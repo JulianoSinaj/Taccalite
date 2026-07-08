@@ -1,143 +1,152 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { useGSAP } from "@gsap/react";
+import { motion, useReducedMotion, useScroll, useSpring, useTransform } from "motion/react";
 import Image from "next/image";
 
-gsap.registerPlugin(ScrollTrigger);
+const SPRING = { mass: 0.2, stiffness: 80, damping: 25 };
 
-type Dish = {
-  src: string;
-  alt: string;
-  label: string;
-};
+const FRAME =
+  "absolute overflow-hidden rounded-[28px] border border-cream/10 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.7)] ring-1 ring-black/20";
 
-const DISHES: Dish[] = [
-  { src: "/images/home-hero-gastronomia.jpg", alt: "Banco gastronomia Taccalite", label: "La gastronomia" },
-  { src: "/images/negozio-centro-formaggi.jpg", alt: "Formaggi selezionati Taccalite", label: "I formaggi" },
-  { src: "/images/negozio-carni-prosciutto.jpg", alt: "Prosciutto di Norcia Taccalite", label: "I salumi" },
-  { src: "/images/shop-shelves-prodotti.jpg", alt: "Prodotti in bottega Taccalite", label: "La bottega" },
-];
+function FrameGlow() {
+  return (
+    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/15 via-transparent to-white/[0.06]" />
+  );
+}
 
 export default function ScrollIntroSequence() {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
-  const dishRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const textRef = useRef<HTMLDivElement>(null);
-  const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const reduceMotionPreferred = useReducedMotion();
+  const [ready, setReady] = useState(false);
 
-  useEffect(() => {
-    setReduceMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  }, []);
+  useEffect(() => setReady(true), []);
 
-  useGSAP(
-    () => {
-      if (reduceMotion !== false) return;
-      const dishes = dishRefs.current.filter(Boolean) as HTMLDivElement[];
-      if (dishes.length === 0) return;
+  // Only ever true once we're actually sure the user wants reduced motion —
+  // defaults to full motion (matches the rest of the codebase's pattern) so
+  // this stays SSR-safe and never conditionally unmounts the scroll target.
+  const reduceMotion = ready && !!reduceMotionPreferred;
 
-      gsap.set(dishes[0], { opacity: 1, scale: 1, x: 0, y: 0 });
-      gsap.set(dishes.slice(1), { opacity: 0 });
+  const { scrollYProgress } = useScroll({
+    target: wrapperRef,
+    offset: ["start start", "end end"],
+  });
+  const p = useSpring(scrollYProgress, SPRING);
 
-      const tl = gsap.timeline({
-        scrollTrigger: {
-          trigger: stageRef.current,
-          start: "top top",
-          end: "+=3200",
-          pin: true,
-          scrub: true,
-          anticipatePin: 1,
-        },
-      });
+  // Phase 1 (0 -> 0.3): title recedes toward a fixed header feel.
+  const headerOpacity = useTransform(p, [0, 0.22, 0.3], [1, 1, 0]);
+  const headerScale = useTransform(p, [0, 0.3], [1, 0.86]);
+  const headerY = useTransform(p, [0, 0.3], [0, -36]);
 
-      // Minimal text holds briefly, then gets out of the way early.
-      tl.to(textRef.current, { opacity: 0, y: -30, duration: 0.5 }, 0.15);
+  // Hero dish holds through phase 1, recedes through phase 2/3.
+  const dish1Scale = useTransform(p, [0, 0.3, 0.65, 0.88], [0.94, 1, 0.94, 0.82]);
+  const dish1Opacity = useTransform(p, [0, 0.3, 0.78, 0.92], [1, 1, 1, 0]);
 
-      // Dish 1 (hero) holds, then drifts up and out — slow depth layer.
-      tl.to(dishes[0], { scale: 1.18, y: -140, opacity: 0, duration: 1.2, ease: "none" }, 0.3);
+  // Left-foreground dish: fast parallax, grows as it passes close to camera.
+  const dish2X = useTransform(p, [0.26, 0.55, 0.85, 1], ["-55vw", "0vw", "6vw", "16vw"]);
+  const dish2Scale = useTransform(p, [0.26, 0.55, 0.85], [0.5, 1.08, 0.96]);
+  const dish2Opacity = useTransform(p, [0.24, 0.34, 0.86, 1], [0, 1, 1, 0]);
 
-      // Dish 2 crosses in fast from below, then exits left at a different speed.
-      tl.fromTo(
-        dishes[1],
-        { opacity: 0, scale: 1.25, y: 220, x: 0 },
-        { opacity: 1, scale: 1, y: 0, x: 0, duration: 0.9, ease: "none" },
-        0.55
-      );
-      tl.to(dishes[1], { opacity: 0, scale: 0.82, x: -180, duration: 1, ease: "none" }, 1.55);
+  // Right-background dish: slower, deeper, smaller — classic parallax depth cue.
+  const dish3X = useTransform(p, [0.3, 0.6, 0.9, 1], ["46vw", "4vw", "-4vw", "-14vw"]);
+  const dish3Scale = useTransform(p, [0.3, 0.6, 0.9], [0.42, 0.68, 0.6]);
+  const dish3Opacity = useTransform(p, [0.28, 0.4, 0.9, 1], [0, 0.85, 0.85, 0]);
 
-      // Dish 3 crosses in from the right, slower drift, different depth.
-      tl.fromTo(
-        dishes[2],
-        { opacity: 0, scale: 1.3, x: 260, y: 0 },
-        { opacity: 1, scale: 1, x: 0, y: 0, duration: 1.1, ease: "none" },
-        1.75
-      );
-      tl.to(dishes[2], { opacity: 0, scale: 0.85, y: -160, duration: 1, ease: "none" }, 2.85);
+  // Floating detail shot: settles last, bridges into normal content.
+  const dish4Y = useTransform(p, [0.52, 0.82, 1], ["36vh", "0vh", "-8vh"]);
+  const dish4Scale = useTransform(p, [0.52, 0.82], [0.72, 1]);
+  const dish4Opacity = useTransform(p, [0.5, 0.62, 1], [0, 1, 1]);
 
-      // Dish 4 settles into place and holds — bridges into normal page content.
-      tl.fromTo(
-        dishes[3],
-        { opacity: 0, scale: 1.2, y: 180 },
-        { opacity: 1, scale: 1, y: 0, duration: 1.1, ease: "none" },
-        3.0
-      );
-    },
-    { scope: rootRef, dependencies: [reduceMotion] }
-  );
+  return (
+    <div ref={wrapperRef} className="relative" style={{ height: reduceMotion ? "100vh" : "400vh" }}>
+      <div className="sticky top-0 h-screen w-full overflow-hidden bg-[#1c1512]">
+        <div className="bg-noise absolute inset-0 opacity-10" />
 
-  // Accessible / reduced-motion fallback: a single static hero image, no scroll-jacking.
-  if (reduceMotion) {
-    return (
-      <div className="relative flex h-screen w-full flex-col items-center justify-center overflow-hidden bg-brown-950">
-        <div className="bg-noise absolute inset-0 opacity-20" />
-        <span className="text-xs font-semibold tracking-[0.25em] text-gold uppercase">Norcineria Taccalite</span>
-        <span className="font-display mt-1 text-lg text-cream/70">Ancona, dal 1946</span>
-        <div className="relative mt-8 h-[58vh] w-[62vw] max-w-xl overflow-hidden rounded-3xl border border-cream/10 shadow-2xl">
+        <motion.div
+          style={reduceMotion ? undefined : { opacity: headerOpacity, scale: headerScale, y: headerY }}
+          className="absolute inset-x-0 top-0 z-50 flex flex-col items-center pt-20 sm:pt-24"
+        >
+          <span className="text-[11px] font-semibold tracking-[0.3em] text-gold uppercase">
+            Norcineria dal 1946
+          </span>
+          <span className="font-display mt-2 text-5xl font-semibold tracking-tight text-cream sm:text-6xl">
+            Taccalite
+          </span>
+        </motion.div>
+
+        {/* Dish 3 — right background, deepest layer */}
+        {!reduceMotion && (
+          <motion.div
+            style={{ x: dish3X, scale: dish3Scale, opacity: dish3Opacity }}
+            className={`${FRAME} top-[16%] right-[6%] z-10 hidden h-[30vh] w-[22vw] sm:block`}
+          >
+            <Image
+              src="/images/negozio-carni-prosciutto.jpg"
+              alt="Prosciutto di Norcia Taccalite"
+              fill
+              loading="lazy"
+              className="object-cover"
+              sizes="30vw"
+            />
+            <FrameGlow />
+          </motion.div>
+        )}
+
+        {/* Dish 1 — center hero, the anchor */}
+        <motion.div
+          style={
+            reduceMotion
+              ? undefined
+              : { scale: dish1Scale, opacity: dish1Opacity }
+          }
+          className={`${FRAME} top-1/2 left-1/2 z-20 h-[54vh] w-[80vw] -translate-x-1/2 -translate-y-1/2 sm:w-[38vw]`}
+        >
           <Image
-            src={DISHES[0].src}
-            alt={DISHES[0].alt}
+            src="/images/home-hero-gastronomia.jpg"
+            alt="Banco gastronomia Taccalite"
             fill
             priority
             className="object-cover"
             sizes="80vw"
           />
-        </div>
-      </div>
-    );
-  }
+          <FrameGlow />
+        </motion.div>
 
-  return (
-    <div ref={rootRef}>
-      <div ref={stageRef} className="relative h-screen w-full overflow-hidden bg-brown-950">
-        <div className="bg-noise absolute inset-0 opacity-20" />
-
-        <div
-          ref={textRef}
-          className="absolute inset-x-0 top-14 z-40 flex flex-col items-center text-center"
-        >
-          <span className="text-xs font-semibold tracking-[0.25em] text-gold uppercase">
-            Norcineria Taccalite
-          </span>
-          <span className="mt-1 font-display text-lg text-cream/70">Ancona, dal 1946</span>
-        </div>
-
-        {DISHES.map((dish, i) => (
-          <div
-            key={dish.src}
-            ref={(el) => {
-              dishRefs.current[i] = el;
-            }}
-            className="absolute top-1/2 left-1/2 h-[46vh] w-[78vw] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl border border-cream/10 shadow-2xl sm:h-[58vh] sm:w-[62vw]"
-            style={{ zIndex: 10 + i, opacity: i === 0 ? 1 : 0 }}
+        {/* Dish 2 — left foreground, fastest / closest to camera */}
+        {!reduceMotion && (
+          <motion.div
+            style={{ x: dish2X, scale: dish2Scale, opacity: dish2Opacity }}
+            className={`${FRAME} bottom-[14%] left-[5%] z-30 hidden h-[32vh] w-[25vw] sm:block`}
           >
-            <Image src={dish.src} alt={dish.alt} fill priority={i === 0} className="object-cover" sizes="80vw" />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-brown-950/80 to-transparent p-5">
-              <span className="text-sm font-semibold tracking-wide text-cream">{dish.label}</span>
-            </div>
-          </div>
-        ))}
+            <Image
+              src="/images/negozio-centro-formaggi.jpg"
+              alt="Formaggi selezionati Taccalite"
+              fill
+              loading="lazy"
+              className="object-cover"
+              sizes="26vw"
+            />
+            <FrameGlow />
+          </motion.div>
+        )}
+
+        {/* Dish 4 — floating detail, settles last */}
+        {!reduceMotion && (
+          <motion.div
+            style={{ y: dish4Y, scale: dish4Scale, opacity: dish4Opacity }}
+            className={`${FRAME} right-[10%] bottom-[8%] z-40 hidden h-[20vh] w-[15vw] sm:block`}
+          >
+            <Image
+              src="/images/shop-shelves-prodotti.jpg"
+              alt="Prodotti in bottega Taccalite"
+              fill
+              loading="lazy"
+              className="object-cover"
+              sizes="16vw"
+            />
+            <FrameGlow />
+          </motion.div>
+        )}
       </div>
     </div>
   );
