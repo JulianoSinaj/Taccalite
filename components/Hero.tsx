@@ -5,6 +5,7 @@ import { motion, useReducedMotion, useScroll, useTransform } from "motion/react"
 import { useRef } from "react";
 import Photo from "./Photo";
 import Hero3D from "./Hero3D";
+import { Button } from "./ui/button";
 
 type HeroProps = {
   eyebrow: string;
@@ -86,22 +87,20 @@ export default function Hero({
               className="mt-8 flex flex-wrap gap-4"
             >
               {primaryCta && (
-                <Link
-                  href={primaryCta.href}
-                  data-magnetic
-                  className="rounded-full bg-gold px-6 py-3 text-sm font-semibold text-brown-950 transition-colors hover:bg-cream"
-                >
-                  {primaryCta.label}
-                </Link>
+                <Button asChild variant="accent" size="lg" data-magnetic className="h-auto rounded-full px-6 py-3 text-sm">
+                  <Link href={primaryCta.href}>{primaryCta.label}</Link>
+                </Button>
               )}
               {secondaryCta && (
-                <Link
-                  href={secondaryCta.href}
+                <Button
+                  asChild
+                  variant="outline"
+                  size="lg"
                   data-magnetic
-                  className="rounded-full border border-cream/30 px-6 py-3 text-sm font-semibold text-cream transition-colors hover:border-cream hover:bg-cream/10"
+                  className="h-auto rounded-full border-cream/30 bg-transparent px-6 py-3 text-sm text-cream hover:border-cream hover:bg-cream/10 hover:text-cream"
                 >
-                  {secondaryCta.label}
-                </Link>
+                  <Link href={secondaryCta.href}>{secondaryCta.label}</Link>
+                </Button>
               )}
             </motion.div>
           )}

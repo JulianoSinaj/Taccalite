@@ -7,6 +7,7 @@ import IntroLoader from "@/components/IntroLoader";
 import SmoothScroll from "@/components/SmoothScroll";
 import MagneticCursor from "@/components/MagneticCursor";
 import PageTransition from "@/components/PageTransition";
+import { cn } from "@/lib/utils";
 
 const playfair = Playfair_Display({
   variable: "--font-playfair",
@@ -32,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="it" className={`${playfair.variable} ${openSans.variable} h-full`}>
+    <html lang="it" className={cn("h-full", playfair.variable, openSans.variable, "font-sans")}>
       <body className="flex min-h-full flex-col antialiased">
         <IntroLoader />
         <SmoothScroll />
