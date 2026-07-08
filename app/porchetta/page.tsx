@@ -34,6 +34,7 @@ export default function PorchettaPage() {
         description="Una ricetta che si tramanda in famiglia dal 1946: pelle croccante, carne morbida e le erbe aromatiche delle Marche. È il prodotto che ci rappresenta di più."
         imageLabel="Foto porchetta intera appena sfornata"
         primaryCta={{ href: "/prenotazioni", label: "Prenota la tua porchetta" }}
+        showMedallion
       />
 
       <section className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-24">

@@ -15,6 +15,7 @@ type HeroProps = {
   primaryCta?: { href: string; label: string };
   secondaryCta?: { href: string; label: string };
   showMedallion?: boolean;
+  backLink?: { href: string; label: string };
 };
 
 export default function Hero({
@@ -26,6 +27,7 @@ export default function Hero({
   primaryCta,
   secondaryCta,
   showMedallion = false,
+  backLink,
 }: HeroProps) {
   const sectionRef = useRef<HTMLElement>(null);
   const reduceMotion = useReducedMotion();
@@ -41,11 +43,22 @@ export default function Hero({
       <div className="bg-noise absolute inset-0 opacity-20" />
       <div className="relative mx-auto grid max-w-6xl gap-10 px-5 py-16 sm:px-8 sm:py-24 lg:grid-cols-2 lg:items-center lg:py-28">
         <div>
+          {backLink && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              <Link href={backLink.href} className="text-sm font-medium text-cream/60 hover:text-cream">
+                {backLink.label}
+              </Link>
+            </motion.div>
+          )}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.1 }}
-            className="text-xs font-semibold tracking-[0.2em] text-gold uppercase"
+            className={`text-xs font-semibold tracking-[0.2em] text-gold uppercase ${backLink ? "mt-4" : ""}`}
           >
             {eyebrow}
           </motion.div>

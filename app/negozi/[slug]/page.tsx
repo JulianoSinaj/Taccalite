@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import Photo from "@/components/Photo";
+import Hero from "@/components/Hero";
 import SectionHeading from "@/components/SectionHeading";
 import ProductCard from "@/components/ProductCard";
 import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
@@ -33,23 +33,15 @@ export default async function ShopDetailPage({ params }: Params) {
 
   return (
     <div>
-      <section className="bg-brown-950">
-        <div className="mx-auto grid max-w-6xl gap-10 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-2 lg:items-center">
-          <div>
-            <Link href="/negozi" className="text-sm font-medium text-cream/60 hover:text-cream">
-              ← Tutti i negozi
-            </Link>
-            <div className="mt-4 text-xs font-semibold tracking-[0.2em] text-gold uppercase">
-              {shop.specialty}
-            </div>
-            <h1 className="font-display mt-2 text-4xl font-semibold text-cream sm:text-5xl">
-              {shop.name}
-            </h1>
-            <p className="mt-4 max-w-lg text-lg leading-relaxed text-cream/70">{shop.tagline}</p>
-          </div>
-          <Photo src={shop.image} alt={shop.name} label={shop.imageLabel} ratio="wide" className="border-cream/10" priority />
-        </div>
-      </section>
+      <Hero
+        eyebrow={shop.specialty}
+        title={shop.name}
+        description={shop.tagline}
+        imageLabel={shop.imageLabel}
+        image={shop.image}
+        backLink={{ href: "/negozi", label: "← Tutti i negozi" }}
+        showMedallion
+      />
 
       <section className="mx-auto grid max-w-6xl gap-10 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-3">
         <Reveal className="lg:col-span-2">
