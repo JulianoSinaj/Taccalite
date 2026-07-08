@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Hero from "@/components/Hero";
+import ScrollIntroSequence from "@/components/ScrollIntroSequence";
 import SectionHeading from "@/components/SectionHeading";
 import ShopCard from "@/components/ShopCard";
 import ProductCard from "@/components/ProductCard";
@@ -11,6 +12,8 @@ import { shops, featuredProducts, blogPosts } from "@/lib/data";
 export default function Home() {
   return (
     <>
+      <ScrollIntroSequence />
+
       <Hero
         eyebrow="Norcineria di famiglia · Ancona dal 1946"
         title="La tradizione norcina nel cuore delle Marche"
