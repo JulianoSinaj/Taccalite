@@ -1,26 +1,53 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand palette — "marroncino" family, echoing the Taccalite shopfronts */
+  --color-cream: #f8f2e8;
+  --color-cream-dark: #efe4d2;
+  --color-brown-950: #2a1a10;
+  --color-brown-900: #3a2314;
+  --color-brown-800: #41281b;
+  --color-brown-700: #5c3820;
+  --color-brown-600: #7a4f30;
+  --color-tan: #a79685;
+  --color-taupe: #807868;
+  --color-gold: #e1be64;
+  --color-gold-dark: #c9a24e;
+  --color-ink: #221913;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-cream: var(--color-cream);
+  --color-cream-dark: var(--color-cream-dark);
+  --color-brown-950: var(--color-brown-950);
+  --color-brown-900: var(--color-brown-900);
+  --color-brown-800: var(--color-brown-800);
+  --color-brown-700: var(--color-brown-700);
+  --color-brown-600: var(--color-brown-600);
+  --color-tan: var(--color-tan);
+  --color-taupe: var(--color-taupe);
+  --color-gold: var(--color-gold);
+  --color-gold-dark: var(--color-gold-dark);
+  --color-ink: var(--color-ink);
+  --font-display: var(--font-playfair);
+  --font-sans: var(--font-open-sans);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-open-sans), Arial, Helvetica, sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-playfair), Georgia, serif;
+}
+
+.text-shadow-sm {
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+.bg-noise {
+  background-image: radial-gradient(rgba(42, 26, 16, 0.06) 1px, transparent 1px);
+  background-size: 4px 4px;
 }
