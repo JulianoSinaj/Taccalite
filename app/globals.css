@@ -127,6 +127,54 @@ body {
   background-size: 4px 4px;
 }
 
+/* — Superdesign language — */
+.eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-weight: 600;
+  color: var(--color-gold);
+}
+
+.eyebrow-dark {
+  color: var(--color-gold-dark);
+}
+
+.cinematic-shadow {
+  box-shadow:
+    0 40px 100px -30px rgba(0, 0, 0, 0.85),
+    inset 0 1px 1px rgba(255, 255, 255, 0.1);
+}
+
+.card-shadow-soft {
+  box-shadow: 0 30px 60px -12px rgba(58, 35, 20, 0.08);
+}
+
+.card-shadow-soft-hover {
+  box-shadow: 0 40px 80px -20px rgba(58, 35, 20, 0.15);
+}
+
+.medallion-rotation {
+  animation: medallion-spin 14s linear infinite;
+}
+
+@keyframes medallion-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.parallax-orb {
+  filter: blur(120px);
+  opacity: 0.25;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--color-gold) 0%, transparent 70%);
+  will-change: transform, opacity;
+}
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);

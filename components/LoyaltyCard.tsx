@@ -1,41 +1,56 @@
+import { Award, QrCode } from "lucide-react";
+
 const POINTS = 340;
 const NEXT_REWARD = 500;
 
 export default function LoyaltyCard({ name }: { name: string }) {
   const pct = Math.min(100, Math.round((POINTS / NEXT_REWARD) * 100));
+  const year = new Date().getFullYear();
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-brown-700/15 bg-gradient-to-br from-brown-900 to-brown-950 p-6 text-cream sm:p-8">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-xs font-semibold tracking-[0.2em] text-gold uppercase">
-            Scheda Fedeltà
-          </div>
-          <div className="font-display mt-1 text-2xl font-semibold">Taccalite</div>
-        </div>
-        <span className="rounded-full border border-gold/40 px-3 py-1 text-xs font-medium text-gold">
-          Cliente
+    <div className="cinematic-shadow relative mx-auto flex aspect-[1.6] w-full max-w-[520px] flex-col justify-between overflow-hidden rounded-[24px] border border-white/20 bg-gradient-to-br from-gold via-[#e8cc84] to-gold-dark p-6 sm:p-10">
+      <div className="absolute inset-0 bg-white/5 opacity-10 mix-blend-overlay" />
+      <div className="bg-noise absolute inset-0 opacity-30" />
+
+      <div className="relative z-10 flex items-start justify-between">
+        <span className="text-[10px] font-bold tracking-[0.4em] text-brown-950/40 uppercase">
+          Scheda Fedeltà
         </span>
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brown-950/5 sm:h-12 sm:w-12">
+          <Award className="size-5 text-brown-950 sm:size-6" />
+        </div>
       </div>
 
-      <div className="mt-8">
-        <div className="text-sm text-cream/60">Titolare</div>
-        <div className="font-display text-xl">{name}</div>
-      </div>
-
-      <div className="mt-6">
-        <div className="flex items-baseline justify-between text-sm">
-          <span className="text-cream/60">Punti raccolti</span>
-          <span className="font-semibold text-gold">
-            {POINTS} / {NEXT_REWARD}
-          </span>
-        </div>
-        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-cream/10">
-          <div className="h-full rounded-full bg-gold" style={{ width: `${pct}%` }} />
-        </div>
-        <p className="mt-2 text-xs text-cream/50">
-          Ti mancano {NEXT_REWARD - POINTS} punti per il tuo prossimo premio.
+      <div className="relative z-10">
+        <h3 className="font-display text-2xl font-bold tracking-tighter text-brown-950 uppercase sm:text-3xl">
+          Taccalite
+        </h3>
+        <p className="text-[10px] font-bold tracking-[0.2em] text-brown-950/50 uppercase">
+          Cliente · Norcineria dal 1946
         </p>
+      </div>
+
+      <div className="relative z-10 space-y-1">
+        <p className="text-[10px] font-bold tracking-widest text-brown-950/60 uppercase">
+          Punti accumulati
+        </p>
+        <p className="font-display text-4xl font-bold tracking-tight text-brown-950 sm:text-6xl">
+          {POINTS}{" "}
+          <span className="text-xl font-light opacity-60 sm:text-2xl">/ {NEXT_REWARD}</span>
+        </p>
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-brown-950/10">
+          <div className="h-full rounded-full bg-brown-950" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+
+      <div className="relative z-10 flex items-end justify-between">
+        <div className="space-y-1">
+          <p className="text-[10px] font-bold text-brown-950 uppercase">{name}</p>
+          <p className="font-mono text-[10px] text-brown-950/40">#TAC-1946-{year}</p>
+        </div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brown-950/20">
+          <QrCode className="size-5 text-brown-950" />
+        </div>
       </div>
     </div>
   );

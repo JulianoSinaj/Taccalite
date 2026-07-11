@@ -118,6 +118,7 @@ export type BlogPost = {
   slug: string;
   title: string;
   date: string;
+  category: string;
   excerpt: string;
   content: string[];
   imageLabel: string;
@@ -129,6 +130,7 @@ export const blogPosts: BlogPost[] = [
     slug: "porchetta-del-sabato",
     title: "Torna la porchetta del sabato in Piazza Kennedy",
     date: "2026-06-20",
+    category: "Tradizione",
     excerpt:
       "Ogni sabato mattina la nostra porchetta esce calda dal forno: ecco dove trovarla e come prenotarla in anticipo.",
     content: [
@@ -136,11 +138,13 @@ export const blogPosts: BlogPost[] = [
       "Per evitare la fila, è possibile prenotare la propria porchetta direttamente al negozio o telefonicamente entro il venerdì.",
     ],
     imageLabel: "Foto porchetta calda appena sfornata",
+    image: "https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&q=80&w=800",
   },
   {
     slug: "nuovi-formaggi-stagionati",
     title: "Nuovi arrivi: formaggi cremosi da tutta Italia",
     date: "2026-05-14",
+    category: "Prodotti",
     excerpt:
       "Ampliata la selezione di formaggi cremosi al negozio Centro, con taleggio, gorgonzola, roquefort e nuvola di capra.",
     content: [
@@ -154,6 +158,7 @@ export const blogPosts: BlogPost[] = [
     slug: "orari-festivi",
     title: "Orari di apertura per le prossime festività",
     date: "2026-04-02",
+    category: "Avvisi",
     excerpt:
       "Consulta gli orari aggiornati dei nostri due negozi per il periodo delle festività.",
     content: [
