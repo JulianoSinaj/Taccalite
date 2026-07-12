@@ -109,7 +109,7 @@ export default function IntroLoader() {
       <motion.button
         type="button"
         onClick={handleSkip}
-        className="absolute right-6 bottom-6 text-xs font-medium tracking-wide text-cream/40 hover:text-cream sm:right-10 sm:bottom-10"
+        className="absolute right-6 bottom-6 text-xs font-medium tracking-wide text-cream/75 hover:text-cream sm:right-10 sm:bottom-10"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1, duration: 0.6 }}

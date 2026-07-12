@@ -146,7 +146,7 @@ export default async function ShopDetailPage({ params }: Params) {
             <h3 className="mb-4 text-sm font-bold tracking-widest text-cream uppercase">
               Orari di apertura
             </h3>
-            <ul className="space-y-1 text-sm leading-relaxed text-cream/60">
+            <ul className="space-y-1 text-sm leading-relaxed text-cream/75">
               {shop.hours.map((h) => (
                 <li key={h.label}>
                   {h.label}: {h.value}
@@ -154,7 +154,7 @@ export default async function ShopDetailPage({ params }: Params) {
               ))}
             </ul>
             {!shop.hoursConfirmed && (
-              <p className="mt-3 text-xs text-cream/30">Orari da confermare in negozio.</p>
+              <p className="mt-3 text-xs text-cream/55">Orari da confermare in negozio.</p>
             )}
           </RevealStaggerItem>
           <RevealStaggerItem className="rounded-[28px] border border-white/5 bg-brown-800/40 p-8">
@@ -162,7 +162,7 @@ export default async function ShopDetailPage({ params }: Params) {
             <h3 className="mb-4 text-sm font-bold tracking-widest text-cream uppercase">
               Contatti diretti
             </h3>
-            <div className="space-y-2 text-sm leading-relaxed text-cream/60">
+            <div className="space-y-2 text-sm leading-relaxed text-cream/75">
               <a href={`tel:${shop.phone.replace(/\s/g, "")}`} className="block hover:text-gold">
                 T: {shop.phone}
               </a>
@@ -176,7 +176,7 @@ export default async function ShopDetailPage({ params }: Params) {
             <h3 className="mb-4 text-sm font-bold tracking-widest text-cream uppercase">
               Indirizzo
             </h3>
-            <p className="text-sm leading-relaxed text-cream/60">
+            <p className="text-sm leading-relaxed text-cream/75">
               {shop.address}
               <br />
               Marche, Italia
@@ -204,12 +204,12 @@ export default async function ShopDetailPage({ params }: Params) {
                 Chi siamo
               </h2>
             </div>
-            <p className="max-w-xl text-xl leading-relaxed font-light text-brown-900/60">
+            <p className="max-w-xl text-xl leading-relaxed font-light text-brown-900/75">
               {shop.description}
             </p>
             <ul className="space-y-4">
               {shop.highlights.map((h) => (
-                <li key={h} className="flex items-start gap-4 text-brown-900/70">
+                <li key={h} className="flex items-start gap-4 text-brown-900/80">
                   <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-gold-dark" />
                   {h}
                 </li>
@@ -217,12 +217,12 @@ export default async function ShopDetailPage({ params }: Params) {
             </ul>
             <div className="flex gap-12 pt-4">
               <div className="text-center">
-                <p className="font-display text-4xl font-bold text-gold-dark italic">1946</p>
-                <p className="text-[10px] font-bold tracking-widest uppercase opacity-40">Dal</p>
+                <p className="font-display text-4xl font-bold text-gold-deep italic">1946</p>
+                <p className="text-[10px] font-bold tracking-widest uppercase opacity-70">Dal</p>
               </div>
               <div className="text-center">
-                <p className="font-display text-4xl font-bold text-gold-dark italic">3</p>
-                <p className="text-[10px] font-bold tracking-widest uppercase opacity-40">
+                <p className="font-display text-4xl font-bold text-gold-deep italic">3</p>
+                <p className="text-[10px] font-bold tracking-widest uppercase opacity-70">
                   Generazioni
                 </p>
               </div>
@@ -275,8 +275,8 @@ export default async function ShopDetailPage({ params }: Params) {
                     />
                   </div>
                   <h4 className="font-display mb-2 text-2xl text-brown-950">{product.name}</h4>
-                  <p className="mb-6 text-sm text-taupe">{product.description}</p>
-                  <span className="inline-block rounded-full bg-brown-900/5 px-3 py-1 text-[10px] font-bold tracking-widest text-brown-800/70 uppercase">
+                  <p className="mb-6 text-sm leading-relaxed text-brown-900/70">{product.description}</p>
+                  <span className="inline-block rounded-full bg-brown-900/5 px-3 py-1 text-[10px] font-bold tracking-widest text-brown-800/85 uppercase">
                     In negozio · online a breve
                   </span>
                 </RevealStaggerItem>
@@ -297,7 +297,7 @@ export default async function ShopDetailPage({ params }: Params) {
                   <Icon className="size-7" />
                 </div>
                 <h5 className="font-display text-xl text-cream">{feature.title}</h5>
-                <p className="text-xs tracking-widest text-cream/40 uppercase">{feature.caption}</p>
+                <p className="text-xs tracking-widest text-cream/65 uppercase">{feature.caption}</p>
               </RevealStaggerItem>
             );
           })}
@@ -327,7 +327,7 @@ export default async function ShopDetailPage({ params }: Params) {
             <h3 className="font-display mb-6 text-3xl text-brown-950 sm:text-4xl">
               Vieni a trovarci per una degustazione
             </h3>
-            <p className="mb-10 text-lg leading-relaxed text-brown-900/60">
+            <p className="mb-10 text-lg leading-relaxed text-brown-900/75">
               Il nostro banco è a tua disposizione per consigli, assaggi e ordini speciali.
               Chiamaci o prenota un tavolo per un&apos;esperienza guidata.
             </p>
@@ -381,7 +381,7 @@ export default async function ShopDetailPage({ params }: Params) {
                   <br />
                   {otherShop.specialty}
                 </h3>
-                <p className="text-cream/60">{otherShop.tagline}</p>
+                <p className="text-cream/75">{otherShop.tagline}</p>
                 <span className="inline-flex w-fit items-center rounded-full bg-gold px-8 py-3.5 text-sm font-semibold text-brown-950 shadow-[0_10px_20px_-5px_rgba(225,190,100,0.3)]">
                   Visita il negozio
                 </span>

@@ -17,6 +17,8 @@
   --color-taupe: #807868;
   --color-gold: #e1be64;
   --color-gold-dark: #c9a24e;
+  /* Readable gold for small text on cream surfaces (≥5:1 on --color-cream). */
+  --color-gold-deep: #7d5c25;
   --color-ink: #221913;
   --background: #f8f2e8;
   --foreground: #221913;
@@ -64,6 +66,7 @@
   --color-taupe: var(--color-taupe);
   --color-gold: var(--color-gold);
   --color-gold-dark: var(--color-gold-dark);
+  --color-gold-deep: var(--color-gold-deep);
   --color-ink: var(--color-ink);
   --font-display: var(--font-playfair);
   --font-sans: var(--font-open-sans);
@@ -137,7 +140,21 @@ body {
 }
 
 .eyebrow-dark {
-  color: var(--color-gold-dark);
+  color: var(--color-gold-deep);
+}
+
+/* Link hover: 1px underline draws from left to right. */
+.underline-draw {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: left bottom;
+  background-size: 0% 1px;
+  transition: background-size 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  padding-bottom: 2px;
+}
+
+.underline-draw:hover {
+  background-size: 100% 1px;
 }
 
 .cinematic-shadow {

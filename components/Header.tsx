@@ -43,10 +43,10 @@ export default function Header() {
         }`}
       >
         <Link href="/" className="group flex flex-col">
-          <span className="font-display text-2xl font-bold tracking-tighter text-brown-950 uppercase transition-colors group-hover:text-gold-dark sm:text-3xl">
+          <span className="font-display text-2xl font-bold tracking-tighter text-brown-950 uppercase transition-colors group-hover:text-gold-deep sm:text-3xl">
             Taccalite
           </span>
-          <span className="mt-1 text-[10px] font-bold tracking-[0.45em] text-taupe uppercase">
+          <span className="mt-1 text-[10px] font-bold tracking-[0.45em] text-brown-700 uppercase">
             Norcineria dal 1946
           </span>
         </Link>
@@ -59,8 +59,8 @@ export default function Header() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`transition-colors hover:text-gold-dark ${
-                  active ? "border-b-2 border-gold pb-1 text-brown-950" : "text-brown-900/60"
+                className={`transition-colors hover:text-gold-deep ${
+                  active ? "border-b-2 border-gold pb-1 text-brown-950" : "text-brown-900/75"
                 }`}
               >
                 {link.label}

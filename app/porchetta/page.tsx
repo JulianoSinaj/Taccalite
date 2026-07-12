@@ -104,13 +104,13 @@ export default function PorchettaPage() {
             <div className="grid grid-cols-2 gap-8 py-6">
               <div className="space-y-2">
                 <p className="font-display text-4xl font-bold text-gold italic">Cottura lenta</p>
-                <p className="text-[10px] font-bold tracking-widest text-cream/40 uppercase">
+                <p className="text-[10px] font-bold tracking-widest text-cream/65 uppercase">
                   Nel forno, per ore
                 </p>
               </div>
               <div className="space-y-2">
                 <p className="font-display text-4xl font-bold text-gold italic">100% locale</p>
-                <p className="text-[10px] font-bold tracking-widest text-cream/40 uppercase">
+                <p className="text-[10px] font-bold tracking-widest text-cream/65 uppercase">
                   Erbe marchigiane
                 </p>
               </div>
@@ -164,7 +164,7 @@ export default function PorchettaPage() {
                   </div>
                 </div>
                 <h3 className="font-display mb-4 text-3xl text-brown-950">{step.title}</h3>
-                <p className="leading-relaxed text-brown-900/60">{step.text}</p>
+                <p className="leading-relaxed text-brown-900/75">{step.text}</p>
               </RevealStaggerItem>
             ))}
           </RevealStagger>
@@ -213,7 +213,7 @@ export default function PorchettaPage() {
                 <Flame className="size-7 text-gold-dark" />
               </div>
               <h3 className="font-display mb-4 text-3xl text-brown-950">Ogni sabato mattina</h3>
-              <p className="text-lg leading-relaxed text-brown-900/60">
+              <p className="text-lg leading-relaxed text-brown-900/75">
                 Disponibile calda appena sfornata presso il nostro negozio di Piazza Kennedy ad
                 Ancona.
               </p>
@@ -223,7 +223,7 @@ export default function PorchettaPage() {
                 <Bell className="size-7 text-gold-dark" />
               </div>
               <h3 className="font-display mb-4 text-3xl text-brown-950">Su prenotazione</h3>
-              <p className="text-lg leading-relaxed text-brown-900/60">
+              <p className="text-lg leading-relaxed text-brown-900/75">
                 Per essere sicuro di trovarla, prenota la tua porchetta in negozio o per telefono
                 entro il venerdì.
               </p>

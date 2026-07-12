@@ -81,8 +81,9 @@ export default function AccountArea() {
             <h1 className="font-display text-4xl tracking-tighter text-white sm:text-6xl">
               Il Club Taccalite
             </h1>
-            <p className="text-lg font-light text-cream/60">
-              Accedi per consultare la tua scheda fedeltà e i vantaggi riservati ai clienti.
+            <p className="text-lg font-light text-cream/75">
+              Accedi per consultare la tua scheda fedeltà, i punti raccolti e i premi riservati
+              ai clienti della bottega.
             </p>
           </div>
 
@@ -94,7 +95,7 @@ export default function AccountArea() {
                 type="button"
                 onClick={() => setMode("login")}
                 className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                  mode === "login" ? "bg-brown-950 text-cream" : "text-brown-800/60 hover:text-brown-950"
+                  mode === "login" ? "bg-brown-950 text-cream" : "text-brown-800/75 hover:text-brown-950"
                 }`}
               >
                 Accedi
@@ -103,7 +104,7 @@ export default function AccountArea() {
                 type="button"
                 onClick={() => setMode("register")}
                 className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                  mode === "register" ? "bg-brown-950 text-cream" : "text-brown-800/60 hover:text-brown-950"
+                  mode === "register" ? "bg-brown-950 text-cream" : "text-brown-800/75 hover:text-brown-950"
                 }`}
               >
                 Registrati
@@ -171,7 +172,7 @@ export default function AccountArea() {
             <button
               type="button"
               onClick={handleLogout}
-              className="rounded-full border border-white/20 px-6 py-2.5 text-xs font-bold tracking-widest text-cream/60 uppercase transition-colors hover:border-white/40 hover:text-white"
+              className="rounded-full border border-white/25 px-6 py-2.5 text-xs font-bold tracking-widest text-cream/80 uppercase transition-colors hover:border-white/50 hover:text-white"
             >
               Esci
             </button>
@@ -193,9 +194,9 @@ export default function AccountArea() {
               <div className="flex-1 space-y-5 text-center md:text-left">
                 <div className="space-y-1">
                   <h4 className="font-display text-3xl text-brown-950">{name}</h4>
-                  <p className="font-medium text-taupe">Cliente Taccalite</p>
+                  <p className="font-medium text-brown-800/75">Cliente Taccalite</p>
                 </div>
-                <p className="text-sm leading-relaxed text-brown-900/60">
+                <p className="text-sm leading-relaxed text-brown-900/75">
                   Presenta la tua scheda in negozio ad ogni acquisto per accumulare punti e
                   riscattare i premi del club.
                 </p>
@@ -205,7 +206,7 @@ export default function AccountArea() {
               <h3 className="font-display mb-6 text-3xl tracking-tight text-brown-950">
                 Come funziona
               </h3>
-              <ul className="space-y-4 text-brown-900/70">
+              <ul className="space-y-4 text-brown-900/80">
                 <li className="flex items-start gap-4">
                   <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-gold-dark" />
                   Ogni acquisto nei nostri due negozi ti fa guadagnare punti fedeltà.
@@ -232,13 +233,13 @@ export default function AccountArea() {
               </div>
               <div className="grid grid-cols-1 gap-4">
                 <div className="flex items-center justify-between rounded-2xl border border-brown-950/5 bg-white p-6 shadow-sm">
-                  <p className="text-sm font-medium tracking-widest text-taupe uppercase">
+                  <p className="text-sm font-medium tracking-widest text-brown-800/75 uppercase">
                     Punti raccolti
                   </p>
                   <p className="font-display text-3xl text-brown-950">340</p>
                 </div>
                 <div className="flex items-center justify-between rounded-2xl border border-brown-950/5 bg-white p-6 shadow-sm">
-                  <p className="text-sm font-medium tracking-widest text-taupe uppercase">
+                  <p className="text-sm font-medium tracking-widest text-brown-800/75 uppercase">
                     Prossimo premio
                   </p>
                   <p className="font-display text-3xl text-brown-950">500</p>
@@ -258,7 +259,7 @@ export default function AccountArea() {
               <h5 className="text-[11px] font-bold tracking-[0.3em] text-gold uppercase">
                 Vuoi accumulare più punti?
               </h5>
-              <p className="font-light text-cream/60">
+              <p className="font-light text-cream/75">
                 Prenota un tavolo per una degustazione: ogni visita ti avvicina al prossimo premio.
               </p>
               <Link
@@ -283,7 +284,7 @@ export default function AccountArea() {
                 Catalogo fedeltà
               </h2>
             </div>
-            <p className="max-w-md text-lg leading-relaxed text-cream/40">
+            <p className="max-w-md text-lg leading-relaxed text-cream/70">
               Accumula punti e riscatta le eccellenze del nostro territorio. Ogni visita ti
               avvicina al prossimo premio.
             </p>
@@ -308,8 +309,8 @@ export default function AccountArea() {
                   </div>
                 </div>
                 <h4 className="font-display mb-2 text-2xl text-white">{reward.name}</h4>
-                <p className="mb-6 text-sm leading-relaxed text-cream/40">{reward.description}</p>
-                <p className="text-[10px] font-bold tracking-widest text-gold/70 uppercase">
+                <p className="mb-6 text-sm leading-relaxed text-cream/70">{reward.description}</p>
+                <p className="text-[10px] font-bold tracking-widest text-gold uppercase">
                   Riscattabile in negozio
                 </p>
               </RevealStaggerItem>

@@ -9,7 +9,7 @@ type Status = "idle" | "submitting" | "success" | "error";
 const PREFERENCES = ["Tavolo tranquillo", "Celebrazione speciale", "Degustazione guidata"];
 
 const inputClasses =
-  "w-full rounded-xl border border-brown-900/15 bg-cream-dark/40 px-4 py-3.5 text-sm text-brown-950 transition-colors placeholder:text-taupe/60 focus:border-gold-dark focus:outline-none";
+  "w-full rounded-xl border border-brown-900/15 bg-cream-dark/40 px-4 py-3.5 text-sm text-brown-950 transition-colors placeholder:text-taupe focus:border-gold-dark focus:outline-none";
 
 function Field({
   label,
@@ -76,7 +76,7 @@ export default function ReservationForm() {
         <h3 className="font-display text-3xl font-semibold text-brown-950">
           Prenotazione inviata!
         </h3>
-        <p className="mt-3 text-lg text-brown-900/60">
+        <p className="mt-3 text-lg text-brown-900/75">
           Grazie per la tua richiesta. Ti contatteremo al più presto per confermare la
           disponibilità.
         </p>

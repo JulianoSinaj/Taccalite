@@ -34,18 +34,18 @@ export default function BlogCard({ post }: { post: BlogPost }) {
         </div>
         <div className="space-y-4 p-7 lg:p-10">
           <div className="flex items-center gap-3">
-            <span className="text-[10px] font-semibold tracking-wider text-taupe uppercase">
+            <span className="text-[10px] font-semibold tracking-wider text-brown-800/70 uppercase">
               {formatDate(post.date)}
             </span>
-            <span className="rounded-full bg-gold/10 px-3 py-1 text-[9px] font-bold tracking-widest text-gold-dark uppercase">
+            <span className="rounded-full bg-gold/15 px-3 py-1 text-[9px] font-bold tracking-widest text-gold-deep uppercase">
               {post.category}
             </span>
           </div>
-          <h2 className="font-display text-2xl leading-tight font-semibold text-brown-950 transition-colors group-hover:text-gold-dark">
+          <h2 className="font-display text-2xl leading-tight font-semibold text-brown-950 transition-colors group-hover:text-gold-deep">
             {post.title}
           </h2>
-          <p className="text-sm leading-relaxed text-brown-900/60">{post.excerpt}</p>
-          <span className="inline-flex items-center gap-2 text-sm font-bold text-gold-dark transition-all group-hover:gap-4">
+          <p className="text-sm leading-relaxed text-brown-900/70">{post.excerpt}</p>
+          <span className="inline-flex items-center gap-2 text-sm font-bold text-gold-deep transition-all group-hover:gap-4">
             Leggi di più
             <ArrowRight className="size-4" />
           </span>

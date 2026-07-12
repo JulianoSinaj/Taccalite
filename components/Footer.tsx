@@ -40,8 +40,13 @@ function FacebookIcon({ className }: { className?: string }) {
 
 export default function Footer() {
   return (
-    <footer className="relative z-10 border-t border-white/5 bg-brown-950 py-24 text-cream/40 sm:py-32">
-      <div className="mx-auto max-w-7xl px-5 sm:px-10">
+    <footer className="relative z-10 overflow-hidden border-t border-white/5 bg-brown-950 pb-24 text-cream/70 sm:pb-32">
+      <div aria-hidden className="pointer-events-none select-none">
+        <p className="font-display -mb-[2vw] translate-y-[18%] text-center text-[19vw] leading-none font-bold tracking-tighter text-white/[0.045] uppercase">
+          Taccalite
+        </p>
+      </div>
+      <div className="relative mx-auto max-w-7xl px-5 pt-16 sm:px-10 sm:pt-20">
         <div className="mb-24 grid grid-cols-1 gap-16 md:grid-cols-2 lg:grid-cols-4 lg:gap-20">
           <div className="space-y-8">
             <div className="flex flex-col">
@@ -52,9 +57,9 @@ export default function Footer() {
                 Eccellenza dal 1946
               </span>
             </div>
-            <p className="text-sm leading-relaxed font-light">
-              Norcineria artigianale nel cuore di Ancona. Tre generazioni dedicate alla selezione e
-              lavorazione delle eccellenze del territorio marchigiano.
+            <p className="text-sm leading-relaxed font-light text-cream/75">
+              Norcineria artigianale nel cuore di Ancona. Dal 1946, tre generazioni scelgono e
+              lavorano ogni giorno le eccellenze del territorio marchigiano.
             </p>
           </div>
 
@@ -101,11 +106,11 @@ export default function Footer() {
                   <Link href={`/negozi/${shop.slug}`} className="transition-colors hover:text-gold">
                     {shop.address}
                     <br />
-                    <span className="text-[10px] tracking-widest text-white/25 uppercase">
+                    <span className="text-[10px] tracking-widest text-white/55 uppercase">
                       {shop.name} · {shop.specialty}
                     </span>
                   </Link>
-                  <p className="mt-1 text-white/30">{shop.phone}</p>
+                  <p className="mt-1 text-white/60">{shop.phone}</p>
                 </li>
               ))}
               <li>E: {shops[0].email}</li>
@@ -116,16 +121,16 @@ export default function Footer() {
             <h5 className="mb-8 text-[10px] font-bold tracking-widest text-white uppercase">
               Rimani aggiornato
             </h5>
-            <p className="mb-8 text-sm font-light">
-              Ricevi inviti per le degustazioni stagionali e le news sulla porchetta calda del
-              sabato.
+            <p className="mb-8 text-sm font-light text-cream/75">
+              Ricevi gli inviti alle degustazioni stagionali e l&apos;avviso quando la porchetta
+              del sabato esce dal forno.
             </p>
             <div className="flex border-b border-white/10 pb-4 transition-colors focus-within:border-gold">
               <input
                 type="email"
                 placeholder="Inserisci la tua email"
                 aria-label="Email per la newsletter"
-                className="w-full bg-transparent text-sm placeholder:text-white/15 focus:outline-none"
+                className="w-full bg-transparent text-sm text-cream placeholder:text-white/40 focus:outline-none"
               />
               <button
                 type="button"
@@ -141,7 +146,7 @@ export default function Footer() {
         <div className="border-t border-white/5 pt-10">
           <div className="flex flex-col justify-between gap-6 text-[10px] font-bold tracking-[0.3em] uppercase md:flex-row md:items-center">
             <p>© 1946–{new Date().getFullYear()} Norcineria Taccalite. Tutti i diritti riservati.</p>
-            <p className="text-white/20">Ancona, Marche</p>
+            <p className="text-white/50">Ancona, Marche</p>
           </div>
           <div className="mt-10 flex justify-center gap-5">
             <a
@@ -149,7 +154,7 @@ export default function Footer() {
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Instagram"
-              className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 transition-all hover:bg-gold hover:text-brown-950"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 text-cream/80 transition-all hover:bg-gold hover:text-brown-950"
             >
               <InstagramIcon className="size-5" />
             </a>
@@ -158,7 +163,7 @@ export default function Footer() {
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Facebook"
-              className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 transition-all hover:bg-gold hover:text-brown-950"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 text-cream/80 transition-all hover:bg-gold hover:text-brown-950"
             >
               <FacebookIcon className="size-5" />
             </a>

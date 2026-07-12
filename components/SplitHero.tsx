@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { motion, useReducedMotion, useScroll, useTransform } from "motion/react";
 import PillButton from "./PillButton";
-import MedallionBadge from "./MedallionBadge";
+import HeroSeal from "./HeroSeal";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -62,7 +62,7 @@ export default function SplitHero() {
           <h1 className="font-display text-[16vw] leading-[0.9] font-semibold tracking-tighter text-cream sm:text-[11vw] lg:text-[7.5vw]">
             <RevealLine delay={0.25}>Taccalite</RevealLine>
             <RevealLine delay={0.4}>
-              <span className="text-cream/25">Storico</span>
+              <span className="text-cream/45">Norcineria</span>
             </RevealLine>
             <RevealLine delay={0.55}>
               <span className="text-gold italic">Porchetta</span>
@@ -73,10 +73,10 @@ export default function SplitHero() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: EASE, delay: 0.8 }}
-            className="mt-10 max-w-md text-lg leading-relaxed font-light text-cream/60"
+            className="mt-10 max-w-md text-lg leading-relaxed font-light text-cream/75"
           >
-            Tre generazioni di arte norcina nel cuore delle Marche. Ogni sabato la porchetta esce
-            calda dal forno di Piazza Kennedy.
+            Dal 1946 la nostra famiglia custodisce l&apos;arte norcina nel cuore delle Marche.
+            Ogni sabato mattina la porchetta esce calda dal forno di Piazza Kennedy.
           </motion.p>
 
           <motion.div
@@ -114,12 +114,12 @@ export default function SplitHero() {
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-brown-950/40 via-transparent to-white/10" />
           </div>
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
+            initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1, ease: EASE, delay: 1.4 }}
-            className="absolute -bottom-8 -left-8 hidden h-32 w-32 sm:block lg:h-40 lg:w-40"
+            transition={{ duration: 1.2, ease: EASE, delay: 1.2 }}
+            className="absolute -bottom-16 -left-16 hidden h-56 w-56 sm:block lg:-bottom-20 lg:-left-24 lg:h-80 lg:w-80"
           >
-            <MedallionBadge className="h-full w-full" />
+            <HeroSeal scroll={scrollYProgress} className="h-full w-full" />
           </motion.div>
         </motion.div>
       </div>
@@ -128,7 +128,7 @@ export default function SplitHero() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 1, delay: 1.6 }}
-        className="pointer-events-none absolute bottom-8 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-3 text-cream/30 lg:flex"
+        className="pointer-events-none absolute bottom-8 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-3 text-cream/50 lg:flex"
       >
         <span className="text-[9px] font-bold tracking-[0.5em] uppercase">Scroll</span>
         <div className="h-10 w-px bg-gradient-to-b from-cream/40 to-transparent" />
