@@ -13,18 +13,18 @@ import {
 const ACTS = [
   {
     n: "01",
-    title: "La selezione",
-    text: "Solo suino di alta qualità, scelto capo per capo e lavorato a mano dai nostri norcini, come si fa in famiglia dal 1946.",
-    image: "/images/negozio-carni-prosciutto.jpg",
-    alt: "Il banco carni: la selezione del suino",
-  },
-  {
-    n: "02",
     title: "La cottura lenta",
     text: "Rosmarino, aglio, finocchietto selvatico. Poi ore di forno, finché la pelle non canta sotto il coltello e la carne si scioglie.",
     image:
       "https://images.unsplash.com/photo-1615937657715-bc7b4b7962c1?auto=format&fit=crop&q=80&w=1600",
     alt: "La cottura lenta in forno",
+  },
+  {
+    n: "02",
+    title: "La selezione",
+    text: "Solo suino di alta qualità, scelto capo per capo e lavorato a mano dai nostri norcini, come si fa in famiglia dal 1946.",
+    image: "/images/selezione-prosciutto-camino.jpg",
+    alt: "Il prosciutto stagionato accanto al fuoco, con aglio e peperoncini",
   },
   {
     n: "03",
