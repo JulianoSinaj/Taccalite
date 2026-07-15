@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { motion, useReducedMotion, useScroll, useTransform } from "motion/react";
 import PillButton from "./PillButton";
-import HeroSeal from "./HeroSeal";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -113,14 +112,6 @@ export default function SplitHero() {
             />
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-brown-950/40 via-transparent to-white/10" />
           </div>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.85 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1.2, ease: EASE, delay: 1.2 }}
-            className="absolute -bottom-16 -left-16 hidden h-56 w-56 sm:block lg:-bottom-20 lg:-left-24 lg:h-80 lg:w-80"
-          >
-            <HeroSeal scroll={scrollYProgress} className="h-full w-full" />
-          </motion.div>
         </motion.div>
       </div>
 

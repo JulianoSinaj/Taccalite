@@ -19,18 +19,35 @@ export default function NegoziPage() {
       <section className="relative overflow-hidden bg-[#1c1512] px-5 pt-44 pb-24 sm:px-10 sm:pt-56 sm:pb-32">
         <div className="bg-noise absolute inset-0 opacity-10" />
         <div className="parallax-orb absolute -top-52 -right-52 h-[48rem] w-[48rem] opacity-10" />
-        <Reveal className="relative mx-auto max-w-7xl">
-          <span className="eyebrow mb-8 block">Le nostre sedi · Ancona</span>
-          <h1 className="font-display max-w-4xl text-5xl leading-[0.95] tracking-tighter text-cream sm:text-7xl md:text-8xl">
-            Due botteghe,
-            <br />
-            <span className="text-gold italic">un&apos;anima sola</span>
-          </h1>
-          <p className="mt-8 max-w-xl text-lg leading-relaxed font-light text-cream/75">
-            Il banco dei grandi formaggi in Piazza Kennedy e quello delle carni al Mercato Coperto
-            del Piano. Stessa famiglia, stessa cura: scegli la bottega più vicina e vieni ad
-            assaggiare.
-          </p>
+        <Reveal className="relative mx-auto flex max-w-7xl flex-col items-center gap-16 lg:flex-row lg:gap-24">
+          <div className="w-full lg:w-[55%]">
+            <span className="eyebrow mb-8 block">Le nostre sedi · Ancona</span>
+            <h1 className="font-display max-w-4xl text-5xl leading-[0.95] tracking-tighter text-cream sm:text-7xl md:text-8xl">
+              Due botteghe,
+              <br />
+              <span className="text-gold italic">un&apos;anima sola</span>
+            </h1>
+            <p className="mt-8 max-w-xl text-lg leading-relaxed font-light text-cream/75">
+              Il banco dei grandi formaggi in Piazza Kennedy e quello delle carni al Mercato
+              Coperto del Piano. Stessa famiglia, stessa cura: scegli la bottega più vicina e
+              vieni ad assaggiare.
+            </p>
+          </div>
+
+          {/* Single frame — la bottega in un'immagine */}
+          <div className="relative hidden w-full max-w-md lg:block lg:w-[45%]">
+            <div className="cinematic-shadow relative aspect-[5/4] -rotate-2 overflow-hidden rounded-[32px] will-change-transform">
+              <Image
+                src="/images/coppa-finocchio-bottega.jpg"
+                alt="Coppa artigianale con finocchio, aglio e semi di finocchio sul banco della bottega"
+                fill
+                priority
+                className="object-cover"
+                sizes="(max-width: 1024px) 0px, 40vw"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-brown-950/40 via-transparent to-transparent" />
+            </div>
+          </div>
         </Reveal>
       </section>
 
@@ -45,11 +62,6 @@ export default function NegoziPage() {
               }`}
             >
               <div className="relative w-full lg:w-[55%]">
-                <div
-                  className={`absolute -inset-3 rounded-[40px] border border-gold/30 ${
-                    i % 2 === 0 ? "translate-x-5 translate-y-5" : "-translate-x-5 translate-y-5"
-                  }`}
-                />
                 <Link
                   href={`/negozi/${shop.slug}`}
                   className="group cinematic-shadow relative block aspect-[4/3] overflow-hidden rounded-[32px]"

@@ -230,7 +230,6 @@ export default async function ShopDetailPage({ params }: Params) {
           </Reveal>
           <Reveal delay={0.15} className="w-full lg:w-1/2">
             <div className="relative">
-              <div className="absolute -inset-4 translate-x-4 translate-y-4 rounded-[40px] border border-gold/30" />
               <div className="cinematic-shadow relative z-10 aspect-[4/5] overflow-hidden rounded-[32px]">
                 <Image
                   src={content.storyImage}

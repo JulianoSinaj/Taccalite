@@ -5,7 +5,6 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import IntroLoader from "@/components/IntroLoader";
 import SmoothScroll from "@/components/SmoothScroll";
-import MagneticCursor from "@/components/MagneticCursor";
 import PageTransition from "@/components/PageTransition";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +37,6 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col antialiased">
         <IntroLoader />
         <SmoothScroll />
-        <MagneticCursor />
         <Header />
         <main className="flex-1">
           <PageTransition>{children}</PageTransition>

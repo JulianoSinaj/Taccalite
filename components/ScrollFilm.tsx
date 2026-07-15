@@ -50,22 +50,32 @@ function Act({
   const start = index / ACTS.length;
   const end = (index + 1) / ACTS.length;
   const fade = 0.045;
+  const isFirst = index === 0;
+  const isLast = index === ACTS.length - 1;
 
+  // Crossfades overlap symmetrically around each act boundary so the
+  // outgoing and incoming acts always sum to full coverage — no dark gap
+  // where lower stacked acts could bleed through.
   const opacity = useTransform(
     progress,
-    index === 0
-      ? [start, end - fade, end]
-      : index === ACTS.length - 1
-        ? [start, start + fade, end]
-        : [start, start + fade, end - fade, end],
-    index === 0 ? [1, 1, 0] : index === ACTS.length - 1 ? [0, 1, 1] : [0, 1, 1, 0]
+    isFirst
+      ? [end - fade, end + fade]
+      : isLast
+        ? [start - fade, start + fade]
+        : [start - fade, start + fade, end - fade, end + fade],
+    isFirst ? [1, 0] : isLast ? [0, 1] : [0, 1, 1, 0]
+  );
+  // Hard-hide acts outside their window so a non-adjacent act can never
+  // paint through a partially transparent crossfade above it.
+  const visibility = useTransform(progress, (v) =>
+    (isFirst || v > start - fade) && (isLast || v < end + fade) ? "visible" : "hidden"
   );
   const imageScale = useTransform(progress, [start, end], [1.18, 1.02]);
   const textY = useTransform(progress, [start, start + 0.06, end], [48, 0, -24]);
 
   return (
     <motion.div
-      style={ready ? { opacity } : undefined}
+      style={ready ? { opacity, visibility } : undefined}
       className={`absolute inset-0 ${ready ? "" : index === 0 ? "opacity-100" : "opacity-0"}`}
     >
       <motion.div style={ready ? { scale: imageScale } : undefined} className="absolute inset-0">

@@ -30,17 +30,68 @@ export default function BlogPage() {
       <section className="relative overflow-hidden bg-[#1c1512] px-5 pt-44 pb-24 sm:px-10 sm:pt-56 sm:pb-32">
         <div className="bg-noise absolute inset-0 opacity-10" />
         <div className="parallax-orb absolute -top-52 -left-52 h-[48rem] w-[48rem] opacity-10" />
-        <Reveal className="relative mx-auto max-w-7xl">
-          <span className="eyebrow mb-8 block">Il diario della bottega</span>
-          <h1 className="font-display max-w-4xl text-5xl leading-[0.95] tracking-tighter text-cream sm:text-7xl md:text-8xl">
-            Storie, novità
-            <br />
-            <span className="text-gold italic">e tradizioni</span>
-          </h1>
-          <p className="mt-8 max-w-xl text-lg leading-relaxed font-light text-cream/75">
-            Nuovi arrivi al banco, appuntamenti in bottega e l&apos;immancabile porchetta del
-            sabato: tutto quello che succede in casa Taccalite.
-          </p>
+        <Reveal className="relative mx-auto flex max-w-7xl flex-col items-center gap-16 lg:flex-row lg:gap-24">
+          <div className="w-full lg:w-[55%]">
+            <span className="eyebrow mb-8 block">Il diario della bottega</span>
+            <h1 className="font-display max-w-4xl text-5xl leading-[0.95] tracking-tighter text-cream sm:text-7xl md:text-8xl">
+              Storie, novità
+              <br />
+              <span className="text-gold italic">e tradizioni</span>
+            </h1>
+            <p className="mt-8 max-w-xl text-lg leading-relaxed font-light text-cream/75">
+              Nuovi arrivi al banco, appuntamenti in bottega e l&apos;immancabile porchetta del
+              sabato: tutto quello che succede in casa Taccalite.
+            </p>
+          </div>
+
+          {/* Diary postcards — featured story as a stacked deck */}
+          {featured && (
+            <div className="relative hidden w-full max-w-md lg:block lg:w-[45%]">
+              {/* Blank postcards underneath */}
+              <div className="absolute inset-0 rotate-6 rounded-[28px] border border-cream/10 bg-brown-900/60" />
+              <div className="absolute inset-0 rotate-3 rounded-[28px] border border-cream/10 bg-brown-800/60" />
+
+              <Link
+                href={`/blog/${featured.slug}`}
+                className="group cinematic-shadow relative block -rotate-2 overflow-hidden rounded-[28px] bg-cream p-4 pb-16 transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform hover:rotate-0"
+              >
+                <div className="relative aspect-[5/4] overflow-hidden rounded-[18px]">
+                  {featured.image ? (
+                    <Image
+                      src={featured.image}
+                      alt={featured.title}
+                      fill
+                      priority
+                      className="object-cover transition-transform duration-[1.8s] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105"
+                      sizes="(max-width: 1024px) 0px, 40vw"
+                    />
+                  ) : (
+                    <ImagePlaceholder
+                      label={featured.imageLabel}
+                      ratio="wide"
+                      className="h-full rounded-none border-0"
+                    />
+                  )}
+                </div>
+                <div className="mt-5 flex items-end justify-between gap-4 px-2">
+                  <div className="space-y-1.5">
+                    <span className="rounded-full bg-gold/15 px-3 py-1 text-[9px] font-bold tracking-widest text-gold-deep uppercase">
+                      {featured.category}
+                    </span>
+                    <p className="font-display max-w-[16rem] text-xl leading-tight text-brown-950">
+                      {featured.title}
+                    </p>
+                  </div>
+                  <span className="rotate-3 rounded border border-brown-950/25 px-2.5 py-1.5 text-[9px] font-bold tracking-[0.2em] whitespace-nowrap text-brown-950/50 uppercase">
+                    {formatDate(featured.date)}
+                  </span>
+                </div>
+              </Link>
+
+              {/* Tape strip */}
+              <span className="absolute -top-4 left-1/2 h-8 w-28 -translate-x-1/2 -rotate-3 rounded-sm bg-gold/30 backdrop-blur-sm" />
+            </div>
+          )}
         </Reveal>
       </section>
 

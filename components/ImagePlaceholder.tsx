@@ -23,7 +23,7 @@ export default function ImagePlaceholder({
 }: ImagePlaceholderProps) {
   return (
     <div
-      className={`relative flex items-center justify-center overflow-hidden rounded-2xl border border-brown-700/15 bg-gradient-to-br from-cream-dark via-tan/40 to-brown-700/30 ${ratioClasses[ratio]} ${className}`}
+      className={`relative flex items-center justify-center overflow-hidden rounded-2xlbg-gradient-to-br from-cream-dark via-tan/40 to-brown-700/30 ${ratioClasses[ratio]} ${className}`}
     >
       <div className="bg-noise absolute inset-0 opacity-40" />
       <span className="relative px-6 text-center text-xs font-medium tracking-wide text-brown-800/70 uppercase">

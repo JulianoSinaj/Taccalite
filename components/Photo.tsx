@@ -23,7 +23,7 @@ export default function Photo({ src, alt, label, className = "", ratio = "wide",
   }
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl border border-brown-700/15 ${ratioClasses[ratio]} ${className}`}>
+    <div className={`relative overflow-hidden rounded-2xl${ratioClasses[ratio]} ${className}`}>
       <Image
         src={src}
         alt={alt}

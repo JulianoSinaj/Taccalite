@@ -41,8 +41,11 @@ function FacebookIcon({ className }: { className?: string }) {
 export default function Footer() {
   return (
     <footer className="relative z-10 overflow-hidden border-t border-white/5 bg-brown-950 pb-24 text-cream/70 sm:pb-32">
-      <div aria-hidden className="pointer-events-none select-none">
-        <p className="font-display -mb-[2vw] translate-y-[18%] text-center text-[19vw] leading-none font-bold tracking-tighter text-white/[0.045] uppercase">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 select-none"
+      >
+        <p className="font-display translate-y-[38%] text-center text-[13vw] leading-none font-bold tracking-tighter text-white/[0.03] uppercase">
           Taccalite
         </p>
       </div>

@@ -8,6 +8,13 @@ type Status = "idle" | "submitting" | "success" | "error";
 
 const PREFERENCES = ["Tavolo tranquillo", "Celebrazione speciale", "Degustazione guidata"];
 
+// Slot ogni 30 minuti entro l'orario di apertura (9:00 – 20:00)
+const timeSlots = Array.from({ length: 23 }, (_, i) => {
+  const h = 9 + Math.floor(i / 2);
+  const m = i % 2 === 0 ? "00" : "30";
+  return `${String(h).padStart(2, "0")}:${m}`;
+});
+
 const inputClasses =
   "w-full rounded-xl border border-brown-900/15 bg-cream-dark/40 px-4 py-3.5 text-sm text-brown-950 transition-colors placeholder:text-taupe focus:border-gold-dark focus:outline-none";
 
@@ -132,7 +139,16 @@ export default function ReservationForm() {
         <Field label="Ora" htmlFor="time">
           <div className="relative">
             <Clock className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-taupe" />
-            <input id="time" name="time" type="time" required className={`${inputClasses} pl-12`} />
+            <select id="time" name="time" required defaultValue="" className={`${inputClasses} pl-12`}>
+              <option value="" disabled>
+                --:--
+              </option>
+              {timeSlots.map((slot) => (
+                <option key={slot} value={slot}>
+                  {slot}
+                </option>
+              ))}
+            </select>
           </div>
         </Field>
       </div>

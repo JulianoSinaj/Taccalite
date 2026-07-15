@@ -125,7 +125,6 @@ export default function PorchettaPage() {
             </a>
           </Reveal>
           <Reveal delay={0.15} className="relative flex justify-center">
-            <div className="absolute -inset-4 translate-x-4 translate-y-4 rounded-[40px] border border-gold/20" />
             <div className="cinematic-shadow relative z-10 h-[480px] w-full overflow-hidden rounded-[32px] sm:h-[600px] lg:w-[480px]">
               <Image
                 src="https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?auto=format&fit=crop&q=80&w=800"

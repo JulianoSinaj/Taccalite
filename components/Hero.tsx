@@ -113,7 +113,7 @@ export default function Hero({
           transition={{ duration: 1, delay: 0.15 }}
           className="relative"
         >
-          <Photo src={image} alt={title} label={imageLabel} ratio="wide" className="border-cream/10" priority />
+          <Photo src={image} alt={title} label={imageLabel} ratio="wide" priority />
           {showMedallion && (
             <div className="pointer-events-none absolute -bottom-10 -right-6 hidden h-36 w-36 drop-shadow-[0_8px_24px_rgba(0,0,0,0.45)] sm:block lg:h-44 lg:w-44">
               <Hero3D />
