@@ -148,7 +148,7 @@ export default function ScrollFilm() {
   }
 
   return (
-    <section ref={ref} className="relative bg-brown-950" style={{ height: "350vh" }}>
+    <section ref={ref} className="relative h-[260vh] bg-brown-950 sm:h-[350vh]">
       <div className="sticky top-0 h-screen overflow-hidden">
         {ACTS.map((act, i) => (
           <Act key={act.n} act={act} index={i} progress={scrollYProgress} ready={ready} />

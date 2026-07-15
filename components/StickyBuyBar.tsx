@@ -32,20 +32,27 @@ export default function StickyBuyBar() {
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="fixed inset-x-0 bottom-0 z-50 px-4 pb-4 sm:px-6 sm:pb-6"
         >
-          <div className="cinematic-shadow mx-auto flex max-w-3xl flex-col items-center justify-between gap-4 rounded-[24px] border border-white/10 bg-brown-950/90 px-6 py-4 backdrop-blur-xl sm:flex-row sm:rounded-full sm:py-3 sm:pl-8 sm:pr-3">
-            <div className="flex items-center gap-4">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
-                <Flame className="size-5" />
+          <div className="cinematic-shadow mx-auto flex w-fit max-w-full items-center justify-between gap-3 rounded-full border border-white/10 bg-brown-950/90 py-1.5 pl-4 pr-1.5 backdrop-blur-xl sm:w-auto sm:max-w-3xl sm:gap-4 sm:py-3 sm:pl-8 sm:pr-3">
+            <div className="flex min-w-0 items-center gap-2.5 sm:gap-4">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold sm:h-10 sm:w-10">
+                <Flame className="size-3.5 sm:size-5" />
               </span>
-              <div>
-                <p className="text-sm font-semibold text-cream">La porchetta del sabato</p>
-                <p className="text-[10px] font-bold tracking-[0.2em] text-gold uppercase">
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-cream sm:text-sm">
+                  La porchetta del sabato
+                </p>
+                <p className="hidden text-[10px] font-bold tracking-[0.2em] text-gold uppercase sm:block">
                   Sfornata ogni sabato mattina · quantità limitate
                 </p>
               </div>
             </div>
-            <PillButton href="/prenotazioni" tone="gold" className="w-full sm:w-auto">
-              Riserva la tua porzione
+            <PillButton
+              href="/prenotazioni"
+              tone="gold"
+              className="shrink-0 px-4 py-2 text-xs sm:px-8 sm:py-3.5 sm:text-sm"
+            >
+              <span className="sm:hidden">Riserva</span>
+              <span className="hidden sm:inline">Riserva la tua porzione</span>
             </PillButton>
           </div>
         </motion.div>

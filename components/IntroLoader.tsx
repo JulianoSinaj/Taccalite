@@ -71,6 +71,28 @@ export default function IntroLoader() {
             visible: { pathLength: 1, opacity: 1, transition: { duration: 1.4, ease: "easeInOut", delay: 0.15 } },
           }}
         />
+        <motion.text
+          x="66"
+          y="66"
+          textAnchor="middle"
+          dominantBaseline="central"
+          className="font-display"
+          fill="var(--color-gold)"
+          fontSize="58"
+          fontWeight="600"
+          variants={{
+            hidden: { opacity: 0, scale: 0.82, filter: "blur(6px)" },
+            visible: {
+              opacity: 1,
+              scale: 1,
+              filter: "blur(0px)",
+              transition: { duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.7 },
+            },
+          }}
+          style={{ transformOrigin: "66px 66px" }}
+        >
+          T
+        </motion.text>
       </motion.svg>
 
       <motion.div

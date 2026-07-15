@@ -50,7 +50,7 @@ export default function Footer() {
         </p>
       </div>
       <div className="relative mx-auto max-w-7xl px-5 pt-16 sm:px-10 sm:pt-20">
-        <div className="mb-24 grid grid-cols-1 gap-16 md:grid-cols-2 lg:grid-cols-4 lg:gap-20">
+        <div className="mb-12 grid grid-cols-1 gap-16 md:grid-cols-2 lg:grid-cols-4 lg:gap-20">
           <div className="space-y-8">
             <div className="flex flex-col">
               <span className="font-display text-4xl font-bold tracking-tighter text-white uppercase">
