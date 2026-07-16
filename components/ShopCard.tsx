@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Clock, MapPin } from "lucide-react";
-import type { Shop } from "@/lib/data";
+import type { ShopRow as Shop } from "@/lib/db/schema";
 
 export default function ShopCard({ shop }: { shop: Shop }) {
   return (

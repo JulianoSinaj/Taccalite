@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import ImagePlaceholder from "./ImagePlaceholder";
-import type { BlogPost } from "@/lib/data";
+import type { BlogPostRow as BlogPost } from "@/lib/db/schema";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("it-IT", {

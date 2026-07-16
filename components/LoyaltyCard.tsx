@@ -1,11 +1,18 @@
 import { Award, QrCode } from "lucide-react";
 
-const POINTS = 340;
-const NEXT_REWARD = 500;
-
-export default function LoyaltyCard({ name }: { name: string }) {
-  const pct = Math.min(100, Math.round((POINTS / NEXT_REWARD) * 100));
-  const year = new Date().getFullYear();
+export default function LoyaltyCard({
+  name,
+  points,
+  nextRewardPoints,
+  cardNumber,
+}: {
+  name: string;
+  points: number;
+  nextRewardPoints?: number | null;
+  cardNumber: string;
+}) {
+  const target = nextRewardPoints ?? points;
+  const pct = target > 0 ? Math.min(100, Math.round((points / target) * 100)) : 100;
 
   return (
     <div className="cinematic-shadow relative mx-auto flex aspect-[1.6] w-full max-w-[520px] flex-col justify-between overflow-hidden rounded-[24px] border border-white/20 bg-gradient-to-br from-gold via-[#e8cc84] to-gold-dark p-6 sm:p-10">
@@ -35,8 +42,10 @@ export default function LoyaltyCard({ name }: { name: string }) {
           Punti accumulati
         </p>
         <p className="font-display text-4xl font-bold tracking-tight text-brown-950 sm:text-6xl">
-          {POINTS}{" "}
-          <span className="text-xl font-light opacity-60 sm:text-2xl">/ {NEXT_REWARD}</span>
+          {points}{" "}
+          {nextRewardPoints ? (
+            <span className="text-xl font-light opacity-60 sm:text-2xl">/ {nextRewardPoints}</span>
+          ) : null}
         </p>
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-brown-950/10">
           <div className="h-full rounded-full bg-brown-950" style={{ width: `${pct}%` }} />
@@ -46,7 +55,7 @@ export default function LoyaltyCard({ name }: { name: string }) {
       <div className="relative z-10 flex items-end justify-between">
         <div className="space-y-1">
           <p className="text-[10px] font-bold text-brown-950 uppercase">{name}</p>
-          <p className="font-mono text-[10px] text-brown-950/65">#TAC-1946-{year}</p>
+          <p className="font-mono text-[10px] text-brown-950/65">#{cardNumber}</p>
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brown-950/20">
           <QrCode className="size-5 text-brown-950" />

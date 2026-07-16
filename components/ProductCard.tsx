@@ -1,5 +1,5 @@
 import ImagePlaceholder from "./ImagePlaceholder";
-import type { Product } from "@/lib/data";
+import type { ProductRow as Product } from "@/lib/db/schema";
 
 export default function ProductCard({ product }: { product: Product }) {
   return (

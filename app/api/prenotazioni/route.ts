@@ -1,22 +1,53 @@
 import { NextResponse } from "next/server";
+import { reservationSchema } from "@/lib/validation/reservation";
+import { createReservation } from "@/lib/reservations";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
+
+export const runtime = "nodejs";
 
 /**
- * Stub endpoint: validates and logs the reservation request.
- * Wire this up to email/CRM/database once the owner picks a provider.
+ * Reservation intake: validates (Zod), rate-limits by IP, rejects honeypot bots,
+ * persists the reservation, and sends owner + customer emails.
  */
 export async function POST(request: Request) {
-  const body = await request.json();
-  const required = ["name", "phone", "date", "time", "guests", "shop"];
-  const missing = required.filter((key) => !body[key]);
-
-  if (missing.length > 0) {
+  const ip = clientIp(request);
+  const limited = rateLimit(`prenotazioni:${ip}`, { limit: 6, windowMs: 60_000 });
+  if (!limited.ok) {
     return NextResponse.json(
-      { ok: false, error: `Campi mancanti: ${missing.join(", ")}` },
-      { status: 400 }
+      { ok: false, error: "Troppe richieste. Riprova tra poco." },
+      { status: 429, headers: { "Retry-After": String(limited.retryAfterSec) } },
     );
   }
 
-  console.log("Nuova richiesta di prenotazione:", body);
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: "Richiesta non valida" }, { status: 400 });
+  }
 
-  return NextResponse.json({ ok: true });
+  const parsed = reservationSchema.safeParse(body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return NextResponse.json(
+      { ok: false, error: first?.message ?? "Dati non validi", field: first?.path?.[0] },
+      { status: 400 },
+    );
+  }
+
+  // Honeypot: silently accept but do nothing.
+  if (parsed.data.company) {
+    return NextResponse.json({ ok: true });
+  }
+
+  try {
+    const result = await createReservation(parsed.data);
+    return NextResponse.json({ ok: true, reference: result.reference });
+  } catch (err) {
+    console.error("Reservation error:", err);
+    return NextResponse.json(
+      { ok: false, error: "Si è verificato un errore. Riprova o chiamaci." },
+      { status: 500 },
+    );
+  }
 }

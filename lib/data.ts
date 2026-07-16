@@ -73,6 +73,7 @@ export type Product = {
   category: string;
   description: string;
   imageLabel: string;
+  image: string;
 };
 
 export const featuredProducts: Product[] = [
@@ -84,6 +85,8 @@ export const featuredProducts: Product[] = [
     description:
       "La nostra porchetta, cotta lentamente secondo la ricetta di famiglia: pelle croccante e carne morbida, aromatizzata con le erbe delle Marche.",
     imageLabel: "Foto porchetta intera sul banco",
+    image:
+      "https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&q=80&w=800",
   },
   {
     slug: "ciauscolo-igp",
@@ -93,6 +96,7 @@ export const featuredProducts: Product[] = [
     description:
       "Il salame morbido e spalmabile tipico marchigiano, prodotto secondo la tradizione norcina di famiglia.",
     imageLabel: "Foto ciauscolo affettato",
+    image: "/images/negozio-carni-prosciutto.jpg",
   },
   {
     slug: "pecorino-di-fossa",
@@ -102,6 +106,8 @@ export const featuredProducts: Product[] = [
     description:
       "Stagionato in fossa secondo il metodo tradizionale marchigiano, dal profumo intenso e dal gusto deciso.",
     imageLabel: "Foto forma di pecorino di fossa",
+    image:
+      "https://images.unsplash.com/photo-1452195100486-9cc805987862?auto=format&fit=crop&q=80&w=800",
   },
   {
     slug: "bistecca-marchigiana",
@@ -111,6 +117,8 @@ export const featuredProducts: Product[] = [
     description:
       "Carne di razza marchigiana, frollata e tagliata al momento su richiesta dal nostro banco carni.",
     imageLabel: "Foto bistecca sul tagliere",
+    image:
+      "https://images.unsplash.com/photo-1615937657715-bc7b4b7962c1?auto=format&fit=crop&q=80&w=800",
   },
 ];
 

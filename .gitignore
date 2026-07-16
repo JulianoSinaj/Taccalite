@@ -24,6 +24,12 @@
 .DS_Store
 *.pem
 
+# database (SQLite) + local mail outbox
+/data
+*.db
+*.db-shm
+*.db-wal
+
 # debug
 npm-debug.log*
 yarn-debug.log*

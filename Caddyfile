@@ -1,0 +1,20 @@
+# Replace taccalite.it with your real domain. Caddy obtains + renews TLS
+# certificates automatically via Let's Encrypt (ports 80/443 must be reachable).
+taccalite.it, www.taccalite.it {
+	encode zstd gzip
+	reverse_proxy app:3000
+
+	header {
+		# Basic security headers
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}
+
+# Local/testing fallback (no TLS): `http://<server-ip>` → app.
+# Comment out the block above and uncomment this to test by IP first.
+# :80 {
+# 	reverse_proxy app:3000
+# }

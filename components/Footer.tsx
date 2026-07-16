@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
-import { shops } from "@/lib/data";
+import { getShops } from "@/lib/db/queries";
+import NewsletterForm from "@/components/NewsletterForm";
 
 function InstagramIcon({ className }: { className?: string }) {
   return (
@@ -38,7 +38,8 @@ function FacebookIcon({ className }: { className?: string }) {
   );
 }
 
-export default function Footer() {
+export default async function Footer() {
+  const shops = await getShops();
   return (
     <footer className="relative z-10 overflow-hidden border-t border-white/5 bg-brown-950 pb-24 text-cream/70 sm:pb-32">
       <div
@@ -128,28 +129,22 @@ export default function Footer() {
               Ricevi gli inviti alle degustazioni stagionali e l&apos;avviso quando la porchetta
               del sabato esce dal forno.
             </p>
-            <div className="flex border-b border-white/10 pb-4 transition-colors focus-within:border-gold">
-              <input
-                type="email"
-                placeholder="Inserisci la tua email"
-                aria-label="Email per la newsletter"
-                className="w-full bg-transparent text-sm text-cream placeholder:text-white/40 focus:outline-none"
-              />
-              <button
-                type="button"
-                aria-label="Iscriviti alla newsletter"
-                className="text-gold transition-transform hover:translate-x-1"
-              >
-                <ArrowRight className="size-5" />
-              </button>
-            </div>
+            <NewsletterForm />
           </div>
         </div>
 
         <div className="border-t border-white/5 pt-10">
           <div className="flex flex-col justify-between gap-6 text-[10px] font-bold tracking-[0.3em] uppercase md:flex-row md:items-center">
             <p>© 1946–{new Date().getFullYear()} Norcineria Taccalite. Tutti i diritti riservati.</p>
-            <p className="text-white/50">Ancona, Marche</p>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <Link href="/privacy" className="text-white/60 transition-colors hover:text-gold">
+                Privacy
+              </Link>
+              <Link href="/cookie" className="text-white/60 transition-colors hover:text-gold">
+                Cookie
+              </Link>
+              <span className="text-white/50">Ancona, Marche</span>
+            </div>
           </div>
           <div className="mt-10 flex justify-center gap-5">
             <a

@@ -9,6 +9,7 @@ const links = [
   { href: "/", label: "Home" },
   { href: "/negozi", label: "I Negozi" },
   { href: "/porchetta", label: "La Porchetta" },
+  { href: "/negozio", label: "Negozio" },
   { href: "/blog", label: "News" },
   { href: "/prenotazioni", label: "Prenota" },
 ];

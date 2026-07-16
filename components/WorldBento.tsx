@@ -7,8 +7,10 @@ import type { ReactNode } from "react";
 import { ArrowRight, Award, Flame, MapPin } from "lucide-react";
 import SaturdayCountdown from "./SaturdayCountdown";
 import PillButton from "./PillButton";
-import { shops, blogPosts } from "@/lib/data";
 import { cn } from "@/lib/utils";
+
+type BentoShop = { slug: string; name: string; address: string };
+type BentoPost = { slug: string; title: string; date: string; image: string | null };
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("it-IT", {
@@ -53,9 +55,13 @@ function Tile({
  * "Il mondo Taccalite" bento. Mobile is deliberately dense — slim horizontal
  * rows and a 2-up pair — while md+ expands into the full 6-column bento.
  */
-export default function WorldBento() {
-  const latestPost = blogPosts[0];
-
+export default function WorldBento({
+  shops,
+  latestPost,
+}: {
+  shops: BentoShop[];
+  latestPost: BentoPost | null;
+}) {
   return (
     <section className="bg-cream-dark px-5 py-16 sm:px-12 sm:py-24">
       <div className="mx-auto max-w-7xl">
