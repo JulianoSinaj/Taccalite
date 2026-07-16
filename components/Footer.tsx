@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getShops } from "@/lib/db/queries";
+import { siteConfig } from "@/lib/site";
 import NewsletterForm from "@/components/NewsletterForm";
 
 function InstagramIcon({ className }: { className?: string }) {
@@ -117,7 +118,7 @@ export default async function Footer() {
                   <p className="mt-1 text-white/60">{shop.phone}</p>
                 </li>
               ))}
-              <li>E: {shops[0].email}</li>
+              <li>E: {siteConfig.email}</li>
             </ul>
           </div>
 
