@@ -1,12 +1,42 @@
 # Deploying Taccalite to Hetzner
 
-Self-hosted stack: **Docker Compose** running the Next.js app + **Caddy** (automatic
-TLS) in front, with **SQLite** persisted on a host volume. Designed for a single small
-Hetzner Cloud VM.
+Two supported paths:
+
+- **A) Coolify** (recommended if you already run Coolify) — see §0 below.
+- **B) Plain Docker Compose + Caddy** — see §1 onward. Uses `docker-compose.yml` +
+  `Caddyfile` in the repo.
+
+Either way the app is a single Next.js container with **SQLite persisted on a volume**.
 
 ---
 
-## 1. Provision the server
+## 0. Deploying with Coolify (recommended)
+
+Coolify already provides the reverse proxy + automatic HTTPS, so you deploy **only the app
+container** — ignore `docker-compose.yml` and `Caddyfile` (those are for path B).
+
+1. **New Resource → Application**, connect this Git repo, branch `main`.
+2. **Build Pack: `Dockerfile`** (not Nixpacks, not Docker Compose — the repo ships a
+   Dockerfile that also migrates + seeds on start).
+3. **Ports Exposes:** `3000`.
+4. **Domains:** set your FQDN (e.g. `taccalite.it`); Coolify issues Let's Encrypt TLS.
+   Point the DNS A-record at the server first.
+5. **Persistent storage (critical):** add a Storage volume mounted at **`/app/data`** —
+   this is the SQLite database. Without it, every redeploy wipes all data.
+6. **Environment variables:** `NEXT_PUBLIC_SITE_URL`, `DATABASE_URL=/app/data/taccalite.db`,
+   `SESSION_SECRET`, `CRON_SECRET`, `ADMIN_EMAIL`/`ADMIN_PASSWORD`/`ADMIN_NAME`,
+   `OWNER_EMAIL`, and (when ready) `SMTP_*`/`MAIL_FROM` and `STRIPE_*`. See §5–6 for those.
+7. **Deploy.** First boot applies migrations + seeds content and the admin (idempotent).
+8. **Cron:** Coolify → app → **Scheduled Tasks** → add
+   `curl -s "http://localhost:3000/api/cron?job=porchetta-reminders&secret=$CRON_SECRET"`
+   on `0 9 * * 5` (Fridays 09:00).
+
+Open `https://<domain>/admin`, log in with `ADMIN_EMAIL`/`ADMIN_PASSWORD`, change the
+password. Backups: snapshot the `/app/data` volume (see §7).
+
+---
+
+## 1. Provision the server _(path B — plain Docker Compose)_
 
 1. Create a **Hetzner Cloud** VM (CX22 or larger is plenty), Ubuntu 24.04, add your SSH key.
 2. Point your domain's DNS **A record** (`taccalite.it` and `www`) at the VM's IPv4.
