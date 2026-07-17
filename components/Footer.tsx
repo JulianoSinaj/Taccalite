@@ -80,12 +80,17 @@ export default async function Footer() {
               </li>
               <li>
                 <Link href="/negozi" className="transition-colors hover:text-gold">
-                  I Nostri Negozi
+                  Le Botteghe
                 </Link>
               </li>
               <li>
                 <Link href="/porchetta" className="transition-colors hover:text-gold">
                   La Porchetta
+                </Link>
+              </li>
+              <li>
+                <Link href="/negozio" className="transition-colors hover:text-gold">
+                  E-Shop
                 </Link>
               </li>
               <li>

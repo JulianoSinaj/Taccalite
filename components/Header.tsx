@@ -7,9 +7,9 @@ import { User } from "lucide-react";
 
 const links = [
   { href: "/", label: "Home" },
-  { href: "/negozi", label: "I Negozi" },
+  { href: "/negozi", label: "Le Botteghe" },
   { href: "/porchetta", label: "La Porchetta" },
-  { href: "/negozio", label: "Negozio" },
+  { href: "/negozio", label: "E-Shop" },
   { href: "/blog", label: "News" },
   { href: "/prenotazioni", label: "Prenota" },
 ];

@@ -8,7 +8,7 @@ import { formatEuro } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Negozio online",
+  title: "E-Shop",
   description:
     "Ordina online le specialità della Norcineria Taccalite: porchetta, salumi e formaggi, con ritiro in bottega o spedizione.",
 };
