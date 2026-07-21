@@ -19,7 +19,7 @@ const DAYS: { value: string; label: string }[] = [
   { value: "sunday", label: "Domenica" },
 ];
 
-type Control = "number" | "boolean" | "day";
+type Control = "number" | "boolean" | "day" | "text";
 
 /** Typed settings we know how to render as friendly form fields. Anything not
  *  listed here falls back to the raw JSON editor below. The `value` posted must
@@ -130,6 +130,49 @@ const KNOWN: {
     control: "boolean",
     default: true,
   },
+  // ── Dati fiscali (intestazione documenti / riepilogo IVA) ──
+  {
+    key: "business.legalName",
+    label: "Ragione sociale",
+    help: "Denominazione dell'attività così come compare su documenti e riepiloghi fiscali.",
+    control: "text",
+    default: "Norcineria Taccalite",
+  },
+  {
+    key: "business.vatNumber",
+    label: "Partita IVA",
+    help: "Partita IVA dell'attività (11 cifre).",
+    control: "text",
+    default: "",
+  },
+  {
+    key: "business.taxCode",
+    label: "Codice Fiscale",
+    help: "Codice fiscale dell'attività o del titolare.",
+    control: "text",
+    default: "",
+  },
+  {
+    key: "business.address",
+    label: "Sede legale",
+    help: "Indirizzo della sede legale riportato sui documenti.",
+    control: "text",
+    default: "",
+  },
+  {
+    key: "business.rea",
+    label: "REA / Registro imprese",
+    help: "Numero di iscrizione al Registro delle Imprese (REA), se applicabile.",
+    control: "text",
+    default: "",
+  },
+  {
+    key: "business.regime",
+    label: "Regime fiscale",
+    help: "Regime fiscale (es. Ordinario, Forfettario) indicato in fattura.",
+    control: "text",
+    default: "Ordinario",
+  },
 ];
 
 function SettingField({
@@ -156,6 +199,15 @@ function SettingField({
         />
         <span className="text-sm text-brown-800">Attivo</span>
       </label>
+    );
+  }
+  if (def.control === "text") {
+    const current = typeof value === "string" ? value : value == null ? String(def.default) : String(value);
+    return (
+      <>
+        <input type="hidden" name="valueType" value="text" />
+        <input type="text" name="value" defaultValue={current} className={`${inputCls} max-w-md`} />
+      </>
     );
   }
   if (def.control === "day") {

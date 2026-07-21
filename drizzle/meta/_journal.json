@@ -71,6 +71,13 @@
       "when": 1784638043856,
       "tag": "0009_last_crystal",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1784662159060,
+      "tag": "0010_acoustic_jimmy_woo",
+      "breakpoints": true
     }
   ]
 }

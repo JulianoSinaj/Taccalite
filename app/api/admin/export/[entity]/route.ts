@@ -3,8 +3,10 @@ import { desc, gte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { orders, reservations, newsletterSubscribers, pageViews } from "@/lib/db/schema";
 import { requireRole } from "@/lib/auth/session";
-import { getCustomersWithPoints } from "@/lib/admin/queries";
+import { getCustomersWithPoints, getVatReport } from "@/lib/admin/queries";
 import { normalizeRange } from "@/lib/analytics";
+import { getSetting } from "@/lib/db/queries";
+import { vatBreakdown, vatRateLabel } from "@/lib/fiscal";
 import { toCsv } from "@/lib/csv";
 
 export const runtime = "nodejs";
@@ -75,6 +77,34 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
       csv = toCsv(
         ["date", "views"],
         rows.map((r) => [r.day, r.n]),
+      );
+      break;
+    }
+    case "iva": {
+      const sp = new URL(request.url).searchParams;
+      const da = sp.get("da");
+      const a = sp.get("a");
+      const now = new Date();
+      const from = da ? new Date(`${da}T00:00:00`) : new Date(now.getFullYear(), now.getMonth(), 1);
+      const to = a ? new Date(`${a}T23:59:59`) : now;
+      const [{ lines, shippingGrossCents }, shippingVatPct] = await Promise.all([
+        getVatReport(from, to),
+        getSetting<number>("store.shippingVatRate", 22),
+      ]);
+      const buckets = vatBreakdown([
+        ...lines.map((l) => ({ grossCents: l.grossCents, vatRateBps: l.vatRateBps })),
+        ...(shippingGrossCents > 0
+          ? [{ grossCents: shippingGrossCents, vatRateBps: Math.round(shippingVatPct * 100) }]
+          : []),
+      ]);
+      csv = toCsv(
+        ["aliquota", "imponibileEuros", "impostaEuros", "totaleIvatoEuros"],
+        buckets.map((b) => [
+          vatRateLabel(b.rateBps),
+          (b.imponibileCents / 100).toFixed(2),
+          (b.impostaCents / 100).toFixed(2),
+          (b.grossCents / 100).toFixed(2),
+        ]),
       );
       break;
     }

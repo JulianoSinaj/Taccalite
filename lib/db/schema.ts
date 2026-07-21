@@ -75,6 +75,16 @@ export const products = sqliteTable(
     // E-commerce fields (nullable until a product is put on sale)
     priceCents: integer("price_cents"),
     unit: text("unit"), // e.g. "kg", "pezzo", "confezione"
+    // VAT rate in basis points (Italian IVA): 400=4%, 500=5%, 1000=10%, 2200=22%.
+    // Consumer prices are VAT-inclusive, so `priceCents` is the gross amount.
+    vatRateBps: integer("vat_rate_bps").notNull().default(1000),
+    // Fresh meat/salumi are sold to order by weight (price expressed per kg/etto).
+    soldByWeight: integer("sold_by_weight", { mode: "boolean" }).notNull().default(false),
+    // EU Reg. 1169/2011: the 14 mandatory allergens present in the product.
+    allergens: text("allergens", { mode: "json" }).$type<string[]>().notNull().default([]),
+    // Origin / traceability (e.g. "Suino nazionale — Marche") and ingredient list.
+    origin: text("origin"),
+    ingredients: text("ingredients"),
     purchasable: integer("purchasable", { mode: "boolean" }).notNull().default(false),
     stock: integer("stock"), // null = unlimited / made-to-order
     // When a low-stock alert was last emailed to the owner; cleared when restocked
@@ -89,6 +99,7 @@ export const products = sqliteTable(
     index("products_shop_idx").on(t.shopSlug),
     check("products_price_ck", sql`${t.priceCents} is null or ${t.priceCents} >= 0`),
     check("products_stock_ck", sql`${t.stock} is null or ${t.stock} >= 0`),
+    check("products_vat_ck", sql`${t.vatRateBps} >= 0 and ${t.vatRateBps} <= 10000`),
   ],
 );
 
@@ -363,6 +374,9 @@ export const orderItems = sqliteTable(
     unitPriceCents: integer("unit_price_cents").notNull(),
     quantity: integer("quantity").notNull(),
     lineTotalCents: integer("line_total_cents").notNull(),
+    // VAT rate snapshot at order time (basis points) — the product's rate may
+    // later change, but a placed order's fiscal breakdown must stay fixed.
+    vatRateBps: integer("vat_rate_bps").notNull().default(1000),
   },
   (t) => [
     index("order_items_order_idx").on(t.orderId),

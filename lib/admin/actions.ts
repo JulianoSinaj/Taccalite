@@ -194,6 +194,15 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
       image: d.image ?? "",
       priceCents: d.priceEuros,
       unit: d.unit ?? null,
+      vatRateBps: d.vatRate,
+      soldByWeight: d.soldByWeight,
+      // Allergens accepted as a comma/newline separated list, stored as an array.
+      allergens: (d.allergens ?? "")
+        .split(/[,\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean),
+      origin: d.origin ?? null,
+      ingredients: d.ingredients ?? null,
       purchasable: d.purchasable,
       stock: d.stock,
       featured: d.featured,
@@ -521,10 +530,14 @@ export async function saveSetting(_prev: ActionState, fd: FormData): Promise<Act
     await requireRole("admin");
     const d = parseForm(settingInput, fd);
     let value: unknown = d.value;
-    try {
-      value = JSON.parse(d.value);
-    } catch {
-      /* keep as string */
+    // Text settings are stored verbatim; everything else round-trips through JSON
+    // so getSetting<number>/<boolean> keep working.
+    if (d.valueType !== "text") {
+      try {
+        value = JSON.parse(d.value);
+      } catch {
+        /* keep as string */
+      }
     }
     await db
       .insert(settings)

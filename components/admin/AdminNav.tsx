@@ -13,6 +13,7 @@ import {
   Mail,
   Newspaper,
   Package,
+  Receipt,
   ScanLine,
   Settings,
   ShieldCheck,
@@ -35,6 +36,7 @@ const items = [
   { href: "/admin/outbox", label: "Email", icon: Mail },
   // Admin-only.
   { href: "/admin/analytics", label: "Statistiche", icon: BarChart3, adminOnly: true },
+  { href: "/admin/reports/iva", label: "Riepilogo IVA", icon: Receipt, adminOnly: true },
   { href: "/admin/users", label: "Utenti", icon: ShieldCheck, adminOnly: true },
   { href: "/admin/settings", label: "Impostazioni", icon: Settings, adminOnly: true },
 ];

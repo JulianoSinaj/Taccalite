@@ -5,6 +5,7 @@ import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { adminGetOrder, adminGetShops } from "@/lib/admin/queries";
 import { updateOrderStatus, setOrderTracking, refundOrder } from "@/lib/admin/order-actions";
 import { isAdmin } from "@/lib/auth/session";
+import { vatBreakdown, vatRateLabel } from "@/lib/fiscal";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,8 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   const shopName = order.shopSlug ? shops.find((s) => s.slug === order.shopSlug)?.name ?? order.shopSlug : null;
   const addr = order.shippingAddress;
   const canRefund = admin && order.paymentStatus === "paid" && order.status !== "refunded";
+  // IVA breakdown from the per-line snapshot rates (prices are VAT-inclusive).
+  const vat = vatBreakdown(items.map((i) => ({ grossCents: i.lineTotalCents, vatRateBps: i.vatRateBps })));
 
   return (
     <div>
@@ -52,6 +55,31 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 <span>{euro(order.totalCents)}</span>
               </div>
             </div>
+            {vat.length > 0 && (
+              <div className="mt-4 border-t border-brown-900/10 pt-3">
+                <p className="mb-2 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+                  Riepilogo IVA (prezzi ivati)
+                </p>
+                <table className="w-full text-xs text-brown-800/80">
+                  <thead>
+                    <tr className="text-left text-brown-800/50">
+                      <th className="pb-1 font-semibold">Aliquota</th>
+                      <th className="pb-1 text-right font-semibold">Imponibile</th>
+                      <th className="pb-1 text-right font-semibold">Imposta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vat.map((b) => (
+                      <tr key={b.rateBps}>
+                        <td className="py-0.5">{vatRateLabel(b.rateBps)}</td>
+                        <td className="py-0.5 text-right">{euro(b.imponibileCents)}</td>
+                        <td className="py-0.5 text-right">{euro(b.impostaCents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Panel>
 
           <Panel>

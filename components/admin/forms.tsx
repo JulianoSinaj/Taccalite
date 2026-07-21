@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { inputCls, labelCls } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
 import { saveProduct, saveBlogPost, saveShop, saveReward } from "@/lib/admin/actions";
+import { VAT_RATES_BPS, vatRateLabel } from "@/lib/fiscal";
 import type { ProductRow, BlogPostRow, ShopRow, RewardRow } from "@/lib/db/schema";
 
 function Toggle({ name, label, defaultChecked }: { name: string; label: string; defaultChecked?: boolean }) {
@@ -123,11 +124,44 @@ export function ProductForm({ product, shops }: { product?: ProductRow | null; s
         <input name="unit" defaultValue={product?.unit ?? ""} className={inputCls} />
       </div>
       <div>
+        <label className={labelCls}>Aliquota IVA</label>
+        <select name="vatRate" defaultValue={String((product?.vatRateBps ?? 1000) / 100)} className={inputCls}>
+          {VAT_RATES_BPS.map((bps) => (
+            <option key={bps} value={String(bps / 100)}>
+              {vatRateLabel(bps)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
         <label className={labelCls}>Giacenza (vuoto = illimitata)</label>
         <input name="stock" type="number" defaultValue={product?.stock ?? ""} className={inputCls} />
       </div>
-      <div className="flex items-center gap-6 pt-6">
+      <div className="sm:col-span-2">
+        <label className={labelCls}>Provenienza / tracciabilità</label>
+        <input
+          name="origin"
+          defaultValue={product?.origin ?? ""}
+          placeholder="es. Suino nazionale — Marche"
+          className={inputCls}
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <label className={labelCls}>Allergeni (separati da virgola)</label>
+        <input
+          name="allergens"
+          defaultValue={product?.allergens?.join(", ") ?? ""}
+          placeholder="es. glutine, latte, frutta a guscio"
+          className={inputCls}
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <label className={labelCls}>Ingredienti</label>
+        <textarea name="ingredients" rows={2} defaultValue={product?.ingredients ?? ""} className={inputCls} />
+      </div>
+      <div className="flex flex-wrap items-center gap-6 pt-6 sm:col-span-2">
         <Toggle name="purchasable" label="Acquistabile online" defaultChecked={product?.purchasable} />
+        <Toggle name="soldByWeight" label="Venduto a peso" defaultChecked={product?.soldByWeight} />
         <Toggle name="featured" label="In evidenza" defaultChecked={product?.featured ?? true} />
         <Toggle name="active" label="Attivo" defaultChecked={product?.active ?? true} />
       </div>

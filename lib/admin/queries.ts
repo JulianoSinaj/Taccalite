@@ -427,3 +427,37 @@ export async function getOutboxPage(opts: { page?: number; status?: string; q?: 
 }
 
 export const getAllSettings = () => db.select().from(settings).orderBy(settings.key);
+
+/**
+ * IVA report: for paid orders whose creation date falls in [from, to], the gross
+ * of every order line grouped by VAT rate, plus the gross of shipping. The caller
+ * derives imponibile/imposta via `vatBreakdown` (prices are VAT-inclusive).
+ *
+ * Refunded orders are excluded (paymentStatus = 'paid' only), so the report
+ * reflects net taxable takings for the period.
+ */
+export async function getVatReport(from: Date, to: Date) {
+  const paidInRange = and(
+    eq(orders.paymentStatus, "paid"),
+    gte(orders.createdAt, from),
+    lte(orders.createdAt, to),
+  );
+
+  const [lines, [shipping]] = await Promise.all([
+    db
+      .select({
+        vatRateBps: orderItems.vatRateBps,
+        grossCents: sql<number>`coalesce(sum(${orderItems.lineTotalCents}), 0)`,
+      })
+      .from(orderItems)
+      .innerJoin(orders, eq(orderItems.orderId, orders.id))
+      .where(paidInRange)
+      .groupBy(orderItems.vatRateBps),
+    db
+      .select({ grossCents: sql<number>`coalesce(sum(${orders.shippingCents}), 0)` })
+      .from(orders)
+      .where(paidInRange),
+  ]);
+
+  return { lines, shippingGrossCents: shipping?.grossCents ?? 0 };
+}

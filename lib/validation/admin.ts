@@ -38,6 +38,16 @@ export const productInput = z
       .transform((v) => (v && v !== "" ? Math.round(Number(v) * 100) : null))
       .refine((v) => v == null || (Number.isFinite(v) && v >= 0), "Prezzo non valido"),
     unit: optionalText(40),
+    // VAT rate posted as a percent (e.g. "10"), stored as basis points (1000).
+    vatRate: z
+      .union([z.string(), z.null()])
+      .optional()
+      .transform((v) => (v != null && v !== "" ? Math.round(Number(v) * 100) : 1000))
+      .refine((v) => Number.isFinite(v) && v >= 0 && v <= 10000, "Aliquota IVA non valida"),
+    soldByWeight: checkbox,
+    allergens: optionalText(600),
+    origin: optionalText(300),
+    ingredients: optionalText(4000),
     stock: z
       .union([z.string(), z.null()])
       .optional()
@@ -133,6 +143,9 @@ export const pointsInput = z.object({
 export const settingInput = z.object({
   key: z.string().trim().min(1).max(120),
   value: z.string(),
+  // When "text", the value is stored verbatim as a string (never JSON-parsed) so
+  // numeric-looking text like a Partita IVA keeps its leading zeros and type.
+  valueType: z.enum(["json", "text"]).optional(),
 });
 
 export const userRoleInput = z.object({

@@ -120,6 +120,7 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
               unitPriceCents: l.unitPriceCents,
               quantity: l.quantity,
               lineTotalCents: l.lineTotalCents,
+              vatRateBps: l.product.vatRateBps,
             })),
           )
           .run();
