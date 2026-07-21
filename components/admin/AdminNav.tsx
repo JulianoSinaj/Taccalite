@@ -46,7 +46,7 @@ export default function AdminNav({ userName, isAdmin }: { userName: string; isAd
   }
 
   return (
-    <aside className="flex w-full shrink-0 flex-col border-b border-brown-900/10 bg-white lg:h-screen lg:w-64 lg:border-b-0 lg:border-r">
+    <aside className="flex w-full shrink-0 flex-col border-b border-brown-900/10 bg-white lg:h-screen lg:w-64 lg:border-b-0 lg:border-r print:hidden">
       <div className="border-b border-brown-900/10 px-6 py-5">
         <Link href="/admin" className="block">
           <p className="font-display text-xl font-bold tracking-tighter text-brown-950 uppercase">

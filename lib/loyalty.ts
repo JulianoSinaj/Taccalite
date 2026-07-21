@@ -1,8 +1,10 @@
 import "server-only";
 import { customAlphabet } from "nanoid";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gt, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { loyaltyAccounts, loyaltyTransactions, redemptions, rewards } from "@/lib/db/schema";
+import { loyaltyAccounts, loyaltyTransactions, redemptions, rewards, users } from "@/lib/db/schema";
+import { sendMail } from "@/lib/mail/mailer";
+import { rewardUnlockedEmail } from "@/lib/mail/templates";
 
 /** Thrown inside the redeem transaction to roll it back on insufficient points. */
 class InsufficientPointsError extends Error {}
@@ -68,7 +70,7 @@ export async function addPoints(
 ): Promise<{ points: number }> {
   await getOrCreateLoyaltyAccount(userId); // ensure the account row exists
 
-  return db.transaction((tx) => {
+  const result = db.transaction((tx) => {
     const [updated] = tx
       .update(loyaltyAccounts)
       .set({ points: sql`max(0, ${loyaltyAccounts.points} + ${delta})` })
@@ -88,6 +90,40 @@ export async function addPoints(
 
     return { points: updated.points };
   });
+
+  // On accrual, tell the customer about any reward they can now afford. For a
+  // positive delta the balance rose by exactly `delta` (it was already ≥ 0), so
+  // the previous balance is `result.points - delta`. Best-effort — never fails
+  // the points operation.
+  if (delta > 0) {
+    try {
+      await notifyRewardsUnlocked(userId, result.points - delta, result.points);
+    } catch {
+      // ignore — the points are already recorded; the email is non-critical
+    }
+  }
+
+  return result;
+}
+
+/** Email the customer if their balance just crossed one or more reward thresholds. */
+async function notifyRewardsUnlocked(userId: string, prevPoints: number, newPoints: number): Promise<void> {
+  if (newPoints <= prevPoints) return;
+  const unlocked = await db
+    .select({ name: rewards.name, points: rewards.points })
+    .from(rewards)
+    .where(and(eq(rewards.active, true), gt(rewards.points, prevPoints), lte(rewards.points, newPoints)))
+    .orderBy(rewards.points);
+  if (unlocked.length === 0) return;
+
+  const [user] = await db
+    .select({ email: users.email, name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!user?.email) return;
+
+  await sendMail({ to: user.email, ...rewardUnlockedEmail(user.name || "", unlocked, newPoints) });
 }
 
 export type RedeemResult =

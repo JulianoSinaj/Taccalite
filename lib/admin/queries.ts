@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, like, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, like, or, sql, type SQL } from "drizzle-orm";
 
 export const PAGE_SIZE = 25;
 import { db } from "@/lib/db/client";
@@ -60,6 +60,19 @@ export const getReservations = (status?: string, shopSlug?: string) => {
   const q = db.select().from(reservations).orderBy(desc(reservations.createdAt));
   return conds.length ? q.where(and(...conds)) : q;
 };
+
+/** Upcoming (today onward) active reservations, ordered by date+time, for the
+ *  agenda / porchetta prep views. */
+export async function getUpcomingReservations() {
+  const today = new Date().toISOString().slice(0, 10);
+  return db
+    .select()
+    .from(reservations)
+    .where(
+      and(gte(reservations.date, today), inArray(reservations.status, ["pending", "confirmed"])),
+    )
+    .orderBy(reservations.date, reservations.time);
+}
 
 export const getOrdersList = (shopSlug?: string) => {
   const q = db.select().from(orders).orderBy(desc(orders.createdAt));

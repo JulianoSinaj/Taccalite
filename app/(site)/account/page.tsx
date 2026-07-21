@@ -3,6 +3,7 @@ import AuthForms from "@/components/account/AuthForms";
 import AccountDashboard from "@/components/account/AccountDashboard";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getLoyaltySummary } from "@/lib/loyalty";
+import { getOrdersForUser } from "@/lib/orders";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,10 @@ export default async function AccountPage() {
   const user = await getCurrentUser();
   if (!user) return <AuthForms />;
 
-  const { account, transactions, rewards, nextReward } = await getLoyaltySummary(user.id);
+  const [{ account, transactions, rewards, nextReward }, orders] = await Promise.all([
+    getLoyaltySummary(user.id),
+    getOrdersForUser(user.id),
+  ]);
 
   return (
     <AccountDashboard
@@ -24,6 +28,14 @@ export default async function AccountPage() {
       points={account.points}
       cardNumber={account.cardNumber}
       nextReward={nextReward ? { name: nextReward.name, points: nextReward.points } : null}
+      orders={orders.map((o) => ({
+        id: o.id,
+        orderNumber: o.orderNumber,
+        createdAt: o.createdAt ?? new Date(),
+        status: o.status,
+        totalCents: o.totalCents,
+        fulfilment: o.fulfilment,
+      }))}
       rewards={rewards.map((r) => ({
         id: r.id,
         name: r.name,

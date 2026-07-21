@@ -10,6 +10,22 @@ import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
 
 type Reward = { id: string; name: string; description: string; points: number; image: string | null };
 type Tx = { id: string; delta: number; reason: string; balanceAfter: number; createdAt: string | Date };
+type Order = {
+  id: string;
+  orderNumber: string;
+  createdAt: string | Date;
+  status: string;
+  totalCents: number;
+  fulfilment: string;
+};
+
+const ORDER_STATUS: Record<string, { label: string; cls: string }> = {
+  pending: { label: "In attesa", cls: "bg-amber-100 text-amber-800" },
+  paid: { label: "Pagato", cls: "bg-emerald-100 text-emerald-800" },
+  fulfilled: { label: "Consegnato", cls: "bg-emerald-100 text-emerald-800" },
+  cancelled: { label: "Annullato", cls: "bg-red-100 text-red-700" },
+  refunded: { label: "Rimborsato", cls: "bg-brown-900/10 text-brown-800" },
+};
 
 export default function AccountDashboard({
   name,
@@ -18,6 +34,7 @@ export default function AccountDashboard({
   nextReward,
   rewards,
   transactions,
+  orders,
 }: {
   name: string;
   points: number;
@@ -25,6 +42,7 @@ export default function AccountDashboard({
   nextReward: { name: string; points: number } | null;
   rewards: Reward[];
   transactions: Tx[];
+  orders: Order[];
 }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -142,6 +160,57 @@ export default function AccountDashboard({
                       </span>
                     </li>
                   ))}
+                </ul>
+              )}
+            </Reveal>
+
+            <Reveal className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-8 sm:p-10">
+              <h3 className="font-display mb-6 text-3xl tracking-tight text-brown-950">I tuoi ordini</h3>
+              {orders.length === 0 ? (
+                <p className="text-brown-900/70">
+                  Non hai ancora ordini. Scopri il{" "}
+                  <Link href="/negozio" className="font-semibold text-brown-950 underline">
+                    negozio online
+                  </Link>
+                  .
+                </p>
+              ) : (
+                <ul className="divide-y divide-brown-900/10">
+                  {orders.map((o) => {
+                    const st = ORDER_STATUS[o.status] ?? {
+                      label: o.status,
+                      cls: "bg-brown-900/10 text-brown-800",
+                    };
+                    return (
+                      <li key={o.id} className="flex items-center justify-between gap-4 py-3">
+                        <div>
+                          <p className="text-sm font-semibold text-brown-950">
+                            {o.orderNumber}
+                            <span className="ml-2 text-xs font-normal text-brown-800/60">
+                              {o.fulfilment === "pickup" ? "Ritiro" : "Spedizione"}
+                            </span>
+                          </p>
+                          <p className="text-xs text-brown-800/60">
+                            {new Date(o.createdAt).toLocaleDateString("it-IT", {
+                              day: "numeric",
+                              month: "long",
+                              year: "numeric",
+                            })}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`rounded-full px-3 py-1 text-[10px] font-bold tracking-widest uppercase ${st.cls}`}
+                          >
+                            {st.label}
+                          </span>
+                          <span className="font-display text-lg font-bold text-brown-950">
+                            € {(o.totalCents / 100).toFixed(2)}
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </Reveal>

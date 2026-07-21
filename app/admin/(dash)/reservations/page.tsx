@@ -37,16 +37,24 @@ export default async function AdminReservations({ searchParams }: SP) {
         title="Prenotazioni"
         subtitle={`${rows.length} richieste`}
         action={
-          admin ? (
-            // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
-            <a
-              href="/api/admin/export/reservations"
-              download
-              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/reservations/agenda"
+              className="rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
             >
-              Esporta CSV
-            </a>
-          ) : null
+              Agenda / prep
+            </Link>
+            {admin ? (
+              // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
+              <a
+                href="/api/admin/export/reservations"
+                download
+                className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              >
+                Esporta CSV
+              </a>
+            ) : null}
+          </div>
         }
       />
 

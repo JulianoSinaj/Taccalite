@@ -267,6 +267,37 @@ export function reservationStatusEmail(
   };
 }
 
+/** Sent when a customer's balance first crosses one or more reward thresholds. */
+export function rewardUnlockedEmail(
+  name: string,
+  unlocked: { name: string; points: number }[],
+  balance: number,
+): Built {
+  const items = unlocked
+    .map(
+      (r) =>
+        `<li style="margin:0 0 6px;font-size:15px;color:#2a1a10;">${esc(r.name)} — <strong>${r.points} punti</strong></li>`,
+    )
+    .join("");
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(name)}, ottime notizie! Con <strong>${balance} punti</strong> sulla tua scheda
+      fedeltà puoi ora riscattare:
+    </p>
+    <ul style="padding-left:18px;margin:0 0 16px;">${items}</ul>
+    <p style="margin:22px 0 0;">
+      <a href="${absoluteUrl("/account")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Riscatta nel tuo Club</a>
+    </p>`;
+  return {
+    subject: "Hai sbloccato un nuovo premio fedeltà",
+    html: layout({ heading: "Un premio ti aspetta", body, preheader: `${balance} punti disponibili` }),
+    text:
+      `Ciao ${name}, con ${balance} punti puoi riscattare: ` +
+      `${unlocked.map((r) => `${r.name} (${r.points} punti)`).join(", ")}. ` +
+      `Vai su ${absoluteUrl("/account")}`,
+  };
+}
+
 /** Newsletter double opt-in confirmation. */
 export function newsletterConfirmEmail(confirmUrl: string): Built {
   const heading = "Conferma la tua iscrizione";

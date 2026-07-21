@@ -1,6 +1,6 @@
 import "server-only";
 import { customAlphabet } from "nanoid";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { orders, orderItems, products } from "@/lib/db/schema";
 import { getShopBySlug, getSetting } from "@/lib/db/queries";
@@ -132,6 +132,23 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
     totalCents,
     items: lines.map((l) => ({ name: l.product.name, quantity: l.quantity, lineTotalCents: l.lineTotalCents })),
   };
+}
+
+/** A customer's recent orders for their account history (newest first). */
+export async function getOrdersForUser(userId: string) {
+  return db
+    .select({
+      id: orders.id,
+      orderNumber: orders.orderNumber,
+      createdAt: orders.createdAt,
+      status: orders.status,
+      totalCents: orders.totalCents,
+      fulfilment: orders.fulfilment,
+    })
+    .from(orders)
+    .where(eq(orders.userId, userId))
+    .orderBy(desc(orders.createdAt))
+    .limit(20);
 }
 
 export type OrderWithItems = {
