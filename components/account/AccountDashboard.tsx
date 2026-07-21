@@ -120,17 +120,17 @@ export default function AccountDashboard({
       </section>
 
       {/* Profile + stats */}
-      <section className="bg-cream px-5 py-24 sm:px-10 sm:py-32">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-16">
-          <div className="space-y-10 lg:col-span-7">
-            <Reveal className="card-shadow-soft flex flex-col items-center gap-8 rounded-[28px] border border-brown-900/10 bg-white/50 p-8 md:flex-row sm:p-10">
-              <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-full border-4 border-white bg-cream-dark shadow-xl">
-                <User className="size-12 text-brown-900/40" />
+      <section className="bg-cream px-5 py-16 sm:px-10 sm:py-24">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8">
+          <div className="space-y-6 lg:col-span-7">
+            <Reveal className="card-shadow-soft flex flex-col items-center gap-6 rounded-3xl border border-brown-900/10 bg-white/50 p-6 sm:p-8 md:flex-row">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-white bg-cream-dark shadow-md">
+                <User className="size-9 text-brown-900/40" />
               </div>
-              <div className="flex-1 space-y-5 text-center md:text-left">
-                <div className="space-y-1">
-                  <h4 className="font-display text-3xl text-brown-950">{name}</h4>
-                  <p className="font-medium text-brown-800/75">Cliente Taccalite · #{cardNumber}</p>
+              <div className="flex-1 space-y-3 text-center md:text-left">
+                <div className="space-y-0.5">
+                  <h4 className="font-display text-2xl text-brown-950">{name}</h4>
+                  <p className="text-sm font-medium text-brown-800/75">Cliente Taccalite · #{cardNumber}</p>
                 </div>
                 <p className="text-sm leading-relaxed text-brown-900/75">
                   Presenta la tua scheda in negozio ad ogni acquisto per accumulare punti e
@@ -139,18 +139,25 @@ export default function AccountDashboard({
               </div>
             </Reveal>
 
-            <Reveal className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-8 sm:p-10">
-              <h3 className="font-display mb-6 text-3xl tracking-tight text-brown-950">
-                Movimenti punti
-              </h3>
+            <Reveal className="card-shadow-soft rounded-3xl border border-brown-900/10 bg-white/50 p-6 sm:p-8">
+              <div className="mb-4 flex items-baseline justify-between border-b border-brown-900/10 pb-4">
+                <h3 className="font-display text-2xl tracking-tight text-brown-950">
+                  Movimenti punti
+                </h3>
+                {transactions.length > 0 && (
+                  <p className="text-xs font-semibold tracking-widest text-brown-800/60 uppercase">
+                    {transactions.length} {transactions.length === 1 ? "movimento" : "movimenti"}
+                  </p>
+                )}
+              </div>
               {transactions.length === 0 ? (
-                <p className="text-brown-900/70">
+                <p className="py-6 text-center text-sm text-brown-900/70">
                   Non hai ancora movimenti. I punti compaiono qui ad ogni acquisto in negozio.
                 </p>
               ) : (
                 <ul className="divide-y divide-brown-900/10">
                   {transactions.map((tx) => (
-                    <li key={tx.id} className="flex items-center justify-between py-3">
+                    <li key={tx.id} className="flex items-center justify-between gap-4 py-3.5">
                       <div>
                         <p className="text-sm font-semibold text-brown-950">{tx.reason || "Movimento"}</p>
                         <p className="text-xs text-brown-800/60">
@@ -162,7 +169,7 @@ export default function AccountDashboard({
                         </p>
                       </div>
                       <span
-                        className={`font-display text-xl font-bold ${
+                        className={`font-display text-lg font-bold tabular-nums ${
                           tx.delta >= 0 ? "text-gold-deep" : "text-red-700"
                         }`}
                       >
@@ -227,48 +234,50 @@ export default function AccountDashboard({
             </Reveal>
           </div>
 
-          <div className="space-y-6 lg:col-span-5">
-            <Reveal delay={0.1} className="card-shadow-soft space-y-4 rounded-[28px] border border-brown-900/10 bg-white/60 p-8">
-              <div className="mb-2 flex items-center gap-4">
-                <TrendingUp className="size-6 text-gold-dark" />
+          <div className="space-y-6 lg:sticky lg:top-24 lg:col-span-5">
+            <Reveal delay={0.1} className="card-shadow-soft rounded-3xl border border-brown-900/10 bg-white/60 p-6 sm:p-8">
+              <div className="mb-6 flex items-center gap-3">
+                <TrendingUp className="size-5 text-gold-dark" />
                 <h5 className="text-[11px] font-bold tracking-[0.3em] text-brown-950 uppercase">
-                  Il tuo profilo punti
+                  Il tuo saldo punti
                 </h5>
               </div>
-              <div className="grid grid-cols-1 gap-4">
-                <div className="flex items-center justify-between rounded-2xl border border-brown-950/5 bg-white p-6 shadow-sm">
-                  <p className="text-sm font-medium tracking-widest text-brown-800/75 uppercase">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="font-display text-6xl leading-none text-brown-950 tabular-nums">{points}</p>
+                  <p className="mt-2 text-xs font-medium tracking-widest text-brown-800/60 uppercase">
                     Punti raccolti
                   </p>
-                  <p className="font-display text-3xl text-brown-950">{points}</p>
                 </div>
                 {nextReward && (
-                  <div className="flex items-center justify-between rounded-2xl border border-brown-950/5 bg-white p-6 shadow-sm">
-                    <p className="text-sm font-medium tracking-widest text-brown-800/75 uppercase">
+                  <div className="text-right">
+                    <p className="font-display text-2xl leading-none text-brown-800/80 tabular-nums">
+                      {nextReward.points}
+                    </p>
+                    <p className="mt-2 text-xs font-medium tracking-widest text-brown-800/60 uppercase">
                       Prossimo premio
                     </p>
-                    <p className="font-display text-3xl text-brown-950">{nextReward.points}</p>
                   </div>
                 )}
               </div>
               {nextReward && (
-                <div className="pt-4">
-                  <div className="mb-2 flex justify-between text-[10px] font-bold tracking-widest uppercase">
-                    <p>{nextReward.name}</p>
-                    <p>{missing} pt mancanti</p>
+                <div className="mt-6 border-t border-brown-900/10 pt-5">
+                  <div className="mb-2 flex items-baseline justify-between gap-4 text-[10px] font-bold tracking-widest text-brown-900/80 uppercase">
+                    <p className="truncate">{nextReward.name}</p>
+                    <p className="shrink-0">{missing} pt mancanti</p>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-brown-950/5">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-brown-950/10">
                     <div className="h-full rounded-full bg-gold" style={{ width: `${pct}%` }} />
                   </div>
                 </div>
               )}
             </Reveal>
 
-            <Reveal delay={0.2} className="cinematic-shadow space-y-6 rounded-[28px] bg-brown-950 p-8 text-white">
+            <Reveal delay={0.2} className="cinematic-shadow space-y-4 rounded-3xl bg-brown-950 p-6 text-white sm:p-8">
               <h5 className="text-[11px] font-bold tracking-[0.3em] text-gold uppercase">
                 Vuoi accumulare più punti?
               </h5>
-              <p className="font-light text-cream/75">
+              <p className="text-sm font-light leading-relaxed text-cream/75">
                 Prenota un tavolo per una degustazione: ogni visita ti avvicina al prossimo premio.
               </p>
               <Link

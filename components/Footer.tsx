@@ -52,7 +52,7 @@ export default async function Footer() {
         </p>
       </div>
       <div className="relative mx-auto max-w-7xl px-5 pt-16 sm:px-10 sm:pt-20">
-        <div className="mb-12 grid grid-cols-1 gap-16 md:grid-cols-2 lg:grid-cols-4 lg:gap-20">
+        <div className="mb-6 grid grid-cols-1 gap-16 md:mb-12 md:grid-cols-2 lg:grid-cols-4 lg:gap-20">
           <div className="space-y-8">
             <div className="flex flex-col">
               <span className="font-display text-4xl font-bold tracking-tighter text-white uppercase">
@@ -80,12 +80,17 @@ export default async function Footer() {
               </li>
               <li>
                 <Link href="/negozi" className="transition-colors hover:text-gold">
-                  I Nostri Negozi
+                  Le Botteghe
                 </Link>
               </li>
               <li>
                 <Link href="/porchetta" className="transition-colors hover:text-gold">
                   La Porchetta
+                </Link>
+              </li>
+              <li>
+                <Link href="/negozio" className="transition-colors hover:text-gold">
+                  E-Shop
                 </Link>
               </li>
               <li>
@@ -134,7 +139,7 @@ export default async function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-white/5 pt-10">
+        <div className="border-t border-white/5 pt-6 md:pt-10">
           <div className="flex flex-col justify-between gap-6 text-[10px] font-bold tracking-[0.3em] uppercase md:flex-row md:items-center">
             <p>© 1946–{new Date().getFullYear()} Norcineria Taccalite. Tutti i diritti riservati.</p>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">

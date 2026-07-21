@@ -9,7 +9,7 @@ import { getShops } from "@/lib/db/queries";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "I Nostri Negozi",
+  title: "Le Botteghe",
   description:
     "Le due botteghe Taccalite ad Ancona: i grandi formaggi in Piazza Kennedy, carni e salumi al Mercato Coperto del Piano.",
 };
