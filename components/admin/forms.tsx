@@ -1,3 +1,6 @@
+"use client";
+
+import { useRef, useState } from "react";
 import { inputCls, labelCls } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
 import { saveProduct, saveBlogPost, saveShop, saveReward } from "@/lib/admin/actions";
@@ -18,23 +21,50 @@ function Toggle({ name, label, defaultChecked }: { name: string; label: string; 
  * `applyImageUpload` in the save actions.
  */
 function ImageField({ current }: { current?: string | null }) {
+  const [url, setUrl] = useState(current ?? "");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Clear both the URL and any picked file so a nullable image can be unset.
+  function clearImage() {
+    setUrl("");
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   return (
     <div className="sm:col-span-2">
       <label className={labelCls}>Immagine</label>
-      {current ? (
+      {url ? (
         // eslint-disable-next-line @next/next/no-img-element -- simple admin preview
-        <img src={current} alt="" className="mb-2 h-24 w-24 rounded-lg object-cover ring-1 ring-brown-900/10" />
+        <img src={url} alt="" className="mb-2 h-24 w-24 rounded-lg object-cover ring-1 ring-brown-900/10" />
       ) : null}
-      <input name="image" defaultValue={current ?? ""} placeholder="URL immagine…" className={inputCls} />
       <input
+        name="image"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="URL immagine…"
+        className={inputCls}
+      />
+      <input
+        ref={fileRef}
         name="imageFile"
         type="file"
         accept="image/png,image/jpeg,image/webp,image/avif"
         className="mt-2 block text-sm text-brown-800 file:mr-3 file:rounded-full file:border-0 file:bg-brown-900/10 file:px-4 file:py-2 file:text-xs file:font-bold file:tracking-widest file:uppercase hover:file:bg-brown-900/15"
       />
-      <p className="mt-1 text-xs text-brown-800/60">
-        Carica JPG/PNG/WebP/AVIF (max 5 MB) oppure incolla un URL. Il file caricato ha la precedenza.
-      </p>
+      <div className="mt-2 flex items-center gap-3">
+        {url ? (
+          <button
+            type="button"
+            onClick={clearImage}
+            className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+          >
+            Rimuovi immagine
+          </button>
+        ) : null}
+        <p className="text-xs text-brown-800/60">
+          Carica JPG/PNG/WebP/AVIF (max 5 MB) oppure incolla un URL. Il file caricato ha la precedenza.
+        </p>
+      </div>
     </div>
   );
 }

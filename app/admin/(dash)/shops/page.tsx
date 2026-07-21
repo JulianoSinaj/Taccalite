@@ -35,6 +35,11 @@ export default async function AdminShops() {
         </Panel>
       </details>
 
+      {shops.length === 0 ? (
+        <Panel>
+          <p className="text-brown-800/70">Nessuna sede ancora. Aggiungine una con il pulsante qui sopra.</p>
+        </Panel>
+      ) : (
       <div className="space-y-3">
         {shops.map((s) => (
           <Panel key={s.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -65,6 +70,7 @@ export default async function AdminShops() {
           </Panel>
         ))}
       </div>
+      )}
     </div>
   );
 }

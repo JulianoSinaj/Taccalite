@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { Calendar, Check, Clock, Flame, Minus, Plus, Users, UtensilsCrossed } from "lucide-react";
 
 type ShopOption = {
@@ -58,7 +59,12 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
   const reservationShops = shops.filter((s) => s.reservationsEnabled !== false);
   const porchettaShops = shops.filter((s) => s.porchettaEnabled !== false);
 
-  const [type, setType] = useState<ResType>("table");
+  // Allow deep-linking a pre-selected type, e.g. /prenotazioni?tipo=porchetta.
+  const searchParams = useSearchParams();
+  const tipoParam = searchParams.get("tipo");
+  const initialType: ResType =
+    tipoParam === "porchetta" || tipoParam === "order" || tipoParam === "table" ? tipoParam : "table";
+  const [type, setType] = useState<ResType>(initialType);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [reference, setReference] = useState<string | null>(null);

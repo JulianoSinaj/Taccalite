@@ -58,6 +58,24 @@ function parseLines(raw?: string) {
     .filter(Boolean);
 }
 
+/** Build a URL slug from free text: lowercase, accents stripped, spaces/other
+ *  characters → hyphens, repeats collapsed, edges trimmed. May return "". */
+function slugify(input: string): string {
+  return input
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "") // drop combining accent marks
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-") // spaces & non [a-z0-9] → hyphen
+    .replace(/-+/g, "-") // collapse repeats
+    .replace(/^-|-$/g, ""); // trim leading/trailing hyphens
+}
+
+/** True if another blog post already uses this slug (ignoring the row `excludeId`). */
+async function blogSlugTaken(slug: string, excludeId?: string): Promise<boolean> {
+  const rows = await db.select({ id: blogPosts.id }).from(blogPosts).where(eq(blogPosts.slug, slug));
+  return rows.some((r) => r.id !== excludeId);
+}
+
 /**
  * If the form carried an uploaded image file (`imageFile`), store it on the
  * persisted volume and overwrite the `image` field with its served path. Call
@@ -193,6 +211,32 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
   });
 }
 
+/** Quick list-row toggle: activate/deactivate a product. */
+export async function toggleProductActive(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    await requireAdmin();
+    const id = (fd.get("id") ?? "").toString();
+    const active = fd.get("active") === "true";
+    await db.update(products).set({ active }).where(eq(products.id, id));
+    revalidatePath("/admin/products");
+    revalidatePath("/negozio");
+    return ok(active ? "Prodotto attivato." : "Prodotto disattivato.");
+  });
+}
+
+/** Quick list-row toggle: feature/unfeature a product. */
+export async function toggleProductFeatured(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    await requireAdmin();
+    const id = (fd.get("id") ?? "").toString();
+    const featured = fd.get("featured") === "true";
+    await db.update(products).set({ featured }).where(eq(products.id, id));
+    revalidatePath("/admin/products");
+    revalidatePath("/negozio");
+    return ok(featured ? "Prodotto messo in evidenza." : "Prodotto rimosso dalle evidenze.");
+  });
+}
+
 export async function deleteProduct(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     await requireAdmin();
@@ -212,8 +256,15 @@ export async function saveBlogPost(_prev: ActionState, fd: FormData): Promise<Ac
       .split(/\n{2,}/)
       .map((p) => p.trim())
       .filter(Boolean);
+    // Prefer a readable slug derived from the title; fall back to a short random
+    // suffix only when the title yields nothing usable or the slug is taken.
+    let slug = d.slug;
+    if (!slug) {
+      const base = slugify(d.title);
+      slug = base && !(await blogSlugTaken(base, d.id)) ? base : `${base ? `${base}-` : ""}${nanoid(6)}`;
+    }
     const values = {
-      slug: d.slug || nanoid(8),
+      slug,
       title: d.title,
       date: d.date || new Date().toISOString().slice(0, 10),
       category: d.category ?? "",
@@ -232,6 +283,19 @@ export async function saveBlogPost(_prev: ActionState, fd: FormData): Promise<Ac
     revalidatePath("/admin/blog");
     revalidatePath("/blog");
     return ok(d.id ? "Articolo salvato." : "Articolo creato.");
+  });
+}
+
+/** Quick list-row toggle: publish/hide a blog post. */
+export async function toggleBlogPublished(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    await requireAdmin();
+    const id = (fd.get("id") ?? "").toString();
+    const published = fd.get("published") === "true";
+    await db.update(blogPosts).set({ published }).where(eq(blogPosts.id, id));
+    revalidatePath("/admin/blog");
+    revalidatePath("/blog");
+    return ok(published ? "Articolo pubblicato." : "Articolo nascosto.");
   });
 }
 
@@ -320,6 +384,18 @@ export async function saveReward(_prev: ActionState, fd: FormData): Promise<Acti
     }
     revalidatePath("/admin/rewards");
     return ok(d.id ? "Premio salvato." : "Premio creato.");
+  });
+}
+
+/** Quick list-row toggle: activate/deactivate a reward. */
+export async function toggleRewardActive(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    await requireAdmin();
+    const id = (fd.get("id") ?? "").toString();
+    const active = fd.get("active") === "true";
+    await db.update(rewards).set({ active }).where(eq(rewards.id, id));
+    revalidatePath("/admin/rewards");
+    return ok(active ? "Premio attivato." : "Premio disattivato.");
   });
 }
 

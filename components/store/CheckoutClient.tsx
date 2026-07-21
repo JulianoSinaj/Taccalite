@@ -6,7 +6,6 @@ import { Minus, Plus, Trash2 } from "lucide-react";
 import { useCart } from "./cart";
 import { formatEuro } from "@/lib/format";
 
-const SHIPPING_CENTS = 700;
 const inputCls =
   "w-full rounded-xl border border-brown-900/15 bg-cream-dark/40 px-4 py-3 text-sm text-brown-950 focus:border-gold-dark focus:outline-none";
 const labelCls = "eyebrow eyebrow-dark block mb-1.5";
@@ -16,10 +15,16 @@ type CheckoutUser = { name: string; email: string | null; phone: string | null }
 export default function CheckoutClient({
   shops,
   pointsPerEuro = 1,
+  loyaltyEnabled = true,
+  shippingCents = 700,
+  freeShippingThresholdCents = 0,
   user = null,
 }: {
   shops: { slug: string; name: string }[];
   pointsPerEuro?: number;
+  loyaltyEnabled?: boolean;
+  shippingCents?: number;
+  freeShippingThresholdCents?: number;
   user?: CheckoutUser | null;
 }) {
   const { items, subtotalCents, setQty, remove, clear } = useCart();
@@ -27,8 +32,13 @@ export default function CheckoutClient({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const shippingCents = fulfilment === "shipping" ? SHIPPING_CENTS : 0;
-  const totalCents = subtotalCents + shippingCents;
+  // Display-only pricing — mirrors the server rules in lib/orders.ts. Shipping
+  // applies only to shipping orders, and is waived once the subtotal reaches the
+  // free-shipping threshold (a threshold of 0 disables free shipping).
+  const freeShipping =
+    fulfilment === "shipping" && freeShippingThresholdCents > 0 && subtotalCents >= freeShippingThresholdCents;
+  const effectiveShippingCents = fulfilment === "shipping" && !freeShipping ? shippingCents : 0;
+  const totalCents = subtotalCents + effectiveShippingCents;
   // Loyalty points are earned on the goods subtotal (server-authoritative on award).
   const pointsPreview = Math.floor((subtotalCents / 100) * pointsPerEuro);
 
@@ -123,7 +133,13 @@ export default function CheckoutClient({
             </div>
             <div className="flex justify-between text-brown-800/80">
               <span>Spedizione</span>
-              <span>{shippingCents ? formatEuro(shippingCents) : "Gratis (ritiro)"}</span>
+              <span>
+                {fulfilment !== "shipping"
+                  ? "Gratis (ritiro)"
+                  : freeShipping
+                    ? "Spedizione gratuita"
+                    : formatEuro(effectiveShippingCents)}
+              </span>
             </div>
             <div className="flex justify-between pt-2 font-display text-xl font-bold text-brown-950">
               <span>Totale</span>
@@ -161,7 +177,7 @@ export default function CheckoutClient({
                     fulfilment === f ? "border-gold-dark bg-gold/15 text-brown-950" : "border-brown-900/12 text-brown-800/70"
                   }`}
                 >
-                  {f === "pickup" ? "Ritiro in bottega" : "Spedizione (+€7)"}
+                  {f === "pickup" ? "Ritiro in bottega" : `Spedizione (+${formatEuro(shippingCents)})`}
                 </button>
               ))}
             </div>
@@ -200,7 +216,7 @@ export default function CheckoutClient({
 
           <input type="text" name="company" tabIndex={-1} autoComplete="off" aria-hidden className="absolute -left-[9999px] h-0 w-0" />
 
-          {pointsPreview > 0 && (
+          {loyaltyEnabled && pointsPreview > 0 && (
             <p className="rounded-xl bg-gold/10 px-4 py-3 text-sm text-brown-950">
               Con questo ordine guadagnerai ~{pointsPreview}{" "}
               {pointsPreview === 1 ? "punto" : "punti"} fedeltà.

@@ -105,6 +105,31 @@ const KNOWN: {
     min: 0,
     step: 1,
   },
+  {
+    key: "store.shippingCents",
+    label: "Costo di spedizione (centesimi)",
+    help: "Costo fisso di spedizione espresso in centesimi (es. 700 = €7,00). Si applica solo agli ordini con spedizione.",
+    control: "number",
+    default: 700,
+    min: 0,
+    step: 50,
+  },
+  {
+    key: "store.freeShippingThresholdCents",
+    label: "Soglia spedizione gratuita (centesimi)",
+    help: "Se il subtotale dell'ordine raggiunge questo valore in centesimi (es. 5000 = €50,00), la spedizione è gratuita. Imposta 0 per disattivare.",
+    control: "number",
+    default: 0,
+    min: 0,
+    step: 100,
+  },
+  {
+    key: "loyalty.enabled",
+    label: "Programma fedeltà attivo",
+    help: "Abilita il programma fedeltà: accredito dei punti sugli ordini pagati e anteprima dei punti al checkout.",
+    control: "boolean",
+    default: true,
+  },
 ];
 
 function SettingField({

@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { AdminHeader, Panel, StatusBadge, euro } from "@/components/admin/ui";
 import { ProductForm } from "@/components/admin/forms";
-import { DeleteForm } from "@/components/admin/ActionForm";
+import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { adminGetProducts, adminGetShops } from "@/lib/admin/queries";
 import { getSetting } from "@/lib/db/queries";
-import { deleteProduct } from "@/lib/admin/actions";
+import { deleteProduct, toggleProductActive, toggleProductFeatured } from "@/lib/admin/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +65,18 @@ export default async function AdminProducts() {
                 ))}
             </div>
             <div className="flex items-center gap-2">
+              <ActionForm action={toggleProductFeatured} className="inline-flex">
+                <input type="hidden" name="id" value={p.id} />
+                <input type="hidden" name="featured" value={p.featured ? "false" : "true"} />
+                <PendingButton tone={p.featured ? "gold" : "dark"}>
+                  {p.featured ? "★ In evidenza" : "☆ Evidenzia"}
+                </PendingButton>
+              </ActionForm>
+              <ActionForm action={toggleProductActive} className="inline-flex">
+                <input type="hidden" name="id" value={p.id} />
+                <input type="hidden" name="active" value={p.active ? "false" : "true"} />
+                <PendingButton tone="dark">{p.active ? "Disattiva" : "Attiva"}</PendingButton>
+              </ActionForm>
               <Link
                 href={`/admin/products/${p.id}`}
                 className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"

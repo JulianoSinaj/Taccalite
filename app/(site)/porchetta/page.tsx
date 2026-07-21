@@ -4,12 +4,37 @@ import Image from "next/image";
 import { Bell, ChevronDown, Flame } from "lucide-react";
 import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
 import MedallionBadge from "@/components/MedallionBadge";
+import { getSetting, getPorchettaKgForDate } from "@/lib/db/queries";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "La Porchetta",
   description:
     "La porchetta artigianale Taccalite: la ricetta di famiglia, cotta lentamente ogni sabato ad Ancona.",
 };
+
+// English weekday keys (as stored in the `porchetta.day` setting) → JS getDay().
+const WEEKDAY_INDEX: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
+/** yyyy-mm-dd for a local Date, without the UTC shift of toISOString(). */
+function toIsoDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Trim trailing ".0" from half-kg quantities for display (e.g. 12.0 → "12"). */
+function formatKg(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+}
 
 const steps = [
   {
@@ -53,7 +78,34 @@ const gallery = [
   },
 ];
 
-export default function PorchettaPage() {
+export default async function PorchettaPage() {
+  // Live availability for the next porchetta pickup day (configurable; Saturday
+  // by default). All reads are best-effort — the page still renders if unset.
+  const [dayKey, capacityKg] = await Promise.all([
+    getSetting<string>("porchetta.day", "saturday"),
+    getSetting<number>("porchetta.weeklyCapacityKg", 0),
+  ]);
+
+  const now = new Date();
+  const target = WEEKDAY_INDEX[String(dayKey).toLowerCase()] ?? 6; // fall back to Saturday
+  const ahead = (target - now.getDay() + 7) % 7; // 0 = today is the pickup day
+  const pickup = new Date(now.getFullYear(), now.getMonth(), now.getDate() + ahead);
+  const pickupIso = toIsoDate(pickup);
+
+  const reservedKg = await getPorchettaKgForDate(pickupIso);
+  const capacity = Number(capacityKg) || 0;
+  const remainingKg = Math.max(0, capacity - reservedKg);
+  const isFull = capacity > 0 && remainingKg <= 0;
+
+  // "Sabato 26 luglio" — day name derives from the actual date, so it stays
+  // correct even if the pickup day setting changes.
+  const rawLabel = new Intl.DateTimeFormat("it-IT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(pickup);
+  const pickupLabel = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
+
   return (
     <div>
       {/* Hero */}
@@ -87,6 +139,36 @@ export default function PorchettaPage() {
           <span className="text-[9px] font-bold tracking-[0.4em] uppercase">Scroll</span>
           <div className="h-12 w-px bg-gradient-to-b from-white/40 to-transparent" />
         </div>
+      </section>
+
+      {/* Disponibilità — live availability strip */}
+      <section className="bg-brown-900 px-5 py-10 sm:px-8 sm:py-14">
+        <Reveal className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-6 rounded-[28px] border border-gold/25 bg-brown-950/50 px-6 py-7 backdrop-blur-sm sm:flex-row sm:px-10 sm:py-8">
+          <div className="text-center sm:text-left">
+            <span className="eyebrow mb-3 block">Prossima sfornata</span>
+            <p className="font-display text-2xl leading-tight text-cream sm:text-3xl">
+              {pickupLabel}
+              {capacity > 0 &&
+                (isFull ? (
+                  <span className="text-gold italic"> · Al completo — lista d&apos;attesa</span>
+                ) : (
+                  <span className="text-cream/70">
+                    {" "}
+                    · <span className="font-bold text-gold">{formatKg(remainingKg)} kg</span> su{" "}
+                    {formatKg(capacity)} disponibili
+                  </span>
+                ))}
+            </p>
+          </div>
+          <Link
+            href="/prenotazioni?tipo=porchetta"
+            data-magnetic
+            className="inline-flex shrink-0 items-center gap-3 rounded-full bg-gold px-8 py-3.5 text-sm font-semibold text-brown-950 shadow-[0_10px_20px_-5px_rgba(225,190,100,0.3)] transition-all duration-500 hover:-translate-y-1 hover:bg-gold-dark"
+          >
+            <Flame className="size-4" />
+            Prenota la porchetta
+          </Link>
+        </Reveal>
       </section>
 
       {/* Eredità */}

@@ -22,31 +22,43 @@ const slug = z
   .max(80)
   .regex(/^[a-z0-9-]*$/, "Slug non valido (solo lettere minuscole, numeri e trattini)");
 
-export const productInput = z.object({
-  id: optionalText(40),
-  name: z.string().trim().min(1, "Il nome è obbligatorio").max(200),
-  slug: slug.optional(),
-  shopSlug: z.string().trim().min(1, "Scegli un negozio"),
-  category: optionalText(120),
-  description: optionalText(4000),
-  imageLabel: optionalText(200),
-  image: optionalText(1000),
-  priceEuros: z
-    .union([z.string(), z.null()])
-    .optional()
-    .transform((v) => (v && v !== "" ? Math.round(Number(v) * 100) : null))
-    .refine((v) => v == null || (Number.isFinite(v) && v >= 0), "Prezzo non valido"),
-  unit: optionalText(40),
-  stock: z
-    .union([z.string(), z.null()])
-    .optional()
-    .transform((v) => (v && v !== "" ? Number(v) : null))
-    .refine((v) => v == null || (Number.isInteger(v) && v >= 0), "Giacenza non valida"),
-  purchasable: checkbox,
-  featured: checkbox,
-  active: checkbox,
-  sortOrder: z.coerce.number().int().default(0),
-});
+export const productInput = z
+  .object({
+    id: optionalText(40),
+    name: z.string().trim().min(1, "Il nome è obbligatorio").max(200),
+    slug: slug.optional(),
+    shopSlug: z.string().trim().min(1, "Scegli un negozio"),
+    category: optionalText(120),
+    description: optionalText(4000),
+    imageLabel: optionalText(200),
+    image: optionalText(1000),
+    priceEuros: z
+      .union([z.string(), z.null()])
+      .optional()
+      .transform((v) => (v && v !== "" ? Math.round(Number(v) * 100) : null))
+      .refine((v) => v == null || (Number.isFinite(v) && v >= 0), "Prezzo non valido"),
+    unit: optionalText(40),
+    stock: z
+      .union([z.string(), z.null()])
+      .optional()
+      .transform((v) => (v && v !== "" ? Number(v) : null))
+      .refine((v) => v == null || (Number.isInteger(v) && v >= 0), "Giacenza non valida"),
+    purchasable: checkbox,
+    featured: checkbox,
+    active: checkbox,
+    sortOrder: z.coerce.number().int().default(0),
+  })
+  // A product sold online must carry a real price: enforce a positive price when
+  // `purchasable` is on. Non-purchasable products keep the optional price.
+  .superRefine((d, ctx) => {
+    if (d.purchasable && !(typeof d.priceEuros === "number" && d.priceEuros > 0)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Indica un prezzo maggiore di zero per i prodotti acquistabili online",
+        path: ["priceEuros"],
+      });
+    }
+  });
 
 export const blogInput = z.object({
   id: optionalText(40),

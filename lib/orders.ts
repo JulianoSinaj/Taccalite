@@ -64,7 +64,16 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
   }
 
   const subtotalCents = lines.reduce((sum, l) => sum + l.lineTotalCents, 0);
-  const shippingCents = input.fulfilment === "shipping" ? SHIPPING_CENTS : 0;
+  // Shipping is configurable from admin settings. It applies only to shipping
+  // orders, and is waived once the subtotal reaches the free-shipping threshold
+  // (a threshold of 0 disables free shipping).
+  const flatShippingCents = await getSetting<number>("store.shippingCents", SHIPPING_CENTS);
+  const freeShippingThresholdCents = await getSetting<number>("store.freeShippingThresholdCents", 0);
+  const shippingCents =
+    input.fulfilment === "shipping" &&
+    (freeShippingThresholdCents === 0 || subtotalCents < freeShippingThresholdCents)
+      ? flatShippingCents
+      : 0;
   const totalCents = subtotalCents + shippingCents;
 
   // Insert the order and its line items atomically — no zero-item orders. The
@@ -221,8 +230,9 @@ export async function finalizeOrder(orderId: string): Promise<void> {
     sendMail({ to: env.ownerEmail, ...orderOwnerEmail(emailData) }),
   ]);
 
-  // Loyalty accrual for logged-in customers.
-  if (order.userId) {
+  // Loyalty accrual for logged-in customers, when the programme is enabled.
+  const loyaltyEnabled = await getSetting<boolean>("loyalty.enabled", true);
+  if (loyaltyEnabled && order.userId) {
     const perEuro = await getSetting<number>("loyalty.pointsPerEuro", 1);
     const points = Math.floor((order.subtotalCents / 100) * (perEuro || 1));
     if (points > 0) await addPoints(order.userId, points, `Ordine ${order.orderNumber}`);

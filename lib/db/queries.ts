@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import { db } from "./client";
 import * as schema from "./schema";
 
@@ -154,6 +154,26 @@ export const getRedemptionsForUser = cache(async (userId: string) => {
     .where(eq(schema.redemptions.userId, userId))
     .orderBy(desc(schema.redemptions.createdAt))
     .limit(50);
+});
+
+/**
+ * Total porchetta kg already reserved for a given pickup date (yyyy-mm-dd),
+ * counting every non-cancelled pre-order (pending + confirmed + completed).
+ * Mirrors the capacity check in `lib/reservations.ts`. Used by the public
+ * porchetta page to show live availability against `porchetta.weeklyCapacityKg`.
+ */
+export const getPorchettaKgForDate = cache(async (date: string): Promise<number> => {
+  const [row] = await db
+    .select({ total: sql<number>`coalesce(sum(${schema.reservations.quantityKg}), 0)` })
+    .from(schema.reservations)
+    .where(
+      and(
+        eq(schema.reservations.type, "porchetta"),
+        eq(schema.reservations.date, date),
+        ne(schema.reservations.status, "cancelled"),
+      ),
+    );
+  return Number(row?.total ?? 0);
 });
 
 /**

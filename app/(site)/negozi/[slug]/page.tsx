@@ -18,8 +18,25 @@ import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
 import JsonLd from "@/components/JsonLd";
 import { shopSchema, breadcrumbSchema, productSchema } from "@/lib/seo";
 import { getShopBySlug, getShops, getProductsByShop } from "@/lib/db/queries";
+import { isOpenNow, type OpenState } from "@/lib/hours";
 
 export const dynamic = "force-dynamic";
+
+/** Live open/closed pill styled for the dark info band. Null → nothing. */
+function OpenBadge({ state }: { state: OpenState | null }) {
+  if (!state) return null;
+  return state.open ? (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/15 px-3 py-1 text-[10px] font-bold tracking-widest text-green-300 uppercase">
+      <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+      Aperto ora
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1 text-[10px] font-bold tracking-widest text-cream/60 uppercase">
+      <span className="h-1.5 w-1.5 rounded-full bg-cream/40" />
+      Chiuso
+    </span>
+  );
+}
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -101,6 +118,7 @@ export default async function ShopDetailPage({ params }: Params) {
     ],
   };
   const otherShop = allShops.find((s) => s.slug !== slug);
+  const openState = shop.hoursConfirmed ? isOpenNow(shop.hours) : null;
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     `Norcineria Taccalite, ${shop.address}`
   )}`;
@@ -157,9 +175,12 @@ export default async function ShopDetailPage({ params }: Params) {
         <RevealStagger className="mx-auto grid max-w-7xl grid-cols-1 gap-8 md:grid-cols-3">
           <RevealStaggerItem className="rounded-[28px] border border-white/5 bg-brown-800/40 p-8">
             <Clock className="mb-6 size-8 text-gold" />
-            <h3 className="mb-4 text-sm font-bold tracking-widest text-cream uppercase">
-              Orari di apertura
-            </h3>
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <h3 className="text-sm font-bold tracking-widest text-cream uppercase">
+                Orari di apertura
+              </h3>
+              <OpenBadge state={openState} />
+            </div>
             <ul className="space-y-1 text-sm leading-relaxed text-cream/75">
               {shop.hours.map((h) => (
                 <li key={h.label}>

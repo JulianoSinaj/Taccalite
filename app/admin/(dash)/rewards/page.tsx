@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { AdminHeader, Panel, StatusBadge } from "@/components/admin/ui";
 import { RewardForm } from "@/components/admin/forms";
-import { DeleteForm } from "@/components/admin/ActionForm";
+import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { adminGetRewards } from "@/lib/admin/queries";
-import { deleteReward } from "@/lib/admin/actions";
+import { deleteReward, toggleRewardActive } from "@/lib/admin/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +41,11 @@ export default async function AdminRewards() {
                 {!r.active && <StatusBadge status="cancelled" />}
               </div>
               <div className="flex items-center gap-2">
+                <ActionForm action={toggleRewardActive} className="inline-flex">
+                  <input type="hidden" name="id" value={r.id} />
+                  <input type="hidden" name="active" value={r.active ? "false" : "true"} />
+                  <PendingButton tone="dark">{r.active ? "Disattiva" : "Attiva"}</PendingButton>
+                </ActionForm>
                 <Link
                   href={`/admin/rewards/${r.id}`}
                   className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"

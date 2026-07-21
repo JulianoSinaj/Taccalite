@@ -5,8 +5,25 @@ import { ArrowRight, Clock, MapPin, Phone } from "lucide-react";
 import Reveal from "@/components/Reveal";
 import PillButton from "@/components/PillButton";
 import { getShops } from "@/lib/db/queries";
+import { isOpenNow, type OpenState } from "@/lib/hours";
 
 export const dynamic = "force-dynamic";
+
+/** Small live open/closed pill. Renders nothing when state is null. */
+function OpenBadge({ state }: { state: OpenState | null }) {
+  if (!state) return null;
+  return state.open ? (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-700/12 px-3 py-1 text-[10px] font-bold tracking-widest text-green-800 uppercase">
+      <span className="h-1.5 w-1.5 rounded-full bg-green-600" />
+      Aperto ora
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-brown-900/8 px-3 py-1 text-[10px] font-bold tracking-widest text-brown-800/70 uppercase">
+      <span className="h-1.5 w-1.5 rounded-full bg-brown-800/40" />
+      Chiuso
+    </span>
+  );
+}
 
 export const metadata: Metadata = {
   title: "Le Botteghe",
@@ -57,7 +74,9 @@ export default async function NegoziPage() {
       {/* Editorial shop rows */}
       <section className="bg-cream px-5 py-24 sm:px-10 sm:py-32">
         <div className="mx-auto max-w-7xl space-y-28 sm:space-y-40">
-          {shops.map((shop, i) => (
+          {shops.map((shop, i) => {
+            const openState = shop.hoursConfirmed ? isOpenNow(shop.hours) : null;
+            return (
             <Reveal
               key={shop.slug}
               className={`flex flex-col items-center gap-12 lg:gap-20 ${
@@ -88,7 +107,10 @@ export default async function NegoziPage() {
                   0{i + 1}
                 </p>
                 <div className="space-y-4">
-                  <span className="eyebrow eyebrow-dark block">{shop.specialty}</span>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="eyebrow eyebrow-dark block">{shop.specialty}</span>
+                    <OpenBadge state={openState} />
+                  </div>
                   <h2 className="font-display text-4xl leading-[0.95] tracking-tighter text-brown-950 sm:text-5xl md:text-6xl">
                     {shop.name}
                   </h2>
@@ -130,7 +152,8 @@ export default async function NegoziPage() {
                 </div>
               </div>
             </Reveal>
-          ))}
+            );
+          })}
         </div>
       </section>
 
