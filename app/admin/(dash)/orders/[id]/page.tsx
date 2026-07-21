@@ -83,7 +83,12 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 {addr.address}, {addr.zip} {addr.city}
               </p>
             )}
-            {order.notes && <p className="mt-3 text-sm text-brown-800/70">📝 {order.notes}</p>}
+            {order.notes && (
+              <p className="mt-3 text-sm text-brown-800/70">
+                <span aria-hidden="true">📝</span> <span className="sr-only">Note: </span>
+                {order.notes}
+              </p>
+            )}
           </Panel>
         </div>
 

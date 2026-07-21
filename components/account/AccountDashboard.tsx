@@ -46,14 +46,21 @@ export default function AccountDashboard({
 }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   const missing = nextReward ? Math.max(0, nextReward.points - points) : 0;
   const pct = nextReward && nextReward.points > 0 ? Math.min(100, Math.round((points / nextReward.points) * 100)) : 100;
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.refresh();
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.refresh();
+    } catch {
+      setLoggingOut(false);
+    }
   }
 
   async function redeem(reward: Reward) {
@@ -100,9 +107,10 @@ export default function AccountDashboard({
             <button
               type="button"
               onClick={logout}
-              className="rounded-full border border-white/25 px-6 py-2.5 text-xs font-bold tracking-widest text-cream/80 uppercase transition-colors hover:border-white/50 hover:text-white"
+              disabled={loggingOut}
+              className="rounded-full border border-white/25 px-6 py-2.5 text-xs font-bold tracking-widest text-cream/80 uppercase transition-colors hover:border-white/50 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Esci
+              {loggingOut ? "Uscita…" : "Esci"}
             </button>
           </Reveal>
         </div>
@@ -302,8 +310,8 @@ export default function AccountDashboard({
               const canRedeem = points >= reward.points;
               return (
                 <RevealStaggerItem key={reward.id} className="group flex flex-col">
-                  <div className="cinematic-shadow relative mb-8 aspect-[4/3] overflow-hidden rounded-[24px]">
-                    {reward.image && (
+                  <div className="cinematic-shadow relative mb-8 aspect-[4/3] overflow-hidden rounded-[24px] bg-brown-900">
+                    {reward.image ? (
                       <Image
                         src={reward.image}
                         alt={reward.name}
@@ -311,6 +319,10 @@ export default function AccountDashboard({
                         className="object-cover transition-transform duration-[1.5s] group-hover:scale-110"
                         sizes="(max-width: 768px) 100vw, 33vw"
                       />
+                    ) : (
+                      <div className="flex h-full items-center justify-center px-6 text-center font-display text-xl text-cream/50">
+                        {reward.name}
+                      </div>
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-brown-950/80 via-transparent to-transparent" />
                     <div className="absolute bottom-6 left-6">

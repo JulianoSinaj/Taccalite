@@ -27,6 +27,11 @@ export default async function AdminUsers({ searchParams }: SP) {
     <div>
       <AdminHeader title="Utenti" subtitle={`${total} account · gestisci ruoli e password`} />
 
+      {users.length === 0 ? (
+        <Panel>
+          <p className="text-brown-800/70">Nessun utente.</p>
+        </Panel>
+      ) : (
       <div className="space-y-3">
         {users.map((u) => (
           <Panel key={u.id} className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -67,6 +72,7 @@ export default async function AdminUsers({ searchParams }: SP) {
           </Panel>
         ))}
       </div>
+      )}
 
       <Pagination basePath="/admin/users" page={page} pageCount={pageCount} />
     </div>

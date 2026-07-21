@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -39,12 +40,19 @@ const items = [
 export default function AdminNav({ userName, isAdmin }: { userName: string; isAdmin: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
   const visibleItems = items.filter((item) => !item.adminOnly || isAdmin);
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/admin/login");
-    router.refresh();
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.push("/admin/login");
+      router.refresh();
+    } catch {
+      setLoggingOut(false);
+    }
   }
 
   return (
@@ -84,10 +92,11 @@ export default function AdminNav({ userName, isAdmin }: { userName: string; isAd
         <button
           type="button"
           onClick={logout}
-          className="flex w-full items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-brown-800/80 transition-colors hover:bg-red-50 hover:text-red-700"
+          disabled={loggingOut}
+          className="flex w-full items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-brown-800/80 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <LogOut className="size-4" />
-          Esci
+          {loggingOut ? "Uscita…" : "Esci"}
         </button>
       </div>
     </aside>

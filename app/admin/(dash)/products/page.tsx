@@ -23,6 +23,11 @@ export default async function AdminProducts() {
         </Panel>
       </details>
 
+      {products.length === 0 ? (
+        <Panel>
+          <p className="text-brown-800/70">Nessun prodotto ancora. Aggiungine uno con il pulsante qui sopra.</p>
+        </Panel>
+      ) : (
       <div className="space-y-3">
         {products.map((p) => (
           <Panel key={p.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -53,6 +58,7 @@ export default async function AdminProducts() {
           </Panel>
         ))}
       </div>
+      )}
     </div>
   );
 }

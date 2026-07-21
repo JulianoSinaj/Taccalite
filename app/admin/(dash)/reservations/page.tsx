@@ -114,14 +114,43 @@ export default async function AdminReservations({ searchParams }: SP) {
                   </div>
                   <p className="font-display text-xl text-brown-950">{r.name}</p>
                   <div className="grid grid-cols-1 gap-x-8 gap-y-1 text-sm text-brown-800/80 sm:grid-cols-2">
-                    <p>📞 {r.phone}</p>
-                    {r.email && <p>✉️ {r.email}</p>}
-                    <p>📅 {fmtDate(r.date)} {r.time ? `· ${r.time}` : ""}</p>
-                    <p>🏬 {shopName.get(r.shopSlug) ?? r.shopSlug}</p>
-                    {r.guests != null && <p>👥 {r.guests} ospiti</p>}
-                    {r.quantityKg != null && <p>⚖️ {r.quantityKg} kg</p>}
+                    <p>
+                      <span aria-hidden="true">📞</span> <span className="sr-only">Telefono: </span>
+                      {r.phone}
+                    </p>
+                    {r.email && (
+                      <p>
+                        <span aria-hidden="true">✉️</span> <span className="sr-only">Email: </span>
+                        {r.email}
+                      </p>
+                    )}
+                    <p>
+                      <span aria-hidden="true">📅</span> <span className="sr-only">Data: </span>
+                      {fmtDate(r.date)} {r.time ? `· ${r.time}` : ""}
+                    </p>
+                    <p>
+                      <span aria-hidden="true">🏬</span> <span className="sr-only">Negozio: </span>
+                      {shopName.get(r.shopSlug) ?? r.shopSlug}
+                    </p>
+                    {r.guests != null && (
+                      <p>
+                        <span aria-hidden="true">👥</span> <span className="sr-only">Ospiti: </span>
+                        {r.guests} ospiti
+                      </p>
+                    )}
+                    {r.quantityKg != null && (
+                      <p>
+                        <span aria-hidden="true">⚖️</span> <span className="sr-only">Quantità: </span>
+                        {r.quantityKg} kg
+                      </p>
+                    )}
                   </div>
-                  {r.notes && <p className="mt-1 max-w-2xl text-sm text-brown-800/70">📝 {r.notes}</p>}
+                  {r.notes && (
+                    <p className="mt-1 max-w-2xl text-sm text-brown-800/70">
+                      <span aria-hidden="true">📝</span> <span className="sr-only">Note: </span>
+                      {r.notes}
+                    </p>
+                  )}
                 </div>
 
                 <ActionForm action={updateReservationStatus} className="w-full shrink-0 space-y-2 lg:w-64">
