@@ -7,11 +7,14 @@ import { createSession } from "./session";
 import { getOrCreateLoyaltyAccount, addPoints } from "@/lib/loyalty";
 import { sendMail } from "@/lib/mail/mailer";
 import { welcomeEmail } from "@/lib/mail/templates";
+import { verifyTotp } from "@/lib/auth/totp";
 import type { RegisterInput, LoginInput } from "@/lib/validation/auth";
 
 const WELCOME_POINTS = 50;
 
-export type AuthResult = { ok: true; userId: string } | { ok: false; error: string };
+export type AuthResult =
+  | { ok: true; userId: string }
+  | { ok: false; error: string; twoFactorRequired?: boolean };
 
 export async function registerUser(input: RegisterInput): Promise<AuthResult> {
   const existing = await db.select({ id: users.id }).from(users).where(eq(users.username, input.username)).limit(1);
@@ -51,6 +54,17 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
   }
   if (!user.active) {
     return { ok: false, error: "Questo account è stato disattivato." };
+  }
+  // Two-factor: when enabled, a valid TOTP code is required before a session is
+  // issued. Password is already verified here, so a wrong/missing code prompts the
+  // second step without revealing anything new.
+  if (user.totpEnabled && user.totpSecret) {
+    if (!input.code) {
+      return { ok: false, error: "Inserisci il codice di verifica.", twoFactorRequired: true };
+    }
+    if (!verifyTotp(user.totpSecret, input.code)) {
+      return { ok: false, error: "Codice di verifica non valido.", twoFactorRequired: true };
+    }
   }
   // Opportunistically upgrade a hash stored with weaker/older KDF params — this
   // is the only point the plaintext is in hand, so accounts harden silently.

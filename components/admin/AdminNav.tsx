@@ -19,6 +19,7 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
+  ShieldHalf,
   ShoppingBag,
   Store,
   Users,
@@ -37,6 +38,7 @@ const items = [
   { href: "/admin/discounts", label: "Codici sconto", icon: TicketPercent, adminOnly: true },
   { href: "/admin/newsletter", label: "Newsletter", icon: Croissant },
   { href: "/admin/outbox", label: "Email", icon: Mail },
+  { href: "/admin/security", label: "Sicurezza", icon: ShieldHalf },
   // Admin-only.
   { href: "/admin/analytics", label: "Statistiche", icon: BarChart3, adminOnly: true },
   { href: "/admin/reports/iva", label: "Riepilogo IVA", icon: Receipt, adminOnly: true },

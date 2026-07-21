@@ -167,6 +167,9 @@ export const users = sqliteTable(
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     marketingConsent: integer("marketing_consent", { mode: "boolean" }).notNull().default(false),
     emailVerifiedAt: integer("email_verified_at", { mode: "timestamp_ms" }),
+    // Optional TOTP two-factor auth (base32 secret; only enforced once enabled).
+    totpSecret: text("totp_secret"),
+    totpEnabled: integer("totp_enabled", { mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [check("users_role_ck", sql`${t.role} in ('customer', 'staff', 'admin')`)],

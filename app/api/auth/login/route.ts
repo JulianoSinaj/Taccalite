@@ -29,6 +29,12 @@ export async function POST(request: Request) {
   }
 
   const result = await loginUser(parsed.data);
-  if (!result.ok) return NextResponse.json(result, { status: 401 });
+  if (!result.ok) {
+    // Signal the two-factor step to the client without treating it as a hard error.
+    if (result.twoFactorRequired) {
+      return NextResponse.json({ ok: false, twoFactorRequired: true, error: result.error }, { status: 401 });
+    }
+    return NextResponse.json(result, { status: 401 });
+  }
   return NextResponse.json({ ok: true });
 }

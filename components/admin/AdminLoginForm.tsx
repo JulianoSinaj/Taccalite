@@ -9,6 +9,7 @@ const inputClasses =
 export default function AdminLoginForm({ wrongRole }: { wrongRole: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [twoFactor, setTwoFactor] = useState(false);
   const [error, setError] = useState<string | null>(
     wrongRole ? "Questo account non ha accesso all'area riservata." : null,
   );
@@ -22,10 +23,23 @@ export default function AdminLoginForm({ wrongRole }: { wrongRole: boolean }) {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: fd.get("username"), password: fd.get("password") }),
+        body: JSON.stringify({
+          username: fd.get("username"),
+          password: fd.get("password"),
+          code: fd.get("code") || undefined,
+        }),
       });
       const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error ?? "Errore imprevisto");
+      if (!res.ok || !json.ok) {
+        // 2FA-enabled account: reveal the code field and let the user complete it.
+        if (json.twoFactorRequired) {
+          setTwoFactor(true);
+          setError(fd.get("code") ? json.error ?? "Codice non valido." : null);
+          setBusy(false);
+          return;
+        }
+        throw new Error(json.error ?? "Errore imprevisto");
+      }
       router.push("/admin");
       router.refresh();
     } catch (err) {
@@ -53,6 +67,24 @@ export default function AdminLoginForm({ wrongRole }: { wrongRole: boolean }) {
         </label>
         <input id="password" name="password" type="password" required placeholder="••••••••" className={inputClasses} />
       </div>
+
+      {twoFactor && (
+        <div className="space-y-2">
+          <label className="eyebrow block" htmlFor="code">
+            Codice di verifica (2FA)
+          </label>
+          <input
+            id="code"
+            name="code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+            placeholder="123456"
+            className={inputClasses}
+          />
+          <p className="text-xs text-cream/50">Inserisci il codice a 6 cifre dalla tua app di autenticazione.</p>
+        </div>
+      )}
 
       {error && <p className="text-sm font-medium text-red-400">{error}</p>}
 

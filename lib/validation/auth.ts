@@ -26,6 +26,11 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   username,
   password: z.string().min(1, "Inserisci la password"),
+  // Optional TOTP code, supplied on the second step when 2FA is enabled.
+  code: z
+    .union([z.string().trim().max(10), z.literal("")])
+    .optional()
+    .transform((v) => (v ? v : undefined)),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
