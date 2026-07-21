@@ -31,10 +31,12 @@ export default function ShopCard({ shop }: { shop: Shop }) {
             <MapPin className="size-4 shrink-0 text-gold-dark" />
             {shop.address}
           </div>
-          <div className="flex items-center gap-3">
-            <Clock className="size-4 shrink-0 text-gold-dark" />
-            {shop.hours[0].label}: {shop.hours[0].value}
-          </div>
+          {shop.hours[0] && (
+            <div className="flex items-center gap-3">
+              <Clock className="size-4 shrink-0 text-gold-dark" />
+              {shop.hours[0].label}: {shop.hours[0].value}
+            </div>
+          )}
         </div>
         <Link
           href={`/negozi/${shop.slug}`}

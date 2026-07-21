@@ -213,8 +213,7 @@ export default function PorchettaPage() {
               </div>
               <h3 className="font-display mb-4 text-3xl text-brown-950">Ogni sabato mattina</h3>
               <p className="text-lg leading-relaxed text-brown-900/75">
-                Disponibile calda appena sfornata presso il nostro negozio di Piazza Kennedy ad
-                Ancona.
+                Disponibile calda appena sfornata presso le nostre botteghe ad Ancona.
               </p>
             </RevealStaggerItem>
             <RevealStaggerItem className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-10 sm:p-12">
@@ -284,11 +283,11 @@ export default function PorchettaPage() {
               Prenota ora
             </Link>
             <Link
-              href="/negozi/centro"
+              href="/negozi"
               data-magnetic
               className="inline-flex w-full items-center justify-center rounded-full border border-white/20 px-8 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition-all duration-500 hover:border-white/40 hover:bg-white/5 sm:w-auto"
             >
-              Visita il negozio
+              Visita le botteghe
             </Link>
           </div>
         </Reveal>

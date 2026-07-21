@@ -1,8 +1,20 @@
 import { z } from "zod";
 
+const username = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3, "Lo username deve avere almeno 3 caratteri")
+  .max(40, "Lo username è troppo lungo")
+  .regex(/^[a-z0-9._-]+$/, "Usa solo lettere, numeri, punto, trattino o underscore");
+
 export const registerSchema = z.object({
   name: z.string().trim().min(2, "Inserisci il tuo nome").max(120),
-  email: z.string().trim().toLowerCase().email("Email non valida"),
+  username,
+  email: z
+    .union([z.string().trim().toLowerCase().email("Email non valida"), z.literal("")])
+    .optional()
+    .transform((v) => (v ? v : undefined)),
   password: z.string().min(8, "La password deve avere almeno 8 caratteri").max(200),
   phone: z
     .union([z.string().trim().max(40), z.literal("")])
@@ -12,7 +24,7 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().email("Email non valida"),
+  username,
   password: z.string().min(1, "Inserisci la password"),
 });
 

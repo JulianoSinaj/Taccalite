@@ -21,6 +21,8 @@ if (!existsSync(dirname(dbPath))) mkdirSync(dirname(dbPath), { recursive: true }
 
 const sqlite = new Database(dbPath);
 sqlite.pragma("journal_mode = WAL");
+sqlite.pragma("foreign_keys = ON");
+sqlite.pragma("busy_timeout = 5000");
 const db = drizzle(sqlite, { schema });
 
 migrate(db, { migrationsFolder: join(process.cwd(), "drizzle") });
@@ -148,17 +150,16 @@ async function main() {
   const existingAdmin = await db
     .select()
     .from(schema.users)
-    .where(eq(schema.users.email, env.admin.email))
+    .where(eq(schema.users.username, env.admin.username))
     .limit(1);
   if (existingAdmin.length === 0) {
     await db.insert(schema.users).values({
-      email: env.admin.email,
+      username: env.admin.username,
       name: env.admin.name,
       passwordHash: hashPassword(env.admin.password),
       role: "admin",
-      emailVerifiedAt: new Date(),
     });
-    console.log(`✓ Seeded admin user: ${env.admin.email}`);
+    console.log(`✓ Seeded admin user: ${env.admin.username}`);
   }
 
   console.log("✓ Seed complete.");

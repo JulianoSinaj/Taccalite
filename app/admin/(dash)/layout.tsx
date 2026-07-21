@@ -18,7 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen bg-cream text-brown-950 lg:flex">
-      <AdminNav userName={user.name || user.email} />
+      <AdminNav userName={user.name || user.username} isAdmin={user.role === "admin"} />
       <div className="flex-1 overflow-x-hidden">
         <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">{children}</div>
       </div>

@@ -1,15 +1,15 @@
 /**
  * Create or reset an admin user.
  *
- * Reuses the app's own scrypt hashing and the same email normalization the login
+ * Reuses the app's own scrypt hashing and the same username normalization the login
  * uses (trim + lowercase), so the resulting credentials actually work. Standalone:
  * opens its own DB connection (the runtime client is server-only) and applies
  * migrations first, exactly like scripts/seed.ts.
  *
- *   npx tsx scripts/reset-admin.ts <email> <password> [name]
+ *   npx tsx scripts/reset-admin.ts <username> <password> [name]
  *
- * With no arguments it falls back to ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME.
- * If the email already exists, its password is reset and role forced to "admin";
+ * With no arguments it falls back to ADMIN_USERNAME / ADMIN_PASSWORD / ADMIN_NAME.
+ * If the username already exists, its password is reset and role forced to "admin";
  * otherwise a new admin is created.
  */
 import { existsSync, mkdirSync } from "node:fs";
@@ -22,12 +22,12 @@ import * as schema from "../lib/db/schema";
 import { hashPassword } from "../lib/auth/password";
 import { env } from "../lib/env";
 
-const email = (process.argv[2] ?? env.admin.email).trim().toLowerCase();
+const username = (process.argv[2] ?? env.admin.username).trim().toLowerCase();
 const password = process.argv[3] ?? env.admin.password;
 const name = process.argv[4] ?? env.admin.name;
 
-if (!email || !password) {
-  console.error("Usage: npx tsx scripts/reset-admin.ts <email> <password> [name]");
+if (!username || !password) {
+  console.error("Usage: npx tsx scripts/reset-admin.ts <username> <password> [name]");
   process.exit(1);
 }
 
@@ -36,6 +36,8 @@ if (!existsSync(dirname(dbPath))) mkdirSync(dirname(dbPath), { recursive: true }
 
 const sqlite = new Database(dbPath);
 sqlite.pragma("journal_mode = WAL");
+sqlite.pragma("foreign_keys = ON");
+sqlite.pragma("busy_timeout = 5000");
 const db = drizzle(sqlite, { schema });
 
 migrate(db, { migrationsFolder: join(process.cwd(), "drizzle") });
@@ -45,24 +47,23 @@ async function main() {
   const existing = await db
     .select({ id: schema.users.id })
     .from(schema.users)
-    .where(eq(schema.users.email, email))
+    .where(eq(schema.users.username, username))
     .limit(1);
 
   if (existing.length > 0) {
     await db
       .update(schema.users)
       .set({ passwordHash, role: "admin", name })
-      .where(eq(schema.users.email, email));
-    console.log(`✓ Admin password reset for ${email}`);
+      .where(eq(schema.users.username, username));
+    console.log(`✓ Admin password reset for ${username}`);
   } else {
     await db.insert(schema.users).values({
-      email,
+      username,
       name,
       passwordHash,
       role: "admin",
-      emailVerifiedAt: new Date(),
     });
-    console.log(`✓ Admin created: ${email}`);
+    console.log(`✓ Admin created: ${username}`);
   }
 }
 

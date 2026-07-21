@@ -1,8 +1,11 @@
 import "server-only";
 import { customAlphabet } from "nanoid";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { loyaltyAccounts, loyaltyTransactions, redemptions, rewards } from "@/lib/db/schema";
+
+/** Thrown inside the redeem transaction to roll it back on insufficient points. */
+class InsufficientPointsError extends Error {}
 
 const cardCode = customAlphabet("0123456789", 4);
 
@@ -46,37 +49,54 @@ export async function getLoyaltySummary(userId: string) {
   return { account, transactions, rewards: allRewards, nextReward };
 }
 
-/** Credit or debit points and record the ledger entry. */
+/**
+ * Credit or debit points and record the ledger entry — atomically.
+ *
+ * The balance is mutated with a single `points = MAX(0, points + delta)` UPDATE
+ * inside a transaction that also writes the ledger row, so concurrent accruals
+ * can't lose an update or record a `balanceAfter` that disagrees with the account.
+ */
 export async function addPoints(
   userId: string,
   delta: number,
   reason: string,
   byUserId?: string,
 ): Promise<{ points: number }> {
-  const account = await getOrCreateLoyaltyAccount(userId);
-  const newBalance = Math.max(0, account.points + delta);
+  await getOrCreateLoyaltyAccount(userId); // ensure the account row exists
 
-  await db
-    .update(loyaltyAccounts)
-    .set({ points: newBalance })
-    .where(eq(loyaltyAccounts.userId, userId));
+  return db.transaction((tx) => {
+    const [updated] = tx
+      .update(loyaltyAccounts)
+      .set({ points: sql`max(0, ${loyaltyAccounts.points} + ${delta})` })
+      .where(eq(loyaltyAccounts.userId, userId))
+      .returning({ points: loyaltyAccounts.points })
+      .all();
 
-  await db.insert(loyaltyTransactions).values({
-    userId,
-    delta,
-    balanceAfter: newBalance,
-    reason,
-    createdByUserId: byUserId ?? null,
+    tx.insert(loyaltyTransactions)
+      .values({
+        userId,
+        delta,
+        balanceAfter: updated.points,
+        reason,
+        createdByUserId: byUserId ?? null,
+      })
+      .run();
+
+    return { points: updated.points };
   });
-
-  return { points: newBalance };
 }
 
 export type RedeemResult =
   | { ok: true; pointsLeft: number; reference: string }
   | { ok: false; error: string };
 
-/** Redeem a reward for a customer if they have enough points. */
+/**
+ * Redeem a reward for a customer if they have enough points.
+ *
+ * The point-check, debit, ledger write, and redemption insert all happen inside a
+ * single transaction, so two concurrent redeems can't both pass the check (TOCTOU)
+ * and a crash mid-way can't leave a debit without its audit row.
+ */
 export async function redeemReward(userId: string, rewardId: string): Promise<RedeemResult> {
   const [reward] = await db
     .select()
@@ -85,22 +105,50 @@ export async function redeemReward(userId: string, rewardId: string): Promise<Re
     .limit(1);
   if (!reward) return { ok: false, error: "Premio non disponibile" };
 
-  const account = await getOrCreateLoyaltyAccount(userId);
-  if (account.points < reward.points) {
-    return { ok: false, error: "Punti insufficienti per questo premio" };
+  await getOrCreateLoyaltyAccount(userId); // ensure the account row exists
+
+  try {
+    const result = db.transaction((tx) => {
+      const [account] = tx
+        .select({ points: loyaltyAccounts.points })
+        .from(loyaltyAccounts)
+        .where(eq(loyaltyAccounts.userId, userId))
+        .all();
+      if (!account || account.points < reward.points) throw new InsufficientPointsError();
+
+      const newBalance = account.points - reward.points;
+      tx.update(loyaltyAccounts)
+        .set({ points: newBalance })
+        .where(eq(loyaltyAccounts.userId, userId))
+        .run();
+      tx.insert(loyaltyTransactions)
+        .values({
+          userId,
+          delta: -reward.points,
+          balanceAfter: newBalance,
+          reason: `Riscatto: ${reward.name}`,
+        })
+        .run();
+      const [redemption] = tx
+        .insert(redemptions)
+        .values({
+          userId,
+          rewardId: reward.id,
+          rewardName: reward.name,
+          pointsSpent: reward.points,
+          status: "pending",
+        })
+        .returning({ id: redemptions.id })
+        .all();
+
+      return { pointsLeft: newBalance, reference: redemption.id };
+    });
+
+    return { ok: true, ...result };
+  } catch (err) {
+    if (err instanceof InsufficientPointsError) {
+      return { ok: false, error: "Punti insufficienti per questo premio" };
+    }
+    throw err;
   }
-
-  const { points } = await addPoints(userId, -reward.points, `Riscatto: ${reward.name}`);
-  const [redemption] = await db
-    .insert(redemptions)
-    .values({
-      userId,
-      rewardId: reward.id,
-      rewardName: reward.name,
-      pointsSpent: reward.points,
-      status: "pending",
-    })
-    .returning({ id: redemptions.id });
-
-  return { ok: true, pointsLeft: points, reference: redemption.id };
 }

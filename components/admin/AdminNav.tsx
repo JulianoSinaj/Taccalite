@@ -5,12 +5,14 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   CalendarCheck,
   Croissant,
+  Gift,
   LayoutDashboard,
   LogOut,
   Mail,
   Newspaper,
   Package,
   Settings,
+  ShieldCheck,
   ShoppingBag,
   Store,
   Users,
@@ -24,14 +26,18 @@ const items = [
   { href: "/admin/blog", label: "News", icon: Newspaper },
   { href: "/admin/shops", label: "Negozi", icon: Store },
   { href: "/admin/loyalty", label: "Fedeltà", icon: Users },
+  { href: "/admin/rewards", label: "Premi", icon: Gift },
   { href: "/admin/newsletter", label: "Newsletter", icon: Croissant },
   { href: "/admin/outbox", label: "Email", icon: Mail },
-  { href: "/admin/settings", label: "Impostazioni", icon: Settings },
+  // Admin-only.
+  { href: "/admin/users", label: "Utenti", icon: ShieldCheck, adminOnly: true },
+  { href: "/admin/settings", label: "Impostazioni", icon: Settings, adminOnly: true },
 ];
 
-export default function AdminNav({ userName }: { userName: string }) {
+export default function AdminNav({ userName, isAdmin }: { userName: string; isAdmin: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
+  const visibleItems = items.filter((item) => !item.adminOnly || isAdmin);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -52,7 +58,7 @@ export default function AdminNav({ userName }: { userName: string }) {
         </Link>
       </div>
       <nav className="flex flex-1 flex-row gap-1 overflow-x-auto p-3 lg:flex-col lg:overflow-visible">
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
           const Icon = item.icon;
           return (

@@ -3,7 +3,14 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Calendar, Check, Clock, Flame, Minus, Plus, Users, UtensilsCrossed } from "lucide-react";
 
-type ShopOption = { slug: string; name: string; specialty: string };
+type ShopOption = {
+  slug: string;
+  name: string;
+  specialty: string;
+  address?: string;
+  porchettaEnabled?: boolean;
+  reservationsEnabled?: boolean;
+};
 type ResType = "table" | "porchetta" | "order";
 type Status = "idle" | "submitting" | "success" | "error";
 
@@ -46,12 +53,24 @@ function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; 
 }
 
 export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
+  // A shop is available for table/order reservations unless explicitly disabled;
+  // porchetta pickup is offered only at shops that make porchetta.
+  const reservationShops = shops.filter((s) => s.reservationsEnabled !== false);
+  const porchettaShops = shops.filter((s) => s.porchettaEnabled !== false);
+
   const [type, setType] = useState<ResType>("table");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [reference, setReference] = useState<string | null>(null);
   const [guests, setGuests] = useState(2);
   const [quantity, setQuantity] = useState(1);
+  const [porchettaShop, setPorchettaShop] = useState(porchettaShops[0]?.slug ?? "");
+
+  const porchettaPickup = porchettaShops.find((s) => s.slug === porchettaShop) ?? porchettaShops[0];
+  // Only offer reservation types that at least one location supports.
+  const availableTypes = TYPES.filter((t) =>
+    t.key === "porchetta" ? porchettaShops.length > 0 : reservationShops.length > 0,
+  );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -134,7 +153,7 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
       <div className="space-y-4">
         <span className="eyebrow eyebrow-dark block">Cosa vuoi prenotare</span>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {TYPES.map((t) => {
+          {availableTypes.map((t) => {
             const Icon = t.icon;
             const active = type === t.key;
             return (
@@ -224,7 +243,7 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
             </Field>
             <Field label="Negozio" htmlFor="shop">
               <select id="shop" name="shop" required className={inputClasses}>
-                {shops.map((shop) => (
+                {reservationShops.map((shop) => (
                   <option key={shop.slug} value={shop.slug}>
                     {shop.name} — {shop.specialty}
                   </option>
@@ -249,9 +268,33 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
       {type === "porchetta" && (
         <>
           <div className="rounded-xl border border-gold-dark/30 bg-gold/10 px-5 py-4 text-sm text-brown-900">
-            La porchetta esce calda dal forno il <strong>sabato mattina</strong> in Piazza Kennedy.
-            Prenota entro il venerdì la quantità che desideri ritirare.
+            La porchetta esce calda dal forno il <strong>sabato mattina</strong>
+            {porchettaPickup?.address ? (
+              <>
+                {" "}
+                presso <strong>{porchettaPickup.name}</strong> ({porchettaPickup.address})
+              </>
+            ) : null}
+            . Prenota entro il venerdì la quantità che desideri ritirare.
           </div>
+          {porchettaShops.length > 1 && (
+            <Field label="Negozio di ritiro" htmlFor="porchetta-shop">
+              <select
+                id="porchetta-shop"
+                name="shop"
+                required
+                value={porchettaShop}
+                onChange={(e) => setPorchettaShop(e.target.value)}
+                className={inputClasses}
+              >
+                {porchettaShops.map((shop) => (
+                  <option key={shop.slug} value={shop.slug}>
+                    {shop.name} — {shop.specialty}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <Field label="Sabato di ritiro" htmlFor="date">
               <div className="relative">
@@ -290,14 +333,16 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
               </div>
             </Field>
           </div>
-          <input type="hidden" name="shop" value={shops[0]?.slug ?? ""} />
+          {porchettaShops.length <= 1 && (
+            <input type="hidden" name="shop" value={porchettaShop} />
+          )}
         </>
       )}
 
       {type === "order" && (
         <Field label="Negozio" htmlFor="shop">
           <select id="shop" name="shop" required className={inputClasses}>
-            {shops.map((shop) => (
+            {reservationShops.map((shop) => (
               <option key={shop.slug} value={shop.slug}>
                 {shop.name} — {shop.specialty}
               </option>

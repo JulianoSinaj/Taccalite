@@ -1,11 +1,16 @@
-import { AdminHeader, Panel, inputCls, labelCls, SubmitButton } from "@/components/admin/ui";
+import { redirect } from "next/navigation";
+import { AdminHeader, Panel, inputCls, labelCls } from "@/components/admin/ui";
+import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getAllSettings } from "@/lib/admin/queries";
 import { saveSetting, sendTestEmail } from "@/lib/admin/actions";
+import { isAdmin } from "@/lib/auth/session";
 import { smtpConfigured, stripeConfigured, env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminSettings() {
+  // Settings are admin-only (staff are redirected away; nav also hides the link).
+  if (!(await isAdmin())) redirect("/admin");
   const settings = await getAllSettings();
 
   return (
@@ -26,13 +31,13 @@ export default async function AdminSettings() {
             <code> SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM</code>. Per un test con
             Gmail usa una &laquo;password per le app&raquo;.
           </p>
-          <form action={sendTestEmail} className="mt-4 flex items-end gap-2">
+          <ActionForm action={sendTestEmail} className="mt-4 flex items-end gap-2">
             <div className="flex-1">
               <label className={labelCls}>Invia email di prova a</label>
               <input name="to" type="email" required defaultValue={env.ownerEmail} className={inputCls} />
             </div>
-            <SubmitButton tone="dark">Invia prova</SubmitButton>
-          </form>
+            <PendingButton tone="dark">Invia prova</PendingButton>
+          </ActionForm>
         </Panel>
 
         <Panel>
@@ -55,14 +60,14 @@ export default async function AdminSettings() {
       <div className="space-y-3">
         {settings.map((s) => (
           <Panel key={s.key} className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <form action={saveSetting} className="flex w-full flex-col gap-2 sm:flex-row sm:items-end">
+            <ActionForm action={saveSetting} className="flex w-full flex-col gap-2 sm:flex-row sm:items-end">
               <input type="hidden" name="key" value={s.key} />
               <div className="flex-1">
                 <label className={labelCls}>{s.key}</label>
                 <input name="value" defaultValue={JSON.stringify(s.value)} className={inputCls} />
               </div>
-              <SubmitButton tone="dark">Salva</SubmitButton>
-            </form>
+              <PendingButton tone="dark">Salva</PendingButton>
+            </ActionForm>
           </Panel>
         ))}
       </div>

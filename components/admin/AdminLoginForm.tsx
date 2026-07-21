@@ -22,7 +22,7 @@ export default function AdminLoginForm({ wrongRole }: { wrongRole: boolean }) {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: fd.get("email"), password: fd.get("password") }),
+        body: JSON.stringify({ username: fd.get("username"), password: fd.get("password") }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Errore imprevisto");
@@ -42,10 +42,10 @@ export default function AdminLoginForm({ wrongRole }: { wrongRole: boolean }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-5 rounded-[24px] border border-white/10 bg-white/[0.03] p-8">
       <div className="space-y-2">
-        <label className="eyebrow block" htmlFor="email">
-          Email
+        <label className="eyebrow block" htmlFor="username">
+          Username
         </label>
-        <input id="email" name="email" type="email" required placeholder="admin@taccalite.local" className={inputClasses} />
+        <input id="username" name="username" type="text" required autoCapitalize="none" autoComplete="username" placeholder="admin" className={inputClasses} />
       </div>
       <div className="space-y-2">
         <label className="eyebrow block" htmlFor="password">

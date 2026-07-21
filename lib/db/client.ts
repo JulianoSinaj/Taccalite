@@ -26,11 +26,16 @@ function createDb(): DrizzleDb {
   const sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
+  sqlite.pragma("busy_timeout = 5000");
 
   const db = drizzle(sqlite, { schema });
 
+  // Auto-migrate on boot in development so a fresh checkout "just works". In
+  // production this is opt-in (RUN_MIGRATIONS_ON_BOOT=1) — migrations should run
+  // explicitly before the server starts (see docker-entrypoint.sh) to avoid
+  // racing destructive table-rebuild migrations on the request path.
   const migrationsFolder = join(process.cwd(), "drizzle");
-  if (existsSync(migrationsFolder)) {
+  if (env.runMigrationsOnBoot && existsSync(migrationsFolder)) {
     migrate(db, { migrationsFolder });
   }
 

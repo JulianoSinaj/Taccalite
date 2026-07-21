@@ -166,17 +166,25 @@ export function orderOwnerEmail(d: OrderEmailData): Built {
 }
 
 /** Saturday porchetta pickup reminder. */
-export function porchettaReminderEmail(name: string, date: string, quantityKg?: number | null): Built {
+export function porchettaReminderEmail(
+  name: string,
+  date: string,
+  quantityKg?: number | null,
+  pickup?: { name: string; address?: string } | null,
+): Built {
   const qty = quantityKg != null ? ` (${quantityKg} kg)` : "";
+  const where = pickup
+    ? ` presso ${pickup.name}${pickup.address ? ` (${pickup.address})` : ""}`
+    : "";
   const body = `
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
       Ciao ${name}, ti ricordiamo la tua porchetta${qty} prenotata per <strong>${date}</strong>.
-      Esce calda dal forno il sabato mattina in Piazza Kennedy: ti aspettiamo!
+      Esce calda dal forno il sabato mattina${where}: ti aspettiamo!
     </p>`;
   return {
     subject: "Promemoria: la tua porchetta del sabato ti aspetta",
     html: layout({ heading: "La porchetta è quasi pronta", body }),
-    text: `Ciao ${name}, ti ricordiamo la tua porchetta${qty} prenotata per ${date}. Ti aspettiamo in Piazza Kennedy!`,
+    text: `Ciao ${name}, ti ricordiamo la tua porchetta${qty} prenotata per ${date}. Ti aspettiamo${where}!`,
   };
 }
 

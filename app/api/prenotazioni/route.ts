@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { reservationSchema } from "@/lib/validation/reservation";
-import { createReservation } from "@/lib/reservations";
+import { createReservation, ReservationNotAllowedError } from "@/lib/reservations";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -44,6 +44,9 @@ export async function POST(request: Request) {
     const result = await createReservation(parsed.data);
     return NextResponse.json({ ok: true, reference: result.reference });
   } catch (err) {
+    if (err instanceof ReservationNotAllowedError) {
+      return NextResponse.json({ ok: false, error: err.message }, { status: 400 });
+    }
     console.error("Reservation error:", err);
     return NextResponse.json(
       { ok: false, error: "Si è verificato un errore. Riprova o chiamaci." },

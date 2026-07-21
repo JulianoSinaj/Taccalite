@@ -1,4 +1,5 @@
 import "server-only";
+import { env } from "@/lib/env";
 
 /**
  * Minimal in-memory sliding-window rate limiter, keyed by an arbitrary string
@@ -29,8 +30,15 @@ export function rateLimit(
   return { ok: true, remaining: limit - hit.count, retryAfterSec: 0 };
 }
 
-/** Best-effort client IP from proxy headers. */
+/**
+ * Best-effort client IP from proxy headers. The forwarded headers are only
+ * honored when `TRUST_PROXY` is set (the app sits behind a proxy that overwrites
+ * them); otherwise they're ignored, since a client could spoof them to rotate
+ * its rate-limit key. Without a trusted proxy every request shares one bucket —
+ * conservative, but not bypassable.
+ */
 export function clientIp(req: Request): string {
+  if (!env.trustProxy) return "untrusted-proxy";
   const h = req.headers;
   return (
     h.get("x-forwarded-for")?.split(",")[0]?.trim() ||

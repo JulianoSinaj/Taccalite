@@ -1,6 +1,7 @@
-import { inputCls, labelCls, SubmitButton } from "./ui";
-import { saveProduct, saveBlogPost, saveShop } from "@/lib/admin/actions";
-import type { ProductRow, BlogPostRow, ShopRow } from "@/lib/db/schema";
+import { inputCls, labelCls } from "./ui";
+import { ActionForm, PendingButton } from "./ActionForm";
+import { saveProduct, saveBlogPost, saveShop, saveReward } from "@/lib/admin/actions";
+import type { ProductRow, BlogPostRow, ShopRow, RewardRow } from "@/lib/db/schema";
 
 function Toggle({ name, label, defaultChecked }: { name: string; label: string; defaultChecked?: boolean }) {
   return (
@@ -13,7 +14,7 @@ function Toggle({ name, label, defaultChecked }: { name: string; label: string; 
 
 export function ProductForm({ product, shops }: { product?: ProductRow | null; shops: ShopRow[] }) {
   return (
-    <form action={saveProduct} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <ActionForm action={saveProduct} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {product && <input type="hidden" name="id" value={product.id} />}
       <div>
         <label className={labelCls}>Nome</label>
@@ -77,15 +78,15 @@ export function ProductForm({ product, shops }: { product?: ProductRow | null; s
         <Toggle name="active" label="Attivo" defaultChecked={product?.active ?? true} />
       </div>
       <div className="sm:col-span-2">
-        <SubmitButton>{product ? "Salva modifiche" : "Crea prodotto"}</SubmitButton>
+        <PendingButton>{product ? "Salva modifiche" : "Crea prodotto"}</PendingButton>
       </div>
-    </form>
+    </ActionForm>
   );
 }
 
 export function BlogForm({ post }: { post?: BlogPostRow | null }) {
   return (
-    <form action={saveBlogPost} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <ActionForm action={saveBlogPost} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {post && <input type="hidden" name="id" value={post.id} />}
       <div className="sm:col-span-2">
         <label className={labelCls}>Titolo</label>
@@ -127,72 +128,129 @@ export function BlogForm({ post }: { post?: BlogPostRow | null }) {
         <Toggle name="published" label="Pubblicato" defaultChecked={post?.published ?? true} />
       </div>
       <div className="sm:col-span-2">
-        <SubmitButton>{post ? "Salva modifiche" : "Crea news"}</SubmitButton>
+        <PendingButton>{post ? "Salva modifiche" : "Crea news"}</PendingButton>
       </div>
-    </form>
+    </ActionForm>
   );
 }
 
-export function ShopForm({ shop }: { shop: ShopRow }) {
+export function ShopForm({ shop }: { shop?: ShopRow | null }) {
   return (
-    <form action={saveShop} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <input type="hidden" name="id" value={shop.id} />
+    <ActionForm action={saveShop} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {shop && <input type="hidden" name="id" value={shop.id} />}
       <div>
         <label className={labelCls}>Nome</label>
-        <input name="name" required defaultValue={shop.name} className={inputCls} />
+        <input name="name" required defaultValue={shop?.name} className={inputCls} />
+      </div>
+      <div>
+        <label className={labelCls}>Slug (identificativo URL)</label>
+        <input
+          name="slug"
+          defaultValue={shop?.slug}
+          placeholder="es. centro"
+          readOnly={!!shop}
+          className={inputCls}
+        />
       </div>
       <div>
         <label className={labelCls}>Specialità</label>
-        <input name="specialty" defaultValue={shop.specialty} className={inputCls} />
+        <input name="specialty" defaultValue={shop?.specialty} className={inputCls} />
+      </div>
+      <div>
+        <label className={labelCls}>Ordine</label>
+        <input name="sortOrder" type="number" defaultValue={shop?.sortOrder ?? 0} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
         <label className={labelCls}>Tagline</label>
-        <input name="tagline" defaultValue={shop.tagline} className={inputCls} />
+        <input name="tagline" defaultValue={shop?.tagline} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
         <label className={labelCls}>Descrizione</label>
-        <textarea name="description" rows={3} defaultValue={shop.description} className={inputCls} />
+        <textarea name="description" rows={3} defaultValue={shop?.description} className={inputCls} />
       </div>
       <div>
         <label className={labelCls}>Telefono</label>
-        <input name="phone" defaultValue={shop.phone} className={inputCls} />
+        <input name="phone" defaultValue={shop?.phone} className={inputCls} />
       </div>
       <div>
         <label className={labelCls}>Email</label>
-        <input name="email" defaultValue={shop.email} className={inputCls} />
+        <input name="email" defaultValue={shop?.email} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
         <label className={labelCls}>Indirizzo</label>
-        <input name="address" defaultValue={shop.address} className={inputCls} />
+        <input name="address" defaultValue={shop?.address} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
         <label className={labelCls}>Orari (una riga per fascia: Etichetta | Valore)</label>
         <textarea
           name="hours"
           rows={3}
-          defaultValue={shop.hours.map((h) => `${h.label} | ${h.value}`).join("\n")}
+          defaultValue={shop?.hours.map((h) => `${h.label} | ${h.value}`).join("\n")}
           className={inputCls}
         />
       </div>
       <div className="sm:col-span-2">
         <label className={labelCls}>Punti di forza (uno per riga)</label>
-        <textarea name="highlights" rows={3} defaultValue={shop.highlights.join("\n")} className={inputCls} />
+        <textarea name="highlights" rows={3} defaultValue={shop?.highlights.join("\n")} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
         <label className={labelCls}>URL immagine</label>
-        <input name="image" defaultValue={shop.image} className={inputCls} />
+        <input name="image" defaultValue={shop?.image} className={inputCls} />
       </div>
       <div>
         <label className={labelCls}>Etichetta immagine</label>
-        <input name="imageLabel" defaultValue={shop.imageLabel} className={inputCls} />
+        <input name="imageLabel" defaultValue={shop?.imageLabel} className={inputCls} />
       </div>
-      <div className="flex items-center gap-6 pt-6">
-        <Toggle name="addressConfirmed" label="Indirizzo confermato" defaultChecked={shop.addressConfirmed} />
-        <Toggle name="hoursConfirmed" label="Orari confermati" defaultChecked={shop.hoursConfirmed} />
+      <div className="flex flex-wrap items-center gap-6 pt-6 sm:col-span-2">
+        <Toggle name="addressConfirmed" label="Indirizzo confermato" defaultChecked={shop?.addressConfirmed ?? true} />
+        <Toggle name="hoursConfirmed" label="Orari confermati" defaultChecked={shop?.hoursConfirmed ?? true} />
+      </div>
+      <div className="flex flex-wrap items-center gap-6 sm:col-span-2">
+        <Toggle name="reservationsEnabled" label="Prenotazioni attive" defaultChecked={shop?.reservationsEnabled ?? true} />
+        <Toggle name="storeEnabled" label="Ritiro in negozio (store)" defaultChecked={shop?.storeEnabled ?? true} />
+        <Toggle name="porchettaEnabled" label="Porchetta del sabato" defaultChecked={shop?.porchettaEnabled ?? true} />
       </div>
       <div className="sm:col-span-2">
-        <SubmitButton>Salva negozio</SubmitButton>
+        <PendingButton>{shop ? "Salva negozio" : "Crea negozio"}</PendingButton>
       </div>
-    </form>
+    </ActionForm>
+  );
+}
+
+export function RewardForm({ reward }: { reward?: RewardRow | null }) {
+  return (
+    <ActionForm action={saveReward} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {reward && <input type="hidden" name="id" value={reward.id} />}
+      <div>
+        <label className={labelCls}>Nome</label>
+        <input name="name" required defaultValue={reward?.name} className={inputCls} />
+      </div>
+      <div>
+        <label className={labelCls}>Slug</label>
+        <input name="slug" defaultValue={reward?.slug} placeholder="auto se vuoto" className={inputCls} />
+      </div>
+      <div>
+        <label className={labelCls}>Punti richiesti</label>
+        <input name="points" type="number" min={0} required defaultValue={reward?.points ?? 0} className={inputCls} />
+      </div>
+      <div>
+        <label className={labelCls}>Ordine</label>
+        <input name="sortOrder" type="number" defaultValue={reward?.sortOrder ?? 0} className={inputCls} />
+      </div>
+      <div className="sm:col-span-2">
+        <label className={labelCls}>Descrizione</label>
+        <textarea name="description" rows={2} defaultValue={reward?.description} className={inputCls} />
+      </div>
+      <div className="sm:col-span-2">
+        <label className={labelCls}>URL immagine</label>
+        <input name="image" defaultValue={reward?.image ?? ""} className={inputCls} />
+      </div>
+      <div className="flex items-center pt-6">
+        <Toggle name="active" label="Attivo" defaultChecked={reward?.active ?? true} />
+      </div>
+      <div className="sm:col-span-2">
+        <PendingButton>{reward ? "Salva premio" : "Crea premio"}</PendingButton>
+      </div>
+    </ActionForm>
   );
 }

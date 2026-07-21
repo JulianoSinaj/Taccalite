@@ -34,6 +34,26 @@ const badgeStyles: Record<string, string> = {
   unsubscribed: "bg-red-100 text-red-700",
 };
 
+/** Italian labels for the raw enum values stored in the DB. */
+const statusLabels: Record<string, string> = {
+  pending: "In attesa",
+  confirmed: "Confermata",
+  completed: "Completata",
+  cancelled: "Annullata",
+  paid: "Pagato",
+  fulfilled: "Evaso",
+  refunded: "Rimborsato",
+  unpaid: "Da pagare",
+  queued: "In coda",
+  sent: "Inviata",
+  failed: "Fallita",
+  unsubscribed: "Disiscritto",
+};
+
+export function statusLabel(status: string): string {
+  return statusLabels[status] ?? status;
+}
+
 export function StatusBadge({ status }: { status: string }) {
   return (
     <span
@@ -41,7 +61,7 @@ export function StatusBadge({ status }: { status: string }) {
         badgeStyles[status] ?? "bg-brown-900/10 text-brown-800"
       }`}
     >
-      {status}
+      {statusLabels[status] ?? status}
     </span>
   );
 }
@@ -64,6 +84,82 @@ export function SubmitButton({ children, tone = "gold" }: { children: ReactNode;
     >
       {children}
     </button>
+  );
+}
+
+/** GET search box that submits to the current page (preserves other params via hidden inputs). */
+export function SearchBox({
+  basePath,
+  q,
+  placeholder,
+  hidden = {},
+}: {
+  basePath: string;
+  q?: string;
+  placeholder?: string;
+  hidden?: Record<string, string>;
+}) {
+  return (
+    <form action={basePath} method="get" className="mb-4 flex gap-2">
+      {Object.entries(hidden).map(([k, v]) => (
+        <input key={k} type="hidden" name={k} value={v} />
+      ))}
+      <input
+        name="q"
+        defaultValue={q}
+        placeholder={placeholder ?? "Cerca…"}
+        className={`${inputCls} max-w-xs`}
+      />
+      <button
+        type="submit"
+        className="rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+      >
+        Cerca
+      </button>
+    </form>
+  );
+}
+
+/** Prev/next pagination that preserves the current query string. */
+export function Pagination({
+  basePath,
+  page,
+  pageCount,
+  params = {},
+}: {
+  basePath: string;
+  page: number;
+  pageCount: number;
+  params?: Record<string, string | undefined>;
+}) {
+  if (pageCount <= 1) return null;
+  const href = (p: number) => {
+    const sp = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) sp.set(k, v);
+    sp.set("page", String(p));
+    return `${basePath}?${sp.toString()}`;
+  };
+  const btn = "rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase";
+  return (
+    <div className="mt-6 flex items-center justify-between">
+      <a
+        href={page > 1 ? href(page - 1) : undefined}
+        aria-disabled={page <= 1}
+        className={`${btn} ${page > 1 ? "bg-brown-900/10 text-brown-950 hover:bg-brown-900/15" : "pointer-events-none bg-brown-900/5 text-brown-800/30"}`}
+      >
+        ← Precedenti
+      </a>
+      <span className="text-xs font-semibold text-brown-800/60">
+        Pagina {page} di {pageCount}
+      </span>
+      <a
+        href={page < pageCount ? href(page + 1) : undefined}
+        aria-disabled={page >= pageCount}
+        className={`${btn} ${page < pageCount ? "bg-brown-900/10 text-brown-950 hover:bg-brown-900/15" : "pointer-events-none bg-brown-900/5 text-brown-800/30"}`}
+      >
+        Successivi →
+      </a>
+    </div>
   );
 }
 

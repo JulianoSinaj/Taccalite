@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, SubmitButton, fmtDate } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, fmtDate } from "@/components/admin/ui";
 import { BlogForm } from "@/components/admin/forms";
+import { DeleteForm } from "@/components/admin/ActionForm";
 import { adminGetBlogPosts } from "@/lib/admin/queries";
 import { deleteBlogPost } from "@/lib/admin/actions";
 
@@ -41,10 +42,7 @@ export default async function AdminBlog() {
               >
                 Modifica
               </Link>
-              <form action={deleteBlogPost}>
-                <input type="hidden" name="id" value={p.id} />
-                <SubmitButton tone="danger">Elimina</SubmitButton>
-              </form>
+              <DeleteForm action={deleteBlogPost} id={p.id} confirm={`Eliminare "${p.title}"?`} />
             </div>
           </Panel>
         ))}

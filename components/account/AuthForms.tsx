@@ -21,9 +21,10 @@ export default function AuthForms() {
     const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
     const payload =
       mode === "login"
-        ? { email: fd.get("email"), password: fd.get("password") }
+        ? { username: fd.get("username"), password: fd.get("password") }
         : {
             name: fd.get("name"),
+            username: fd.get("username"),
             email: fd.get("email"),
             password: fd.get("password"),
             phone: fd.get("phone"),
@@ -98,10 +99,20 @@ export default function AuthForms() {
               </div>
             )}
             <div className="space-y-2">
-              <label className="eyebrow eyebrow-dark block" htmlFor="email">
-                Email
+              <label className="eyebrow eyebrow-dark block" htmlFor="username">
+                Username
               </label>
-              <input id="email" name="email" type="email" required placeholder="mario.rossi@email.it" className={inputClasses} />
+              <input
+                id="username"
+                name="username"
+                type="text"
+                required
+                autoCapitalize="none"
+                autoComplete="username"
+                minLength={mode === "register" ? 3 : undefined}
+                placeholder="mario.rossi"
+                className={inputClasses}
+              />
             </div>
             <div className="space-y-2">
               <label className="eyebrow eyebrow-dark block" htmlFor="password">
@@ -119,6 +130,12 @@ export default function AuthForms() {
             </div>
             {mode === "register" && (
               <>
+                <div className="space-y-2">
+                  <label className="eyebrow eyebrow-dark block" htmlFor="email">
+                    Email (opzionale)
+                  </label>
+                  <input id="email" name="email" type="email" placeholder="mario.rossi@email.it" className={inputClasses} />
+                </div>
                 <div className="space-y-2">
                   <label className="eyebrow eyebrow-dark block" htmlFor="phone">
                     Telefono (opzionale)

@@ -101,10 +101,12 @@ export default async function NegoziPage() {
                     <MapPin className="size-4 shrink-0 text-gold-deep" />
                     {shop.address}
                   </p>
-                  <p className="flex items-center gap-3">
-                    <Clock className="size-4 shrink-0 text-gold-deep" />
-                    {shop.hours[0].label}: {shop.hours[0].value}
-                  </p>
+                  {shop.hours[0] && (
+                    <p className="flex items-center gap-3">
+                      <Clock className="size-4 shrink-0 text-gold-deep" />
+                      {shop.hours[0].label}: {shop.hours[0].value}
+                    </p>
+                  )}
                   <p className="flex items-center gap-3">
                     <Phone className="size-4 shrink-0 text-gold-deep" />
                     {shop.phone}

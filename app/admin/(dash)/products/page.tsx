@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, euro, SubmitButton } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, euro } from "@/components/admin/ui";
 import { ProductForm } from "@/components/admin/forms";
+import { DeleteForm } from "@/components/admin/ActionForm";
 import { adminGetProducts, adminGetShops } from "@/lib/admin/queries";
 import { deleteProduct } from "@/lib/admin/actions";
 
@@ -47,10 +48,7 @@ export default async function AdminProducts() {
               >
                 Modifica
               </Link>
-              <form action={deleteProduct}>
-                <input type="hidden" name="id" value={p.id} />
-                <SubmitButton tone="danger">Elimina</SubmitButton>
-              </form>
+              <DeleteForm action={deleteProduct} id={p.id} confirm={`Eliminare "${p.name}"?`} />
             </div>
           </Panel>
         ))}

@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 
 export default async function PrenotazioniPage() {
   const shops = await getShops();
+  const porchettaShop = shops.find((s) => s.porchettaEnabled) ?? shops[0];
   return (
     <div>
       {/* Hero: big text left, reservation form right */}
@@ -94,7 +95,8 @@ export default async function PrenotazioniPage() {
                   del sabato
                 </h3>
                 <p className="mt-4 flex-1 leading-relaxed font-light text-cream/70">
-                  Esce calda dal forno ogni sabato mattina in Piazza Kennedy, in quantità limitate.
+                  Esce calda dal forno ogni sabato mattina
+                  {porchettaShop ? ` presso ${porchettaShop.name}` : ""}, in quantità limitate.
                   Prenotala entro il venerdì per essere sicuro di trovarla.
                 </p>
                 <p className="mt-8 border-t border-cream/10 pt-6 text-[10px] font-bold tracking-[0.25em] text-gold uppercase">
@@ -123,12 +125,14 @@ export default async function PrenotazioniPage() {
                     <MapPin className="mt-0.5 size-4 shrink-0 text-gold-deep" />
                     {shop.address}
                   </p>
-                  <p className="flex items-start gap-3">
-                    <Clock className="mt-0.5 size-4 shrink-0 text-gold-deep" />
-                    <span>
-                      {shop.hours[0].label}: {shop.hours[0].value}
-                    </span>
-                  </p>
+                  {shop.hours[0] && (
+                    <p className="flex items-start gap-3">
+                      <Clock className="mt-0.5 size-4 shrink-0 text-gold-deep" />
+                      <span>
+                        {shop.hours[0].label}: {shop.hours[0].value}
+                      </span>
+                    </p>
+                  )}
                 </div>
                 <a
                   href={`tel:${shop.phone.replace(/\s/g, "")}`}

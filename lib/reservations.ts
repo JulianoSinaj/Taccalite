@@ -19,6 +19,9 @@ export type CreateReservationResult = {
   id: string;
 };
 
+/** Thrown when a shop can't take this kind of reservation (surfaced to the user). */
+export class ReservationNotAllowedError extends Error {}
+
 /**
  * Persist a reservation and fire the notification + confirmation emails.
  * Email failures never fail the reservation (it's already saved); they are
@@ -29,7 +32,16 @@ export async function createReservation(
   meta?: { userId?: string },
 ): Promise<CreateReservationResult> {
   const shop = await getShopBySlug(input.shop);
-  const shopName = shop?.name ?? input.shop;
+  if (!shop) {
+    throw new ReservationNotAllowedError("Negozio non valido. Scegli una sede disponibile.");
+  }
+  if (input.type === "porchetta" && !shop.porchettaEnabled) {
+    throw new ReservationNotAllowedError("Questa sede non prepara la porchetta del sabato.");
+  }
+  if (input.type !== "porchetta" && !shop.reservationsEnabled) {
+    throw new ReservationNotAllowedError("Questa sede non accetta prenotazioni al momento.");
+  }
+  const shopName = shop.name;
   const reference = generateReference();
 
   const [row] = await db

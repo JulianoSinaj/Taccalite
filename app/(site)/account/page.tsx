@@ -20,7 +20,7 @@ export default async function AccountPage() {
 
   return (
     <AccountDashboard
-      name={user.name || user.email}
+      name={user.name || user.username}
       points={account.points}
       cardNumber={account.cardNumber}
       nextReward={nextReward ? { name: nextReward.name, points: nextReward.points } : null}

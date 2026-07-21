@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Check } from "lucide-react";
-import { eq } from "drizzle-orm";
-import { db } from "@/lib/db/client";
-import { orders, orderItems } from "@/lib/db/schema";
-import { finalizeOrder } from "@/lib/orders";
+import { finalizeOrder, getOrderForViewer } from "@/lib/orders";
 import { getStripe } from "@/lib/payments/stripe";
+import { getCurrentUser } from "@/lib/auth/session";
 import { formatEuro } from "@/lib/format";
 import ClearCart from "@/components/store/ClearCart";
 
@@ -16,17 +14,20 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-type SP = { searchParams: Promise<{ order?: string; session?: string; sim?: string }> };
+type SP = { searchParams: Promise<{ order?: string; session?: string; token?: string; sim?: string }> };
 
 export default async function CheckoutSuccess({ searchParams }: SP) {
-  const { order: orderNumber, session } = await searchParams;
+  const { order: orderNumber, session, token } = await searchParams;
 
   // With real Stripe, verify the session server-side and finalize (idempotent).
+  // The verified orderId also entitles this viewer to see the order details.
+  let verifiedOrderId: string | null = null;
   const stripe = getStripe();
   if (session && stripe) {
     try {
       const s = await stripe.checkout.sessions.retrieve(session);
       if (s.payment_status === "paid" && s.metadata?.orderId) {
+        verifiedOrderId = s.metadata.orderId;
         await finalizeOrder(s.metadata.orderId);
       }
     } catch {
@@ -34,10 +35,14 @@ export default async function CheckoutSuccess({ searchParams }: SP) {
     }
   }
 
-  const [order] = orderNumber
-    ? await db.select().from(orders).where(eq(orders.orderNumber, orderNumber)).limit(1)
-    : [];
-  const items = order ? await db.select().from(orderItems).where(eq(orderItems.orderId, order.id)) : [];
+  const viewer = await getCurrentUser();
+  const result = await getOrderForViewer(orderNumber, {
+    token,
+    verifiedOrderId,
+    viewerUserId: viewer?.id ?? null,
+  });
+  const order = result?.order ?? null;
+  const items = result?.items ?? [];
 
   return (
     <section className="flex min-h-[80vh] items-center justify-center bg-cream px-5 pt-32 pb-20">

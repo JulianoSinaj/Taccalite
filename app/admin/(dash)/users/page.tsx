@@ -1,0 +1,68 @@
+import { redirect } from "next/navigation";
+import { AdminHeader, Panel, inputCls, fmtDate } from "@/components/admin/ui";
+import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
+import { adminGetUsers } from "@/lib/admin/queries";
+import { isAdmin } from "@/lib/auth/session";
+import { setUserRole, resetUserPassword } from "@/lib/admin/user-actions";
+
+export const dynamic = "force-dynamic";
+
+const ROLE_LABEL: Record<string, string> = {
+  customer: "Cliente",
+  staff: "Staff",
+  admin: "Amministratore",
+};
+
+export default async function AdminUsers() {
+  // User management is admin-only (defence-in-depth beyond the nav gating).
+  if (!(await isAdmin())) redirect("/admin");
+
+  const users = await adminGetUsers();
+
+  return (
+    <div>
+      <AdminHeader title="Utenti" subtitle={`${users.length} account · gestisci ruoli e password`} />
+
+      <div className="space-y-3">
+        {users.map((u) => (
+          <Panel key={u.id} className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="font-display text-lg text-brown-950">
+                {u.name || u.username}{" "}
+                <span className="ml-1 rounded-full bg-brown-900/10 px-2 py-0.5 text-[10px] font-bold uppercase">
+                  {ROLE_LABEL[u.role] ?? u.role}
+                </span>
+              </p>
+              <p className="text-xs text-brown-800/60">
+                @{u.username}
+                {u.email ? ` · ${u.email}` : ""} · registrato {fmtDate(u.createdAt)}
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+              <ActionForm action={setUserRole} className="flex items-center gap-2">
+                <input type="hidden" name="id" value={u.id} />
+                <select name="role" defaultValue={u.role} className={`${inputCls} w-40`}>
+                  <option value="customer">Cliente</option>
+                  <option value="staff">Staff</option>
+                  <option value="admin">Amministratore</option>
+                </select>
+                <PendingButton tone="dark">Ruolo</PendingButton>
+              </ActionForm>
+              <ActionForm action={resetUserPassword} className="flex items-center gap-2">
+                <input type="hidden" name="id" value={u.id} />
+                <input
+                  name="password"
+                  type="text"
+                  minLength={8}
+                  placeholder="Nuova password"
+                  className={`${inputCls} w-44`}
+                />
+                <PendingButton tone="dark">Reset</PendingButton>
+              </ActionForm>
+            </div>
+          </Panel>
+        ))}
+      </div>
+    </div>
+  );
+}

@@ -11,5 +11,7 @@ export const metadata: Metadata = {
 
 export default async function CheckoutPage() {
   const shops = await getShops();
-  return <CheckoutClient shops={shops.map((s) => ({ slug: s.slug, name: s.name }))} />;
+  // Only shops with the store enabled can take pickup orders.
+  const pickupShops = shops.filter((s) => s.storeEnabled).map((s) => ({ slug: s.slug, name: s.name }));
+  return <CheckoutClient shops={pickupShops} />;
 }

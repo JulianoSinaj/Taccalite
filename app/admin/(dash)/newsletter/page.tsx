@@ -1,4 +1,5 @@
-import { AdminHeader, Panel, StatusBadge, SubmitButton, inputCls, labelCls, fmtDate } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, inputCls, labelCls, fmtDate } from "@/components/admin/ui";
+import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
 import { getSubscribers } from "@/lib/admin/queries";
 import { removeSubscriber, sendBroadcast } from "@/lib/admin/actions";
 
@@ -10,14 +11,27 @@ export default async function AdminNewsletter() {
 
   return (
     <div>
-      <AdminHeader title="Newsletter" subtitle={`${confirmed} iscritti confermati · ${subs.length} totali`} />
+      <AdminHeader
+        title="Newsletter"
+        subtitle={`${confirmed} iscritti confermati · ${subs.length} totali`}
+        action={
+          // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
+          <a
+            href="/api/admin/export/subscribers"
+            download
+            className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+          >
+            Esporta CSV
+          </a>
+        }
+      />
 
       <details className="mb-6">
         <summary className="cursor-pointer rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase w-fit">
           ✉ Invia comunicazione
         </summary>
         <Panel className="mt-4">
-          <form action={sendBroadcast} className="space-y-4">
+          <ActionForm action={sendBroadcast} className="space-y-4">
             <div>
               <label className={labelCls}>Oggetto</label>
               <input name="subject" required className={inputCls} placeholder="La porchetta del sabato è pronta!" />
@@ -30,8 +44,8 @@ export default async function AdminNewsletter() {
               Inviata ai {confirmed} iscritti confermati. Senza SMTP configurato, le email restano
               nel registro Email (test).
             </p>
-            <SubmitButton>Invia a {confirmed} iscritti</SubmitButton>
-          </form>
+            <PendingButton>Invia a {confirmed} iscritti</PendingButton>
+          </ActionForm>
         </Panel>
       </details>
       {subs.length === 0 ? (
@@ -61,10 +75,13 @@ export default async function AdminNewsletter() {
                   <td className="py-3 text-brown-800/70">{fmtDate(s.createdAt)}</td>
                   <td className="py-3 text-right">
                     {s.status !== "unsubscribed" && (
-                      <form action={removeSubscriber}>
-                        <input type="hidden" name="id" value={s.id} />
-                        <SubmitButton tone="danger">Rimuovi</SubmitButton>
-                      </form>
+                      <DeleteForm
+                        action={removeSubscriber}
+                        id={s.id}
+                        confirm={`Rimuovere ${s.email} dalla newsletter?`}
+                      >
+                        Rimuovi
+                      </DeleteForm>
                     )}
                   </td>
                 </tr>

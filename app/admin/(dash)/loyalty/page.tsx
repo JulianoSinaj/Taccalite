@@ -1,17 +1,39 @@
-import { AdminHeader, Panel, StatusBadge, inputCls, SubmitButton, fmtDate } from "@/components/admin/ui";
-import { getCustomersWithPoints, getRedemptions } from "@/lib/admin/queries";
+import { AdminHeader, Panel, StatusBadge, inputCls, fmtDate, SearchBox, Pagination } from "@/components/admin/ui";
+import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
+import { getCustomersPage, getRedemptions } from "@/lib/admin/queries";
 import { adjustPoints, updateRedemptionStatus } from "@/lib/admin/actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminLoyalty() {
-  const [customers, redemptions] = await Promise.all([getCustomersWithPoints(), getRedemptions()]);
+type SP = { searchParams: Promise<{ q?: string; page?: string }> };
+
+export default async function AdminLoyalty({ searchParams }: SP) {
+  const { q, page: pageStr } = await searchParams;
+  const page = Number(pageStr) || 1;
+  const [{ rows: customers, total, pageCount }, redemptions] = await Promise.all([
+    getCustomersPage({ q, page }),
+    getRedemptions(),
+  ]);
 
   return (
     <div>
-      <AdminHeader title="Fedeltà" subtitle={`${customers.length} clienti`} />
+      <AdminHeader
+        title="Fedeltà"
+        subtitle={`${total} clienti`}
+        action={
+          // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
+          <a
+            href="/api/admin/export/customers"
+            download
+            className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+          >
+            Esporta CSV
+          </a>
+        }
+      />
 
       <h2 className="font-display mb-3 text-xl text-brown-950">Clienti e punti</h2>
+      <SearchBox basePath="/admin/loyalty" q={q} placeholder="Cerca per nome, username, tessera…" />
       <div className="space-y-3">
         {customers.map((c) => (
           <Panel key={c.id} className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -25,7 +47,7 @@ export default async function AdminLoyalty() {
                 )}
               </p>
               <p className="text-xs text-brown-800/60">
-                {c.email} {c.cardNumber ? `· #${c.cardNumber}` : ""} · iscritto {fmtDate(c.createdAt)}
+                @{c.username}{c.email ? ` · ${c.email}` : ""} {c.cardNumber ? `· #${c.cardNumber}` : ""} · iscritto {fmtDate(c.createdAt)}
               </p>
             </div>
             <div className="flex items-center gap-4">
@@ -33,16 +55,18 @@ export default async function AdminLoyalty() {
                 <p className="font-display text-2xl font-bold text-brown-950">{c.points ?? 0}</p>
                 <p className="text-[10px] font-bold tracking-widest text-brown-800/60 uppercase">Punti</p>
               </div>
-              <form action={adjustPoints} className="flex items-center gap-2">
+              <ActionForm action={adjustPoints} className="flex flex-wrap items-center gap-2">
                 <input type="hidden" name="userId" value={c.id} />
                 <input name="delta" type="number" placeholder="±punti" className={`${inputCls} w-24`} required />
                 <input name="reason" placeholder="Motivo" className={`${inputCls} w-36`} />
-                <SubmitButton tone="dark">Applica</SubmitButton>
-              </form>
+                <PendingButton tone="dark">Applica</PendingButton>
+              </ActionForm>
             </div>
           </Panel>
         ))}
       </div>
+
+      <Pagination basePath="/admin/loyalty" page={page} pageCount={pageCount} params={{ q }} />
 
       <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Premi riscattati</h2>
       {redemptions.length === 0 ? (
@@ -62,15 +86,15 @@ export default async function AdminLoyalty() {
                   </p>
                 </div>
               </div>
-              <form action={updateRedemptionStatus} className="flex items-center gap-2">
+              <ActionForm action={updateRedemptionStatus} className="flex items-center gap-2">
                 <input type="hidden" name="id" value={r.id} />
                 <select name="status" defaultValue={r.status} className={`${inputCls} w-40`}>
                   <option value="pending">In attesa</option>
                   <option value="fulfilled">Consegnato</option>
                   <option value="cancelled">Annullato</option>
                 </select>
-                <SubmitButton tone="dark">Aggiorna</SubmitButton>
-              </form>
+                <PendingButton tone="dark">Aggiorna</PendingButton>
+              </ActionForm>
             </Panel>
           ))}
         </div>

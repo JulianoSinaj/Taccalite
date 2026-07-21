@@ -51,7 +51,9 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       simulated: true,
-      url: `/checkout/success?order=${created.orderNumber}&sim=1`,
+      // The order id is an unguessable nanoid — it entitles this browser to view
+      // the order details on the success page (see getOrderForViewer).
+      url: `/checkout/success?order=${created.orderNumber}&token=${created.orderId}&sim=1`,
     });
   }
 
