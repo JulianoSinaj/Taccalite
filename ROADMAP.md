@@ -258,8 +258,62 @@ _The following land on branch `feat/platform-hardening`._
   redemptions, customers-with-points, admin products/users have no LIMIT; orders & customers are
   paginated). Also noted: CSV formula injection, committed real `OWNER_EMAIL` in `.env.example`,
   `recordPageView` unbatched write throughput, and several a11y gaps.
+- **2026-07-21 — Phase E done** (`edffb9f`, residual security & correctness). scrypt cost raised
+  to **N=2^16** (r8p1, ~64 MiB) with inline params in the hash; legacy paramless hashes still
+  verify and are transparently re-hashed on next login (`needsRehash` in `loginUser`). Sessions:
+  sliding 7-day **idle timeout** (`last_seen_at`, refreshed ≤hourly) atop the 30-day absolute cap;
+  `deleteUserSessions()` invalidates all sessions on password reset + role change (migration
+  `0006` adds `sessions.last_seen_at`). **CSRF/Origin** guard (`lib/security/origin.ts`
+  `isSameOrigin()`) enforced on every hand-rolled state-changing JSON route (login, register,
+  logout, checkout, newsletter, loyalty redeem, prenotazioni, analytics beacon); webhook/cron/email
+  GET links excluded by design. `subscribeNewsletter` now race-safe `onConflictDoNothing` upsert.
+  CSV export formula-injection neutralized (`lib/csv.ts`). Committed real owner email scrubbed from
+  `.env.example` + `env.ts` (placeholder). `runPointsExpiry` N+1 → single grouped query. Remaining
+  admin lists (reservations, subscribers, redemptions, users) paginated.
+- **2026-07-21 — Phase F done** (`53be8b9`, deployability). Scheduler **sidecar**
+  (`scripts/scheduler.sh`, reuses the app image, no Docker socket): hits `/api/cron?job=all` every
+  `CRON_INTERVAL_SEC` (default 900) + nightly online backup (`scripts/backup-container.sh`) after
+  `BACKUP_HOUR` to the `./backups` volume — so bare `docker compose up` runs jobs + backups (host
+  crontab no longer required). **`output: "standalone"` enabled** + `outputFileTracingIncludes` for
+  the native better-sqlite3 binary; lean runtime image (~123 MB) ships only the traced server (no
+  full `node_modules`, no tsx). Seed/reset compiled to plain-node bundles via esbuild
+  (`db:compile-seed`/`db:compile-reset` → `seed.cjs`/`reset.cjs`); entrypoint runs `node seed.cjs`
+  then `node server.js`. compose: scheduler service, `./backups` volume, json-file log rotation
+  (10m×3), shared image tag. Lost-admin recovery: `docker compose exec app node reset.cjs`.
+- **2026-07-21 — Phase G done** (`2cacbe1`, QA harness & CI). **Vitest** (`npm test`, 35 tests):
+  units (password KDF+legacy+rehash, `isSameOrigin`, CSV escape, Zod reservation/auth, formatEuro)
+  + DB-integration (order pricing, order-number, finalizeOrder idempotency/single accrual, loyalty
+  add/redeem/insufficient/zero-clamp) on a temp migrated better-sqlite3 singleton. **Playwright**
+  (`npm run test:e2e`, 8 tests): throwaway seeded DB, drives public routes + admin gate + /traccia +
+  staff-screen gate. CI `.github/workflows/ci.yml`: lint → typecheck → unit → build, plus a
+  Playwright job. Fixed eslint flat-config (react-hooks plugin; ignore generated `dist/`).
+- **2026-07-21 — Phase H done** (`d2eac82`, UX robustness & a11y). Error/loading/not-found
+  boundaries (previously absent): `app/not-found.tsx`, `app/global-error.tsx`,
+  `app/(site)/error.tsx`+`loading.tsx`, `app/admin/(dash)/error.tsx`+`loading.tsx`. **Typed settings
+  editor** (was raw JSON): per-key number/checkbox/weekday controls with Italian labels + help;
+  unknown keys fall back to the raw editor. a11y sweep: emoji field markers get `aria-hidden` +
+  sr-only labels; logout pending/disabled state; empty states for products+users; reward cards
+  without an image fall back to the name.
+- **2026-07-21 — Phase I done** (`7f4a0f8`, feature value-adds). **Porchetta capacity**:
+  `porchetta.weeklyCapacityKg` (0=unlimited); over-capacity Saturday pre-orders are `waitlisted`
+  (+ waitlist email); agenda shows kg/capacity per day; owner `markPorchettaReady` (ready-email,
+  idempotent via `ready_at`) + `promoteFromWaitlist`; waitlist badge on the list. **Tracking +
+  digest**: public `/traccia?ref=<reference>` status page (reference = unguessable bearer token);
+  confirmation emails link to it; `runOwnerDigest` emails a once-a-day summary (today's reservations,
+  last-24h orders, low stock), idempotent per day, via a new `owner-digest` cron job (in `job=all`).
+  **Stock**: `finalizeOrder` decrements product stock (clamped ≥0) for tracked lines; owner low-stock
+  email once per crossing of `store.lowStockThreshold` (default 5); low-stock badge on the product
+  list. **Loyalty QR + staff points**: account card renders a server-generated QR of the card number
+  (qrcode → inline SVG); staff screen `/admin/loyalty/scan` for purchase-tied accrual by card
+  (`addPointsForPurchase`, ledgered with the operator; arbitrary +/- stays admin-only). Migration
+  `0007` adds `reservations.waitlisted`, `reservations.ready_at`, `products.low_stock_notified_at`;
+  new settings `porchetta.weeklyCapacityKg`, `store.lowStockThreshold`; new dep `qrcode`.
+- **2026-07-21 — Phase J done** (`c2313c3`, docs & final sim). All docs regenerated to match the
+  finished platform; full production `docker compose` simulation exercised every feature and passed.
+  tsc + build clean, ESLint 0 errors, 35 Vitest + 8 Playwright green. **The platform is
+  production-ready for Hetzner. All phases complete.**
 
-> **Correction:** earlier notes and §3/§4 below describe `output: "standalone"` and Postgres
-> as the target. Reality: the app ships on **SQLite** (locked decision, §5) and standalone
-> output is **not yet enabled** in `next.config.ts` — enabling it is a task in the hardening
-> plan, not a completed item.
+> **Correction:** earlier notes and §3/§4 below describe Postgres as the target; reality is the app
+> ships on **SQLite** (locked decision, §5). `output: "standalone"` — earlier flagged as *not yet
+> enabled* — **is now enabled** in `next.config.ts` (Phase F, `53be8b9`), so the runtime image ships
+> the lean traced server rather than full `node_modules` + `tsx`.

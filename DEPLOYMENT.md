@@ -123,6 +123,15 @@ docker compose logs -f app
 
 Visit `https://taccalite.it`. The admin panel is at `https://taccalite.it/admin`
 (log in with `ADMIN_USERNAME` / `ADMIN_PASSWORD` — change the password after first login).
+Shop staff can accrue purchase-tied loyalty points in-shop at
+`https://taccalite.it/admin/loyalty/scan` (arbitrary point adjustments stay admin-only).
+
+**Lost admin password?** The seed only creates the bootstrap admin when none exists,
+so re-seeding won't reset an existing one. Reset it in place from the lean image with:
+
+```bash
+docker compose exec app node reset.cjs <username> <password>
+```
 
 ## 4. Scheduled jobs (cron)
 
@@ -131,9 +140,13 @@ Visit `https://taccalite.it`. The admin panel is at `https://taccalite.it/admin`
 authenticating with the `CRON_SECRET` in the `Authorization: Bearer` header over
 the internal Compose network. `job=all` runs the outbox drain/retry + housekeeping,
 porchetta reminders (idempotent — each reservation is emailed once, stamped via
-`reminded_at`, so a frequent sweep is safe), and points-expiry (a no-op unless
-`loyalty.pointsExpiryDays` is set). Tune with `CRON_INTERVAL_SEC` / `BACKUP_HOUR`
-env vars on the `scheduler` service. Watch it with `docker compose logs -f scheduler`.
+`reminded_at`, so a frequent sweep is safe), points-expiry (a no-op unless
+`loyalty.pointsExpiryDays` is set), and the **owner daily digest** (today's
+reservations, last-24h orders, low stock) — the digest is idempotent per calendar
+day, so the frequent sweep fires it exactly once/day with no separate schedule.
+Tune with `CRON_INTERVAL_SEC` (default 900) / `BACKUP_HOUR` (default 3) env vars on
+the `scheduler` service; nightly backups honour `RETENTION_DAYS` (default 14, see
+§7). Watch it with `docker compose logs -f scheduler`.
 
 The cron endpoint is always reachable directly too (secured by the `CRON_SECRET`
 bearer header — never the query string, which leaks into access logs), e.g. to run
@@ -235,8 +248,8 @@ Migrations apply automatically on startup; seeding is idempotent.
   in-memory rate limiter (`lib/rate-limit.ts`) would then need a shared store.
 - Keep `SESSION_SECRET` and `.env` secret and backed up. Rotating `SESSION_SECRET`
   logs everyone out.
-- **Lean runtime image:** `output: "standalone"` is enabled, so the runner ships
-  only the traced server (with better-sqlite3's prebuilt binary) — **no full
+- **Lean runtime image (~123 MB):** `output: "standalone"` is enabled, so the runner
+  ships only the traced server (with better-sqlite3's prebuilt binary) — **no full
   `node_modules`, no `tsx`, no C build toolchain.** The migrate/seed step runs from
   a precompiled plain-node bundle (`npm run db:compile-seed` → `seed.cjs`) and the
   server from Next's `server.js`, both via the entrypoint. For stricter

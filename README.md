@@ -11,10 +11,13 @@ Built with **Next.js 16 (App Router)**, **React 19**, **Tailwind CSS v4**, **SQL
 Drizzle ORM**, and a heavy motion/3D layer (Three.js + Framer Motion + Lenis).
 
 > ✅ **A full, self-hostable platform.** Reservations, customer accounts, a real loyalty
-> programme, newsletter, an online store with Stripe checkout, a role-gated admin/CMS
-> with admin-uploaded images (product/shop/reward/blog), first-party cookieless
-> analytics, transactional email, and scheduled automation — all persisted to a
-> database. See
+> programme (with a scannable QR card + a staff in-shop points screen), newsletter, an
+> online store with Stripe checkout and stock decrement + low-stock alerts, a customer
+> reservation/order tracking page (`/traccia`), a role-gated admin/CMS with
+> admin-uploaded images (product/shop/reward/blog), first-party cookieless analytics,
+> porchetta weekly-capacity + waitlist + ready-emails, an owner daily digest email,
+> transactional email, and an automated scheduler (cron + nightly backups) — all
+> persisted to a database and covered by a test suite (Vitest + Playwright). See
 > [`DOCUMENTATION.md`](./DOCUMENTATION.md) for the complete picture,
 > [`ROADMAP.md`](./ROADMAP.md) for the build log, and [`DEPLOYMENT.md`](./DEPLOYMENT.md)
 > to ship it to Hetzner.
@@ -41,10 +44,13 @@ npm run dev        # http://localhost:3000
 | `npm run build` | Production build |
 | `npm run start` | Serve the production build |
 | `npm run lint` | Run ESLint |
+| `npm test` | Run the unit/integration suite (Vitest) |
+| `npm run test:e2e` | Run the end-to-end suite (Playwright — first run: `npx playwright install chromium`) |
 | `npm run db:generate` | Generate Drizzle migrations from the schema |
 | `npm run db:seed` | Seed content, rewards, settings, and the admin (idempotent) |
 | `npm run db:studio` | Open Drizzle Studio to browse the DB |
 | `npm run admin:reset` | Reset the bootstrap admin (tsx scripts/reset-admin.ts) |
+| `npm run db:compile-seed` / `db:compile-reset` | Bundle seed/reset to plain-node `.cjs` for the lean runtime image (esbuild) |
 
 Requirements: **Node.js 20+**. The database is a local SQLite file under `data/`
 (git-ignored); migrations apply automatically on first run.
