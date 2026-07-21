@@ -3,12 +3,17 @@ import { AdminHeader, Panel, StatusBadge, euro } from "@/components/admin/ui";
 import { ProductForm } from "@/components/admin/forms";
 import { DeleteForm } from "@/components/admin/ActionForm";
 import { adminGetProducts, adminGetShops } from "@/lib/admin/queries";
+import { getSetting } from "@/lib/db/queries";
 import { deleteProduct } from "@/lib/admin/actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminProducts() {
-  const [products, shops] = await Promise.all([adminGetProducts(), adminGetShops()]);
+  const [products, shops, lowStockThreshold] = await Promise.all([
+    adminGetProducts(),
+    adminGetShops(),
+    getSetting<number>("store.lowStockThreshold", 5),
+  ]);
 
   return (
     <div>
@@ -45,6 +50,19 @@ export default async function AdminProducts() {
                   Shop
                 </span>
               )}
+              {/* Stock indicator — only for products that track stock (stock not null;
+                  null = illimitato/su ordinazione). Red "Scorte basse" at/under the
+                  configured threshold, neutral count otherwise. */}
+              {p.stock != null &&
+                (p.stock <= lowStockThreshold ? (
+                  <span className="rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-bold tracking-widest text-red-700 uppercase">
+                    Scorte basse · {p.stock}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-brown-900/10 px-2.5 py-1 text-[10px] font-bold tracking-widest text-brown-800 uppercase">
+                    {p.stock} in magazzino
+                  </span>
+                ))}
             </div>
             <div className="flex items-center gap-2">
               <Link

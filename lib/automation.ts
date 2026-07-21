@@ -1,8 +1,10 @@
 import "server-only";
-import { and, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   reservations,
+  orders,
+  products,
   newsletterSubscribers,
   emailOutbox,
   shops,
@@ -11,8 +13,9 @@ import {
 } from "@/lib/db/schema";
 import { deleteExpiredSessions } from "@/lib/auth/session";
 import { sendMail, enqueueMail, drainOutbox } from "@/lib/mail/mailer";
-import { porchettaReminderEmail, newsletterBroadcast } from "@/lib/mail/templates";
-import { getSetting } from "@/lib/db/queries";
+import { porchettaReminderEmail, newsletterBroadcast, ownerDigestEmail } from "@/lib/mail/templates";
+import { getSetting, setSetting } from "@/lib/db/queries";
+import { env } from "@/lib/env";
 import { addPoints } from "@/lib/loyalty";
 import { absoluteUrl } from "@/lib/site";
 
@@ -152,4 +155,94 @@ export async function runMaintenance(
     .delete(emailOutbox)
     .where(and(eq(emailOutbox.status, "sent"), lt(emailOutbox.createdAt, cutoff)));
   return { sessionsDeleted, outboxDrained: drain.sent, outboxPruned: pruned.changes ?? 0 };
+}
+
+/**
+ * Email the owner a once-a-day operational digest: today's reservations, orders
+ * from the last 24h, and products running low on stock.
+ *
+ * Idempotent per day: the run date is stamped into the `digest.lastSentDate`
+ * setting ("YYYY-MM-DD") and an already-stamped day returns early WITHOUT
+ * re-sending. That makes it safe to include in a frequent `job=all` sweep — it
+ * self-limits to a single send per day. The marker is only written after a
+ * successful (non hard-failing) send, so a transient SMTP error retries next run.
+ */
+export async function runOwnerDigest(
+  now = new Date(),
+): Promise<{
+  skipped: boolean;
+  date: string;
+  reservations: number;
+  orders: number;
+  lowStock: number;
+}> {
+  const iso = now.toISOString().slice(0, 10);
+
+  const lastSent = await getSetting<string>("digest.lastSentDate", "");
+  if (lastSent === iso) {
+    return { skipped: true, date: iso, reservations: 0, orders: 0, lowStock: 0 };
+  }
+
+  // Today's reservations (by ISO date), excluding cancelled ones.
+  const todaysReservations = await db
+    .select()
+    .from(reservations)
+    .where(and(eq(reservations.date, iso), ne(reservations.status, "cancelled")))
+    .orderBy(reservations.time);
+
+  // Orders placed in the last 24 hours.
+  const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const recentOrders = await db
+    .select()
+    .from(orders)
+    .where(gte(orders.createdAt, since))
+    .orderBy(orders.createdAt);
+
+  // Low-stock: purchasable + active products with a tracked stock at/under the threshold.
+  const threshold = await getSetting<number>("store.lowStockThreshold", 5);
+  const lowStockRows = await db
+    .select()
+    .from(products)
+    .where(
+      and(
+        eq(products.purchasable, true),
+        eq(products.active, true),
+        isNotNull(products.stock),
+        lte(products.stock, threshold),
+      ),
+    )
+    .orderBy(products.stock);
+
+  const data = {
+    date: iso,
+    reservations: todaysReservations.map((r) => ({
+      reference: r.reference,
+      type: r.type,
+      name: r.name,
+      time: r.time,
+      quantityKg: r.quantityKg,
+    })),
+    orders: recentOrders.map((o) => ({
+      orderNumber: o.orderNumber,
+      name: o.name,
+      totalCents: o.totalCents,
+    })),
+    lowStock: lowStockRows.map((p) => ({ name: p.name, stock: p.stock ?? 0 })),
+  };
+
+  const res = await sendMail({ to: env.ownerEmail, ...ownerDigestEmail(data) });
+
+  // Only mark the day done on a successful (or queued) send, so a hard SMTP
+  // failure is retried on the next run rather than silently swallowed for a day.
+  if (!res.error) {
+    await setSetting("digest.lastSentDate", iso);
+  }
+
+  return {
+    skipped: false,
+    date: iso,
+    reservations: data.reservations.length,
+    orders: data.orders.length,
+    lowStock: data.lowStock.length,
+  };
 }

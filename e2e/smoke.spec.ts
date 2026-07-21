@@ -13,7 +13,7 @@ test("homepage renders with the brand", async ({ page }) => {
 });
 
 test("key public routes respond OK", async ({ page }) => {
-  for (const path of ["/negozi", "/porchetta", "/blog", "/negozio", "/prenotazioni", "/account", "/privacy", "/cookie"]) {
+  for (const path of ["/negozi", "/porchetta", "/blog", "/negozio", "/prenotazioni", "/account", "/privacy", "/cookie", "/traccia"]) {
     const res = await page.goto(path);
     expect(res, `no response for ${path}`).not.toBeNull();
     expect(res!.status(), `status for ${path}`).toBeLessThan(400);
@@ -38,6 +38,18 @@ test("admin area redirects to login when unauthenticated", async ({ page }) => {
   await page.goto("/admin");
   await expect(page).toHaveURL(/\/admin\/login/);
   await expect(page.locator('input[type="password"]').first()).toBeVisible();
+});
+
+test("tracking page shows a lookup form and handles an unknown ref", async ({ page }) => {
+  await page.goto("/traccia");
+  await expect(page.locator('input[name="ref"]').first()).toBeVisible();
+  const res = await page.goto("/traccia?ref=NONEXISTENT-REF-123");
+  expect(res?.status()).toBeLessThan(400);
+});
+
+test("staff in-shop points screen is gated", async ({ page }) => {
+  await page.goto("/admin/loyalty/scan");
+  await expect(page).toHaveURL(/\/admin\/login/);
 });
 
 test("sitemap and robots are served", async ({ request }) => {

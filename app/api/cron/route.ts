@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
-import { runPorchettaReminders, runMaintenance, runPointsExpiry } from "@/lib/automation";
+import {
+  runPorchettaReminders,
+  runMaintenance,
+  runPointsExpiry,
+  runOwnerDigest,
+} from "@/lib/automation";
 import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -38,6 +43,10 @@ async function handle(request: Request) {
   }
   if (job === "points-expiry" || job === "all") {
     results.pointsExpiry = await runPointsExpiry();
+  }
+  // Self-limits to one send per day, so it's safe inside the frequent `all` sweep.
+  if (job === "owner-digest" || job === "all") {
+    results.ownerDigest = await runOwnerDigest();
   }
 
   return NextResponse.json({ ok: true, job, results });

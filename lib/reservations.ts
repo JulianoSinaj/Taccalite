@@ -1,10 +1,16 @@
 import "server-only";
 import { customAlphabet } from "nanoid";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { reservations } from "@/lib/db/schema";
-import { getShopBySlug } from "@/lib/db/queries";
+import { getShopBySlug, getSetting } from "@/lib/db/queries";
 import { sendMail } from "@/lib/mail/mailer";
-import { reservationCustomerEmail, reservationOwnerEmail, type ReservationEmailData } from "@/lib/mail/templates";
+import {
+  reservationCustomerEmail,
+  reservationOwnerEmail,
+  porchettaWaitlistEmail,
+  type ReservationEmailData,
+} from "@/lib/mail/templates";
 import { env } from "@/lib/env";
 import type { ReservationInput } from "@/lib/validation/reservation";
 
@@ -43,6 +49,29 @@ export async function createReservation(
   }
   const shopName = shop.name;
   const reference = generateReference();
+  const date = input.date ?? new Date().toISOString().slice(0, 10);
+
+  // Porchetta capacity check: if a weekly cap is configured, sum the kg already
+  // booked (non-cancelled) for the same date; when this order would push the day
+  // over the cap it goes on the waitlist instead of the normal confirmation flow.
+  let waitlisted = false;
+  if (input.type === "porchetta") {
+    const capacityKg = await getSetting<number>("porchetta.weeklyCapacityKg", 0);
+    if (capacityKg > 0) {
+      const [{ total }] = await db
+        .select({ total: sql<number>`coalesce(sum(${reservations.quantityKg}), 0)` })
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.type, "porchetta"),
+            eq(reservations.date, date),
+            ne(reservations.status, "cancelled"),
+          ),
+        );
+      const requested = input.quantityKg ?? 0;
+      if (Number(total) + requested > capacityKg) waitlisted = true;
+    }
+  }
 
   const [row] = await db
     .insert(reservations)
@@ -52,13 +81,14 @@ export async function createReservation(
       name: input.name,
       phone: input.phone,
       email: input.email ?? null,
-      date: input.date ?? new Date().toISOString().slice(0, 10),
+      date,
       time: input.time ?? null,
       guests: input.type === "table" ? (input.guests ?? null) : null,
       quantityKg: input.type === "porchetta" ? (input.quantityKg ?? null) : null,
       shopSlug: input.shop,
       notes: input.notes ?? null,
       status: "pending",
+      waitlisted,
       userId: meta?.userId ?? null,
     })
     .returning({ id: reservations.id });
@@ -69,7 +99,7 @@ export async function createReservation(
     name: input.name,
     phone: input.phone,
     email: input.email,
-    date: input.date ?? new Date().toISOString().slice(0, 10),
+    date,
     time: input.time,
     guests: input.type === "table" ? input.guests : undefined,
     quantityKg: input.type === "porchetta" ? input.quantityKg : undefined,
@@ -77,12 +107,21 @@ export async function createReservation(
     notes: input.notes,
   };
 
-  // Owner notification (always) + customer confirmation (if email given).
+  // Owner notification (always) + customer confirmation (if email given). A
+  // waitlisted porchetta order gets the waitlist notice instead of the normal
+  // "we received your request" confirmation.
   const jobs: Promise<unknown>[] = [
     sendMail({ to: env.ownerEmail, ...reservationOwnerEmail(emailData) }),
   ];
   if (input.email) {
-    jobs.push(sendMail({ to: input.email, ...reservationCustomerEmail(emailData) }));
+    jobs.push(
+      sendMail({
+        to: input.email,
+        ...(waitlisted
+          ? porchettaWaitlistEmail(input.name, date, input.quantityKg)
+          : reservationCustomerEmail(emailData)),
+      }),
+    );
   }
   await Promise.allSettled(jobs);
 

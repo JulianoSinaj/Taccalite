@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { AdminHeader, Panel, StatusBadge } from "@/components/admin/ui";
+import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getUpcomingReservations, adminGetShops } from "@/lib/admin/queries";
+import { getSetting } from "@/lib/db/queries";
+import { markPorchettaReady } from "@/lib/admin/actions";
 import { PrintButton } from "./PrintButton";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +23,11 @@ function formatDay(iso: string): string {
 type Row = Awaited<ReturnType<typeof getUpcomingReservations>>[number];
 
 export default async function ReservationAgenda() {
-  const [rows, shops] = await Promise.all([getUpcomingReservations(), adminGetShops()]);
+  const [rows, shops, capacityKg] = await Promise.all([
+    getUpcomingReservations(),
+    adminGetShops(),
+    getSetting<number>("porchetta.weeklyCapacityKg", 0),
+  ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
 
   // Rows arrive ordered by date then time — collapse into consecutive day groups.
@@ -61,6 +68,7 @@ export default async function ReservationAgenda() {
           {groups.map((g) => {
             const porchetta = g.items.filter((r) => r.type === "porchetta");
             const totalKg = porchetta.reduce((sum, r) => sum + (r.quantityKg ?? 0), 0);
+            const overCapacity = capacityKg > 0 && totalKg > capacityKg;
             return (
               <section key={g.date} className="break-inside-avoid">
                 <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-brown-900/10 pb-2">
@@ -68,8 +76,14 @@ export default async function ReservationAgenda() {
                   <div className="flex items-center gap-3 text-xs font-bold tracking-widest text-brown-800/60 uppercase">
                     <span>{g.items.length} prenotazioni</span>
                     {totalKg > 0 && (
-                      <span className="rounded-full bg-gold/30 px-3 py-1 text-brown-950">
-                        Porchetta: {totalKg} kg · {porchetta.length} ordini
+                      <span
+                        className={`rounded-full px-3 py-1 ${
+                          overCapacity ? "bg-red-600/15 text-red-700" : "bg-gold/30 text-brown-950"
+                        }`}
+                      >
+                        Porchetta: {totalKg}
+                        {capacityKg > 0 ? ` / ${capacityKg}` : ""} kg · {porchetta.length} ordini
+                        {overCapacity ? " · oltre capacità" : ""}
                       </span>
                     )}
                   </div>
@@ -91,7 +105,20 @@ export default async function ReservationAgenda() {
                         )}
                         <span className="text-sm text-brown-800/60">· {shopName.get(r.shopSlug) ?? r.shopSlug}</span>
                       </div>
-                      <StatusBadge status={r.status} />
+                      <div className="flex items-center gap-2">
+                        {r.type === "porchetta" &&
+                          (r.readyAt ? (
+                            <span className="rounded-full bg-emerald-600/15 px-3 py-1 text-xs font-bold text-emerald-700">
+                              Inviata ✓
+                            </span>
+                          ) : (
+                            <ActionForm action={markPorchettaReady} className="print:hidden">
+                              <input type="hidden" name="id" value={r.id} />
+                              <PendingButton tone="gold">Segna pronta</PendingButton>
+                            </ActionForm>
+                          ))}
+                        <StatusBadge status={r.status} />
+                      </div>
                     </Panel>
                   ))}
                 </div>

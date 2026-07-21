@@ -1,11 +1,11 @@
 import "server-only";
 import { customAlphabet } from "nanoid";
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { orders, orderItems, products } from "@/lib/db/schema";
 import { getShopBySlug, getSetting } from "@/lib/db/queries";
 import { sendMail } from "@/lib/mail/mailer";
-import { orderCustomerEmail, orderOwnerEmail, type OrderEmailData } from "@/lib/mail/templates";
+import { orderCustomerEmail, orderOwnerEmail, lowStockOwnerEmail, type OrderEmailData } from "@/lib/mail/templates";
 import { addPoints } from "@/lib/loyalty";
 import { env } from "@/lib/env";
 import type { CheckoutInput } from "@/lib/validation/order";
@@ -226,5 +226,63 @@ export async function finalizeOrder(orderId: string): Promise<void> {
     const perEuro = await getSetting<number>("loyalty.pointsPerEuro", 1);
     const points = Math.floor((order.subtotalCents / 100) * (perEuro || 1));
     if (points > 0) await addPoints(order.userId, points, `Ordine ${order.orderNumber}`);
+  }
+
+  // Best-effort stock decrement + low-stock owner alert. Anything here is
+  // non-fatal: a paid order must never be un-finalized because inventory
+  // bookkeeping or an email failed.
+  try {
+    // Aggregate ordered quantity per product (an order could list a product
+    // across more than one line).
+    const qtyByProduct = new Map<string, number>();
+    for (const it of items) {
+      if (!it.productId) continue;
+      qtyByProduct.set(it.productId, (qtyByProduct.get(it.productId) ?? 0) + it.quantity);
+    }
+
+    if (qtyByProduct.size > 0) {
+      const threshold = await getSetting<number>("store.lowStockThreshold", 5);
+      const lowStock: { name: string; stock: number }[] = [];
+      const notifyIds: string[] = [];
+
+      for (const [productId, qty] of qtyByProduct) {
+        // Atomic, never-below-zero decrement, only for products that track
+        // stock (stock not null). max(0, …) respects the products_stock_ck
+        // CHECK and keeps this correct even if two orders finalize at once.
+        const [updated] = db
+          .update(products)
+          .set({ stock: sql`max(0, ${products.stock} - ${qty})` })
+          .where(and(eq(products.id, productId), isNotNull(products.stock)))
+          .returning({
+            name: products.name,
+            stock: products.stock,
+            lowStockNotifiedAt: products.lowStockNotifiedAt,
+          })
+          .all();
+        if (!updated || updated.stock == null) continue;
+
+        // Alert once per dip: collect products now at/under the threshold that
+        // haven't already been notified. Stamping lowStockNotifiedAt below
+        // stops a single dip from spamming repeat alerts on later orders. When
+        // an admin restocks a product back above the threshold, that stamp
+        // should be reset to null so a future dip can alert again — that reset
+        // lives in the product-update action (lib/admin/actions.ts, owned by
+        // another agent) and is intentionally not handled here.
+        if (updated.stock <= threshold && updated.lowStockNotifiedAt == null) {
+          lowStock.push({ name: updated.name, stock: updated.stock });
+          notifyIds.push(productId);
+        }
+      }
+
+      if (notifyIds.length > 0) {
+        await sendMail({ to: env.ownerEmail, ...lowStockOwnerEmail(lowStock) });
+        db.update(products)
+          .set({ lowStockNotifiedAt: new Date() })
+          .where(inArray(products.id, notifyIds))
+          .run();
+      }
+    }
+  } catch {
+    // Swallowed on purpose — stock/alert bookkeeping is best-effort.
   }
 }

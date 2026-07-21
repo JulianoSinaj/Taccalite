@@ -5,11 +5,13 @@ export default function LoyaltyCard({
   points,
   nextRewardPoints,
   cardNumber,
+  qrSvg,
 }: {
   name: string;
   points: number;
   nextRewardPoints?: number | null;
   cardNumber: string;
+  qrSvg?: string;
 }) {
   const target = nextRewardPoints ?? points;
   const pct = target > 0 ? Math.min(100, Math.round((points / target) * 100)) : 100;
@@ -57,9 +59,20 @@ export default function LoyaltyCard({
           <p className="text-[10px] font-bold text-brown-950 uppercase">{name}</p>
           <p className="font-mono text-[10px] text-brown-950/65">#{cardNumber}</p>
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brown-950/20">
-          <QrCode className="size-5 text-brown-950" />
-        </div>
+        {qrSvg ? (
+          <div className="flex flex-col items-center gap-1">
+            <div
+              className="h-16 w-16 rounded-lg bg-white p-1.5 shadow-sm [&>svg]:h-full [&>svg]:w-full sm:h-20 sm:w-20"
+              // Server-generated inline SVG (see app/(site)/account/page.tsx); no user HTML.
+              dangerouslySetInnerHTML={{ __html: qrSvg }}
+            />
+            <p className="font-mono text-[9px] tracking-tight text-brown-950/65">{cardNumber}</p>
+          </div>
+        ) : (
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brown-950/20">
+            <QrCode className="size-5 text-brown-950" />
+          </div>
+        )}
       </div>
     </div>
   );

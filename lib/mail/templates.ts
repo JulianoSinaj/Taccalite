@@ -100,6 +100,9 @@ export function reservationCustomerEmail(d: ReservationEmailData): Built {
       contattandoti ai recapiti che ci hai lasciato. Ecco il riepilogo:
     </p>
     ${reservationDetailTable(d)}
+    <p style="margin:20px 0 0;">
+      <a href="${absoluteUrl(`/traccia?ref=${encodeURIComponent(d.reference)}`)}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Segui lo stato della richiesta</a>
+    </p>
     <p style="font-size:13px;line-height:1.7;color:#807868;margin:18px 0 0;">
       Conserva il riferimento <strong>${d.reference}</strong>. Per modifiche chiamaci in negozio.
     </p>`;
@@ -339,5 +342,116 @@ export function reservationOwnerEmail(d: ReservationEmailData): Built {
       `${d.guests != null ? `Ospiti: ${d.guests}\n` : ""}` +
       `${d.quantityKg != null ? `Quantità: ${d.quantityKg} kg\n` : ""}` +
       `Note: ${d.notes ?? "-"}`,
+  };
+}
+
+/** (I1) "Your porchetta is ready for pickup" — sent by the owner from the agenda. */
+export function porchettaReadyEmail(
+  name: string,
+  date: string,
+  quantityKg?: number | null,
+  pickup?: { name: string; address?: string } | null,
+): Built {
+  const qty = quantityKg != null ? ` (${quantityKg} kg)` : "";
+  const whereText = pickup ? ` da ${pickup.name}${pickup.address ? ` — ${pickup.address}` : ""}` : "";
+  const whereHtml = pickup ? ` da ${esc(pickup.name)}${pickup.address ? ` — ${esc(pickup.address)}` : ""}` : "";
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(name)}, la tua porchetta${qty} prenotata per <strong>${esc(date)}</strong> è
+      <strong>pronta per il ritiro</strong>${whereHtml}. Ti aspettiamo, esce calda dal forno!
+    </p>`;
+  return {
+    subject: "La tua porchetta è pronta per il ritiro",
+    html: layout({ heading: "La porchetta è pronta! 🔥", body, preheader: "Passa a ritirarla in bottega" }),
+    text: `Ciao ${name}, la tua porchetta${qty} del ${date} è pronta per il ritiro${whereText}. Ti aspettiamo!`,
+  };
+}
+
+/** (I1) Sent when a porchetta pre-order exceeds the weekly capacity and is waitlisted. */
+export function porchettaWaitlistEmail(name: string, date: string, quantityKg?: number | null): Built {
+  const qty = quantityKg != null ? ` (${quantityKg} kg)` : "";
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(name)}, grazie per la tua richiesta di porchetta${qty} per <strong>${esc(date)}</strong>.
+      Per quel sabato abbiamo raggiunto la quantità massima prenotabile, quindi sei in
+      <strong>lista d'attesa</strong>: ti contatteremo appena si libera un posto o per proporti
+      il sabato successivo.
+    </p>`;
+  return {
+    subject: "Sei in lista d'attesa per la porchetta",
+    html: layout({ heading: "Lista d'attesa porchetta", body }),
+    text: `Ciao ${name}, la tua porchetta${qty} del ${date} è in lista d'attesa (sabato al completo). Ti contatteremo.`,
+  };
+}
+
+/** (I3) Low-stock alert to the shop owner. */
+export function lowStockOwnerEmail(items: { name: string; stock: number }[]): Built {
+  const rows = items
+    .map(
+      (i) =>
+        `<li style="margin:0 0 6px;font-size:15px;color:#2a1a10;">${esc(i.name)} — <strong>${i.stock}</strong> rimasti</li>`,
+    )
+    .join("");
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Alcuni prodotti stanno per esaurirsi:
+    </p>
+    <ul style="padding-left:18px;margin:0 0 16px;">${rows}</ul>
+    <p style="margin:20px 0 0;">
+      <a href="${absoluteUrl("/admin/products")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Gestisci le scorte</a>
+    </p>`;
+  return {
+    subject: `Scorte in esaurimento · ${items.length} prodott${items.length === 1 ? "o" : "i"}`,
+    html: layout({ heading: "Scorte in esaurimento", body }),
+    text: `Scorte basse:\n${items.map((i) => `- ${i.name}: ${i.stock} rimasti`).join("\n")}\n${absoluteUrl("/admin/products")}`,
+  };
+}
+
+export type OwnerDigestData = {
+  date: string;
+  reservations: { reference: string; type: "table" | "porchetta" | "order"; name: string; time?: string | null; quantityKg?: number | null }[];
+  orders: { orderNumber: string; name: string; totalCents: number }[];
+  lowStock: { name: string; stock: number }[];
+};
+
+/** (I2) Daily digest to the owner: today's reservations + recent orders + low stock. */
+export function ownerDigestEmail(d: OwnerDigestData): Built {
+  const section = (title: string, inner: string) =>
+    `<p style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#807868;margin:20px 0 6px;">${title}</p>${inner}`;
+  const resHtml = d.reservations.length
+    ? `<ul style="padding-left:18px;margin:0;">${d.reservations
+        .map(
+          (r) =>
+            `<li style="margin:0 0 4px;font-size:14px;">${esc(TYPE_LABEL[r.type])} · ${esc(r.name)}${r.time ? ` · ${esc(r.time)}` : ""}${r.quantityKg != null ? ` · ${r.quantityKg} kg` : ""} <span style="color:#807868;">(${esc(r.reference)})</span></li>`,
+        )
+        .join("")}</ul>`
+    : `<p style="font-size:14px;color:#807868;margin:0;">Nessuna prenotazione per oggi.</p>`;
+  const ordHtml = d.orders.length
+    ? `<ul style="padding-left:18px;margin:0;">${d.orders
+        .map((o) => `<li style="margin:0 0 4px;font-size:14px;">${esc(o.orderNumber)} · ${esc(o.name)} · ${euro(o.totalCents)}</li>`)
+        .join("")}</ul>`
+    : `<p style="font-size:14px;color:#807868;margin:0;">Nessun ordine nelle ultime 24 ore.</p>`;
+  const lowHtml = d.lowStock.length
+    ? `<ul style="padding-left:18px;margin:0;">${d.lowStock
+        .map((p) => `<li style="margin:0 0 4px;font-size:14px;">${esc(p.name)} — ${p.stock} rimasti</li>`)
+        .join("")}</ul>`
+    : `<p style="font-size:14px;color:#807868;margin:0;">Scorte a posto.</p>`;
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 4px;">Riepilogo del ${esc(d.date)}.</p>
+    ${section("Prenotazioni di oggi", resHtml)}
+    ${section("Ordini (ultime 24h)", ordHtml)}
+    ${section("Scorte in esaurimento", lowHtml)}
+    <p style="margin:22px 0 0;">
+      <a href="${absoluteUrl("/admin")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Apri il gestionale</a>
+    </p>`;
+  return {
+    subject: `Riepilogo giornaliero · ${d.date}`,
+    html: layout({ heading: "Il tuo riepilogo", body, preheader: `${d.reservations.length} prenotazioni · ${d.orders.length} ordini` }),
+    text:
+      `Riepilogo del ${d.date}\n\nPrenotazioni oggi: ${d.reservations.length}\n` +
+      d.reservations.map((r) => `- ${TYPE_LABEL[r.type]} ${r.name}${r.time ? ` ${r.time}` : ""} (${r.reference})`).join("\n") +
+      `\n\nOrdini 24h: ${d.orders.length}\n` +
+      d.orders.map((o) => `- ${o.orderNumber} ${o.name} ${euro(o.totalCents)}`).join("\n") +
+      `\n\nScorte basse: ${d.lowStock.map((p) => `${p.name} (${p.stock})`).join(", ") || "nessuna"}`,
   };
 }

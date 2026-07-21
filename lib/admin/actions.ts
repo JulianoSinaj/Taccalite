@@ -19,7 +19,7 @@ import { getShopBySlug } from "@/lib/db/queries";
 import { addPoints } from "@/lib/loyalty";
 import { sendMail } from "@/lib/mail/mailer";
 import { broadcastToSubscribers } from "@/lib/automation";
-import { reservationStatusEmail, type ReservationEmailData } from "@/lib/mail/templates";
+import { reservationStatusEmail, porchettaReadyEmail, type ReservationEmailData } from "@/lib/mail/templates";
 import { saveUploadedImage } from "@/lib/media";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import {
@@ -101,6 +101,56 @@ export async function updateReservationStatus(_prev: ActionState, fd: FormData):
     }
     revalidatePath("/admin/reservations");
     return ok("Prenotazione aggiornata.");
+  });
+}
+
+/** Owner marks a porchetta pre-order ready and emails the customer. Idempotent. */
+export async function markPorchettaReady(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    await requireAdmin();
+    const id = (fd.get("id") ?? "").toString();
+
+    const [res] = await db.select().from(reservations).where(eq(reservations.id, id)).limit(1);
+    if (!res) throw new ActionError("Prenotazione non trovata");
+    if (res.type !== "porchetta") throw new ActionError("Disponibile solo per la porchetta.");
+    if (res.readyAt) return ok("Avviso di ritiro già inviato.");
+    if (!res.email) throw new ActionError("Nessuna email per questa prenotazione.");
+
+    const shop = await getShopBySlug(res.shopSlug);
+    const pickup = shop ? { name: shop.name, address: shop.address } : null;
+    await sendMail({
+      to: res.email,
+      ...porchettaReadyEmail(res.name, res.date, res.quantityKg, pickup),
+    }).catch(() => {});
+
+    await db
+      .update(reservations)
+      .set({ readyAt: new Date(), updatedAt: new Date() })
+      .where(eq(reservations.id, id));
+
+    revalidatePath("/admin/reservations/agenda");
+    revalidatePath("/admin/reservations");
+    return ok("Avviso di ritiro inviato.");
+  });
+}
+
+/** Owner confirms a waitlisted porchetta order (removes it from the waitlist). */
+export async function promoteFromWaitlist(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    await requireAdmin();
+    const id = (fd.get("id") ?? "").toString();
+
+    const [res] = await db.select().from(reservations).where(eq(reservations.id, id)).limit(1);
+    if (!res) throw new ActionError("Prenotazione non trovata");
+
+    await db
+      .update(reservations)
+      .set({ waitlisted: false, updatedAt: new Date() })
+      .where(eq(reservations.id, id));
+
+    revalidatePath("/admin/reservations");
+    revalidatePath("/admin/reservations/agenda");
+    return ok("Prenotazione confermata dalla lista d'attesa.");
   });
 }
 

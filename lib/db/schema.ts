@@ -77,6 +77,9 @@ export const products = sqliteTable(
     unit: text("unit"), // e.g. "kg", "pezzo", "confezione"
     purchasable: integer("purchasable", { mode: "boolean" }).notNull().default(false),
     stock: integer("stock"), // null = unlimited / made-to-order
+    // When a low-stock alert was last emailed to the owner; cleared when restocked
+    // above the threshold, so a single dip doesn't spam repeat alerts.
+    lowStockNotifiedAt: integer("low_stock_notified_at", { mode: "timestamp_ms" }),
     featured: integer("featured", { mode: "boolean" }).notNull().default(false),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
@@ -244,6 +247,12 @@ export const reservations = sqliteTable(
     // When the porchetta pickup reminder was sent (null = not yet). Makes the
     // reminder cron idempotent so repeat runs don't re-email the same customer.
     remindedAt: integer("reminded_at", { mode: "timestamp_ms" }),
+    // Porchetta pre-order that exceeded the Saturday weekly kg capacity — held on
+    // a waitlist rather than confirmed (owner can promote it).
+    waitlisted: integer("waitlisted", { mode: "boolean" }).notNull().default(false),
+    // When the "your porchetta is ready" pickup notice was sent (null = not sent);
+    // makes that admin action idempotent.
+    readyAt: integer("ready_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

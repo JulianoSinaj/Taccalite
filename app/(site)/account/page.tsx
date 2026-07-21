@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import QRCode from "qrcode";
 import AuthForms from "@/components/account/AuthForms";
 import AccountDashboard from "@/components/account/AccountDashboard";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -22,11 +23,16 @@ export default async function AccountPage() {
     getOrdersForUser(user.id),
   ]);
 
+  // Render the loyalty card number as a scannable QR (inline SVG) server-side, so
+  // `qrcode` never enters the client bundle. Staff scan this on the in-shop screen.
+  const qrSvg = await QRCode.toString(account.cardNumber, { type: "svg", margin: 1 });
+
   return (
     <AccountDashboard
       name={user.name || user.username}
       points={account.points}
       cardNumber={account.cardNumber}
+      qrSvg={qrSvg}
       nextReward={nextReward ? { name: nextReward.name, points: nextReward.points } : null}
       orders={orders.map((o) => ({
         id: o.id,

@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { loyaltyAccounts, loyaltyTransactions, redemptions, rewards, users } from "@/lib/db/schema";
 import { sendMail } from "@/lib/mail/mailer";
 import { rewardUnlockedEmail } from "@/lib/mail/templates";
+import { getSetting } from "@/lib/db/queries";
 
 /** Thrown inside the redeem transaction to roll it back on insufficient points. */
 class InsufficientPointsError extends Error {}
@@ -33,6 +34,70 @@ export async function getOrCreateLoyaltyAccount(userId: string) {
     .limit(1);
   if (!account) throw new Error(`Loyalty account could not be created for user ${userId}`);
   return account;
+}
+
+/**
+ * Look up a loyalty account by its (unique) card number, joining the owning
+ * user's display name. Returns null when no card matches. Used by the in-shop
+ * staff screen to resolve a scanned/typed card to an account.
+ */
+export async function getAccountByCard(cardNumber: string) {
+  const trimmed = cardNumber.trim();
+  if (!trimmed) return null;
+  const [row] = await db
+    .select({
+      userId: loyaltyAccounts.userId,
+      points: loyaltyAccounts.points,
+      cardNumber: loyaltyAccounts.cardNumber,
+      name: users.name,
+      username: users.username,
+    })
+    .from(loyaltyAccounts)
+    .innerJoin(users, eq(loyaltyAccounts.userId, users.id))
+    .where(eq(loyaltyAccounts.cardNumber, trimmed))
+    .limit(1);
+  return row ?? null;
+}
+
+export type PurchaseAccrualResult =
+  | { ok: true; name: string; added: number; balance: number }
+  | { ok: false; error: string };
+
+/**
+ * Accrue loyalty points for an in-shop purchase, identified by card number.
+ *
+ * Points = floor(euros * loyalty.pointsPerEuro). This is ACCRUAL only (the delta
+ * is always ≥ 0, never a debit), which is why it's safe to expose to staff: they
+ * can only ever credit points tied to a real purchase, never remove them. Unknown
+ * cards and non-positive amounts are rejected without touching any balance.
+ */
+export async function addPointsForPurchase(
+  cardNumber: string,
+  euros: number,
+  byUserId: string,
+): Promise<PurchaseAccrualResult> {
+  if (!Number.isFinite(euros) || euros <= 0) {
+    return { ok: false, error: "Importo non valido" };
+  }
+
+  const account = await getAccountByCard(cardNumber);
+  if (!account) return { ok: false, error: "Tessera non trovata" };
+
+  const pointsPerEuro = await getSetting<number>("loyalty.pointsPerEuro", 1);
+  const points = Math.floor(euros * pointsPerEuro);
+  if (points <= 0) {
+    return { ok: false, error: "L'importo non genera punti" };
+  }
+
+  const { points: balance } = await addPoints(
+    account.userId,
+    points,
+    `Acquisto in negozio (€${euros})`,
+    byUserId,
+  );
+
+  const name = account.name || account.username;
+  return { ok: true, name, added: points, balance };
 }
 
 export async function getLoyaltySummary(userId: string) {

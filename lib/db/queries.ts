@@ -85,3 +85,27 @@ export const getSetting = cache(async <T = unknown>(key: string, fallback: T): P
   const rows = await db.select().from(schema.settings).where(eq(schema.settings.key, key)).limit(1);
   return rows.length ? (rows[0].value as T) : fallback;
 });
+
+/**
+ * Persist a single setting (upsert). Write-side, so intentionally NOT wrapped in
+ * `cache()`. Bumps `updatedAt` on conflict, mirroring the admin settings action.
+ */
+export async function setSetting(key: string, value: unknown): Promise<void> {
+  await db
+    .insert(schema.settings)
+    .values({ key, value })
+    .onConflictDoUpdate({ target: schema.settings.key, set: { value, updatedAt: new Date() } });
+}
+
+/**
+ * Look up a reservation by its unguessable `reference` code (bearer token for the
+ * public tracking page). Returns the single row or null.
+ */
+export const getReservationByReference = cache(async (reference: string) => {
+  const rows = await db
+    .select()
+    .from(schema.reservations)
+    .where(eq(schema.reservations.reference, reference))
+    .limit(1);
+  return rows[0] ?? null;
+});

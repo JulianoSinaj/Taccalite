@@ -74,6 +74,15 @@ const KNOWN: {
     default: "friday",
   },
   {
+    key: "porchetta.weeklyCapacityKg",
+    label: "Capacità porchetta settimanale (kg)",
+    help: "Kg massimi prenotabili per lo stesso sabato. Oltre questa soglia le richieste vanno in lista d'attesa. Imposta 0 per nessun limite.",
+    control: "number",
+    default: 0,
+    min: 0,
+    step: 1,
+  },
+  {
     key: "reservations.enabled",
     label: "Prenotazioni attive",
     help: "Abilita il modulo prenotazioni (tavolo, porchetta, ordini speciali) sul sito.",
@@ -86,6 +95,15 @@ const KNOWN: {
     help: "Abilita l'acquisto dei prodotti online. Se disattivo, il negozio è di sola consultazione.",
     control: "boolean",
     default: true,
+  },
+  {
+    key: "store.lowStockThreshold",
+    label: "Soglia scorte basse",
+    help: "Quando le scorte di un prodotto scendono a questo valore o sotto, ricevi un avviso via email.",
+    control: "number",
+    default: 5,
+    min: 0,
+    step: 1,
   },
 ];
 

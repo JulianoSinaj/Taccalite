@@ -142,6 +142,8 @@ async function main() {
     { key: "porchetta.cutoffDay", value: "friday" },
     { key: "reservations.enabled", value: true },
     { key: "store.enabled", value: true },
+    { key: "porchetta.weeklyCapacityKg", value: 0 },
+    { key: "store.lowStockThreshold", value: 5 },
   ];
   for (const s of defaultSettings) {
     await db.insert(schema.settings).values(s).onConflictDoNothing({ target: schema.settings.key });

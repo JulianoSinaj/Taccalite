@@ -31,6 +31,7 @@ export default function AccountDashboard({
   name,
   points,
   cardNumber,
+  qrSvg,
   nextReward,
   rewards,
   transactions,
@@ -39,6 +40,7 @@ export default function AccountDashboard({
   name: string;
   points: number;
   cardNumber: string;
+  qrSvg?: string;
   nextReward: { name: string; points: number } | null;
   rewards: Reward[];
   transactions: Tx[];
@@ -101,6 +103,7 @@ export default function AccountDashboard({
               points={points}
               nextRewardPoints={nextReward?.points ?? null}
               cardNumber={cardNumber}
+              qrSvg={qrSvg}
             />
           </Reveal>
           <Reveal delay={0.25} className="mt-10">

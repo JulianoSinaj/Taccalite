@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AdminHeader, Panel, StatusBadge, inputCls, fmtDate, Pagination } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getReservationsPage, adminGetShops } from "@/lib/admin/queries";
-import { updateReservationStatus } from "@/lib/admin/actions";
+import { updateReservationStatus, promoteFromWaitlist } from "@/lib/admin/actions";
 import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -111,6 +111,11 @@ export default async function AdminReservations({ searchParams }: SP) {
                       {TYPE_LABEL[r.type] ?? r.type}
                     </span>
                     <StatusBadge status={r.status} />
+                    {r.waitlisted && (
+                      <span className="rounded-full bg-amber-500/20 px-2.5 py-1 text-[10px] font-bold tracking-widest text-amber-700 uppercase">
+                        Lista d&apos;attesa
+                      </span>
+                    )}
                   </div>
                   <p className="font-display text-xl text-brown-950">{r.name}</p>
                   <div className="grid grid-cols-1 gap-x-8 gap-y-1 text-sm text-brown-800/80 sm:grid-cols-2">
@@ -153,22 +158,30 @@ export default async function AdminReservations({ searchParams }: SP) {
                   )}
                 </div>
 
-                <ActionForm action={updateReservationStatus} className="w-full shrink-0 space-y-2 lg:w-64">
-                  <input type="hidden" name="id" value={r.id} />
-                  <select name="status" defaultValue={r.status} className={inputCls}>
-                    <option value="pending">In attesa</option>
-                    <option value="confirmed">Confermata</option>
-                    <option value="completed">Completata</option>
-                    <option value="cancelled">Annullata</option>
-                  </select>
-                  <input
-                    name="adminNotes"
-                    defaultValue={r.adminNotes ?? ""}
-                    placeholder="Note interne"
-                    className={inputCls}
-                  />
-                  <PendingButton tone="dark">Aggiorna</PendingButton>
-                </ActionForm>
+                <div className="w-full shrink-0 space-y-2 lg:w-64">
+                  {r.waitlisted && r.type === "porchetta" && (
+                    <ActionForm action={promoteFromWaitlist}>
+                      <input type="hidden" name="id" value={r.id} />
+                      <PendingButton tone="gold">Conferma dalla lista</PendingButton>
+                    </ActionForm>
+                  )}
+                  <ActionForm action={updateReservationStatus} className="space-y-2">
+                    <input type="hidden" name="id" value={r.id} />
+                    <select name="status" defaultValue={r.status} className={inputCls}>
+                      <option value="pending">In attesa</option>
+                      <option value="confirmed">Confermata</option>
+                      <option value="completed">Completata</option>
+                      <option value="cancelled">Annullata</option>
+                    </select>
+                    <input
+                      name="adminNotes"
+                      defaultValue={r.adminNotes ?? ""}
+                      placeholder="Note interne"
+                      className={inputCls}
+                    />
+                    <PendingButton tone="dark">Aggiorna</PendingButton>
+                  </ActionForm>
+                </div>
               </div>
             </Panel>
           ))}
