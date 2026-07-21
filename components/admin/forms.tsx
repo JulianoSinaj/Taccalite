@@ -12,6 +12,33 @@ function Toggle({ name, label, defaultChecked }: { name: string; label: string; 
   );
 }
 
+/**
+ * Image field: a live preview, an image URL text input, and a file upload. The
+ * uploaded file (if any) takes precedence over the URL — handled server-side by
+ * `applyImageUpload` in the save actions.
+ */
+function ImageField({ current }: { current?: string | null }) {
+  return (
+    <div className="sm:col-span-2">
+      <label className={labelCls}>Immagine</label>
+      {current ? (
+        // eslint-disable-next-line @next/next/no-img-element -- simple admin preview
+        <img src={current} alt="" className="mb-2 h-24 w-24 rounded-lg object-cover ring-1 ring-brown-900/10" />
+      ) : null}
+      <input name="image" defaultValue={current ?? ""} placeholder="URL immagine…" className={inputCls} />
+      <input
+        name="imageFile"
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/avif"
+        className="mt-2 block text-sm text-brown-800 file:mr-3 file:rounded-full file:border-0 file:bg-brown-900/10 file:px-4 file:py-2 file:text-xs file:font-bold file:tracking-widest file:uppercase hover:file:bg-brown-900/15"
+      />
+      <p className="mt-1 text-xs text-brown-800/60">
+        Carica JPG/PNG/WebP/AVIF (max 5 MB) oppure incolla un URL. Il file caricato ha la precedenza.
+      </p>
+    </div>
+  );
+}
+
 export function ProductForm({ product, shops }: { product?: ProductRow | null; shops: ShopRow[] }) {
   return (
     <ActionForm action={saveProduct} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -42,10 +69,7 @@ export function ProductForm({ product, shops }: { product?: ProductRow | null; s
         <label className={labelCls}>Descrizione</label>
         <textarea name="description" rows={3} defaultValue={product?.description} className={inputCls} />
       </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls}>URL immagine</label>
-        <input name="image" defaultValue={product?.image} className={inputCls} />
-      </div>
+      <ImageField current={product?.image} />
       <div>
         <label className={labelCls}>Etichetta immagine</label>
         <input name="imageLabel" defaultValue={product?.imageLabel} className={inputCls} />
@@ -116,10 +140,7 @@ export function BlogForm({ post }: { post?: BlogPostRow | null }) {
         <label className={labelCls}>Contenuto (un paragrafo per riga vuota)</label>
         <textarea name="content" rows={8} defaultValue={post?.content?.join("\n\n")} className={inputCls} />
       </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls}>URL immagine</label>
-        <input name="image" defaultValue={post?.image ?? ""} className={inputCls} />
-      </div>
+      <ImageField current={post?.image} />
       <div>
         <label className={labelCls}>Etichetta immagine</label>
         <input name="imageLabel" defaultValue={post?.imageLabel} className={inputCls} />
@@ -193,10 +214,7 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
         <label className={labelCls}>Punti di forza (uno per riga)</label>
         <textarea name="highlights" rows={3} defaultValue={shop?.highlights.join("\n")} className={inputCls} />
       </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls}>URL immagine</label>
-        <input name="image" defaultValue={shop?.image} className={inputCls} />
-      </div>
+      <ImageField current={shop?.image} />
       <div>
         <label className={labelCls}>Etichetta immagine</label>
         <input name="imageLabel" defaultValue={shop?.imageLabel} className={inputCls} />
@@ -241,10 +259,7 @@ export function RewardForm({ reward }: { reward?: RewardRow | null }) {
         <label className={labelCls}>Descrizione</label>
         <textarea name="description" rows={2} defaultValue={reward?.description} className={inputCls} />
       </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls}>URL immagine</label>
-        <input name="image" defaultValue={reward?.image ?? ""} className={inputCls} />
-      </div>
+      <ImageField current={reward?.image} />
       <div className="flex items-center pt-6">
         <Toggle name="active" label="Attivo" defaultChecked={reward?.active ?? true} />
       </div>

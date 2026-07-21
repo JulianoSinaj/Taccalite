@@ -20,6 +20,7 @@ import { addPoints } from "@/lib/loyalty";
 import { sendMail } from "@/lib/mail/mailer";
 import { broadcastToSubscribers } from "@/lib/automation";
 import { reservationStatusEmail, type ReservationEmailData } from "@/lib/mail/templates";
+import { saveUploadedImage } from "@/lib/media";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import {
   parseForm,
@@ -49,6 +50,22 @@ function parseLines(raw?: string) {
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
+}
+
+/**
+ * If the form carried an uploaded image file (`imageFile`), store it on the
+ * persisted volume and overwrite the `image` field with its served path. Call
+ * AFTER the auth check. A blank/absent file leaves the pasted `image` URL as-is.
+ */
+async function applyImageUpload(fd: FormData): Promise<void> {
+  const file = fd.get("imageFile");
+  if (file instanceof File && file.size > 0) {
+    try {
+      fd.set("image", await saveUploadedImage(file));
+    } catch (e) {
+      throw new ActionError(e instanceof Error ? e.message : "Caricamento immagine non riuscito.");
+    }
+  }
 }
 
 // ── Reservations ─────────────────────────────────────────────────────────────
@@ -91,6 +108,7 @@ export async function updateReservationStatus(_prev: ActionState, fd: FormData):
 export async function saveProduct(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     await requireAdmin();
+    await applyImageUpload(fd);
     const d = parseForm(productInput, fd);
     const values = {
       slug: d.slug || nanoid(8),
@@ -132,6 +150,7 @@ export async function deleteProduct(_prev: ActionState, fd: FormData): Promise<A
 export async function saveBlogPost(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     await requireAdmin();
+    await applyImageUpload(fd);
     const d = parseForm(blogInput, fd);
     const content = (d.content ?? "")
       .split(/\n{2,}/)
@@ -172,6 +191,8 @@ export async function deleteBlogPost(_prev: ActionState, fd: FormData): Promise<
 // ── Shops (create/delete are admin-only) ─────────────────────────────────────
 export async function saveShop(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
+    await requireAdmin(); // staff+ may edit; creating a NEW shop additionally requires admin (below)
+    await applyImageUpload(fd);
     const d = parseForm(shopInput, fd);
     const values = {
       name: d.name,
@@ -193,7 +214,6 @@ export async function saveShop(_prev: ActionState, fd: FormData): Promise<Action
       sortOrder: d.sortOrder,
     };
     if (d.id) {
-      await requireAdmin();
       await db.update(shops).set(values).where(eq(shops.id, d.id));
     } else {
       await requireRole("admin");
@@ -226,6 +246,7 @@ export async function deleteShop(_prev: ActionState, fd: FormData): Promise<Acti
 export async function saveReward(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     await requireAdmin();
+    await applyImageUpload(fd);
     const d = parseForm(rewardInput, fd);
     const values = {
       slug: d.slug || nanoid(8),
