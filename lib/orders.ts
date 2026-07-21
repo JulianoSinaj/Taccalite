@@ -4,6 +4,7 @@ import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { orders, orderItems, products } from "@/lib/db/schema";
 import { getShopBySlug, getSetting } from "@/lib/db/queries";
+import { validateDiscount, recordDiscountUse } from "@/lib/discounts";
 import { sendMail } from "@/lib/mail/mailer";
 import { orderCustomerEmail, orderOwnerEmail, lowStockOwnerEmail, type OrderEmailData } from "@/lib/mail/templates";
 import { addPoints } from "@/lib/loyalty";
@@ -64,17 +65,25 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
   }
 
   const subtotalCents = lines.reduce((sum, l) => sum + l.lineTotalCents, 0);
+
+  // Discount code (optional). Validated server-side against the DB subtotal — a
+  // client-supplied code can never fabricate a discount. A free-shipping code
+  // waives the fee below; a percent/fixed code reduces the subtotal.
+  const discount = await validateDiscount(input.discountCode, subtotalCents);
+  const discountCents = discount?.discountCents ?? 0;
+
   // Shipping is configurable from admin settings. It applies only to shipping
   // orders, and is waived once the subtotal reaches the free-shipping threshold
-  // (a threshold of 0 disables free shipping).
+  // (a threshold of 0 disables free shipping) or when a free-shipping code applies.
   const flatShippingCents = await getSetting<number>("store.shippingCents", SHIPPING_CENTS);
   const freeShippingThresholdCents = await getSetting<number>("store.freeShippingThresholdCents", 0);
   const shippingCents =
     input.fulfilment === "shipping" &&
+    !discount?.freeShipping &&
     (freeShippingThresholdCents === 0 || subtotalCents < freeShippingThresholdCents)
       ? flatShippingCents
       : 0;
-  const totalCents = subtotalCents + shippingCents;
+  const totalCents = Math.max(0, subtotalCents - discountCents + shippingCents);
 
   // Insert the order and its line items atomically — no zero-item orders. The
   // order number is random, so on the (rare) unique-constraint collision we
@@ -103,6 +112,8 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
                 : null,
             subtotalCents,
             shippingCents,
+            discountCode: discount?.code ?? null,
+            discountCents,
             totalCents,
             paymentStatus: "unpaid",
             notes: input.notes ?? null,
@@ -135,6 +146,9 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
   }
 
   if (!order) throw new Error("Impossibile generare un numero d'ordine univoco");
+
+  // Count the redemption once the order exists.
+  if (discount) await recordDiscountUse(discount.id);
 
   return {
     orderId: order.id,

@@ -19,6 +19,7 @@ import {
   emailOutbox,
   settings,
   auditLog,
+  discountCodes,
 } from "@/lib/db/schema";
 
 export async function getDashboardStats() {
@@ -428,6 +429,16 @@ export async function getOutboxPage(opts: { page?: number; status?: string; q?: 
 }
 
 export const getAllSettings = () => db.select().from(settings).orderBy(settings.key);
+
+/** All discount codes, newest first. */
+export const adminGetDiscounts = () =>
+  db.select().from(discountCodes).orderBy(desc(discountCodes.createdAt));
+
+/** One discount code by id (or null). */
+export async function adminGetDiscount(id: string) {
+  const [row] = await db.select().from(discountCodes).where(eq(discountCodes.id, id)).limit(1);
+  return row ?? null;
+}
 
 /** Paginated audit-log feed, newest first. Optional `entity` filter. */
 export async function getAuditPage(opts: { page?: number; entity?: string } = {}) {

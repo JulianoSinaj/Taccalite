@@ -330,6 +330,9 @@ export const orders = sqliteTable(
     shippingAddress: text("shipping_address", { mode: "json" }).$type<Record<string, string>>(),
     subtotalCents: integer("subtotal_cents").notNull().default(0),
     shippingCents: integer("shipping_cents").notNull().default(0),
+    // Applied coupon (if any) and the amount it took off the subtotal.
+    discountCode: text("discount_code"),
+    discountCents: integer("discount_cents").notNull().default(0),
     totalCents: integer("total_cents").notNull().default(0),
     currency: text("currency").notNull().default("eur"),
     paymentProvider: text("payment_provider").default("stripe"),
@@ -384,6 +387,34 @@ export const orderItems = sqliteTable(
       "order_items_amounts_ck",
       sql`${t.unitPriceCents} >= 0 and ${t.lineTotalCents} >= 0 and ${t.quantity} > 0`,
     ),
+  ],
+);
+
+// ── Discount codes / coupons ─────────────────────────────────────────────────
+export const discountCodes = sqliteTable(
+  "discount_codes",
+  {
+    id: id(),
+    code: text("code").notNull().unique(), // stored uppercased
+    // percent: `value` is a whole percent (0–100).
+    // fixed:   `value` is an amount in cents deducted from the subtotal.
+    // free_shipping: `value` is ignored; the order's shipping is waived.
+    type: text("type", { enum: ["percent", "fixed", "free_shipping"] }).notNull().default("percent"),
+    value: integer("value").notNull().default(0),
+    // Minimum order subtotal (cents) required for the code to apply.
+    minSubtotalCents: integer("min_subtotal_cents").notNull().default(0),
+    // Total redemption cap across all customers (null = unlimited).
+    maxRedemptions: integer("max_redemptions"),
+    timesUsed: integer("times_used").notNull().default(0),
+    startsAt: integer("starts_at", { mode: "timestamp_ms" }),
+    endsAt: integer("ends_at", { mode: "timestamp_ms" }),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("discount_active_idx").on(t.active),
+    check("discount_type_ck", sql`${t.type} in ('percent', 'fixed', 'free_shipping')`),
+    check("discount_value_ck", sql`${t.value} >= 0`),
   ],
 );
 
@@ -460,3 +491,4 @@ export type RewardRow = typeof rewards.$inferSelect;
 export type OrderRow = typeof orders.$inferSelect;
 export type OrderItemRow = typeof orderItems.$inferSelect;
 export type AuditLogRow = typeof auditLog.$inferSelect;
+export type DiscountCodeRow = typeof discountCodes.$inferSelect;

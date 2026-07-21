@@ -46,6 +46,12 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 <span>Subtotale</span>
                 <span>{euro(order.subtotalCents)}</span>
               </div>
+              {order.discountCents > 0 && (
+                <div className="flex justify-between text-emerald-700">
+                  <span>Sconto{order.discountCode ? ` (${order.discountCode})` : ""}</span>
+                  <span>−{euro(order.discountCents)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-brown-800/70">
                 <span>Spedizione</span>
                 <span>{euro(order.shippingCents)}</span>

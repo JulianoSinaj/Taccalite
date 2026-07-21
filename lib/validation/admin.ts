@@ -117,6 +117,38 @@ export const rewardInput = z.object({
   sortOrder: z.coerce.number().int().default(0),
 });
 
+export const discountInput = z.object({
+  id: optionalText(40),
+  code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .min(2, "Il codice deve avere almeno 2 caratteri")
+    .max(40)
+    .regex(/^[A-Z0-9._-]+$/, "Codice non valido (solo lettere, numeri, . _ -)"),
+  type: z.enum(["percent", "fixed", "free_shipping"]),
+  // Meaning depends on `type`: percent → whole percent; fixed → euros; ignored for
+  // free_shipping. The action converts to the stored integer form.
+  value: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (v && v !== "" ? Number(v) : 0))
+    .refine((v) => Number.isFinite(v) && v >= 0, "Valore non valido"),
+  minSubtotalEuros: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (v && v !== "" ? Math.round(Number(v) * 100) : 0))
+    .refine((v) => Number.isFinite(v) && v >= 0, "Importo minimo non valido"),
+  maxRedemptions: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (v && v !== "" ? Number(v) : null))
+    .refine((v) => v == null || (Number.isInteger(v) && v >= 1), "Limite non valido"),
+  startsAt: optionalText(20),
+  endsAt: optionalText(20),
+  active: checkbox,
+});
+
 export const reservationStatusInput = z.object({
   id: z.string().trim().min(1),
   status: z.enum(["pending", "confirmed", "completed", "cancelled"]),

@@ -81,9 +81,28 @@ export async function POST(request: Request) {
     });
   }
 
+  // Reflect any applied coupon as a Stripe discount so the charged total matches
+  // the order total (Stripe forbids negative line items).
+  const discounts =
+    order.discountCents > 0
+      ? [
+          {
+            coupon: (
+              await stripe.coupons.create({
+                amount_off: order.discountCents,
+                currency: "eur",
+                duration: "once",
+                name: order.discountCode ?? "Sconto",
+              })
+            ).id,
+          },
+        ]
+      : undefined;
+
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     line_items: lineItems,
+    ...(discounts ? { discounts } : {}),
     customer_email: parsed.data.email,
     metadata: { orderId: created.orderId },
     success_url: absoluteUrl(

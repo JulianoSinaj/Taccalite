@@ -14,6 +14,7 @@ export const checkoutSchema = z
     city: z.string().trim().max(120).optional(),
     zip: z.string().trim().max(20).optional(),
     notes: z.string().trim().max(1000).optional(),
+    discountCode: z.string().trim().max(40).optional(),
     company: z.string().optional(), // honeypot
   })
   .superRefine((d, ctx) => {

@@ -53,7 +53,11 @@ Legend: `[✓]` shipped this session · `[~]` partially shipped · `[ ]` planned
 ### P1 — Core commerce merchants expect
 
 - `[✓]` **Discount codes / coupons** (percent / fixed / free-shipping, min-spend, usage
-  limits, validity window, active) + admin CRUD + checkout validation lib.
+  limits, validity window, active) + admin CRUD + server-side validation, applied in
+  `createOrder` (+ Stripe ad-hoc coupon so totals match) and shown on order detail.
+  `[ ]` Remaining: the customer-facing coupon **input field** in the storefront
+  `CheckoutClient` (deliberately deferred — left the live checkout UI untouched while
+  running unattended; the whole engine behind it is done and admin-manageable).
 - `[✓]` **Audit log** of sensitive actions (refunds, role/price changes, deletes, point
   adjustments, settings) + admin viewer.
 - `[ ]` **Manual / draft orders** (phone & counter orders from admin, send payment link).

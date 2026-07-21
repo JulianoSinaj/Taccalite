@@ -4,8 +4,14 @@ import { useRef, useState } from "react";
 import { inputCls, labelCls } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
 import { saveProduct, saveBlogPost, saveShop, saveReward } from "@/lib/admin/actions";
+import { saveDiscount } from "@/lib/admin/discount-actions";
 import { VAT_RATES_BPS, vatRateLabel } from "@/lib/fiscal";
-import type { ProductRow, BlogPostRow, ShopRow, RewardRow } from "@/lib/db/schema";
+import type { ProductRow, BlogPostRow, ShopRow, RewardRow, DiscountCodeRow } from "@/lib/db/schema";
+
+/** yyyy-mm-dd for a date input default, or "" for null. */
+function dateValue(d: Date | null | undefined): string {
+  return d ? new Date(d).toISOString().slice(0, 10) : "";
+}
 
 function Toggle({ name, label, defaultChecked }: { name: string; label: string; defaultChecked?: boolean }) {
   return (
@@ -294,6 +300,73 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
       </div>
       <div className="sm:col-span-2">
         <PendingButton>{shop ? "Salva negozio" : "Crea negozio"}</PendingButton>
+      </div>
+    </ActionForm>
+  );
+}
+
+export function DiscountForm({ discount }: { discount?: DiscountCodeRow | null }) {
+  // `value` is shown in its human form: whole percent, or euros for a fixed code.
+  const valueDefault = discount
+    ? discount.type === "fixed"
+      ? (discount.value / 100).toFixed(2)
+      : String(discount.value)
+    : "";
+  return (
+    <ActionForm action={saveDiscount} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {discount && <input type="hidden" name="id" value={discount.id} />}
+      <div>
+        <label className={labelCls}>Codice</label>
+        <input
+          name="code"
+          required
+          defaultValue={discount?.code}
+          placeholder="es. BENVENUTO10"
+          className={`${inputCls} uppercase`}
+        />
+      </div>
+      <div>
+        <label className={labelCls}>Tipo</label>
+        <select name="type" defaultValue={discount?.type ?? "percent"} className={inputCls}>
+          <option value="percent">Percentuale (%)</option>
+          <option value="fixed">Importo fisso (€)</option>
+          <option value="free_shipping">Spedizione gratuita</option>
+        </select>
+      </div>
+      <div>
+        <label className={labelCls}>Valore (% o € — ignorato per spedizione gratuita)</label>
+        <input name="value" type="number" step="0.01" min={0} defaultValue={valueDefault} className={inputCls} />
+      </div>
+      <div>
+        <label className={labelCls}>Spesa minima (€)</label>
+        <input
+          name="minSubtotalEuros"
+          type="number"
+          step="0.01"
+          min={0}
+          defaultValue={discount ? (discount.minSubtotalCents / 100).toFixed(2) : ""}
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label className={labelCls}>Utilizzi massimi (vuoto = illimitati)</label>
+        <input name="maxRedemptions" type="number" min={1} defaultValue={discount?.maxRedemptions ?? ""} className={inputCls} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Valido dal</label>
+          <input name="startsAt" type="date" defaultValue={dateValue(discount?.startsAt)} className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls}>Valido al</label>
+          <input name="endsAt" type="date" defaultValue={dateValue(discount?.endsAt)} className={inputCls} />
+        </div>
+      </div>
+      <div className="flex items-center pt-6">
+        <Toggle name="active" label="Attivo" defaultChecked={discount?.active ?? true} />
+      </div>
+      <div className="sm:col-span-2">
+        <PendingButton>{discount ? "Salva codice" : "Crea codice"}</PendingButton>
       </div>
     </ActionForm>
   );

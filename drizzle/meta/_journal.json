@@ -85,6 +85,13 @@
       "when": 1784662756257,
       "tag": "0011_eminent_sentry",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1784662891997,
+      "tag": "0012_elite_nomad",
+      "breakpoints": true
     }
   ]
 }

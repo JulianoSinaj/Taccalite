@@ -14,6 +14,7 @@ import {
   Newspaper,
   Package,
   Receipt,
+  TicketPercent,
   ScanLine,
   ScrollText,
   Settings,
@@ -33,6 +34,7 @@ const items = [
   { href: "/admin/loyalty", label: "Fedeltà", icon: Users, exact: true },
   { href: "/admin/loyalty/scan", label: "Punti in negozio", icon: ScanLine },
   { href: "/admin/rewards", label: "Premi", icon: Gift },
+  { href: "/admin/discounts", label: "Codici sconto", icon: TicketPercent, adminOnly: true },
   { href: "/admin/newsletter", label: "Newsletter", icon: Croissant },
   { href: "/admin/outbox", label: "Email", icon: Mail },
   // Admin-only.
