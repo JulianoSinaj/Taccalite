@@ -10,6 +10,8 @@
     "db:generate": "drizzle-kit generate",
     "db:seed": "tsx scripts/seed.ts",
     "db:studio": "drizzle-kit studio",
+    "db:compile-seed": "esbuild scripts/seed.ts --bundle --platform=node --target=node20 --format=cjs --external:better-sqlite3 --outfile=dist/seed.cjs",
+    "db:compile-reset": "esbuild scripts/reset-admin.ts --bundle --platform=node --target=node20 --format=cjs --external:better-sqlite3 --outfile=dist/reset.cjs",
     "admin:reset": "tsx scripts/reset-admin.ts"
   },
   "dependencies": {
@@ -44,6 +46,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.25.12",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",

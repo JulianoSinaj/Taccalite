@@ -1,8 +1,20 @@
 # Taccalite — production stack for a single Hetzner VM.
 #   docker compose up -d --build
+#
+# Three services: the app (Next.js standalone), a scheduler sidecar that runs the
+# cron jobs + nightly backups automatically (no host crontab needed), and Caddy
+# for TLS. The app image is built once and reused by the scheduler.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   app:
     build: .
+    image: taccalite-app:latest
     restart: unless-stopped
     env_file: .env
     environment:
@@ -12,6 +24,7 @@ services:
       TRUST_PROXY: "true"
     volumes:
       - ./data:/app/data          # SQLite DB + WAL live here (persisted)
+      - ./backups:/app/backups    # nightly backups (persisted; ship off-box too)
     expose:
       - "3000"
     # No public port — Caddy is the only thing exposed to the internet.
@@ -28,9 +41,34 @@ services:
     # Resource ceilings so a runaway can't take the whole VM down.
     mem_limit: 512m
     cpus: 1.0
+    logging: *default-logging
+
+  # Scheduler sidecar — reuses the app image, reaches the app over the compose
+  # network, and needs no Docker socket. Triggers /api/cron periodically and runs
+  # the nightly backup. Without this (or a host crontab), no scheduled jobs run.
+  scheduler:
+    image: taccalite-app:latest
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: /app/data/taccalite.db
+      APP_URL: http://app:3000
+      # CRON_INTERVAL_SEC: "900"   # override the 15-min default if desired
+      # BACKUP_HOUR: "3"           # nightly backup fires on the first tick past this hour
+    entrypoint: ["gosu", "node", "sh", "/app/scripts/scheduler.sh"]
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+    mem_limit: 256m
+    cpus: 0.5
+    logging: *default-logging
 
   caddy:
-    image: caddy:2
+    image: caddy:2   # operators may pin a minor (e.g. caddy:2.8) or a digest
     restart: unless-stopped
     depends_on:
       app:
@@ -44,6 +82,7 @@ services:
       - caddy_config:/config
     mem_limit: 128m
     cpus: 0.5
+    logging: *default-logging
 
 volumes:
   caddy_data:

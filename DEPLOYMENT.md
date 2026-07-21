@@ -8,14 +8,18 @@ Two supported paths:
 
 Either way the app is a single Next.js container with **SQLite persisted on a volume**.
 
-> ⚠️ **Scheduled jobs & backups are NOT automatic.** A bare `docker compose up`
-> runs **ZERO** cron jobs and **ZERO** backups. The container ships no scheduler —
-> nothing drains the email outbox, sends porchetta reminders, expires points, or
-> snapshots the database until **you** add host crontab entries for
-> `/api/cron?job=all` (with the `CRON_SECRET` bearer token) and for
-> `scripts/backup.sh`. This is the single biggest operational gap. See **§4**
-> (cron) and **§7** (backups). *(Coolify users: use its Scheduled Tasks instead —
-> see §0 step 8.)*
+> ✅ **Scheduled jobs & backups run automatically with Docker Compose (path B).**
+> The stack ships a **`scheduler`** sidecar (a second container built from the same
+> image) that triggers `/api/cron?job=all` every 15 minutes and takes a nightly
+> online backup — no host crontab, no Docker socket. So a plain `docker compose up`
+> drains the outbox, sends porchetta reminders, expires points, GCs sessions, and
+> snapshots the DB on its own. See **§4** (how it works / tuning) and **§7**
+> (backups). A host crontab remains a supported alternative if you prefer to remove
+> the sidecar.
+>
+> ⚠️ **Coolify (path A) is the exception:** it deploys only the app container, so
+> the sidecar is not present — you must add Coolify **Scheduled Tasks** (see §0
+> step 8).
 
 ---
 
@@ -75,11 +79,11 @@ cp .env.example .env
 nano .env
 ```
 
-> ⚠️ **The shipped `.env.example` contains insecure defaults and a real address —
-> override them.** It carries `SESSION_SECRET=dev-insecure-secret-change-me-in-production`,
-> `CRON_SECRET=dev-cron-secret`, and `ADMIN_PASSWORD=taccalite-admin`, and it hard-codes
-> the owner's **real** `OWNER_EMAIL` (`norcineriataccalitepaolo@gmail.com`). You **must**
-> set fresh `SESSION_SECRET`, `CRON_SECRET`, and `ADMIN_PASSWORD`, and confirm
+> ⚠️ **The shipped `.env.example` contains insecure defaults — override them.** It
+> carries `SESSION_SECRET=dev-insecure-secret-change-me-in-production`,
+> `CRON_SECRET=dev-cron-secret`, and `ADMIN_PASSWORD=taccalite-admin` (and a
+> placeholder `OWNER_EMAIL=owner@example.com`). You **must** set fresh
+> `SESSION_SECRET`, `CRON_SECRET`, and `ADMIN_PASSWORD`, and set a real
 > `OWNER_EMAIL` — the app's production guard **refuses to boot** with the insecure
 > defaults when `NODE_ENV=production`.
 
@@ -122,15 +126,26 @@ Visit `https://taccalite.it`. The admin panel is at `https://taccalite.it/admin`
 
 ## 4. Scheduled jobs (cron)
 
-> ⚠️ **Required for path B — nothing schedules these for you.** Until you add the
-> crontab entries below, the outbox never drains (no newsletter/retry mail goes
-> out), reminders never fire, and points never expire.
+**Path B (Compose): handled for you by the `scheduler` sidecar.** It calls
+`/api/cron?job=all` every `CRON_INTERVAL_SEC` seconds (default 900 = 15 min),
+authenticating with the `CRON_SECRET` in the `Authorization: Bearer` header over
+the internal Compose network. `job=all` runs the outbox drain/retry + housekeeping,
+porchetta reminders (idempotent — each reservation is emailed once, stamped via
+`reminded_at`, so a frequent sweep is safe), and points-expiry (a no-op unless
+`loyalty.pointsExpiryDays` is set). Tune with `CRON_INTERVAL_SEC` / `BACKUP_HOUR`
+env vars on the `scheduler` service. Watch it with `docker compose logs -f scheduler`.
 
-The cron endpoint is secured by the `CRON_SECRET` passed in the **`Authorization:
-Bearer`** header (never the query string, which leaks into access logs). Add host
-cron entries — a frequent maintenance sweep (which **drains the email outbox**, so
-newsletter broadcasts and any retried mail actually go out), the Friday porchetta
-reminders, and a daily points-expiry pass:
+The cron endpoint is always reachable directly too (secured by the `CRON_SECRET`
+bearer header — never the query string, which leaks into access logs), e.g. to run
+a job on demand:
+
+```bash
+docker compose exec app node -e "fetch('http://127.0.0.1:3000/api/cron?job=maintenance',{method:'POST',headers:{Authorization:'Bearer '+process.env.CRON_SECRET}}).then(r=>console.log(r.status))"
+```
+
+**Alternative (host crontab).** If you remove the `scheduler` service, schedule the
+jobs from the host instead — a frequent maintenance sweep (drains the outbox so
+newsletter/retry mail goes out), Friday porchetta reminders, and a daily points pass:
 
 ```bash
 crontab -e
@@ -139,10 +154,6 @@ crontab -e
   0    9 *   *   5   curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" "https://taccalite.it/api/cron?job=porchetta-reminders" >/dev/null
   0    3 *   *   *   curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" "https://taccalite.it/api/cron?job=points-expiry" >/dev/null
 ```
-
-`job=all` runs every job at once if you prefer a single entry — but note it also
-fires porchetta reminders, so don't schedule `all` frequently or reminders go out
-as soon as a booking is made rather than on the Friday.
 
 ## 5. Email (make it real)
 
@@ -169,28 +180,28 @@ page also finalizes orders as a webhook-free fallback.
 
 ## 7. Backups & restore
 
-The entire dataset is the SQLite file under `./data`. The repo ships
-`scripts/backup.sh`, which takes a **safe online backup** (no downtime), compresses
-it under `./backups`, and prunes copies older than `RETENTION_DAYS` (default 14):
+The entire dataset is the SQLite file under `./data`.
+
+**Automatic (Compose).** The `scheduler` sidecar runs `scripts/backup-container.sh`
+once a day (the first tick past `BACKUP_HOUR`, default 03:00) — a **safe online
+backup** (no downtime) compressed into `./backups`, pruning copies older than
+`RETENTION_DAYS` (default 14). Nothing to configure. Run one on demand:
 
 ```bash
-# One-off
-cd /opt/taccalite && ./scripts/backup.sh
+docker compose exec scheduler sh /app/scripts/backup-container.sh
+```
 
+**Host-cron alternative.** If you run without the sidecar, `scripts/backup.sh`
+does the same thing from the host (it wraps `docker compose exec` around the online
+backup):
+
+```bash
 # Nightly at 03:00 (crontab -e)
 0 3 * * *  cd /opt/taccalite && ./scripts/backup.sh >> /var/log/taccalite-backup.log 2>&1
 ```
 
-A backup on the same VM is **not** disaster recovery — sync `./backups` off-box
-(Hetzner Storage Box / S3 / `rclone`) on a schedule. A quick manual alternative:
-
-```bash
-docker compose exec -T app node -e "require('better-sqlite3')('/app/data/taccalite.db').backup('/app/data/backup-'+Date.now()+'.db').then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
-```
-
-better-sqlite3's `.backup()` returns a **Promise**; the older one-liner that
-dropped the `.then().catch()` could let the process exit before the copy
-finished. The form above (matching `scripts/backup.sh`) waits for completion.
+> A backup on the same VM is **not** disaster recovery — sync `./backups` off-box
+> (Hetzner Storage Box / S3 / `rclone`) on a schedule.
 
 **Restore:** stop the stack (`docker compose down`), replace `data/taccalite.db`
 (and delete any stale `-wal`/`-shm` sidecars), then `docker compose up -d`.
@@ -224,10 +235,12 @@ Migrations apply automatically on startup; seeding is idempotent.
   in-memory rate limiter (`lib/rate-limit.ts`) would then need a shared store.
 - Keep `SESSION_SECRET` and `.env` secret and backed up. Rotating `SESSION_SECRET`
   logs everyone out.
-- **Image size (pending optimization, not a blocker):** `output: "standalone"` is
-  **not yet enabled** in `next.config.ts` (the line is commented out). The runtime
-  image therefore still ships the full `node_modules` plus `tsx` (the entrypoint
-  runs `npx tsx scripts/seed.ts` and `npx next start`), which means a larger image
-  and wider attack surface than a trimmed standalone build. Enabling standalone
-  (with `outputFileTracingIncludes` for the native better-sqlite3 binary + the
-  `drizzle/` migrations) is a known follow-up.
+- **Lean runtime image:** `output: "standalone"` is enabled, so the runner ships
+  only the traced server (with better-sqlite3's prebuilt binary) — **no full
+  `node_modules`, no `tsx`, no C build toolchain.** The migrate/seed step runs from
+  a precompiled plain-node bundle (`npm run db:compile-seed` → `seed.cjs`) and the
+  server from Next's `server.js`, both via the entrypoint. For stricter
+  reproducibility, pin the base images by digest in the `Dockerfile` / `Caddyfile`.
+- **Scheduler:** the `scheduler` sidecar reuses the app image; it needs no extra
+  build and no Docker socket. Container + scheduler logs are rotated (json-file,
+  10 MB × 3) via the compose `logging` block.

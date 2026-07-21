@@ -19,6 +19,8 @@
 
 # production
 /build
+# esbuild-compiled seed bundle (produced by `npm run db:compile-seed`)
+/dist
 
 # misc
 .DS_Store
