@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
-import { runPorchettaReminders, runMaintenance } from "@/lib/automation";
+import { runPorchettaReminders, runMaintenance, runPointsExpiry } from "@/lib/automation";
 import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -35,6 +35,9 @@ async function handle(request: Request) {
   }
   if (job === "maintenance" || job === "all") {
     results.maintenance = await runMaintenance();
+  }
+  if (job === "points-expiry" || job === "all") {
+    results.pointsExpiry = await runPointsExpiry();
   }
 
   return NextResponse.json({ ok: true, job, results });

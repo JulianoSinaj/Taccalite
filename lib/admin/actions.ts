@@ -306,10 +306,12 @@ export async function sendBroadcast(_prev: ActionState, fd: FormData): Promise<A
           `<p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 14px;">${p.replace(/\n/g, "<br>")}</p>`,
       )
       .join("");
-    const { sent } = await broadcastToSubscribers(subject, bodyHtml);
+    const { queued, sent } = await broadcastToSubscribers(subject, bodyHtml);
     revalidatePath("/admin/newsletter");
     revalidatePath("/admin/outbox");
-    return ok(`Newsletter inviata a ${sent} iscritti.`);
+    return ok(
+      `Newsletter accodata per ${queued} iscritti${sent ? ` (${sent} già inviate)` : ""}.`,
+    );
   });
 }
 

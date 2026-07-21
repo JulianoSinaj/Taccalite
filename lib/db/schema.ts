@@ -364,6 +364,9 @@ export const emailOutbox = sqliteTable(
     text: text("text").notNull().default(""),
     status: text("status", { enum: ["queued", "sent", "failed"] }).notNull().default("queued"),
     error: text("error"),
+    // Number of delivery attempts made — lets the outbox drain retry transient
+    // failures while capping permanently-failing messages.
+    attempts: integer("attempts").notNull().default(0),
     createdAt: createdAt(),
     sentAt: integer("sent_at", { mode: "timestamp_ms" }),
   },

@@ -166,7 +166,7 @@ honeypot-protected.
 | `/api/newsletter/unsubscribe` | GET | Unsubscribe (token) |
 | `/api/checkout` | POST | Create order (server-priced) → Stripe session **or** simulate → success URL |
 | `/api/checkout/webhook` | POST | Stripe `checkout.session.completed` → finalize (idempotent) |
-| `/api/cron` | GET/POST | Scheduled jobs; `Authorization: Bearer CRON_SECRET` (timing-safe); `job=porchetta-reminders`, `maintenance`, or `all` |
+| `/api/cron` | GET/POST | Scheduled jobs; `Authorization: Bearer CRON_SECRET` (timing-safe); `job=porchetta-reminders`, `maintenance` (drains + prunes the outbox, GCs sessions), `points-expiry`, or `all` |
 | `/api/admin/export/[entity]` | GET | **Admin-gated** CSV export — `orders` / `customers` / `reservations` / `subscribers` |
 | `/api/health` | GET | Unauthenticated liveness/readiness probe (pings SQLite); `200` healthy, `503` otherwise |
 
@@ -187,10 +187,14 @@ confirm/cancel emails the customer.
   `redeemReward`, `getLoyaltySummary`. Accrual on paid orders (`loyalty.pointsPerEuro`).
 - **Orders** (`lib/orders.ts`): `createOrder` (re-prices from DB — never trusts the
   client), `finalizeOrder` (idempotent: mark paid → emails → loyalty). Shipping flat €7.
-- **Mail** (`lib/mail`): `mailer.sendMail` records to `email_outbox`, sends if SMTP set
-  else keeps queued; `templates.ts` — branded responsive HTML (reservation, status,
-  welcome, newsletter confirm, order, porchetta reminder, broadcast).
-- **Automation** (`lib/automation.ts`): `runPorchettaReminders`, `broadcastToSubscribers`.
+- **Mail** (`lib/mail`): `mailer.sendMail` records to `email_outbox` then delivers (or
+  keeps `queued` if no SMTP); `enqueueMail` records without sending; `drainOutbox` retries
+  queued/failed rows (below an attempt cap) throttled, oldest-first; templates escape
+  user input (`templates.ts`).
+- **Automation** (`lib/automation.ts`): `runPorchettaReminders` (idempotent via
+  `remindedAt`), `broadcastToSubscribers` (enqueue + throttled drain), `runPointsExpiry`
+  (opt-in via `loyalty.pointsExpiryDays`), `runMaintenance` (session GC + outbox
+  drain/prune).
 - **Store UI** (`components/store`): `cart.tsx` (context + localStorage), `AddToCartButton`,
   `CartBar`, `CheckoutClient`, `ClearCart`.
 - **Account** (`components/account`): `AuthForms`, `AccountDashboard` (real loyalty + redeem).
@@ -284,9 +288,9 @@ _Confirmed by the 2026-07-21 audit; these feed the enhancement plan. Grouped by 
 7. **`getOrCreateLoyaltyAccount`** is a select-then-insert race (not an upsert/transaction).
 8. **Order numbers** (`ORD-YYYY-NNNN`) use a 4-digit suffix (10k/yr) with no retry on the
    unique-constraint collision.
-9. **Outbox `queued`/`failed` rows are never drained or retried**, and broadcasts send
-   unbatched (an SMTP provider will throttle a real list). `runAction` returns raw
-   `err.message` to the client (leak on unexpected errors).
+9. ✅ _Resolved (Phase A/C)._ `runAction` no longer leaks raw errors (Phase A). The outbox
+   now retries `queued`/`failed` rows (below an attempt cap) via `drainOutbox` on the cron
+   sweep, and broadcasts enqueue + drain throttled instead of firing unbatched (Phase C).
 
 **Infrastructure**
 10. **In-memory rate limiter** (`lib/rate-limit.ts`) is per-instance — fine for one VM; a

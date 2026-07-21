@@ -31,9 +31,14 @@ container** — ignore `docker-compose.yml` and `Caddyfile` (those are for path 
    `SMTP_*`/`MAIL_FROM` and `STRIPE_*`. See §5–6 for those. Migrations run at container
    start via the entrypoint, so you do **not** set `RUN_MIGRATIONS_ON_BOOT`.
 7. **Deploy.** First boot applies migrations + seeds content and the admin (idempotent).
-8. **Cron:** Coolify → app → **Scheduled Tasks** → add
-   `curl -s "http://localhost:3000/api/cron?job=porchetta-reminders&secret=$CRON_SECRET"`
-   on `0 9 * * 5` (Fridays 09:00).
+8. **Cron:** Coolify → app → **Scheduled Tasks**. The secret goes in the
+   `Authorization: Bearer` header (never the query string). Add three tasks:
+   - `*/15 * * * *` — outbox drain + housekeeping:
+     `curl -s -H "Authorization: Bearer $CRON_SECRET" "http://localhost:3000/api/cron?job=maintenance"`
+   - `0 9 * * 5` — Friday porchetta reminders:
+     `curl -s -H "Authorization: Bearer $CRON_SECRET" "http://localhost:3000/api/cron?job=porchetta-reminders"`
+   - `0 3 * * *` — points expiry (no-op unless `loyalty.pointsExpiryDays` is set):
+     `curl -s -H "Authorization: Bearer $CRON_SECRET" "http://localhost:3000/api/cron?job=points-expiry"`
 
 Open `https://<domain>/admin`, log in with `ADMIN_USERNAME`/`ADMIN_PASSWORD`, change the
 password. Backups: snapshot the `/app/data` volume (see §7).
@@ -95,15 +100,25 @@ docker compose logs -f app
 Visit `https://taccalite.it`. The admin panel is at `https://taccalite.it/admin`
 (log in with `ADMIN_USERNAME` / `ADMIN_PASSWORD` — change the password after first login).
 
-## 4. Scheduled jobs (porchetta reminders)
+## 4. Scheduled jobs (cron)
 
-Add a host cron entry (e.g. every Friday 09:00) to hit the secured cron endpoint:
+The cron endpoint is secured by the `CRON_SECRET` passed in the **`Authorization:
+Bearer`** header (never the query string, which leaks into access logs). Add host
+cron entries — a frequent maintenance sweep (which **drains the email outbox**, so
+newsletter broadcasts and any retried mail actually go out), the Friday porchetta
+reminders, and a daily points-expiry pass:
 
 ```bash
 crontab -e
-# m h  dom mon dow  command
-  0 9  *   *   5    curl -s "https://taccalite.it/api/cron?job=porchetta-reminders&secret=YOUR_CRON_SECRET" >/dev/null
+# m  h  dom mon dow  command   (replace YOUR_CRON_SECRET)
+  */15 * *   *   *   curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" "https://taccalite.it/api/cron?job=maintenance" >/dev/null
+  0    9 *   *   5   curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" "https://taccalite.it/api/cron?job=porchetta-reminders" >/dev/null
+  0    3 *   *   *   curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" "https://taccalite.it/api/cron?job=points-expiry" >/dev/null
 ```
+
+`job=all` runs every job at once if you prefer a single entry — but note it also
+fires porchetta reminders, so don't schedule `all` frequently or reminders go out
+as soon as a booking is made rather than on the Friday.
 
 ## 5. Email (make it real)
 

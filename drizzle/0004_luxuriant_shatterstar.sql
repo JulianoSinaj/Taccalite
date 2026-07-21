@@ -1,0 +1,1 @@
+ALTER TABLE `email_outbox` ADD `attempts` integer DEFAULT 0 NOT NULL;

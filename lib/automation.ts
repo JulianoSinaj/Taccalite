@@ -1,10 +1,19 @@
 import "server-only";
-import { and, eq, gte, inArray, isNull, lt } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { reservations, newsletterSubscribers, emailOutbox, shops } from "@/lib/db/schema";
+import {
+  reservations,
+  newsletterSubscribers,
+  emailOutbox,
+  shops,
+  loyaltyAccounts,
+  loyaltyTransactions,
+} from "@/lib/db/schema";
 import { deleteExpiredSessions } from "@/lib/auth/session";
-import { sendMail } from "@/lib/mail/mailer";
+import { sendMail, enqueueMail, drainOutbox } from "@/lib/mail/mailer";
 import { porchettaReminderEmail, newsletterBroadcast } from "@/lib/mail/templates";
+import { getSetting } from "@/lib/db/queries";
+import { addPoints } from "@/lib/loyalty";
 import { absoluteUrl } from "@/lib/site";
 
 /**
@@ -63,34 +72,76 @@ export async function runPorchettaReminders(today = new Date()): Promise<{ sent:
   return { sent };
 }
 
-/** Send an admin-composed broadcast to all confirmed subscribers. */
-export async function broadcastToSubscribers(subject: string, bodyHtml: string): Promise<{ sent: number }> {
+/**
+ * Send an admin-composed broadcast to all confirmed subscribers.
+ *
+ * Every message is enqueued to the outbox (fast, no blocking), then a throttled
+ * first batch is sent inline; the cron `drainOutbox` sweep delivers any
+ * remainder without firing hundreds of parallel SMTP calls (which a provider
+ * would rate-limit or block).
+ */
+export async function broadcastToSubscribers(
+  subject: string,
+  bodyHtml: string,
+): Promise<{ queued: number; sent: number }> {
   const subs = await db
     .select()
     .from(newsletterSubscribers)
     .where(eq(newsletterSubscribers.status, "confirmed"));
 
-  await Promise.allSettled(
-    subs.map((s) => {
-      const unsubUrl = absoluteUrl(`/api/newsletter/unsubscribe?token=${s.token}`);
-      return sendMail({ to: s.email, ...newsletterBroadcast(subject, bodyHtml, unsubUrl) });
-    }),
-  );
-  return { sent: subs.length };
+  for (const s of subs) {
+    const unsubUrl = absoluteUrl(`/api/newsletter/unsubscribe?token=${s.token}`);
+    await enqueueMail({ to: s.email, ...newsletterBroadcast(subject, bodyHtml, unsubUrl) });
+  }
+
+  const { sent } = await drainOutbox({ max: 50 });
+  return { queued: subs.length, sent };
 }
 
 /**
- * Housekeeping sweep: delete expired sessions and prune old outbox rows. Safe to
- * run frequently from the cron endpoint.
+ * Expire loyalty points for accounts inactive beyond `loyalty.pointsExpiryDays`
+ * (a setting; 0 or absent = disabled — the default, so nothing expires unless the
+ * owner opts in). The balance is zeroed through the ledger so it's auditable, and
+ * the expiry entry itself counts as activity, so an account is never expired twice.
+ */
+export async function runPointsExpiry(
+  now = new Date(),
+): Promise<{ accountsExpired: number; pointsExpired: number }> {
+  const days = await getSetting<number>("loyalty.pointsExpiryDays", 0);
+  if (!days || days <= 0) return { accountsExpired: 0, pointsExpired: 0 };
+  const cutoffMs = now.getTime() - days * 24 * 60 * 60 * 1000;
+
+  const accounts = await db.select().from(loyaltyAccounts).where(gt(loyaltyAccounts.points, 0));
+  let accountsExpired = 0;
+  let pointsExpired = 0;
+  for (const acc of accounts) {
+    const [last] = await db
+      .select({ latest: sql<number | null>`max(${loyaltyTransactions.createdAt})` })
+      .from(loyaltyTransactions)
+      .where(eq(loyaltyTransactions.userId, acc.userId));
+    const latestMs = last?.latest ?? 0;
+    if (latestMs < cutoffMs) {
+      await addPoints(acc.userId, -acc.points, "Punti scaduti per inattività");
+      accountsExpired += 1;
+      pointsExpired += acc.points;
+    }
+  }
+  return { accountsExpired, pointsExpired };
+}
+
+/**
+ * Housekeeping sweep: delete expired sessions, retry the outbox, and prune old
+ * sent outbox rows. Safe to run frequently from the cron endpoint.
  */
 export async function runMaintenance(
   now = new Date(),
   outboxRetentionDays = 90,
-): Promise<{ sessionsDeleted: number; outboxPruned: number }> {
+): Promise<{ sessionsDeleted: number; outboxDrained: number; outboxPruned: number }> {
   const { deleted: sessionsDeleted } = await deleteExpiredSessions();
+  const drain = await drainOutbox();
   const cutoff = new Date(now.getTime() - outboxRetentionDays * 24 * 60 * 60 * 1000);
   const pruned = await db
     .delete(emailOutbox)
     .where(and(eq(emailOutbox.status, "sent"), lt(emailOutbox.createdAt, cutoff)));
-  return { sessionsDeleted, outboxPruned: pruned.changes ?? 0 };
+  return { sessionsDeleted, outboxDrained: drain.sent, outboxPruned: pruned.changes ?? 0 };
 }
