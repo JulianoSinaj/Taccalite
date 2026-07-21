@@ -37,10 +37,11 @@ Legend: `[✓]` shipped this session · `[~]` partially shipped · `[ ]` planned
   - `[✓]` Business fiscal identity settings (ragione sociale, Partita IVA, Cod. Fiscale,
     regime, REA).
   - `[✓]` IVA report (imponibile + imposta per rate over a date range) + CSV export.
-  - `[ ]` **Fatturazione elettronica / SdI** (FatturaPA XML) — via certified provider
-    integration (Fatture in Cloud / TeamSystem / Danea). Needs external credentials.
+  - `[✓]` **Fatturazione elettronica / SdI** — FatturaPA FPR12 XML generated per order
+    (`lib/fattura.ts`, `/api/admin/invoice/[orderId]/xml`), importable into a certified
+    provider. `[ ]` Signing + SdI transmission still need a provider/intermediary.
   - `[ ]` **Corrispettivi telematici / documento commerciale** (RT device or AdE software).
-  - `[ ]` Invoice / credit-note PDF generation; Codice Destinatario / PEC capture on B2B.
+  - `[ ]` Credit-note XML; Codice Destinatario / PEC capture on B2B.
 - **Food-vertical product data**
   - `[✓]` Sold-by-weight / price-per-kg pricing model.
   - `[✓]` Allergens (EU Reg. 1169/2011 — 14 allergens), ingredients, origin/traceability.
@@ -60,10 +61,11 @@ Legend: `[✓]` shipped this session · `[~]` partially shipped · `[ ]` planned
   running unattended; the whole engine behind it is done and admin-manageable).
 - `[✓]` **Audit log** of sensitive actions (refunds, role/price changes, deletes, point
   adjustments, settings) + admin viewer.
-- `[ ]` **Manual / draft orders** (phone & counter orders from admin, send payment link).
+- `[✓]` **Manual / draft orders** (counter & phone sales from admin — Batch H).
 - `[~]` **Inventory ops**: `[✓]` stock adjustment-with-reason + movement ledger (on the
   product editor) + auto-reset of the low-stock alert on restock. `[ ]` suppliers / POs.
-- `[ ]` **Reservation deposits + no-show tracking** (Stripe card-hold).
+- `[~]` **Reservation deposits**: `[✓]` manual caparra tracking (Batch M).
+  `[ ]` Stripe-hosted deposit links + no-show auto-deposit still open.
 - `[ ]` Weight-reconciliation at pack time for sold-by-weight orders.
 
 ### P2 — Differentiators
@@ -71,18 +73,21 @@ Legend: `[✓]` shipped this session · `[~]` partially shipped · `[ ]` planned
 - `[✓]` **Dashboard KPI upgrade**: AOV, period-over-period deltas, top products, new-vs-
   returning, revenue trend chart.
 - `[ ]` Dynamic customer **segments** reusable across marketing.
-- `[ ]` Marketing **automations** (welcome / abandoned-cart / back-in-stock).
-- `[ ]` Per-page **SEO** fields + sitemap + schema.org (Product / LocalBusiness / Recipe);
-  scheduled blog publishing.
+- `[~]` Marketing **automations**: `[✓]` back-in-stock (Batch J), welcome email already
+  present. `[ ]` abandoned-cart still open (needs server-side cart persistence + cron).
+- `[✓]` **SEO**: schema.org already wired; product pages added to the sitemap +
+  scheduled blog publishing (Batch I).
 - `[ ]` Reporting: sales-by-product, Stripe payout reconciliation.
-- `[ ]` **2FA** for admin accounts.
+- `[✓]` **2FA** for admin/staff accounts (Batch L).
 
 ### P3 — Polish / scale
 
 - `[ ]` shadcn **DataTable** (sort / bulk-select / bulk actions / density) across
   orders / products / customers / reservations.
-- `[ ]` **Dark mode** via semantic design tokens (retrofit the raw brown/cream palette).
-- `[ ]` **⌘K command palette**, saved filter views, breadcrumbs.
+- `[ ]` **Dark mode** via semantic design tokens — DEFERRED: the admin uses literal
+  `bg-white` + status tints, so a blind CSS-variable flip breaks panels; needs a token
+  refactor + browser verification, unsafe to do unattended.
+- `[✓]` **⌘K command palette** (Batch N). `[ ]` saved filter views, breadcrumbs.
 - `[ ]` Gift cards / store credit, B2B price lists, multi-location stock, tiered loyalty.
 
 ---
