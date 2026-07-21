@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gte, inArray, like, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, like, lt, lte, or, sql, type SQL } from "drizzle-orm";
 
 export const PAGE_SIZE = 25;
 import { db } from "@/lib/db/client";
@@ -91,6 +91,85 @@ export async function getDashboardStats() {
     revenueTodayCents: revenueToday,
     revenue7dCents: revenue7d,
     revenue30dCents: revenue30d,
+  };
+}
+
+/**
+ * Richer dashboard analytics: average order value, 30-day revenue with a
+ * period-over-period delta, new-customer counts, the daily revenue trend, and the
+ * top products by revenue. All money in integer cents; only PAID orders counted.
+ */
+export async function getDashboardInsights() {
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const p30 = new Date(now - 30 * day);
+  const p60 = new Date(now - 60 * day);
+
+  const paid = eq(orders.paymentStatus, "paid");
+
+  const sumRev = async (from: Date, to?: Date) => {
+    const conds = [paid, gte(orders.createdAt, from)];
+    if (to) conds.push(lt(orders.createdAt, to));
+    const [r] = await db
+      .select({ sum: sql<number>`coalesce(sum(${orders.totalCents}), 0)`, n: sql<number>`count(*)` })
+      .from(orders)
+      .where(and(...conds));
+    return { sum: r?.sum ?? 0, n: r?.n ?? 0 };
+  };
+
+  const countCustomers = async (from: Date, to?: Date) => {
+    const conds = [eq(users.role, "customer"), gte(users.createdAt, from)];
+    if (to) conds.push(lt(users.createdAt, to));
+    const [r] = await db.select({ n: sql<number>`count(*)` }).from(users).where(and(...conds));
+    return r?.n ?? 0;
+  };
+
+  const dayExpr = sql<string>`date(${orders.createdAt} / 1000, 'unixepoch')`;
+
+  const [last30, prev30, newCust30, newCustPrev, daily, topProducts] = await Promise.all([
+    sumRev(p30),
+    sumRev(p60, p30),
+    countCustomers(p30),
+    countCustomers(p60, p30),
+    db
+      .select({ day: dayExpr, cents: sql<number>`coalesce(sum(${orders.totalCents}), 0)` })
+      .from(orders)
+      .where(and(paid, gte(orders.createdAt, p30)))
+      .groupBy(dayExpr)
+      .orderBy(dayExpr),
+    db
+      .select({
+        name: orderItems.name,
+        cents: sql<number>`coalesce(sum(${orderItems.lineTotalCents}), 0)`,
+        qty: sql<number>`coalesce(sum(${orderItems.quantity}), 0)`,
+      })
+      .from(orderItems)
+      .innerJoin(orders, eq(orderItems.orderId, orders.id))
+      .where(and(paid, gte(orders.createdAt, p30)))
+      .groupBy(orderItems.name)
+      .orderBy(desc(sql`sum(${orderItems.lineTotalCents})`))
+      .limit(5),
+  ]);
+
+  const aovCents = last30.n > 0 ? Math.round(last30.sum / last30.n) : 0;
+
+  // Fill the daily revenue into a continuous 30-day series (UTC, to match the SQL
+  // date() grouping) so the chart has no gaps.
+  const byDay = new Map(daily.map((d) => [d.day, d.cents]));
+  const dailySeries = Array.from({ length: 30 }, (_, i) => {
+    const key = new Date(now - (29 - i) * day).toISOString().slice(0, 10);
+    return { day: key, cents: byDay.get(key) ?? 0 };
+  });
+
+  return {
+    revenue30dCents: last30.sum,
+    revenuePrev30dCents: prev30.sum,
+    orders30d: last30.n,
+    aovCents,
+    newCustomers30d: newCust30,
+    newCustomersPrev30d: newCustPrev,
+    dailySeries, // [{ day: "yyyy-mm-dd", cents }] — 30 continuous days
+    topProducts, // [{ name, cents, qty }]
   };
 }
 

@@ -12,7 +12,12 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { AdminHeader, Panel, StatusBadge, euro } from "@/components/admin/ui";
-import { getDashboardStats, getTodayReservations, getRecentOrders } from "@/lib/admin/queries";
+import {
+  getDashboardStats,
+  getDashboardInsights,
+  getTodayReservations,
+  getRecentOrders,
+} from "@/lib/admin/queries";
 import { smtpConfigured, stripeConfigured } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -23,12 +28,36 @@ const typeLabels: Record<string, string> = {
   order: "Ordine",
 };
 
+/** Period-over-period delta as a rounded percentage. */
+function delta(cur: number, prev: number): { pct: number; up: boolean } | null {
+  if (prev <= 0) return cur > 0 ? { pct: 100, up: true } : null;
+  const pct = Math.round(((cur - prev) / prev) * 100);
+  return { pct: Math.abs(pct), up: pct >= 0 };
+}
+
+function DeltaBadge({ d }: { d: { pct: number; up: boolean } | null }) {
+  if (!d) return null;
+  return (
+    <span className={`text-xs font-bold ${d.up ? "text-emerald-700" : "text-red-600"}`}>
+      {d.up ? "▲" : "▼"} {d.pct}%
+    </span>
+  );
+}
+
 export default async function AdminDashboard() {
-  const [s, todayReservations, recentOrders] = await Promise.all([
+  const [s, insights, todayReservations, recentOrders] = await Promise.all([
     getDashboardStats(),
+    getDashboardInsights(),
     getTodayReservations(),
     getRecentOrders(6),
   ]);
+
+  const series = insights.dailySeries;
+  const maxCents = Math.max(1, ...series.map((d) => d.cents));
+  const maxTopCents = Math.max(1, ...insights.topProducts.map((p) => p.cents));
+
+  const revDelta = delta(insights.revenue30dCents, insights.revenuePrev30dCents);
+  const custDelta = delta(insights.newCustomers30d, insights.newCustomersPrev30d);
 
   const money = [
     { label: "Incasso oggi", value: s.revenueTodayCents },
@@ -93,6 +122,82 @@ export default async function AdminDashboard() {
             <p className="mt-3 font-display text-3xl font-bold text-brown-950">{euro(m.value)}</p>
           </Panel>
         ))}
+      </div>
+
+      {/* KPI strip — 30-day performance with period-over-period deltas */}
+      <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Panel>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Incasso 30 giorni</p>
+          <div className="mt-2 flex items-baseline gap-2">
+            <p className="font-display text-2xl font-bold text-brown-950">{euro(insights.revenue30dCents)}</p>
+            <DeltaBadge d={revDelta} />
+          </div>
+          <p className="mt-1 text-xs text-brown-800/50">vs. 30 giorni precedenti</p>
+        </Panel>
+        <Panel>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Scontrino medio</p>
+          <p className="mt-2 font-display text-2xl font-bold text-brown-950">{euro(insights.aovCents)}</p>
+          <p className="mt-1 text-xs text-brown-800/50">{insights.orders30d} ordini pagati (30 gg)</p>
+        </Panel>
+        <Panel>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Ordini 30 giorni</p>
+          <p className="mt-2 font-display text-2xl font-bold text-brown-950">{insights.orders30d}</p>
+          <p className="mt-1 text-xs text-brown-800/50">pagati</p>
+        </Panel>
+        <Panel>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Nuovi clienti</p>
+          <div className="mt-2 flex items-baseline gap-2">
+            <p className="font-display text-2xl font-bold text-brown-950">{insights.newCustomers30d}</p>
+            <DeltaBadge d={custDelta} />
+          </div>
+          <p className="mt-1 text-xs text-brown-800/50">registrati (30 gg)</p>
+        </Panel>
+      </div>
+
+      {/* Revenue trend + top products */}
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Panel className="lg:col-span-2">
+          <h3 className="font-display mb-4 text-lg text-brown-950">Andamento incassi · 30 giorni</h3>
+          <div className="flex h-40 items-end gap-1">
+            {series.map((d) => (
+              <div
+                key={d.day}
+                className="flex flex-1 flex-col items-center justify-end"
+                title={`${d.day}: ${euro(d.cents)}`}
+              >
+                <div
+                  className="w-full rounded-t bg-gold transition-colors hover:bg-gold-dark"
+                  style={{ height: `${Math.round((d.cents / maxCents) * 100)}%`, minHeight: d.cents > 0 ? "3px" : "0" }}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex justify-between text-[10px] text-brown-800/50">
+            <span>{series[0]?.day.slice(5)}</span>
+            <span>{series[series.length - 1]?.day.slice(5)}</span>
+          </div>
+        </Panel>
+
+        <Panel>
+          <h3 className="font-display mb-4 text-lg text-brown-950">Prodotti più venduti · 30 gg</h3>
+          {insights.topProducts.length === 0 ? (
+            <p className="py-6 text-center text-sm text-brown-800/60">Nessuna vendita nel periodo.</p>
+          ) : (
+            <ul className="space-y-3">
+              {insights.topProducts.map((p) => (
+                <li key={p.name}>
+                  <div className="flex items-baseline justify-between gap-2 text-sm">
+                    <span className="truncate text-brown-950">{p.name}</span>
+                    <span className="shrink-0 font-semibold text-brown-950">{euro(p.cents)}</span>
+                  </div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-brown-900/10">
+                    <div className="h-full rounded-full bg-gold-deep" style={{ width: `${Math.round((p.cents / maxTopCents) * 100)}%` }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
       </div>
 
       {/* Work queue — the actionable part */}
