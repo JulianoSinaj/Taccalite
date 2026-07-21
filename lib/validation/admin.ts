@@ -149,6 +149,12 @@ export const discountInput = z.object({
   active: checkbox,
 });
 
+export const stockAdjustInput = z.object({
+  productId: z.string().trim().min(1),
+  delta: z.coerce.number().int().refine((v) => v !== 0, "Inserisci una variazione diversa da zero"),
+  reason: optionalText(200),
+});
+
 export const reservationStatusInput = z.object({
   id: z.string().trim().min(1),
   status: z.enum(["pending", "confirmed", "completed", "cancelled"]),

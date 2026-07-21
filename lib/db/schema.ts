@@ -103,6 +103,23 @@ export const products = sqliteTable(
   ],
 );
 
+// ── Inventory movements (stock adjustment ledger) ────────────────────────────
+export const stockMovements = sqliteTable(
+  "stock_movements",
+  {
+    id: id(),
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    delta: integer("delta").notNull(), // + received / correction up, − shrink/waste
+    reason: text("reason").notNull().default(""),
+    stockAfter: integer("stock_after").notNull(),
+    createdByUserId: text("created_by_user_id"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("stock_mov_product_idx").on(t.productId)],
+);
+
 // ── Content: blog posts ──────────────────────────────────────────────────────
 export const blogPosts = sqliteTable("blog_posts", {
   id: id(),
@@ -492,3 +509,4 @@ export type OrderRow = typeof orders.$inferSelect;
 export type OrderItemRow = typeof orderItems.$inferSelect;
 export type AuditLogRow = typeof auditLog.$inferSelect;
 export type DiscountCodeRow = typeof discountCodes.$inferSelect;
+export type StockMovementRow = typeof stockMovements.$inferSelect;

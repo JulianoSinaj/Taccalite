@@ -46,7 +46,7 @@ Legend: `[✓]` shipped this session · `[~]` partially shipped · `[ ]` planned
   - `[✓]` Allergens (EU Reg. 1169/2011 — 14 allergens), ingredients, origin/traceability.
   - `[~]` Lot / batch + expiry (scadenza) tracking → basic product fields shipped; full
     FEFO batch table is a follow-on.
-- **GDPR / consent**
+- **GDPR / consent** (double opt-in newsletter already present)
   - `[✓]` Data-subject export + right-to-erasure (anonymize) tooling per customer.
   - `[ ]` Cookie-consent banner audit (Garante equal Accept/Reject) — storefront task.
 
@@ -61,7 +61,8 @@ Legend: `[✓]` shipped this session · `[~]` partially shipped · `[ ]` planned
 - `[✓]` **Audit log** of sensitive actions (refunds, role/price changes, deletes, point
   adjustments, settings) + admin viewer.
 - `[ ]` **Manual / draft orders** (phone & counter orders from admin, send payment link).
-- `[ ]` **Inventory ops**: stock adjustment-with-reason + movement log, suppliers / POs.
+- `[~]` **Inventory ops**: `[✓]` stock adjustment-with-reason + movement ledger (on the
+  product editor) + auto-reset of the low-stock alert on restock. `[ ]` suppliers / POs.
 - `[ ]` **Reservation deposits + no-show tracking** (Stripe card-hold).
 - `[ ]` Weight-reconciliation at pack time for sold-by-weight orders.
 

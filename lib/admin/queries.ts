@@ -20,6 +20,7 @@ import {
   settings,
   auditLog,
   discountCodes,
+  stockMovements,
 } from "@/lib/db/schema";
 
 export async function getDashboardStats() {
@@ -508,6 +509,15 @@ export async function getOutboxPage(opts: { page?: number; status?: string; q?: 
 }
 
 export const getAllSettings = () => db.select().from(settings).orderBy(settings.key);
+
+/** Recent stock movements for a product, newest first. */
+export const getStockMovements = (productId: string, limit = 20) =>
+  db
+    .select()
+    .from(stockMovements)
+    .where(eq(stockMovements.productId, productId))
+    .orderBy(desc(stockMovements.createdAt))
+    .limit(limit);
 
 /** All discount codes, newest first. */
 export const adminGetDiscounts = () =>

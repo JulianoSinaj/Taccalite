@@ -13,9 +13,10 @@ import {
   redemptions,
   newsletterSubscribers,
   settings,
+  stockMovements,
 } from "@/lib/db/schema";
 import { requireAdmin, requireRole } from "@/lib/auth/session";
-import { getShopBySlug } from "@/lib/db/queries";
+import { getShopBySlug, getSetting } from "@/lib/db/queries";
 import { addPoints } from "@/lib/loyalty";
 import { sendMail } from "@/lib/mail/mailer";
 import { broadcastToSubscribers } from "@/lib/automation";
@@ -39,6 +40,7 @@ import {
   redemptionStatusInput,
   pointsInput,
   settingInput,
+  stockAdjustInput,
 } from "@/lib/validation/admin";
 
 // Parse "Label | Value" lines into hours; blank-separated lines into a list.
@@ -185,6 +187,10 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
     await requireAdmin();
     await applyImageUpload(fd);
     const d = parseForm(productInput, fd);
+    // Restocking above the low-stock threshold via the editor clears the alert
+    // stamp so a future dip can alert again.
+    const threshold = await getSetting<number>("store.lowStockThreshold", 5);
+    const clearLowStock = d.stock != null && d.stock > threshold;
     const values = {
       slug: d.slug || nanoid(8),
       name: d.name,
@@ -206,6 +212,7 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
       ingredients: d.ingredients ?? null,
       purchasable: d.purchasable,
       stock: d.stock,
+      ...(clearLowStock ? { lowStockNotifiedAt: null } : {}),
       featured: d.featured,
       active: d.active,
       sortOrder: d.sortOrder,
@@ -255,6 +262,59 @@ export async function deleteProduct(_prev: ActionState, fd: FormData): Promise<A
     await logAudit({ actor, action: "product.delete", entity: "product", entityId: id, summary: `Prodotto eliminato (${id})` });
     revalidatePath("/admin/products");
     return ok("Prodotto eliminato.");
+  });
+}
+
+/**
+ * Adjust a product's stock by a signed delta and record a movement in the ledger.
+ * Staff-permitted (in-shop inventory management). The product must already track
+ * stock (stock not null). Restocking above the low-stock threshold clears the
+ * alert stamp so a future dip can re-alert (the reset the order flow deferred).
+ */
+export async function adjustStock(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const d = parseForm(stockAdjustInput, fd);
+
+    const [product] = await db.select().from(products).where(eq(products.id, d.productId)).limit(1);
+    if (!product) throw new ActionError("Prodotto non trovato.");
+    if (product.stock == null) {
+      throw new ActionError("Questo prodotto non traccia le scorte. Imposta prima una giacenza dalla scheda.");
+    }
+
+    const newStock = Math.max(0, product.stock + d.delta);
+    const threshold = await getSetting<number>("store.lowStockThreshold", 5);
+
+    await db
+      .update(products)
+      .set({
+        stock: newStock,
+        // Clear the low-stock alert stamp when back above the threshold.
+        ...(newStock > threshold ? { lowStockNotifiedAt: null } : {}),
+      })
+      .where(eq(products.id, d.productId));
+
+    await db.insert(stockMovements).values({
+      productId: d.productId,
+      delta: d.delta,
+      reason: d.reason ?? "",
+      stockAfter: newStock,
+      createdByUserId: actor.id,
+    });
+
+    await logAudit({
+      actor,
+      action: "stock.adjust",
+      entity: "product",
+      entityId: d.productId,
+      summary: `Giacenza ${product.name}: ${d.delta > 0 ? "+" : ""}${d.delta} → ${newStock}${d.reason ? ` (${d.reason})` : ""}`,
+      meta: { delta: d.delta, stockAfter: newStock },
+    });
+
+    revalidatePath("/admin/products");
+    revalidatePath(`/admin/products/${d.productId}`);
+    revalidatePath("/negozio");
+    return ok(`Giacenza aggiornata: ${newStock}.`);
   });
 }
 
