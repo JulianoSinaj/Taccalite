@@ -1,3 +1,9 @@
+{
+	# Contact address for Let's Encrypt — used for certificate-expiry notices.
+	# Replace with a real mailbox you monitor.
+	email admin@taccalite.it
+}
+
 # Replace taccalite.it with your real domain. Caddy obtains + renews TLS
 # certificates automatically via Let's Encrypt (ports 80/443 must be reachable).
 taccalite.it, www.taccalite.it {
@@ -10,6 +16,11 @@ taccalite.it, www.taccalite.it {
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "SAMEORIGIN"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		# Content Security Policy. 'unsafe-inline' is needed for Next.js's inline
+		# hydration scripts/styles (no nonce wiring yet); images allow Unsplash +
+		# data URIs. Tighten as the image sources firm up. Remove the header if a
+		# console reports a legitimate resource being blocked, then re-add tuned.
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'; object-src 'none'; img-src 'self' data: https://images.unsplash.com; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'"
 	}
 }
 

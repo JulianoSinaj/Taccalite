@@ -41,6 +41,9 @@ yarn-error.log*
 # …but the example template MUST be tracked — the deploy docs reference it.
 !.env.example
 
+# database backups produced by scripts/backup.sh
+/backups/
+
 # vercel
 .vercel
 

@@ -130,17 +130,40 @@ page also finalizes orders as a webhook-free fallback.
 
 ## 7. Backups & restore
 
-The entire dataset is the SQLite file under `./data`.
+The entire dataset is the SQLite file under `./data`. The repo ships
+`scripts/backup.sh`, which takes a **safe online backup** (no downtime), compresses
+it under `./backups`, and prunes copies older than `RETENTION_DAYS` (default 14):
 
 ```bash
-# Backup (safe while running — SQLite online backup)
-docker compose exec app npx tsx -e "require('better-sqlite3')('/app/data/taccalite.db').backup('/app/data/backup-'+Date.now()+'.db')"
-# …or simply copy the folder when low-traffic:
-tar czf taccalite-data-$(date +%F).tgz data/
+# One-off
+cd /opt/taccalite && ./scripts/backup.sh
+
+# Nightly at 03:00 (crontab -e)
+0 3 * * *  cd /opt/taccalite && ./scripts/backup.sh >> /var/log/taccalite-backup.log 2>&1
 ```
 
-Automate with a nightly cron copying `data/` off-box (e.g. to Hetzner Storage Box / S3).
-**Restore:** stop the stack, replace `data/taccalite.db`, start again.
+A backup on the same VM is **not** disaster recovery — sync `./backups` off-box
+(Hetzner Storage Box / S3 / `rclone`) on a schedule. A quick manual alternative:
+
+```bash
+docker compose exec app node -e "require('better-sqlite3')('/app/data/taccalite.db').backup('/app/data/backup-'+Date.now()+'.db')"
+```
+
+**Restore:** stop the stack (`docker compose down`), replace `data/taccalite.db`
+(and delete any stale `-wal`/`-shm` sidecars), then `docker compose up -d`.
+
+## 7a. Health & readiness
+
+The app exposes an unauthenticated **`GET /api/health`** that returns `200` only
+when the process is up and SQLite is reachable (`503` otherwise). Both the
+Dockerfile and `docker-compose.yml` define a healthcheck against it, and Caddy is
+configured to wait for the app to become **healthy** before proxying — so a
+redeploy never serves traffic mid-migration. The container also **fails to start**
+if migrations/seeding error (the entrypoint no longer swallows failures), so a bad
+migration surfaces immediately instead of booting against an un-migrated DB.
+
+The container runs the server as the unprivileged **`node`** user (the entrypoint
+only uses root briefly to fix the data-volume ownership).
 
 ## 8. Updates
 

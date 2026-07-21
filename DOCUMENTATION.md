@@ -168,6 +168,7 @@ honeypot-protected.
 | `/api/checkout/webhook` | POST | Stripe `checkout.session.completed` → finalize (idempotent) |
 | `/api/cron` | GET/POST | Scheduled jobs; `Authorization: Bearer CRON_SECRET` (timing-safe); `job=porchetta-reminders`, `maintenance`, or `all` |
 | `/api/admin/export/[entity]` | GET | **Admin-gated** CSV export — `orders` / `customers` / `reservations` / `subscribers` |
+| `/api/health` | GET | Unauthenticated liveness/readiness probe (pings SQLite); `200` healthy, `503` otherwise |
 
 Reservation flows (`type`): **table** (date+time+guests), **porchetta** (Saturday date +
 kg), **order** (free-text request). Statuses: pending→confirmed→completed/cancelled;
@@ -290,11 +291,15 @@ _Confirmed by the 2026-07-21 audit; these feed the enhancement plan. Grouped by 
 **Infrastructure**
 10. **In-memory rate limiter** (`lib/rate-limit.ts`) is per-instance — fine for one VM; a
     shared store (Redis) is needed only if horizontally scaled.
-11. **No backups, healthcheck, resource limits, or non-root user** in the Docker/Compose
-    setup; the entrypoint swallows seed/migration failure (can boot in a broken state).
-12. **`output: "standalone"` is NOT actually enabled** (`next.config.ts` leaves it as a
-    note); the runtime image still ships the full `node_modules` + `tsx`. Docs/roadmap
-    previously claimed standalone — corrected here.
+11. ✅ _Resolved (Phase B)._ The Docker/Compose setup now has a `/api/health` probe +
+    healthcheck (Caddy waits for `healthy`), a nightly online **backup** script
+    (`scripts/backup.sh`), **resource limits**, runs the server as the non-root `node`
+    user, and the entrypoint **fails hard** on a migration/seed error.
+12. **`output: "standalone"` is still NOT enabled** (`next.config.ts`); the runtime image
+    ships the full `node_modules` + `tsx` because the startup migrate/seed runs via `tsx`.
+    Deferred: enabling standalone needs a compiled migrate/seed step so `tsx` and the full
+    dependency tree can be dropped from the runtime image (image-size/attack-surface only,
+    not a correctness issue).
 
 **Product / content**
 13. **Media uploads**: product/shop/reward images are URLs (no file-upload UI yet); many

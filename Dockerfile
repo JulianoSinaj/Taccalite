@@ -26,6 +26,11 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
+# gosu lets the root entrypoint fix the data-volume ownership and then drop to
+# the unprivileged `node` user for the migrate/seed step and the server itself.
+RUN apt-get update && apt-get install -y --no-install-recommends gosu \
+  && rm -rf /var/lib/apt/lists/*
+
 # Full dependency tree (the seed script uses tsx; migrations run at startup).
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
@@ -35,7 +40,15 @@ COPY package.json next.config.ts drizzle.config.ts tsconfig.json ./
 COPY lib ./lib
 COPY scripts ./scripts
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod +x ./docker-entrypoint.sh && mkdir -p /app/data
+# App files are owned by `node`; the entrypoint runs as root only to chown the
+# bind-mounted /app/data, then execs the server as `node` via gosu.
+RUN chmod +x ./docker-entrypoint.sh && mkdir -p /app/data && chown -R node:node /app
 
 EXPOSE 3000
+
+# Container-level healthcheck (used by Coolify and plain `docker run`; Compose
+# defines its own equivalent). Node 20 ships a global fetch.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=5 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
 ENTRYPOINT ["./docker-entrypoint.sh"]
