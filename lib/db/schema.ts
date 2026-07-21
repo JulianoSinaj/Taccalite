@@ -324,6 +324,9 @@ export const orders = sqliteTable(
       .notNull()
       .default("unpaid"),
     stripeSessionId: text("stripe_session_id"),
+    // Shipping fulfilment tracking, set by the owner when an order ships.
+    carrier: text("carrier"),
+    trackingNumber: text("tracking_number"),
     notes: text("notes"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

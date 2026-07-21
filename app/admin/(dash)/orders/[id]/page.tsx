@@ -1,19 +1,21 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, labelCls } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { adminGetOrder, adminGetShops } from "@/lib/admin/queries";
-import { updateOrderStatus } from "@/lib/admin/order-actions";
+import { updateOrderStatus, setOrderTracking, refundOrder } from "@/lib/admin/order-actions";
+import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrderDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [data, shops] = await Promise.all([adminGetOrder(id), adminGetShops()]);
+  const [data, shops, admin] = await Promise.all([adminGetOrder(id), adminGetShops(), isAdmin()]);
   if (!data) notFound();
   const { order, items } = data;
   const shopName = order.shopSlug ? shops.find((s) => s.slug === order.shopSlug)?.name ?? order.shopSlug : null;
   const addr = order.shippingAddress;
+  const canRefund = admin && order.paymentStatus === "paid" && order.status !== "refunded";
 
   return (
     <div>
@@ -83,6 +85,16 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 {addr.address}, {addr.zip} {addr.city}
               </p>
             )}
+            {order.userId && (
+              <p className="mt-3 text-sm">
+                <Link
+                  href={`/admin/loyalty/${order.userId}`}
+                  className="font-bold text-brown-800 underline decoration-gold-dark/60 underline-offset-2 hover:text-brown-950"
+                >
+                  Scheda cliente e punti fedeltà →
+                </Link>
+              </p>
+            )}
             {order.notes && (
               <p className="mt-3 text-sm text-brown-800/70">
                 <span aria-hidden="true">📝</span> <span className="sr-only">Note: </span>
@@ -102,9 +114,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             <ActionForm action={updateOrderStatus} className="space-y-3">
               <input type="hidden" name="id" value={order.id} />
               <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-widest text-brown-800/60">
-                  Stato ordine
-                </label>
+                <label className={labelCls}>Stato ordine</label>
                 <select name="status" defaultValue={order.status} className={inputCls}>
                   <option value="pending">In attesa</option>
                   <option value="paid">Pagato</option>
@@ -114,9 +124,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-widest text-brown-800/60">
-                  Stato pagamento
-                </label>
+                <label className={labelCls}>Stato pagamento</label>
                 <select name="paymentStatus" defaultValue={order.paymentStatus} className={inputCls}>
                   <option value="unpaid">Da pagare</option>
                   <option value="paid">Pagato</option>
@@ -125,6 +133,68 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               </div>
               <PendingButton tone="dark">Aggiorna ordine</PendingButton>
             </ActionForm>
+          </Panel>
+
+          {order.fulfilment === "shipping" && (
+            <Panel>
+              <h3 className="font-display mb-3 text-lg text-brown-950">Spedizione</h3>
+              <ActionForm action={setOrderTracking} className="space-y-3">
+                <input type="hidden" name="id" value={order.id} />
+                <div>
+                  <label className={labelCls}>Corriere</label>
+                  <input
+                    name="carrier"
+                    defaultValue={order.carrier ?? ""}
+                    placeholder="es. BRT, GLS, Poste"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Numero di tracking</label>
+                  <input
+                    name="trackingNumber"
+                    defaultValue={order.trackingNumber ?? ""}
+                    placeholder="Codice di spedizione"
+                    className={inputCls}
+                  />
+                </div>
+                <p className="text-xs text-brown-800/60">
+                  Se l&apos;ordine è già evaso, salvando il tracking l&apos;email di spedizione viene reinviata al cliente.
+                </p>
+                <PendingButton tone="dark">Salva tracking</PendingButton>
+              </ActionForm>
+            </Panel>
+          )}
+
+          <Panel>
+            <h3 className="font-display mb-3 text-lg text-brown-950">Pagamento</h3>
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-brown-800/60">Provider</dt>
+                <dd className="text-brown-950">{order.paymentProvider ?? "—"}</dd>
+              </div>
+              {order.stripeSessionId && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-brown-800/60">Sessione Stripe</dt>
+                  <dd className="max-w-[60%] truncate font-mono text-xs text-brown-950" title={order.stripeSessionId}>
+                    {order.stripeSessionId}
+                  </dd>
+                </div>
+              )}
+            </dl>
+            {canRefund && (
+              <div className="mt-4 border-t border-brown-900/10 pt-4">
+                <ActionForm action={refundOrder} className="flex flex-col items-start gap-2">
+                  <input type="hidden" name="id" value={order.id} />
+                  <PendingButton
+                    tone="danger"
+                    confirm={`Confermi il rimborso di ${euro(order.totalCents)} per l'ordine ${order.orderNumber}? L'operazione non è reversibile.`}
+                  >
+                    Rimborsa
+                  </PendingButton>
+                </ActionForm>
+              </div>
+            )}
           </Panel>
         </div>
       </div>

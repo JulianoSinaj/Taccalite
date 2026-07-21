@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gte, inArray, like, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, like, lte, or, sql, type SQL } from "drizzle-orm";
 
 export const PAGE_SIZE = 25;
 import { db } from "@/lib/db/client";
@@ -54,11 +54,33 @@ export async function getDashboardStats() {
 }
 
 /** Paginated reservations list, preserving the status + shop filters. */
-export async function getReservationsPage(opts: { status?: string; shopSlug?: string; page?: number }) {
+export async function getReservationsPage(opts: {
+  status?: string;
+  shopSlug?: string;
+  type?: string;
+  q?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+}) {
   const page = Math.max(1, opts.page ?? 1);
   const conds: SQL[] = [];
   if (opts.status && opts.status !== "all") conds.push(eq(reservations.status, opts.status as "pending"));
   if (opts.shopSlug && opts.shopSlug !== "all") conds.push(eq(reservations.shopSlug, opts.shopSlug));
+  if (opts.type && opts.type !== "all") conds.push(eq(reservations.type, opts.type as "table"));
+  if (opts.from) conds.push(gte(reservations.date, opts.from));
+  if (opts.to) conds.push(lte(reservations.date, opts.to));
+  if (opts.q) {
+    const term = `%${opts.q.toLowerCase()}%`;
+    conds.push(
+      or(
+        like(sql`lower(${reservations.reference})`, term),
+        like(sql`lower(${reservations.name})`, term),
+        like(sql`lower(${reservations.phone})`, term),
+        like(sql`lower(coalesce(${reservations.email}, ''))`, term),
+      )!,
+    );
+  }
   const where = conds.length ? and(...conds) : undefined;
   const [rows, [{ total }]] = await Promise.all([
     db
@@ -92,10 +114,19 @@ export const getOrdersList = (shopSlug?: string) => {
 };
 
 /** Paginated + searchable orders list. Search matches order number / name / email. */
-export async function getOrdersPage(opts: { shopSlug?: string; q?: string; page?: number }) {
+export async function getOrdersPage(opts: { shopSlug?: string; q?: string; status?: string; fulfilment?: string; page?: number }) {
   const page = Math.max(1, opts.page ?? 1);
   const conds: SQL[] = [];
   if (opts.shopSlug && opts.shopSlug !== "all") conds.push(eq(orders.shopSlug, opts.shopSlug));
+  if (opts.status && opts.status !== "all") {
+    // Special work-queue value: paid but not yet fulfilled.
+    if (opts.status === "to-fulfil") {
+      conds.push(eq(orders.status, "paid"));
+    } else {
+      conds.push(eq(orders.status, opts.status as "paid"));
+    }
+  }
+  if (opts.fulfilment && opts.fulfilment !== "all") conds.push(eq(orders.fulfilment, opts.fulfilment as "pickup"));
   if (opts.q) {
     const term = `%${opts.q.toLowerCase()}%`;
     conds.push(
@@ -229,6 +260,15 @@ export const countAdmins = () =>
     .from(users)
     .where(eq(users.role, "admin"))
     .then((r) => r[0]?.n ?? 0);
+
+/** A single user's loyalty account (points + card), or null. For the customer detail view. */
+export const getLoyaltyAccountForUser = (userId: string) =>
+  db
+    .select({ points: loyaltyAccounts.points, cardNumber: loyaltyAccounts.cardNumber })
+    .from(loyaltyAccounts)
+    .where(eq(loyaltyAccounts.userId, userId))
+    .limit(1)
+    .then((r) => r[0] ?? null);
 
 export async function getCustomersWithPoints() {
   return db

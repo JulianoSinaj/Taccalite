@@ -455,3 +455,54 @@ export function ownerDigestEmail(d: OwnerDigestData): Built {
       `\n\nScorte basse: ${d.lowStock.map((p) => `${p.name} (${p.stock})`).join(", ") || "nessuna"}`,
   };
 }
+
+/** (Batch 2) Order status-change notice to the customer: shipped/fulfilled (with
+ *  optional tracking), cancelled, or refunded. */
+export function orderStatusEmail(
+  d: {
+    orderNumber: string;
+    name: string;
+    fulfilment: "pickup" | "shipping";
+    shopName?: string | null;
+    carrier?: string | null;
+    trackingNumber?: string | null;
+    totalCents: number;
+  },
+  status: "fulfilled" | "cancelled" | "refunded",
+): Built {
+  const euroTot = euro(d.totalCents);
+  let heading: string;
+  let intro: string;
+  let extraHtml = "";
+  let extraText = "";
+
+  if (status === "fulfilled") {
+    if (d.fulfilment === "shipping") {
+      heading = "Il tuo ordine è in viaggio";
+      intro = `il tuo ordine <strong>${esc(d.orderNumber)}</strong> è stato spedito.`;
+      if (d.trackingNumber) {
+        const carrier = d.carrier ? `${esc(d.carrier)} · ` : "";
+        extraHtml = `<p style="font-size:15px;color:#41281b;margin:0 0 8px;">Tracking: ${carrier}<strong>${esc(d.trackingNumber)}</strong></p>`;
+        extraText = `\nTracking: ${d.carrier ? d.carrier + " " : ""}${d.trackingNumber}`;
+      }
+    } else {
+      heading = "Il tuo ordine è pronto";
+      intro = `il tuo ordine <strong>${esc(d.orderNumber)}</strong> è pronto per il ritiro${d.shopName ? ` presso ${esc(d.shopName)}` : ""}.`;
+    }
+  } else if (status === "cancelled") {
+    heading = "Ordine annullato";
+    intro = `il tuo ordine <strong>${esc(d.orderNumber)}</strong> è stato annullato. Per qualsiasi domanda, rispondi a questa email o chiamaci in bottega.`;
+  } else {
+    heading = "Rimborso emesso";
+    intro = `abbiamo emesso un rimborso di <strong>${euroTot}</strong> per l'ordine <strong>${esc(d.orderNumber)}</strong>. L'accredito può richiedere alcuni giorni lavorativi.`;
+  }
+
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">Ciao ${esc(d.name)}, ${intro}</p>
+    ${extraHtml}`;
+  return {
+    subject: `${heading} · ${d.orderNumber} — Norcineria Taccalite`,
+    html: layout({ heading, body }),
+    text: `Ciao ${d.name}, ${intro.replace(/<[^>]+>/g, "")}${extraText}`,
+  };
+}

@@ -69,6 +69,13 @@ test("staff in-shop points screen is gated", async ({ page }) => {
   await expect(page).toHaveURL(/\/admin\/login/);
 });
 
+test("new admin routes (calendar, customer detail) are gated", async ({ page }) => {
+  await page.goto("/admin/reservations/calendar");
+  await expect(page).toHaveURL(/\/admin\/login/);
+  await page.goto("/admin/loyalty/some-user-id");
+  await expect(page).toHaveURL(/\/admin\/login/);
+});
+
 test("sitemap and robots are served", async ({ request }) => {
   expect((await request.get("/sitemap.xml")).status()).toBeLessThan(400);
   expect((await request.get("/robots.txt")).status()).toBeLessThan(400);

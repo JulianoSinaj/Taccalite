@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminHeader, Panel, inputCls, fmtDate, Pagination } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
@@ -46,6 +47,12 @@ export default async function AdminUsers({ searchParams }: SP) {
                 @{u.username}
                 {u.email ? ` · ${u.email}` : ""} · registrato {fmtDate(u.createdAt)}
               </p>
+              <Link
+                href={`/admin/loyalty/${u.id}`}
+                className="mt-1 inline-block text-[11px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
+              >
+                Scheda cliente →
+              </Link>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
               <ActionForm action={setUserRole} className="flex items-center gap-2">

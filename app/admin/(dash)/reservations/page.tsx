@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, inputCls, fmtDate, Pagination } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, inputCls, labelCls, fmtDate, Pagination } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getReservationsPage, adminGetShops } from "@/lib/admin/queries";
 import { updateReservationStatus, promoteFromWaitlist } from "@/lib/admin/actions";
@@ -13,23 +13,59 @@ const TYPE_LABEL: Record<string, string> = {
   order: "Ordine",
 };
 const FILTERS = ["all", "pending", "confirmed", "completed", "cancelled"];
+const TYPE_FILTERS: { value: string; label: string }[] = [
+  { value: "all", label: "Tutti" },
+  { value: "table", label: "Tavolo" },
+  { value: "porchetta", label: "Porchetta" },
+  { value: "order", label: "Ordine" },
+];
 
-type SP = { searchParams: Promise<{ stato?: string; negozio?: string; page?: string }> };
+type SP = {
+  searchParams: Promise<{
+    stato?: string;
+    negozio?: string;
+    tipo?: string;
+    q?: string;
+    da?: string;
+    a?: string;
+    page?: string;
+  }>;
+};
 
 export default async function AdminReservations({ searchParams }: SP) {
-  const { stato = "all", negozio = "all", page: pageStr } = await searchParams;
+  const {
+    stato = "all",
+    negozio = "all",
+    tipo = "all",
+    q = "",
+    da = "",
+    a = "",
+    page: pageStr,
+  } = await searchParams;
   const page = Number(pageStr) || 1;
   const [{ rows, total, pageCount }, shops, admin] = await Promise.all([
-    getReservationsPage({ status: stato, shopSlug: negozio, page }),
+    getReservationsPage({
+      status: stato,
+      shopSlug: negozio,
+      type: tipo,
+      q: q || undefined,
+      from: da || undefined,
+      to: a || undefined,
+      page,
+    }),
     adminGetShops(),
     isAdmin(),
   ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
 
-  const filterHref = (next: { stato?: string; negozio?: string }) => {
-    const s = next.stato ?? stato;
-    const n = next.negozio ?? negozio;
-    return `/admin/reservations?stato=${s}&negozio=${n}`;
+  // All active filters, so chips/pagination preserve one another.
+  const current = { stato, negozio, tipo, q, da, a };
+  const filterHref = (next: Partial<typeof current>) => {
+    const merged = { ...current, ...next };
+    const sp = new URLSearchParams();
+    for (const [k, v] of Object.entries(merged)) if (v && v !== "all") sp.set(k, v);
+    const qs = sp.toString();
+    return qs ? `/admin/reservations?${qs}` : "/admin/reservations";
   };
 
   return (
@@ -39,6 +75,12 @@ export default async function AdminReservations({ searchParams }: SP) {
         subtitle={`${total} richieste`}
         action={
           <div className="flex items-center gap-2">
+            <Link
+              href="/admin/reservations/calendar"
+              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            >
+              Calendario
+            </Link>
             <Link
               href="/admin/reservations/agenda"
               className="rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
@@ -73,7 +115,21 @@ export default async function AdminReservations({ searchParams }: SP) {
         ))}
       </div>
 
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-3 flex flex-wrap gap-2">
+        {TYPE_FILTERS.map((t) => (
+          <Link
+            key={t.value}
+            href={filterHref({ tipo: t.value })}
+            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+              tipo === t.value ? "bg-gold-deep text-cream" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
+            }`}
+          >
+            {t.label}
+          </Link>
+        ))}
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-2">
         <Link
           href={filterHref({ negozio: "all" })}
           className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
@@ -95,6 +151,51 @@ export default async function AdminReservations({ searchParams }: SP) {
         ))}
       </div>
 
+      {/* Search + date-range filter (GET; preserves chip selections via hidden inputs). */}
+      <form action="/admin/reservations" method="get" className="mb-6 flex flex-wrap items-end gap-3">
+        {stato !== "all" && <input type="hidden" name="stato" value={stato} />}
+        {negozio !== "all" && <input type="hidden" name="negozio" value={negozio} />}
+        {tipo !== "all" && <input type="hidden" name="tipo" value={tipo} />}
+        <div className="min-w-[14rem] flex-1">
+          <label className={labelCls} htmlFor="res-q">
+            Cerca
+          </label>
+          <input
+            id="res-q"
+            name="q"
+            defaultValue={q}
+            placeholder="Riferimento, nome, telefono, email…"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor="res-da">
+            Dal
+          </label>
+          <input id="res-da" type="date" name="da" defaultValue={da} className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor="res-a">
+            Al
+          </label>
+          <input id="res-a" type="date" name="a" defaultValue={a} className={inputCls} />
+        </div>
+        <button
+          type="submit"
+          className="rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+        >
+          Filtra
+        </button>
+        {(q || da || a) && (
+          <Link
+            href={filterHref({ q: "", da: "", a: "" })}
+            className="rounded-full bg-brown-900/10 px-5 py-2.5 text-xs font-bold tracking-widest text-brown-800 uppercase hover:bg-brown-900/15"
+          >
+            Azzera
+          </Link>
+        )}
+      </form>
+
       {rows.length === 0 ? (
         <Panel>
           <p className="text-brown-800/70">Nessuna prenotazione in questa vista.</p>
@@ -114,6 +215,16 @@ export default async function AdminReservations({ searchParams }: SP) {
                     {r.waitlisted && (
                       <span className="rounded-full bg-amber-500/20 px-2.5 py-1 text-[10px] font-bold tracking-widest text-amber-700 uppercase">
                         Lista d&apos;attesa
+                      </span>
+                    )}
+                    {r.remindedAt && (
+                      <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[10px] font-bold tracking-widest text-sky-700 uppercase">
+                        Promemoria inviato
+                      </span>
+                    )}
+                    {r.readyAt && (
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold tracking-widest text-emerald-700 uppercase">
+                        Pronta ✓
                       </span>
                     )}
                   </div>
@@ -165,6 +276,27 @@ export default async function AdminReservations({ searchParams }: SP) {
                       <PendingButton tone="gold">Conferma dalla lista</PendingButton>
                     </ActionForm>
                   )}
+
+                  {/* One-click Conferma / Annulla for pending/confirmed reservations. */}
+                  {(r.status === "pending" || r.status === "confirmed") && (
+                    <div className="flex gap-2">
+                      {r.status !== "confirmed" && (
+                        <ActionForm action={updateReservationStatus} className="flex-1">
+                          <input type="hidden" name="id" value={r.id} />
+                          <input type="hidden" name="status" value="confirmed" />
+                          <PendingButton tone="gold">Conferma</PendingButton>
+                        </ActionForm>
+                      )}
+                      <ActionForm action={updateReservationStatus} className="flex-1">
+                        <input type="hidden" name="id" value={r.id} />
+                        <input type="hidden" name="status" value="cancelled" />
+                        <PendingButton tone="danger" confirm="Annullare questa prenotazione? Il cliente riceverà un'email.">
+                          Annulla
+                        </PendingButton>
+                      </ActionForm>
+                    </div>
+                  )}
+
                   <ActionForm action={updateReservationStatus} className="space-y-2">
                     <input type="hidden" name="id" value={r.id} />
                     <select name="status" defaultValue={r.status} className={inputCls}>
@@ -188,7 +320,12 @@ export default async function AdminReservations({ searchParams }: SP) {
         </div>
       )}
 
-      <Pagination basePath="/admin/reservations" page={page} pageCount={pageCount} params={{ stato, negozio }} />
+      <Pagination
+        basePath="/admin/reservations"
+        page={page}
+        pageCount={pageCount}
+        params={{ stato, negozio, tipo, q, da, a }}
+      />
     </div>
   );
 }

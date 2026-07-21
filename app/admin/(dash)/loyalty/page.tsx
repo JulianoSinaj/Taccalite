@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AdminHeader, Panel, StatusBadge, inputCls, fmtDate, SearchBox, Pagination } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getCustomersPage, getRedemptionsPage } from "@/lib/admin/queries";
@@ -57,6 +58,12 @@ export default async function AdminLoyalty({ searchParams }: SP) {
               <p className="text-xs text-brown-800/60">
                 @{c.username}{c.email ? ` · ${c.email}` : ""} {c.cardNumber ? `· #${c.cardNumber}` : ""} · iscritto {fmtDate(c.createdAt)}
               </p>
+              <Link
+                href={`/admin/loyalty/${c.id}`}
+                className="mt-1 inline-block text-[11px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
+              >
+                Scheda cliente →
+              </Link>
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
