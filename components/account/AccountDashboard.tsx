@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { TrendingUp, User } from "lucide-react";
+import { ChevronRight, TrendingUp, User } from "lucide-react";
 import LoyaltyCard from "@/components/LoyaltyCard";
 import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
 
@@ -18,6 +18,24 @@ type Order = {
   totalCents: number;
   fulfilment: string;
 };
+type Reservation = {
+  id: string;
+  reference: string;
+  type: "table" | "porchetta" | "order";
+  status: "pending" | "confirmed" | "completed" | "cancelled";
+  waitlisted: boolean;
+  date: string;
+  time: string | null;
+  quantityKg: number | null;
+  name: string;
+};
+type Redemption = {
+  id: string;
+  rewardName: string;
+  pointsSpent: number;
+  status: "pending" | "fulfilled" | "cancelled";
+  createdAt: string | Date;
+};
 
 const ORDER_STATUS: Record<string, { label: string; cls: string }> = {
   pending: { label: "In attesa", cls: "bg-amber-100 text-amber-800" },
@@ -26,6 +44,27 @@ const ORDER_STATUS: Record<string, { label: string; cls: string }> = {
   cancelled: { label: "Annullato", cls: "bg-red-100 text-red-700" },
   refunded: { label: "Rimborsato", cls: "bg-brown-900/10 text-brown-800" },
 };
+
+const RESERVATION_TYPE_LABEL: Record<Reservation["type"], string> = {
+  table: "Tavolo / degustazione",
+  porchetta: "Porchetta del sabato",
+  order: "Ordine speciale",
+};
+
+const RESERVATION_STATUS: Record<Reservation["status"], { label: string; cls: string }> = {
+  pending: { label: "In attesa", cls: "bg-amber-100 text-amber-800" },
+  confirmed: { label: "Confermata", cls: "bg-emerald-100 text-emerald-800" },
+  completed: { label: "Completata", cls: "bg-brown-900/10 text-brown-800" },
+  cancelled: { label: "Annullata", cls: "bg-red-100 text-red-700" },
+};
+
+const REDEMPTION_STATUS: Record<Redemption["status"], { label: string; cls: string }> = {
+  pending: { label: "Da ritirare", cls: "bg-amber-100 text-amber-800" },
+  fulfilled: { label: "Ritirato", cls: "bg-emerald-100 text-emerald-800" },
+  cancelled: { label: "Annullato", cls: "bg-red-100 text-red-700" },
+};
+
+const dateFmt: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
 
 export default function AccountDashboard({
   name,
@@ -36,6 +75,8 @@ export default function AccountDashboard({
   rewards,
   transactions,
   orders,
+  reservations,
+  redemptions,
 }: {
   name: string;
   points: number;
@@ -45,6 +86,8 @@ export default function AccountDashboard({
   rewards: Reward[];
   transactions: Tx[];
   orders: Order[];
+  reservations: Reservation[];
+  redemptions: Redemption[];
 }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -123,6 +166,8 @@ export default function AccountDashboard({
       <section className="bg-cream px-5 py-16 sm:px-10 sm:py-24">
         <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8">
           <div className="space-y-6 lg:col-span-7">
+            {/* TODO (follow-up, out of scope): profile editing (name/email/phone) and
+                change-password go here — they need dedicated server mutation actions. */}
             <Reveal className="card-shadow-soft flex flex-col items-center gap-6 rounded-3xl border border-brown-900/10 bg-white/50 p-6 sm:p-8 md:flex-row">
               <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-white bg-cream-dark shadow-md">
                 <User className="size-9 text-brown-900/40" />
@@ -200,20 +245,118 @@ export default function AccountDashboard({
                       cls: "bg-brown-900/10 text-brown-800",
                     };
                     return (
-                      <li key={o.id} className="flex items-center justify-between gap-4 py-3">
-                        <div>
-                          <p className="text-sm font-semibold text-brown-950">
-                            {o.orderNumber}
-                            <span className="ml-2 text-xs font-normal text-brown-800/60">
-                              {o.fulfilment === "pickup" ? "Ritiro" : "Spedizione"}
+                      <li key={o.id}>
+                        <Link
+                          href={`/account/ordini/${o.orderNumber}`}
+                          className="group -mx-3 flex items-center justify-between gap-4 rounded-2xl px-3 py-3 transition-colors hover:bg-brown-900/5"
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-brown-950 group-hover:text-gold-deep">
+                              {o.orderNumber}
+                              <span className="ml-2 text-xs font-normal text-brown-800/60">
+                                {o.fulfilment === "pickup" ? "Ritiro" : "Spedizione"}
+                              </span>
+                            </p>
+                            <p className="text-xs text-brown-800/60">
+                              {new Date(o.createdAt).toLocaleDateString("it-IT", dateFmt)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span
+                              className={`rounded-full px-3 py-1 text-[10px] font-bold tracking-widest uppercase ${st.cls}`}
+                            >
+                              {st.label}
                             </span>
-                          </p>
+                            <span className="font-display text-lg font-bold text-brown-950">
+                              € {(o.totalCents / 100).toFixed(2)}
+                            </span>
+                            <ChevronRight className="size-4 shrink-0 text-brown-900/30 transition-transform group-hover:translate-x-0.5 group-hover:text-brown-900/60" />
+                          </div>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Reveal>
+
+            {/* Reservation history */}
+            <Reveal className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-8 sm:p-10">
+              <h3 className="font-display mb-6 text-3xl tracking-tight text-brown-950">
+                Le tue prenotazioni
+              </h3>
+              {reservations.length === 0 ? (
+                <p className="text-brown-900/70">
+                  Nessuna prenotazione ancora. Prenota un{" "}
+                  <Link href="/prenotazioni" className="font-semibold text-brown-950 underline">
+                    tavolo o una porchetta
+                  </Link>
+                  .
+                </p>
+              ) : (
+                <ul className="divide-y divide-brown-900/10">
+                  {reservations.map((r) => {
+                    const st = RESERVATION_STATUS[r.status];
+                    const detail =
+                      r.quantityKg != null
+                        ? `${r.quantityKg} kg`
+                        : r.time
+                          ? `${r.date} · ${r.time}`
+                          : r.date;
+                    return (
+                      <li key={r.id}>
+                        <Link
+                          href={`/traccia?ref=${encodeURIComponent(r.reference)}`}
+                          className="group -mx-3 flex items-center justify-between gap-4 rounded-2xl px-3 py-3 transition-colors hover:bg-brown-900/5"
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-brown-950 group-hover:text-gold-deep">
+                              {RESERVATION_TYPE_LABEL[r.type]}
+                            </p>
+                            <p className="text-xs text-brown-800/60">
+                              {detail} · Rif. {r.reference}
+                            </p>
+                            {r.waitlisted && r.status !== "cancelled" && (
+                              <p className="mt-1 text-xs font-medium text-gold-deep">
+                                In lista d&apos;attesa
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span
+                              className={`rounded-full px-3 py-1 text-[10px] font-bold tracking-widest uppercase ${st.cls}`}
+                            >
+                              {st.label}
+                            </span>
+                            <ChevronRight className="size-4 shrink-0 text-brown-900/30 transition-transform group-hover:translate-x-0.5 group-hover:text-brown-900/60" />
+                          </div>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Reveal>
+
+            {/* Redemption history */}
+            <Reveal className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-8 sm:p-10">
+              <h3 className="font-display mb-6 text-3xl tracking-tight text-brown-950">
+                Premi riscattati
+              </h3>
+              {redemptions.length === 0 ? (
+                <p className="text-brown-900/70">
+                  Non hai ancora riscattato premi. Sfoglia il catalogo fedeltà qui sotto.
+                </p>
+              ) : (
+                <ul className="divide-y divide-brown-900/10">
+                  {redemptions.map((r) => {
+                    const st = REDEMPTION_STATUS[r.status];
+                    return (
+                      <li key={r.id} className="flex items-center justify-between gap-4 py-3.5">
+                        <div>
+                          <p className="text-sm font-semibold text-brown-950">{r.rewardName}</p>
                           <p className="text-xs text-brown-800/60">
-                            {new Date(o.createdAt).toLocaleDateString("it-IT", {
-                              day: "numeric",
-                              month: "long",
-                              year: "numeric",
-                            })}
+                            {new Date(r.createdAt).toLocaleDateString("it-IT", dateFmt)}
                           </p>
                         </div>
                         <div className="flex items-center gap-3">
@@ -222,8 +365,8 @@ export default function AccountDashboard({
                           >
                             {st.label}
                           </span>
-                          <span className="font-display text-lg font-bold text-brown-950">
-                            € {(o.totalCents / 100).toFixed(2)}
+                          <span className="font-display text-lg font-bold text-red-700 tabular-nums">
+                            −{r.pointsSpent}
                           </span>
                         </div>
                       </li>

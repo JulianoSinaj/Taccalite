@@ -40,6 +40,23 @@ test("admin area redirects to login when unauthenticated", async ({ page }) => {
   await expect(page.locator('input[type="password"]').first()).toBeVisible();
 });
 
+test("product detail page renders with price and add-to-cart", async ({ page }) => {
+  // porchetta-artigianale is a purchasable seeded product.
+  const res = await page.goto("/negozio/porchetta-artigianale");
+  expect(res?.status()).toBeLessThan(400);
+  await expect(page.locator("body")).toContainText(/€|Aggiungi|carrello/i);
+});
+
+test("store supports category/search filtering without error", async ({ page }) => {
+  const res = await page.goto("/negozio?q=porchetta");
+  expect(res?.status()).toBeLessThan(400);
+});
+
+test("account order detail redirects to account when logged out", async ({ page }) => {
+  await page.goto("/account/ordini/ORD-2026-000001");
+  await expect(page).toHaveURL(/\/account(\/|$|\?)/);
+});
+
 test("tracking page shows a lookup form and handles an unknown ref", async ({ page }) => {
   await page.goto("/traccia");
   await expect(page.locator('input[name="ref"]').first()).toBeVisible();

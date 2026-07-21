@@ -5,6 +5,7 @@ import AccountDashboard from "@/components/account/AccountDashboard";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getLoyaltySummary } from "@/lib/loyalty";
 import { getOrdersForUser } from "@/lib/orders";
+import { getReservationsForUser, getRedemptionsForUser } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +19,13 @@ export default async function AccountPage() {
   const user = await getCurrentUser();
   if (!user) return <AuthForms />;
 
-  const [{ account, transactions, rewards, nextReward }, orders] = await Promise.all([
-    getLoyaltySummary(user.id),
-    getOrdersForUser(user.id),
-  ]);
+  const [{ account, transactions, rewards, nextReward }, orders, reservations, redemptions] =
+    await Promise.all([
+      getLoyaltySummary(user.id),
+      getOrdersForUser(user.id),
+      getReservationsForUser(user.id),
+      getRedemptionsForUser(user.id),
+    ]);
 
   // Render the loyalty card number as a scannable QR (inline SVG) server-side, so
   // `qrcode` never enters the client bundle. Staff scan this on the in-shop screen.
@@ -41,6 +45,24 @@ export default async function AccountPage() {
         status: o.status,
         totalCents: o.totalCents,
         fulfilment: o.fulfilment,
+      }))}
+      reservations={reservations.map((r) => ({
+        id: r.id,
+        reference: r.reference,
+        type: r.type,
+        status: r.status,
+        waitlisted: r.waitlisted,
+        date: r.date,
+        time: r.time,
+        quantityKg: r.quantityKg,
+        name: r.name,
+      }))}
+      redemptions={redemptions.map((r) => ({
+        id: r.id,
+        rewardName: r.rewardName,
+        pointsSpent: r.pointsSpent,
+        status: r.status,
+        createdAt: r.createdAt ?? new Date(),
       }))}
       rewards={rewards.map((r) => ({
         id: r.id,

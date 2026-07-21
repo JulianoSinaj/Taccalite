@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { getShops } from "@/lib/db/queries";
+import { getShops, getSetting } from "@/lib/db/queries";
+import { getCurrentUser } from "@/lib/auth/session";
 import CheckoutClient from "@/components/store/CheckoutClient";
 
 export const dynamic = "force-dynamic";
@@ -10,8 +11,18 @@ export const metadata: Metadata = {
 };
 
 export default async function CheckoutPage() {
-  const shops = await getShops();
+  const [shops, user, pointsPerEuro] = await Promise.all([
+    getShops(),
+    getCurrentUser(),
+    getSetting<number>("loyalty.pointsPerEuro", 1),
+  ]);
   // Only shops with the store enabled can take pickup orders.
   const pickupShops = shops.filter((s) => s.storeEnabled).map((s) => ({ slug: s.slug, name: s.name }));
-  return <CheckoutClient shops={pickupShops} />;
+  return (
+    <CheckoutClient
+      shops={pickupShops}
+      pointsPerEuro={pointsPerEuro}
+      user={user ? { name: user.name, email: user.email, phone: user.phone } : null}
+    />
+  );
 }

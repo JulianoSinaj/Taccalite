@@ -19,6 +19,10 @@ type CartContext = {
   setQty: (slug: string, qty: number) => void;
   remove: (slug: string) => void;
   clear: () => void;
+  /** Mini-cart drawer visibility. */
+  isOpen: boolean;
+  open: () => void;
+  close: () => void;
 };
 
 const Ctx = createContext<CartContext | null>(null);
@@ -27,6 +31,7 @@ const STORAGE_KEY = "taccalite-cart";
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [ready, setReady] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -59,8 +64,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         ),
       remove: (slug) => setItems((prev) => prev.filter((i) => i.slug !== slug)),
       clear: () => setItems([]),
+      isOpen,
+      open: () => setIsOpen(true),
+      close: () => setIsOpen(false),
     };
-  }, [items]);
+  }, [items, isOpen]);
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

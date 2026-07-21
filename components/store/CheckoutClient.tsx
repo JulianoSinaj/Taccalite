@@ -11,7 +11,17 @@ const inputCls =
   "w-full rounded-xl border border-brown-900/15 bg-cream-dark/40 px-4 py-3 text-sm text-brown-950 focus:border-gold-dark focus:outline-none";
 const labelCls = "eyebrow eyebrow-dark block mb-1.5";
 
-export default function CheckoutClient({ shops }: { shops: { slug: string; name: string }[] }) {
+type CheckoutUser = { name: string; email: string | null; phone: string | null };
+
+export default function CheckoutClient({
+  shops,
+  pointsPerEuro = 1,
+  user = null,
+}: {
+  shops: { slug: string; name: string }[];
+  pointsPerEuro?: number;
+  user?: CheckoutUser | null;
+}) {
   const { items, subtotalCents, setQty, remove, clear } = useCart();
   const [fulfilment, setFulfilment] = useState<"pickup" | "shipping">("pickup");
   const [busy, setBusy] = useState(false);
@@ -19,6 +29,8 @@ export default function CheckoutClient({ shops }: { shops: { slug: string; name:
 
   const shippingCents = fulfilment === "shipping" ? SHIPPING_CENTS : 0;
   const totalCents = subtotalCents + shippingCents;
+  // Loyalty points are earned on the goods subtotal (server-authoritative on award).
+  const pointsPreview = Math.floor((subtotalCents / 100) * pointsPerEuro);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -125,16 +137,16 @@ export default function CheckoutClient({ shops }: { shops: { slug: string; name:
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
               <label className={labelCls} htmlFor="name">Nome completo</label>
-              <input id="name" name="name" required className={inputCls} />
+              <input id="name" name="name" required defaultValue={user?.name ?? ""} className={inputCls} />
             </div>
             <div>
               <label className={labelCls} htmlFor="phone">Telefono</label>
-              <input id="phone" name="phone" type="tel" className={inputCls} />
+              <input id="phone" name="phone" type="tel" defaultValue={user?.phone ?? ""} className={inputCls} />
             </div>
           </div>
           <div>
             <label className={labelCls} htmlFor="email">Email</label>
-            <input id="email" name="email" type="email" required className={inputCls} />
+            <input id="email" name="email" type="email" required defaultValue={user?.email ?? ""} className={inputCls} />
           </div>
 
           <div>
@@ -168,15 +180,15 @@ export default function CheckoutClient({ shops }: { shops: { slug: string; name:
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label className={labelCls} htmlFor="address">Indirizzo</label>
-                <input id="address" name="address" className={inputCls} />
+                <input id="address" name="address" required className={inputCls} />
               </div>
               <div>
                 <label className={labelCls} htmlFor="city">Città</label>
-                <input id="city" name="city" className={inputCls} />
+                <input id="city" name="city" required className={inputCls} />
               </div>
               <div>
                 <label className={labelCls} htmlFor="zip">CAP</label>
-                <input id="zip" name="zip" className={inputCls} />
+                <input id="zip" name="zip" required className={inputCls} />
               </div>
             </div>
           )}
@@ -187,6 +199,13 @@ export default function CheckoutClient({ shops }: { shops: { slug: string; name:
           </div>
 
           <input type="text" name="company" tabIndex={-1} autoComplete="off" aria-hidden className="absolute -left-[9999px] h-0 w-0" />
+
+          {pointsPreview > 0 && (
+            <p className="rounded-xl bg-gold/10 px-4 py-3 text-sm text-brown-950">
+              Con questo ordine guadagnerai ~{pointsPreview}{" "}
+              {pointsPreview === 1 ? "punto" : "punti"} fedeltà.
+            </p>
+          )}
 
           {error && <p className="text-sm font-medium text-red-700">{error}</p>}
 

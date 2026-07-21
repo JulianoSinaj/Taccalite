@@ -7,6 +7,7 @@ import CookieConsent from "@/components/CookieConsent";
 import Analytics from "@/components/Analytics";
 import { CartProvider } from "@/components/store/cart";
 import CartBar from "@/components/store/CartBar";
+import CartDrawer from "@/components/store/CartDrawer";
 
 // The shared chrome (Footer) reads shop data from the database, so every page under
 // this layout must render at request time — never prerendered against an empty
@@ -26,6 +27,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
       <Footer />
       <CookieConsent />
       <CartBar />
+      <CartDrawer />
       <Analytics />
     </CartProvider>
   );
