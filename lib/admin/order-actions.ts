@@ -1,16 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { orders } from "@/lib/db/schema";
+import { orders, orderItems, products } from "@/lib/db/schema";
 import { requireAdmin, requireRole } from "@/lib/auth/session";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
-import { parseForm, orderStatusInput } from "@/lib/validation/admin";
-import { getShopBySlug } from "@/lib/db/queries";
+import { parseForm, orderStatusInput, manualOrderInput } from "@/lib/validation/admin";
+import { getShopBySlug, getSetting } from "@/lib/db/queries";
 import { orderStatusEmail } from "@/lib/mail/templates";
 import { sendMail } from "@/lib/mail/mailer";
 import { getStripe } from "@/lib/payments/stripe";
+import { generateOrderNumber } from "@/lib/orders";
+import { validateDiscount, recordDiscountUse } from "@/lib/discounts";
 import { logAudit } from "@/lib/audit";
 
 type OrderRow = typeof orders.$inferSelect;
@@ -45,6 +47,138 @@ async function notifyOrderStatus(
   } catch (err) {
     console.error(`[order-actions] status email failed (${status}) for ${order.orderNumber}:`, err);
   }
+}
+
+/**
+ * Create an order by hand from the back-office (counter / phone sale). Prices,
+ * VAT rates and stock all come from the DB — the form only supplies quantities.
+ * Quantities arrive as `qty_<slug>` fields. When "markPaid" is set the order is
+ * booked as paid (provider "manual") and stock is decremented; no emails are sent
+ * (this is a staff-entered sale, not an online checkout).
+ */
+export async function createManualOrder(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const d = parseForm(manualOrderInput, fd);
+
+    // Collect qty_<slug> → quantity for positive quantities.
+    const wanted = new Map<string, number>();
+    for (const [k, v] of fd.entries()) {
+      if (!k.startsWith("qty_")) continue;
+      const qty = Number(v);
+      if (Number.isInteger(qty) && qty > 0) wanted.set(k.slice(4), qty);
+    }
+    if (wanted.size === 0) throw new ActionError("Aggiungi almeno un prodotto con quantità.");
+
+    const rows = await db
+      .select()
+      .from(products)
+      .where(and(eq(products.active, true), inArray(products.slug, [...wanted.keys()])));
+    const lines = rows
+      .filter((p) => p.priceCents != null)
+      .map((p) => {
+        const quantity = wanted.get(p.slug)!;
+        return {
+          product: p,
+          quantity,
+          unitPriceCents: p.priceCents!,
+          lineTotalCents: p.priceCents! * quantity,
+        };
+      });
+    if (lines.length === 0) throw new ActionError("Nessun prodotto valido con prezzo selezionato.");
+
+    if (d.fulfilment === "pickup" && d.shopSlug) {
+      const shop = await getShopBySlug(d.shopSlug);
+      if (!shop) throw new ActionError("Negozio di ritiro non valido.");
+    }
+    if (d.fulfilment === "shipping" && (!d.address || !d.city || !d.zip)) {
+      throw new ActionError("Per la spedizione servono indirizzo, città e CAP.");
+    }
+
+    const subtotalCents = lines.reduce((s, l) => s + l.lineTotalCents, 0);
+    const discount = await validateDiscount(d.discountCode, subtotalCents);
+    const discountCents = discount?.discountCents ?? 0;
+
+    const flatShippingCents = await getSetting<number>("store.shippingCents", 700);
+    const freeThreshold = await getSetting<number>("store.freeShippingThresholdCents", 0);
+    const shippingCents =
+      d.fulfilment === "shipping" &&
+      !discount?.freeShipping &&
+      (freeThreshold === 0 || subtotalCents < freeThreshold)
+        ? flatShippingCents
+        : 0;
+    const totalCents = Math.max(0, subtotalCents - discountCents + shippingCents);
+    const paid = d.markPaid;
+
+    const orderNumber = generateOrderNumber();
+    const created = db.transaction((tx) => {
+      const [row] = tx
+        .insert(orders)
+        .values({
+          orderNumber,
+          email: d.email ?? "",
+          name: d.name,
+          phone: d.phone ?? null,
+          status: paid ? "paid" : "pending",
+          fulfilment: d.fulfilment,
+          shopSlug: d.fulfilment === "pickup" ? d.shopSlug ?? null : null,
+          shippingAddress:
+            d.fulfilment === "shipping"
+              ? { address: d.address ?? "", city: d.city ?? "", zip: d.zip ?? "" }
+              : null,
+          subtotalCents,
+          shippingCents,
+          discountCode: discount?.code ?? null,
+          discountCents,
+          totalCents,
+          paymentProvider: "manual",
+          paymentStatus: paid ? "paid" : "unpaid",
+          notes: d.notes ?? null,
+        })
+        .returning({ id: orders.id })
+        .all();
+      tx.insert(orderItems)
+        .values(
+          lines.map((l) => ({
+            orderId: row.id,
+            productId: l.product.id,
+            productSlug: l.product.slug,
+            name: l.product.name,
+            unitPriceCents: l.unitPriceCents,
+            quantity: l.quantity,
+            lineTotalCents: l.lineTotalCents,
+            vatRateBps: l.product.vatRateBps,
+          })),
+        )
+        .run();
+      return row;
+    });
+
+    if (discount) await recordDiscountUse(discount.id);
+
+    // A paid counter sale immediately reduces stock (atomic, never below zero) for
+    // products that track it.
+    if (paid) {
+      for (const l of lines) {
+        db.update(products)
+          .set({ stock: sql`max(0, ${products.stock} - ${l.quantity})` })
+          .where(and(eq(products.id, l.product.id), isNotNull(products.stock)))
+          .run();
+      }
+    }
+
+    await logAudit({
+      actor,
+      action: "order.manual_create",
+      entity: "order",
+      entityId: created.id,
+      summary: `Ordine manuale ${orderNumber} (${paid ? "pagato" : "da pagare"}) — ${(totalCents / 100).toFixed(2)} €`,
+      meta: { paid, totalCents },
+    });
+
+    revalidatePath("/admin/orders");
+    return ok(`Ordine ${orderNumber} creato${paid ? " e segnato come pagato" : ""}.`);
+  });
 }
 
 export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promise<ActionState> {

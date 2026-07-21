@@ -149,6 +149,27 @@ export const discountInput = z.object({
   active: checkbox,
 });
 
+export const manualOrderInput = z.object({
+  name: z.string().trim().min(1, "Il nome è obbligatorio").max(200),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(200)
+    .email("Email non valida")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
+  phone: optionalText(40),
+  fulfilment: z.enum(["pickup", "shipping"]).default("pickup"),
+  shopSlug: optionalText(80),
+  address: optionalText(200),
+  city: optionalText(120),
+  zip: optionalText(20),
+  discountCode: optionalText(40),
+  notes: optionalText(1000),
+  markPaid: checkbox,
+});
+
 export const stockAdjustInput = z.object({
   productId: z.string().trim().min(1),
   delta: z.coerce.number().int().refine((v) => v !== 0, "Inserisci una variazione diversa da zero"),

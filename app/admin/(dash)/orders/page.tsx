@@ -89,16 +89,24 @@ export default async function AdminOrders({ searchParams }: SP) {
         title="Ordini"
         subtitle={`${total} ordini`}
         action={
-          admin ? (
-            // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
-            <a
-              href="/api/admin/export/orders"
-              download
-              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+          <div className="flex gap-2">
+            <Link
+              href="/admin/orders/new"
+              className="rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-gold-dark"
             >
-              Esporta CSV
-            </a>
-          ) : null
+              + Nuovo ordine
+            </Link>
+            {admin ? (
+              // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
+              <a
+                href="/api/admin/export/orders"
+                download
+                className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              >
+                Esporta CSV
+              </a>
+            ) : null}
+          </div>
         }
       />
 
