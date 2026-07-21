@@ -12,6 +12,12 @@
 
 # testing
 /coverage
+/.vitest-tmp
+/.pw-tmp
+/playwright-report
+/test-results
+/blob-report
+/.playwright
 
 # next.js
 /.next/

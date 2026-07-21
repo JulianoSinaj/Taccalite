@@ -4,21 +4,9 @@ import { db } from "@/lib/db/client";
 import { orders, reservations, newsletterSubscribers } from "@/lib/db/schema";
 import { requireRole } from "@/lib/auth/session";
 import { getCustomersWithPoints } from "@/lib/admin/queries";
+import { toCsv } from "@/lib/csv";
 
 export const runtime = "nodejs";
-
-/** Serialize a row set to CSV (RFC-4180-ish quoting) with spreadsheet
- *  formula-injection neutralization: a cell that would be interpreted as a
- *  formula (leading = + - @, or a tab/CR) is prefixed with a single quote so
- *  Excel/Sheets treats it as text, not an executable expression. */
-function toCsv(headers: string[], rows: (string | number | null | undefined)[][]): string {
-  const esc = (v: string | number | null | undefined) => {
-    let s = v == null ? "" : String(v);
-    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  return [headers, ...rows].map((r) => r.map(esc).join(",")).join("\r\n");
-}
 
 const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : "");
 
