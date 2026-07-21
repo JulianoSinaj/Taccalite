@@ -20,7 +20,7 @@ export async function createSession(userId: string): Promise<void> {
   const store = await cookies();
   store.set(COOKIE, token, {
     httpOnly: true,
-    secure: env.isProd,
+    secure: env.secureCookies,
     sameSite: "lax",
     path: "/",
     maxAge: MAX_AGE_SEC,

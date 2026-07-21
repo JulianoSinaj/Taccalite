@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { desc } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { orders, reservations, newsletterSubscribers } from "@/lib/db/schema";
-import { requireAdmin } from "@/lib/auth/session";
+import { requireRole } from "@/lib/auth/session";
 import { getCustomersWithPoints } from "@/lib/admin/queries";
 
 export const runtime = "nodejs";
@@ -20,7 +20,8 @@ const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOStrin
 
 export async function GET(_request: Request, ctx: { params: Promise<{ entity: string }> }) {
   try {
-    await requireAdmin();
+    // Bulk CSV export is a mass-PII operation — full admins only, not staff.
+    await requireRole("admin");
   } catch {
     return NextResponse.json({ ok: false, error: "Non autorizzato" }, { status: 403 });
   }

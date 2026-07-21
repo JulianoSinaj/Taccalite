@@ -11,10 +11,15 @@ import { env } from "@/lib/env";
 import type { CheckoutInput } from "@/lib/validation/order";
 
 const SHIPPING_CENTS = 700; // flat shipping fee
-const orderCode = customAlphabet("0123456789", 4);
+const orderCode = customAlphabet("0123456789", 6); // ~1M namespace/year
 
 export function generateOrderNumber(): string {
   return `ORD-${new Date().getFullYear()}-${orderCode()}`;
+}
+
+/** True when an error is the unique-constraint violation on orders.order_number. */
+function isDuplicateOrderNumber(err: unknown): boolean {
+  return err instanceof Error && /UNIQUE constraint failed:\s*orders\.order_number/i.test(err.message);
 }
 
 export type CreatedOrder = {
@@ -61,50 +66,65 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
   const subtotalCents = lines.reduce((sum, l) => sum + l.lineTotalCents, 0);
   const shippingCents = input.fulfilment === "shipping" ? SHIPPING_CENTS : 0;
   const totalCents = subtotalCents + shippingCents;
-  const orderNumber = generateOrderNumber();
 
-  // Insert the order and its line items atomically — no zero-item orders.
-  const order = db.transaction((tx) => {
-    const [created] = tx
-      .insert(orders)
-      .values({
-        orderNumber,
-        userId: userId ?? null,
-        email: input.email,
-        name: input.name,
-        phone: input.phone ?? null,
-        status: "pending",
-        fulfilment: input.fulfilment,
-        shopSlug: input.fulfilment === "pickup" ? input.shopSlug ?? null : null,
-        shippingAddress:
-          input.fulfilment === "shipping"
-            ? { address: input.address ?? "", city: input.city ?? "", zip: input.zip ?? "" }
-            : null,
-        subtotalCents,
-        shippingCents,
-        totalCents,
-        paymentStatus: "unpaid",
-        notes: input.notes ?? null,
-      })
-      .returning({ id: orders.id })
-      .all();
+  // Insert the order and its line items atomically — no zero-item orders. The
+  // order number is random, so on the (rare) unique-constraint collision we
+  // regenerate and retry rather than failing the checkout.
+  const MAX_ATTEMPTS = 5;
+  let orderNumber = "";
+  let order: { id: string } | undefined;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    orderNumber = generateOrderNumber();
+    try {
+      order = db.transaction((tx) => {
+        const [created] = tx
+          .insert(orders)
+          .values({
+            orderNumber,
+            userId: userId ?? null,
+            email: input.email,
+            name: input.name,
+            phone: input.phone ?? null,
+            status: "pending",
+            fulfilment: input.fulfilment,
+            shopSlug: input.fulfilment === "pickup" ? input.shopSlug ?? null : null,
+            shippingAddress:
+              input.fulfilment === "shipping"
+                ? { address: input.address ?? "", city: input.city ?? "", zip: input.zip ?? "" }
+                : null,
+            subtotalCents,
+            shippingCents,
+            totalCents,
+            paymentStatus: "unpaid",
+            notes: input.notes ?? null,
+          })
+          .returning({ id: orders.id })
+          .all();
 
-    tx.insert(orderItems)
-      .values(
-        lines.map((l) => ({
-          orderId: created.id,
-          productId: l.product.id,
-          productSlug: l.product.slug,
-          name: l.product.name,
-          unitPriceCents: l.unitPriceCents,
-          quantity: l.quantity,
-          lineTotalCents: l.lineTotalCents,
-        })),
-      )
-      .run();
+        tx.insert(orderItems)
+          .values(
+            lines.map((l) => ({
+              orderId: created.id,
+              productId: l.product.id,
+              productSlug: l.product.slug,
+              name: l.product.name,
+              unitPriceCents: l.unitPriceCents,
+              quantity: l.quantity,
+              lineTotalCents: l.lineTotalCents,
+            })),
+          )
+          .run();
 
-    return created;
-  });
+        return created;
+      });
+      break;
+    } catch (err) {
+      if (isDuplicateOrderNumber(err) && attempt < MAX_ATTEMPTS) continue;
+      throw err;
+    }
+  }
+
+  if (!order) throw new Error("Impossibile generare un numero d'ordine univoco");
 
   return {
     orderId: order.id,

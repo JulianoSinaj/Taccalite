@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActionError } from "@/lib/admin/action-state";
 
 /** Checkbox → boolean ("on"/"true" = checked). */
 const checkbox = z
@@ -132,12 +133,14 @@ export const userPasswordInput = z.object({
   password: z.string().min(8, "La password deve avere almeno 8 caratteri").max(200),
 });
 
-/** Parse a FormData through a schema, throwing the first message on failure. */
+/** Parse a FormData through a schema, throwing the first message on failure.
+ *  Throws `ActionError` so `runAction` surfaces the (user-facing) validation
+ *  message to the form instead of genericizing it. */
 export function parseForm<T extends z.ZodTypeAny>(schema: T, fd: FormData): z.infer<T> {
   const obj = Object.fromEntries(fd.entries());
   const result = schema.safeParse(obj);
   if (!result.success) {
-    throw new Error(result.error.issues[0]?.message ?? "Dati non validi");
+    throw new ActionError(result.error.issues[0]?.message ?? "Dati non validi");
   }
   return result.data;
 }

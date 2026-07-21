@@ -20,7 +20,7 @@ import { addPoints } from "@/lib/loyalty";
 import { sendMail } from "@/lib/mail/mailer";
 import { broadcastToSubscribers } from "@/lib/automation";
 import { reservationStatusEmail, type ReservationEmailData } from "@/lib/mail/templates";
-import { type ActionState, runAction, ok } from "@/lib/admin/action-state";
+import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import {
   parseForm,
   productInput,
@@ -58,7 +58,7 @@ export async function updateReservationStatus(_prev: ActionState, fd: FormData):
     const data = parseForm(reservationStatusInput, fd);
 
     const [res] = await db.select().from(reservations).where(eq(reservations.id, data.id)).limit(1);
-    if (!res) throw new Error("Prenotazione non trovata");
+    if (!res) throw new ActionError("Prenotazione non trovata");
 
     await db
       .update(reservations)
@@ -197,7 +197,7 @@ export async function saveShop(_prev: ActionState, fd: FormData): Promise<Action
       await db.update(shops).set(values).where(eq(shops.id, d.id));
     } else {
       await requireRole("admin");
-      if (!d.slug) throw new Error("Slug obbligatorio per una nuova sede");
+      if (!d.slug) throw new ActionError("Slug obbligatorio per una nuova sede");
       await db.insert(shops).values({ ...values, slug: d.slug });
     }
     revalidatePath("/admin/shops");
@@ -212,7 +212,7 @@ export async function deleteShop(_prev: ActionState, fd: FormData): Promise<Acti
     try {
       await db.delete(shops).where(eq(shops.id, (fd.get("id") ?? "").toString()));
     } catch {
-      throw new Error(
+      throw new ActionError(
         "Impossibile eliminare: la sede ha prodotti, ordini o prenotazioni collegati. Riassegnali prima.",
       );
     }
@@ -258,7 +258,8 @@ export async function deleteReward(_prev: ActionState, fd: FormData): Promise<Ac
 // ── Loyalty ──────────────────────────────────────────────────────────────────
 export async function adjustPoints(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    const admin = await requireAdmin();
+    // Points are money-equivalent — restrict manual adjustment to full admins.
+    const admin = await requireRole("admin");
     const d = parseForm(pointsInput, fd);
     await addPoints(d.userId, d.delta, d.reason || "Rettifica manuale", admin.id);
     revalidatePath("/admin/loyalty");
@@ -297,7 +298,7 @@ export async function sendBroadcast(_prev: ActionState, fd: FormData): Promise<A
     await requireAdmin();
     const subject = (fd.get("subject") ?? "").toString().trim();
     const bodyText = (fd.get("body") ?? "").toString().trim();
-    if (!subject || !bodyText) throw new Error("Oggetto e testo sono obbligatori");
+    if (!subject || !bodyText) throw new ActionError("Oggetto e testo sono obbligatori");
     const bodyHtml = bodyText
       .split(/\n{2,}/)
       .map(
@@ -317,7 +318,7 @@ export async function sendTestEmail(_prev: ActionState, fd: FormData): Promise<A
   return runAction(async () => {
     await requireAdmin();
     const to = (fd.get("to") ?? "").toString().trim();
-    if (!to) throw new Error("Inserisci un indirizzo email");
+    if (!to) throw new ActionError("Inserisci un indirizzo email");
     await sendMail({
       to,
       subject: "Email di prova — Norcineria Taccalite",

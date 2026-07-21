@@ -235,6 +235,9 @@ export const reservations = sqliteTable(
       .default("pending"),
     adminNotes: text("admin_notes"),
     userId: text("user_id").references(() => users.id, { onDelete: "set null" }), // linked customer, if logged in
+    // When the porchetta pickup reminder was sent (null = not yet). Makes the
+    // reminder cron idempotent so repeat runs don't re-email the same customer.
+    remindedAt: integer("reminded_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

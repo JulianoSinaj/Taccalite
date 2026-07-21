@@ -15,18 +15,22 @@ export function generateCardNumber(): string {
 
 /** Fetch (or lazily create) a customer's loyalty account. */
 export async function getOrCreateLoyaltyAccount(userId: string) {
-  const existing = await db
+  // Atomic upsert instead of select-then-insert: two concurrent first-touch
+  // calls would otherwise both see no row and both insert, and the second would
+  // hit the unique(userId) constraint. `onConflictDoNothing` on userId makes the
+  // insert idempotent; we then read the row back (whether just created or not).
+  await db
+    .insert(loyaltyAccounts)
+    .values({ userId, points: 0, cardNumber: generateCardNumber() })
+    .onConflictDoNothing({ target: loyaltyAccounts.userId });
+
+  const [account] = await db
     .select()
     .from(loyaltyAccounts)
     .where(eq(loyaltyAccounts.userId, userId))
     .limit(1);
-  if (existing[0]) return existing[0];
-
-  const [created] = await db
-    .insert(loyaltyAccounts)
-    .values({ userId, points: 0, cardNumber: generateCardNumber() })
-    .returning();
-  return created;
+  if (!account) throw new Error(`Loyalty account could not be created for user ${userId}`);
+  return account;
 }
 
 export async function getLoyaltySummary(userId: string) {

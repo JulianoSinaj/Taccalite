@@ -3,6 +3,7 @@ import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, SearchBox, Pa
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getOrdersPage, adminGetShops } from "@/lib/admin/queries";
 import { updateOrderStatus } from "@/lib/admin/order-actions";
+import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +12,10 @@ type SP = { searchParams: Promise<{ negozio?: string; q?: string; page?: string 
 export default async function AdminOrders({ searchParams }: SP) {
   const { negozio = "all", q, page: pageStr } = await searchParams;
   const page = Number(pageStr) || 1;
-  const [{ rows: orders, total, pageCount }, shops] = await Promise.all([
+  const [{ rows: orders, total, pageCount }, shops, admin] = await Promise.all([
     getOrdersPage({ shopSlug: negozio, q, page }),
     adminGetShops(),
+    isAdmin(),
   ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
 
@@ -23,14 +25,16 @@ export default async function AdminOrders({ searchParams }: SP) {
         title="Ordini"
         subtitle={`${total} ordini`}
         action={
-          // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
-          <a
-            href="/api/admin/export/orders"
-            download
-            className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-          >
-            Esporta CSV
-          </a>
+          admin ? (
+            // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
+            <a
+              href="/api/admin/export/orders"
+              download
+              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            >
+              Esporta CSV
+            </a>
+          ) : null
         }
       />
 

@@ -12,6 +12,7 @@
  * If the username already exists, its password is reset and role forced to "admin";
  * otherwise a new admin is created.
  */
+import "./_bootstrap-env"; // MUST be first: defaults NODE_ENV before lib/env loads
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve, join } from "node:path";
 import Database from "better-sqlite3";

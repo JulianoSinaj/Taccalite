@@ -2,11 +2,12 @@ import { AdminHeader, Panel, StatusBadge, inputCls, labelCls, fmtDate } from "@/
 import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
 import { getSubscribers } from "@/lib/admin/queries";
 import { removeSubscriber, sendBroadcast } from "@/lib/admin/actions";
+import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminNewsletter() {
-  const subs = await getSubscribers();
+  const [subs, admin] = await Promise.all([getSubscribers(), isAdmin()]);
   const confirmed = subs.filter((s) => s.status === "confirmed").length;
 
   return (
@@ -15,14 +16,16 @@ export default async function AdminNewsletter() {
         title="Newsletter"
         subtitle={`${confirmed} iscritti confermati · ${subs.length} totali`}
         action={
-          // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
-          <a
-            href="/api/admin/export/subscribers"
-            download
-            className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-          >
-            Esporta CSV
-          </a>
+          admin ? (
+            // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
+            <a
+              href="/api/admin/export/subscribers"
+              download
+              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            >
+              Esporta CSV
+            </a>
+          ) : null
         }
       />
 

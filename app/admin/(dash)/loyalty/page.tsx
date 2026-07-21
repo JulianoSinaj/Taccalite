@@ -2,6 +2,7 @@ import { AdminHeader, Panel, StatusBadge, inputCls, fmtDate, SearchBox, Paginati
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getCustomersPage, getRedemptions } from "@/lib/admin/queries";
 import { adjustPoints, updateRedemptionStatus } from "@/lib/admin/actions";
+import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,12 @@ type SP = { searchParams: Promise<{ q?: string; page?: string }> };
 export default async function AdminLoyalty({ searchParams }: SP) {
   const { q, page: pageStr } = await searchParams;
   const page = Number(pageStr) || 1;
-  const [{ rows: customers, total, pageCount }, redemptions] = await Promise.all([
+  // Points adjustment and bulk PII export are admin-only (see the matching
+  // server-side guards); hide the controls from staff so they don't 403.
+  const [{ rows: customers, total, pageCount }, redemptions, admin] = await Promise.all([
     getCustomersPage({ q, page }),
     getRedemptions(),
+    isAdmin(),
   ]);
 
   return (
@@ -21,14 +25,16 @@ export default async function AdminLoyalty({ searchParams }: SP) {
         title="Fedeltà"
         subtitle={`${total} clienti`}
         action={
-          // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
-          <a
-            href="/api/admin/export/customers"
-            download
-            className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-          >
-            Esporta CSV
-          </a>
+          admin ? (
+            // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
+            <a
+              href="/api/admin/export/customers"
+              download
+              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            >
+              Esporta CSV
+            </a>
+          ) : null
         }
       />
 
@@ -55,12 +61,14 @@ export default async function AdminLoyalty({ searchParams }: SP) {
                 <p className="font-display text-2xl font-bold text-brown-950">{c.points ?? 0}</p>
                 <p className="text-[10px] font-bold tracking-widest text-brown-800/60 uppercase">Punti</p>
               </div>
-              <ActionForm action={adjustPoints} className="flex flex-wrap items-center gap-2">
-                <input type="hidden" name="userId" value={c.id} />
-                <input name="delta" type="number" placeholder="±punti" className={`${inputCls} w-24`} required />
-                <input name="reason" placeholder="Motivo" className={`${inputCls} w-36`} />
-                <PendingButton tone="dark">Applica</PendingButton>
-              </ActionForm>
+              {admin && (
+                <ActionForm action={adjustPoints} className="flex flex-wrap items-center gap-2">
+                  <input type="hidden" name="userId" value={c.id} />
+                  <input name="delta" type="number" placeholder="±punti" className={`${inputCls} w-24`} required />
+                  <input name="reason" placeholder="Motivo" className={`${inputCls} w-36`} />
+                  <PendingButton tone="dark">Applica</PendingButton>
+                </ActionForm>
+              )}
             </div>
           </Panel>
         ))}

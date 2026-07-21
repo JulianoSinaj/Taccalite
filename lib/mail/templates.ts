@@ -2,6 +2,23 @@ import { siteConfig, absoluteUrl } from "@/lib/site";
 
 type Built = { subject: string; html: string; text: string };
 
+/**
+ * Escape a value for safe interpolation into email HTML. User-supplied fields
+ * (names, notes, email, phone, free-text dates) must go through this so a value
+ * like `<script>` or broken markup can't inject into the owner's/customer's
+ * inbox. NOTE: the admin-composed newsletter body is intentionally NOT escaped
+ * (it's trusted HTML authored in the gestionale).
+ */
+function esc(v: string | number | null | undefined): string {
+  if (v == null) return "";
+  return String(v)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /** Brand-styled responsive email shell (inline styles for client compatibility). */
 function layout(opts: { heading: string; body: string; preheader?: string }): string {
   return `<!doctype html>
@@ -31,9 +48,10 @@ function layout(opts: { heading: string; body: string; preheader?: string }): st
 
 function row(label: string, value: string): string {
   if (!value) return "";
+  // `label` is a hard-coded constant; `value` is often user-supplied → escape it.
   return `<tr>
     <td style="padding:8px 0;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#807868;width:150px;vertical-align:top;">${label}</td>
-    <td style="padding:8px 0;font-size:15px;color:#2a1a10;">${value}</td>
+    <td style="padding:8px 0;font-size:15px;color:#2a1a10;">${esc(value)}</td>
   </tr>`;
 }
 
@@ -78,7 +96,7 @@ export function reservationCustomerEmail(d: ReservationEmailData): Built {
   const heading = "Abbiamo ricevuto la tua richiesta";
   const body = `
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
-      Ciao ${d.name}, grazie per la tua richiesta di prenotazione. La confermeremo al più presto
+      Ciao ${esc(d.name)}, grazie per la tua richiesta di prenotazione. La confermeremo al più presto
       contattandoti ai recapiti che ci hai lasciato. Ecco il riepilogo:
     </p>
     ${reservationDetailTable(d)}
@@ -115,7 +133,7 @@ function orderItemsTable(d: OrderEmailData): string {
   const rows = d.items
     .map(
       (i) =>
-        `<tr><td style="padding:6px 0;font-size:14px;color:#2a1a10;">${i.quantity}× ${i.name}</td>` +
+        `<tr><td style="padding:6px 0;font-size:14px;color:#2a1a10;">${i.quantity}× ${esc(i.name)}</td>` +
         `<td style="padding:6px 0;font-size:14px;color:#2a1a10;text-align:right;">${euro(i.lineTotalCents)}</td></tr>`,
     )
     .join("");
@@ -134,7 +152,7 @@ export function orderCustomerEmail(d: OrderEmailData): Built {
       : "Spedizione all'indirizzo indicato";
   const body = `
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
-      Ciao ${d.name}, grazie per il tuo ordine <strong>${d.orderNumber}</strong>.
+      Ciao ${esc(d.name)}, grazie per il tuo ordine <strong>${esc(d.orderNumber)}</strong>.
     </p>
     ${orderItemsTable(d)}
     <p style="font-size:13px;color:#807868;margin:14px 0 0;">${fulfil}</p>`;
@@ -152,7 +170,7 @@ export function orderCustomerEmail(d: OrderEmailData): Built {
 export function orderOwnerEmail(d: OrderEmailData): Built {
   const body = `
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
-      Nuovo ordine <strong>${d.orderNumber}</strong> da ${d.name} (${d.email}).
+      Nuovo ordine <strong>${esc(d.orderNumber)}</strong> da ${esc(d.name)} (${esc(d.email)}).
     </p>
     ${orderItemsTable(d)}
     <p style="margin:20px 0 0;">
@@ -173,18 +191,21 @@ export function porchettaReminderEmail(
   pickup?: { name: string; address?: string } | null,
 ): Built {
   const qty = quantityKg != null ? ` (${quantityKg} kg)` : "";
-  const where = pickup
+  const whereText = pickup
     ? ` presso ${pickup.name}${pickup.address ? ` (${pickup.address})` : ""}`
+    : "";
+  const whereHtml = pickup
+    ? ` presso ${esc(pickup.name)}${pickup.address ? ` (${esc(pickup.address)})` : ""}`
     : "";
   const body = `
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
-      Ciao ${name}, ti ricordiamo la tua porchetta${qty} prenotata per <strong>${date}</strong>.
-      Esce calda dal forno il sabato mattina${where}: ti aspettiamo!
+      Ciao ${esc(name)}, ti ricordiamo la tua porchetta${qty} prenotata per <strong>${esc(date)}</strong>.
+      Esce calda dal forno il sabato mattina${whereHtml}: ti aspettiamo!
     </p>`;
   return {
     subject: "Promemoria: la tua porchetta del sabato ti aspetta",
     html: layout({ heading: "La porchetta è quasi pronta", body }),
-    text: `Ciao ${name}, ti ricordiamo la tua porchetta${qty} prenotata per ${date}. Ti aspettiamo${where}!`,
+    text: `Ciao ${name}, ti ricordiamo la tua porchetta${qty} prenotata per ${date}. Ti aspettiamo${whereText}!`,
   };
 }
 
@@ -207,7 +228,7 @@ export function welcomeEmail(name: string, welcomePoints: number): Built {
   const heading = "Benvenuto nel Club Taccalite";
   const body = `
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
-      Ciao ${name}, il tuo account è attivo. Ti abbiamo già accreditato
+      Ciao ${esc(name)}, il tuo account è attivo. Ti abbiamo già accreditato
       <strong>${welcomePoints} punti</strong> di benvenuto sulla tua scheda fedeltà.
     </p>
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
@@ -231,16 +252,18 @@ export function reservationStatusEmail(
 ): Built {
   const confirmed = status === "confirmed";
   const heading = confirmed ? "La tua prenotazione è confermata" : "Aggiornamento sulla prenotazione";
-  const intro = confirmed
-    ? `Ciao ${d.name}, abbiamo confermato la tua prenotazione. Ti aspettiamo!`
-    : `Ciao ${d.name}, purtroppo non possiamo accogliere la tua richiesta per la data indicata. Contattaci per trovare un'alternativa.`;
+  const tail = confirmed
+    ? ", abbiamo confermato la tua prenotazione. Ti aspettiamo!"
+    : ", purtroppo non possiamo accogliere la tua richiesta per la data indicata. Contattaci per trovare un'alternativa.";
+  const introText = `Ciao ${d.name}${tail}`;
+  const introHtml = `Ciao ${esc(d.name)}${tail}`;
   const body = `
-    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">${intro}</p>
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">${introHtml}</p>
     ${reservationDetailTable(d)}`;
   return {
     subject: `${confirmed ? "Confermata" : "Aggiornamento"} · ${d.reference} — Norcineria Taccalite`,
     html: layout({ heading, body }),
-    text: `${intro}\nRiferimento: ${d.reference}`,
+    text: `${introText}\nRiferimento: ${d.reference}`,
   };
 }
 

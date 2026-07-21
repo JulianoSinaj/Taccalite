@@ -17,7 +17,19 @@ function bool(key: string, fallback = false): boolean {
   return v === "1" || v.toLowerCase() === "true";
 }
 
-const isProd = process.env.NODE_ENV === "production";
+const nodeEnv = process.env.NODE_ENV;
+const isProd = nodeEnv === "production";
+const isDev = nodeEnv === "development";
+
+/**
+ * Enforce production-grade security for anything that is NOT explicitly
+ * `development` — that includes `production`, `test`, `staging`, and (crucially)
+ * an unset or unrecognized `NODE_ENV`. This fails closed: a server that boots
+ * without a properly configured environment gets the strict path, not the
+ * insecure dev defaults. Local CLI scripts (seed/reset) default `NODE_ENV` to
+ * `development` via `scripts/_bootstrap-env.ts` so zero-setup dev still works.
+ */
+const enforceSecurity = !isDev;
 
 /** Dev fallbacks that are safe locally but MUST be overridden in production. */
 const DEV_DEFAULTS = {
@@ -28,7 +40,15 @@ const DEV_DEFAULTS = {
 
 export const env = {
   isProd,
-  nodeEnv: process.env.NODE_ENV ?? "development",
+  nodeEnv: nodeEnv ?? "development",
+
+  /**
+   * Emit `Secure` cookies (and generally behave as a hardened server) for any
+   * non-development environment. Keyed off `enforceSecurity` rather than
+   * `isProd` so an HTTPS staging box or a deploy with an unset `NODE_ENV` still
+   * gets Secure cookies instead of silently downgrading.
+   */
+  secureCookies: enforceSecurity,
 
   /** Public base URL (canonical/OG/JSON-LD, absolute links in emails). */
   siteUrl: str("NEXT_PUBLIC_SITE_URL", isProd ? "https://taccalite.it" : "http://localhost:3000"),
@@ -45,10 +65,11 @@ export const env = {
 
   /**
    * Whether to trust the `x-forwarded-for` / `x-real-ip` headers for the client
-   * IP (rate limiting). Only enable when a trusted reverse proxy (e.g. Caddy)
-   * sets/overwrites them — otherwise clients can spoof the header to evade limits.
+   * IP (rate limiting). Defaults to **false** (secure by default): only enable
+   * when a trusted reverse proxy (e.g. Caddy/Coolify) sets/overwrites them —
+   * otherwise clients can spoof the header to rotate their key and evade limits.
    */
-  trustProxy: bool("TRUST_PROXY", true),
+  trustProxy: bool("TRUST_PROXY", false),
 
   /**
    * High-entropy secret reserved for signing/verifying tokens (currently the
@@ -92,11 +113,13 @@ export const smtpConfigured = env.smtp.host !== "";
 export const stripeConfigured = env.stripe.secretKey !== "";
 
 /**
- * Fail fast if a production server would boot with known dev-default secrets.
- * Skipped during `next build` (NEXT_PHASE === "phase-production-build") so the
- * build doesn't require real secrets; enforced when the server actually starts.
+ * Fail fast if a server would boot with known dev-default secrets. Enforced for
+ * every non-development environment (production, staging, test, or an unset
+ * `NODE_ENV`) — fail closed. Skipped during `next build`
+ * (NEXT_PHASE === "phase-production-build") so the build doesn't require real
+ * secrets; enforced when the server actually starts.
  */
-if (isProd && process.env.NEXT_PHASE !== "phase-production-build") {
+if (enforceSecurity && process.env.NEXT_PHASE !== "phase-production-build") {
   const insecure: string[] = [];
   if (env.sessionSecret === DEV_DEFAULTS.sessionSecret) insecure.push("SESSION_SECRET");
   if (env.cronSecret === DEV_DEFAULTS.cronSecret) insecure.push("CRON_SECRET");

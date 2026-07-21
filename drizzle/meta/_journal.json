@@ -22,6 +22,13 @@
       "when": 1784210018286,
       "tag": "0002_empty_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784593293277,
+      "tag": "0003_normal_forge",
+      "breakpoints": true
     }
   ]
 }
