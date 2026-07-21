@@ -120,6 +120,22 @@ export const stockMovements = sqliteTable(
   (t) => [index("stock_mov_product_idx").on(t.productId)],
 );
 
+// ── Back-in-stock notification requests ──────────────────────────────────────
+export const stockNotifications = sqliteTable(
+  "stock_notifications",
+  {
+    id: id(),
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    // Stamped when the "back in stock" email was sent (null = still waiting).
+    notifiedAt: integer("notified_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("stock_notif_product_idx").on(t.productId, t.notifiedAt)],
+);
+
 // ── Content: blog posts ──────────────────────────────────────────────────────
 export const blogPosts = sqliteTable("blog_posts", {
   id: id(),

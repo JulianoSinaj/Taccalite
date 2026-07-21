@@ -29,6 +29,7 @@ import {
 } from "@/lib/mail/templates";
 import { saveUploadedImage } from "@/lib/media";
 import { logAudit } from "@/lib/audit";
+import { notifyBackInStock } from "@/lib/stock-notify";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import {
   parseForm,
@@ -218,7 +219,16 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
       sortOrder: d.sortOrder,
     };
     if (d.id) {
+      // Detect an out-of-stock → available transition to trigger back-in-stock mail.
+      const [prev] = await db
+        .select({ stock: products.stock, name: products.name, slug: products.slug })
+        .from(products)
+        .where(eq(products.id, d.id))
+        .limit(1);
       await db.update(products).set(values).where(eq(products.id, d.id));
+      if (prev && (prev.stock ?? 0) <= 0 && d.stock != null && d.stock > 0) {
+        await notifyBackInStock(d.id, prev.name, prev.slug);
+      }
     } else {
       await db.insert(products).values(values);
     }
@@ -301,6 +311,11 @@ export async function adjustStock(_prev: ActionState, fd: FormData): Promise<Act
       stockAfter: newStock,
       createdByUserId: actor.id,
     });
+
+    // Back in stock: if it was out (0) and is now available, notify waitlisters.
+    if (product.stock <= 0 && newStock > 0) {
+      await notifyBackInStock(product.id, product.name, product.slug);
+    }
 
     await logAudit({
       actor,

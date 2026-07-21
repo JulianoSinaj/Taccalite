@@ -6,6 +6,7 @@ import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { ProductForm } from "@/components/admin/forms";
 import { adminGetProduct, adminGetShops, getStockMovements } from "@/lib/admin/queries";
 import { adjustStock } from "@/lib/admin/actions";
+import { pendingStockNotificationCount } from "@/lib/stock-notify";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,10 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
   const [product, shops] = await Promise.all([adminGetProduct(id), adminGetShops()]);
   if (!product) notFound();
 
-  const movements = product.stock != null ? await getStockMovements(product.id) : [];
+  const [movements, waiting] =
+    product.stock != null
+      ? await Promise.all([getStockMovements(product.id), pendingStockNotificationCount(product.id)])
+      : [[], 0];
 
   return (
     <div>
@@ -39,6 +43,11 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
         <Panel>
           <p className="mb-4 text-sm text-brown-800/70">
             Giacenza attuale: <strong className="font-display text-lg text-brown-950">{product.stock}</strong>
+            {waiting > 0 && (
+              <span className="ml-3 rounded-full bg-gold/20 px-3 py-1 text-xs font-bold text-brown-950">
+                {waiting} in attesa di riassortimento
+              </span>
+            )}
           </p>
           <ActionForm action={adjustStock} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="productId" value={product.id} />

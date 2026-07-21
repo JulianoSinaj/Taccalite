@@ -248,6 +248,25 @@ export function welcomeEmail(name: string, welcomePoints: number): Built {
   };
 }
 
+/** Sent when a product the customer asked about is back in stock. */
+export function backInStockEmail(productName: string, productSlug: string): Built {
+  const heading = "Di nuovo disponibile";
+  const url = absoluteUrl(`/negozio/${productSlug}`);
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Buone notizie! <strong>${esc(productName)}</strong> è di nuovo disponibile nel nostro
+      negozio online.
+    </p>
+    <p style="margin:22px 0 0;">
+      <a href="${url}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Vai al prodotto</a>
+    </p>`;
+  return {
+    subject: `${productName} è di nuovo disponibile`,
+    html: layout({ heading, body, preheader: `${productName} è tornato disponibile` }),
+    text: `${productName} è di nuovo disponibile: ${url}`,
+  };
+}
+
 /** Sent to the customer when the shop confirms or cancels their reservation. */
 export function reservationStatusEmail(
   d: ReservationEmailData,

@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, Store } from "lucide-react";
 import JsonLd from "@/components/JsonLd";
 import AddToCartButton from "@/components/store/AddToCartButton";
+import BackInStockForm from "@/components/store/BackInStockForm";
 import { getProductBySlug, getRelatedProducts, getShopBySlug } from "@/lib/db/queries";
 import { formatEuro } from "@/lib/format";
 import { absoluteUrl, siteConfig } from "@/lib/site";
@@ -175,6 +176,7 @@ export default async function ProductDetailPage({ params }: Params) {
                   stock={product.stock}
                   withQuantity
                 />
+                {soldOut && <BackInStockForm slug={product.slug} />}
               </div>
             </div>
           </div>
