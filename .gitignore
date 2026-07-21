@@ -38,6 +38,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# …but the example template MUST be tracked — the deploy docs reference it.
+!.env.example
 
 # vercel
 .vercel

@@ -17,7 +17,7 @@ Drizzle ORM**, and a heavy motion/3D layer (Three.js + Framer Motion + Lenis).
 > [`ROADMAP.md`](./ROADMAP.md) for the build log, and [`DEPLOYMENT.md`](./DEPLOYMENT.md)
 > to ship it to Hetzner.
 
-**Admin panel:** `/admin` (default login `admin@taccalite.local` / `taccalite-admin` —
+**Admin panel:** `/admin` (default login `admin` / `taccalite-admin` —
 change it). **Without SMTP/Stripe keys** the app still runs fully: email goes to a
 viewable outbox and checkout runs in simulate mode.
 

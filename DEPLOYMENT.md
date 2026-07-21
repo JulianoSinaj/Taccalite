@@ -24,14 +24,18 @@ container** — ignore `docker-compose.yml` and `Caddyfile` (those are for path 
 5. **Persistent storage (critical):** add a Storage volume mounted at **`/app/data`** —
    this is the SQLite database. Without it, every redeploy wipes all data.
 6. **Environment variables:** `NEXT_PUBLIC_SITE_URL`, `DATABASE_URL=/app/data/taccalite.db`,
-   `SESSION_SECRET`, `CRON_SECRET`, `ADMIN_EMAIL`/`ADMIN_PASSWORD`/`ADMIN_NAME`,
-   `OWNER_EMAIL`, and (when ready) `SMTP_*`/`MAIL_FROM` and `STRIPE_*`. See §5–6 for those.
+   `SESSION_SECRET`, `CRON_SECRET`, `ADMIN_USERNAME`/`ADMIN_PASSWORD`/`ADMIN_NAME`,
+   `OWNER_EMAIL`, `NODE_ENV=production` (**required** — the app only enforces its
+   secure-secret guard and the `Secure` cookie flag in production), `TRUST_PROXY=true`
+   (safe here because Coolify's proxy overwrites `X-Forwarded-For`), and (when ready)
+   `SMTP_*`/`MAIL_FROM` and `STRIPE_*`. See §5–6 for those. Migrations run at container
+   start via the entrypoint, so you do **not** set `RUN_MIGRATIONS_ON_BOOT`.
 7. **Deploy.** First boot applies migrations + seeds content and the admin (idempotent).
 8. **Cron:** Coolify → app → **Scheduled Tasks** → add
    `curl -s "http://localhost:3000/api/cron?job=porchetta-reminders&secret=$CRON_SECRET"`
    on `0 9 * * 5` (Fridays 09:00).
 
-Open `https://<domain>/admin`, log in with `ADMIN_EMAIL`/`ADMIN_PASSWORD`, change the
+Open `https://<domain>/admin`, log in with `ADMIN_USERNAME`/`ADMIN_PASSWORD`, change the
 password. Backups: snapshot the `/app/data` volume (see §7).
 
 ---
@@ -62,9 +66,11 @@ Set at minimum in `.env`:
 | Variable | Value |
 | -------- | ----- |
 | `NEXT_PUBLIC_SITE_URL` | `https://taccalite.it` |
+| `NODE_ENV` | `production` (**required** — gates the secure-secret guard + `Secure` cookie) |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
 | `CRON_SECRET` | `openssl rand -hex 16` |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | the owner's admin login |
+| `TRUST_PROXY` | `true` (only because Caddy overwrites `X-Forwarded-For`; never enable without such a proxy) |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | the owner's admin login (must NOT be the `taccalite-admin` default in prod) |
 | `OWNER_EMAIL` | where reservation/order notifications go |
 | SMTP\_\* / `MAIL_FROM` | when you have real email (see §5) |
 | `STRIPE_*` | when you enable payments (see §6) |
@@ -87,7 +93,7 @@ docker compose logs -f app
 ```
 
 Visit `https://taccalite.it`. The admin panel is at `https://taccalite.it/admin`
-(log in with `ADMIN_EMAIL` / `ADMIN_PASSWORD` — change the password after first login).
+(log in with `ADMIN_USERNAME` / `ADMIN_PASSWORD` — change the password after first login).
 
 ## 4. Scheduled jobs (porchetta reminders)
 

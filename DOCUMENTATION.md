@@ -1,7 +1,9 @@
 # Taccalite — Technical Documentation
 
-_Last updated: 2026-07-16, after the full platform build (Phases 0–7). Describes the
-system as it now exists. Companion docs: [`README.md`](./README.md),
+_Last updated: 2026-07-21, after the full platform build (Phases 0–7) plus the in-progress
+**admin-hardening pass** (user management, rewards CRUD, order detail, CSV export, schema
+migrations 0001–0002, shared server-action infrastructure). Describes the system as it now
+exists in the working tree. Companion docs: [`README.md`](./README.md),
 [`ROADMAP.md`](./ROADMAP.md) (build log), [`DEPLOYMENT.md`](./DEPLOYMENT.md),
 [`DESIGN.md`](./DESIGN.md)._
 
@@ -30,7 +32,9 @@ business's online operations. Everything is in **Italian**.
 | Customer accounts (email+password) with real loyalty points, ledger, redemptions | ✅ |
 | Newsletter with double opt-in + admin broadcasts | ✅ |
 | Online store: cart, checkout, Stripe (test) or simulate, order emails, loyalty accrual | ✅ |
-| Admin dashboard: reservations, orders, products, blog, shops, loyalty, subscribers, email outbox, settings | ✅ |
+| Admin dashboard: reservations, orders (+ per-order detail), products, blog, shops, loyalty, rewards, subscribers, email outbox, users, settings | ✅ |
+| Admin user management (roles, password reset) — **admin-only** | ✅ |
+| CSV export (orders, customers, reservations, subscribers) | ✅ |
 | Transactional email via configurable SMTP + dev outbox fallback | ✅ |
 | Automation: Saturday porchetta reminders (cron), broadcasts | ✅ |
 | SEO (sitemap, robots, JSON-LD, OG), GDPR (privacy/cookie + consent) | ✅ |
@@ -73,18 +77,20 @@ app/
   admin/
     login/                   Public admin login
     (dash)/                  ROLE-GATED admin (own layout: sidebar, no marketing chrome)
-      page.tsx (dashboard) + reservations/ orders/ products/[id] blog/[id] shops/[id]
-      loyalty/ newsletter/ outbox/ settings/
+      page.tsx (dashboard) + reservations/ orders/ orders/[id] products/[id] blog/[id]
+      shops/[id] loyalty/ rewards/ rewards/[id] newsletter/ outbox/ users/ settings/
+    api/admin/export/[entity]/  CSV export (orders|customers|reservations|subscribers)
   api/                       Route handlers (see §5)
   sitemap.ts  robots.ts
 lib/
-  db/       schema.ts (15 tables) · client.ts (singleton + auto-migrate) · queries.ts (read) · admin/*
-  auth/     password.ts (scrypt) · session.ts (cookies) · service.ts (register/login)
+  db/       schema.ts (15 tables) · client.ts (singleton + gated auto-migrate) · queries.ts (read) · admin/*
+  admin/    queries.ts (admin reads, paginated) · actions.ts · order-actions.ts · user-actions.ts · action-state.ts (runAction/ActionState)
+  auth/     password.ts (scrypt) · session.ts (cookies, requireUser/requireAdmin/requireRole) · service.ts (register/login)
   mail/     mailer.ts (nodemailer + outbox) · templates.ts (branded HTML emails)
-  validation/  reservation.ts · auth.ts · order.ts (Zod)
-  payments/ stripe.ts        loyalty.ts  orders.ts  newsletter.ts  automation.ts
+  validation/  reservation.ts · auth.ts · order.ts · admin.ts (Zod + parseForm)
+  payments/ stripe.ts   loyalty.ts  orders.ts  reservations.ts  newsletter.ts  automation.ts
   rate-limit.ts  env.ts  site.ts  seo.ts  format.ts  data.ts (seed source) utils.ts
-components/  marketing + admin/* + store/* + account/* (see §6)
+components/  marketing + admin/* (incl. ActionForm) + store/* + account/* (see §6)
 scripts/seed.ts              Idempotent DB seed (content, rewards, settings, admin)
 drizzle/                     Generated SQL migrations (applied at runtime)
 ```
@@ -95,21 +101,28 @@ drizzle/                     Generated SQL migrations (applied at runtime)
   request, so admin edits appear immediately. Static: `/porchetta`, `/privacy`, `/cookie`,
   `/sitemap.xml`, `/robots.txt`.
 - **Mutations:** public flows POST to `/api/*` (JSON, Zod-validated). Admin uses **Server
-  Actions** (`lib/admin/actions.ts`, `order-actions.ts`).
+  Actions** (`lib/admin/actions.ts`, `order-actions.ts`, `user-actions.ts`), all funnelled
+  through `runAction` (`lib/admin/action-state.ts`) which returns a typed `ActionState`
+  (`idle`/`success`/`error` + message) rendered by `components/admin/ActionForm.tsx`
+  (`ActionForm`/`PendingButton`/`DeleteForm`, using `useActionState`/`useFormStatus`).
+  Every action re-checks the role server-side via `requireAdmin`/`requireRole` — the layout
+  gate and nav filtering are UI convenience only.
 
 ---
 
 ## 4. Data model (SQLite, `lib/db/schema.ts`)
 
-Conventions: nanoid text PKs, integer unix-ms timestamps, integer booleans, JSON text
-columns, **money as integer cents**. 15 tables:
+Conventions: nanoid text PKs, integer unix-ms timestamps (both an app `$defaultFn` **and**
+a SQL `DEFAULT (unixepoch()*1000)`), integer booleans, JSON text columns, **money as
+integer cents**, real foreign keys (`foreign_keys=ON`), and SQL `CHECK` constraints
+guarding every text enum and non-negative amount. 15 tables:
 
 | Table | Purpose |
 | ----- | ------- |
-| `shops` | Two botteghe — info, `hours`/`highlights` (JSON), confirmation flags |
+| `shops` | Two botteghe — info, `hours`/`highlights` (JSON), confirmation flags, and per-shop service switches `porchettaEnabled`/`storeEnabled`/`reservationsEnabled` |
 | `products` | Catalogue + commerce fields (`priceCents`, `unit`, `purchasable`, `stock`, `featured`, `active`) |
 | `blog_posts` | News — `content` as JSON paragraph array, `published` |
-| `users` | Customers + staff/admin (`role`), `passwordHash`, `marketingConsent` |
+| `users` | Customers + staff/admin. Login key is **`username`** (unique, not null); `email` is optional. `role` (customer/staff/admin), `passwordHash`, `marketingConsent`, `emailVerifiedAt` |
 | `sessions` | Opaque cookie tokens → user, `expiresAt` |
 | `loyalty_accounts` | Per-user `points` + unique `cardNumber` |
 | `loyalty_transactions` | Points ledger (`delta`, `balanceAfter`, `reason`, `createdByUserId`) |
@@ -122,11 +135,17 @@ columns, **money as integer cents**. 15 tables:
 | `email_outbox` | Every email (audit + dev fallback), `status` queued/sent/failed |
 | `settings` | Admin-editable key/value (JSON), e.g. `loyalty.pointsPerEuro`, `store.enabled` |
 
-**Migrations** are generated with `npm run db:generate` into `drizzle/` and applied
-automatically on first DB connection (`lib/db/client.ts` → `migrate()`), so a fresh
-checkout or deploy just works. **Seeding** (`npm run db:seed`) is idempotent and loads the
+**Migrations** are generated with `npm run db:generate` into `drizzle/`. Three exist:
+`0000` (base schema), `0001_wakeful_stranger` (re-keys `users` onto `username`, makes
+`email` nullable — backfilling `username` from the existing id), and `0002_empty_chat`
+(a full table-rebuild that adds the `CHECK` constraints, foreign keys, indexes, and the
+shop service flags). Because `0002` rebuilds tables, auto-migrate on DB connect is now
+**gated** behind `RUN_MIGRATIONS_ON_BOOT` (`lib/db/client.ts`): it defaults on in dev and
+**off in production**, where migrations run once at container start via
+`docker-entrypoint.sh` (never on the request path). **Seeding** (`npm run db:seed`) is
+idempotent and loads the
 two shops, four products (three purchasable), three posts, three rewards, default settings,
-and the bootstrap admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD`).
+and the bootstrap admin (`ADMIN_USERNAME`/`ADMIN_PASSWORD`).
 
 ---
 
@@ -147,7 +166,8 @@ honeypot-protected.
 | `/api/newsletter/unsubscribe` | GET | Unsubscribe (token) |
 | `/api/checkout` | POST | Create order (server-priced) → Stripe session **or** simulate → success URL |
 | `/api/checkout/webhook` | POST | Stripe `checkout.session.completed` → finalize (idempotent) |
-| `/api/cron` | GET/POST | Scheduled jobs; `?secret=CRON_SECRET`; `job=porchetta-reminders` |
+| `/api/cron` | GET/POST | Scheduled jobs; `Authorization: Bearer CRON_SECRET` (timing-safe); `job=porchetta-reminders`, `maintenance`, or `all` |
+| `/api/admin/export/[entity]` | GET | **Admin-gated** CSV export — `orders` / `customers` / `reservations` / `subscribers` |
 
 Reservation flows (`type`): **table** (date+time+guests), **porchetta** (Saturday date +
 kg), **order** (free-text request). Statuses: pending→confirmed→completed/cancelled;
@@ -157,8 +177,11 @@ confirm/cancel emails the customer.
 
 ## 6. Key modules & components
 
-- **Auth** (`lib/auth`): `password.ts` scrypt hash/verify; `session.ts`
-  create/get/destroy + `requireUser`/`requireAdmin`; `service.ts` register/login.
+- **Auth** (`lib/auth`): `password.ts` scrypt hash/verify (+ dummy-hash to equalise login
+  timing); `session.ts` create/get/destroy + `requireUser`/`requireAdmin`/`requireRole`;
+  `service.ts` register/login (username-keyed). **Note:** `requireAdmin()` currently
+  accepts role `admin` **or** `staff`; only `requireRole("admin")` is admin-exclusive
+  (user management, settings, shop create/delete).
 - **Loyalty** (`lib/loyalty.ts`): `getOrCreateLoyaltyAccount`, `addPoints` (ledgered),
   `redeemReward`, `getLoyaltySummary`. Accrual on paid orders (`loyalty.pointsPerEuro`).
 - **Orders** (`lib/orders.ts`): `createOrder` (re-prices from DB — never trusts the
@@ -170,8 +193,14 @@ confirm/cancel emails the customer.
 - **Store UI** (`components/store`): `cart.tsx` (context + localStorage), `AddToCartButton`,
   `CartBar`, `CheckoutClient`, `ClearCart`.
 - **Account** (`components/account`): `AuthForms`, `AccountDashboard` (real loyalty + redeem).
-- **Admin** (`components/admin`): `AdminNav`, `AdminLoginForm`, `ui.tsx` (Panel/Badge/etc.),
-  `forms.tsx` (Product/Blog/Shop forms → server actions).
+- **Admin actions** (`lib/admin`): `queries.ts` (paginated/searchable reads,
+  `getDashboardStats`, `countAdmins`), `actions.ts` (content + loyalty + newsletter +
+  settings mutations), `order-actions.ts` (`updateOrderStatus`), `user-actions.ts`
+  (`setUserRole` — blocks demoting the last admin — and `resetUserPassword`, both
+  admin-only), `action-state.ts` (`runAction`/`ok`/`fail`/`ActionState`).
+- **Admin** (`components/admin`): `AdminNav` (role-filtered, admin-only items hidden),
+  `AdminLoginForm`, `ui.tsx` (Panel/Badge/etc.), `forms.tsx` (Product/Blog/Shop/Reward
+  forms), `ActionForm.tsx` (`ActionForm`/`PendingButton`/`DeleteForm`/`Feedback`).
 - **Marketing**: unchanged cinematic components (`SplitHero`, `ScrollFilm`, 3D intro,
   `SaturdayCountdown`, `Reveal`, …) now fed by DB data.
 - **SEO/legal**: `JsonLd`, `lib/seo.ts`, `CookieConsent`, `LegalLayout`, `NewsletterForm`.
@@ -185,12 +214,13 @@ All optional with safe local defaults — the app runs with an empty env file.
 | Group | Vars |
 | ----- | ---- |
 | Site | `NEXT_PUBLIC_SITE_URL` |
-| DB | `DATABASE_URL` (SQLite path) |
+| DB | `DATABASE_URL` (SQLite path), `RUN_MIGRATIONS_ON_BOOT` (default off in prod — run via entrypoint) |
 | Sessions | `SESSION_SECRET` (**set in prod**) |
+| Proxy | `TRUST_PROXY` — whether to trust `X-Forwarded-For` for rate-limit client IP (**only enable behind a proxy that overwrites it**) |
 | Email | `SMTP_HOST/PORT/SECURE/USER/PASS`, `MAIL_FROM`, `OWNER_EMAIL` |
 | Payments | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` |
 | Automation | `CRON_SECRET` |
-| Bootstrap admin | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` |
+| Bootstrap admin | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_NAME` |
 
 Two feature flags degrade gracefully: **no SMTP → outbox mode** (emails stored, viewable
 in Admin → Email); **no Stripe → simulate mode** (orders recorded + confirmed, no charge).
@@ -206,7 +236,7 @@ npm run dev         # http://localhost:3000  → admin at /admin
 ```
 
 Scripts: `dev`, `build`, `start`, `lint`, `db:generate`, `db:seed`, `db:studio`.
-Bootstrap admin defaults: `admin@taccalite.local` / `taccalite-admin` (change it).
+Bootstrap admin defaults: `admin` / `taccalite-admin` (change it).
 Deployment: [`DEPLOYMENT.md`](./DEPLOYMENT.md) (Docker + Caddy on Hetzner).
 
 ---
@@ -227,19 +257,55 @@ Deployment: [`DEPLOYMENT.md`](./DEPLOYMENT.md) (Docker + Caddy on Hetzner).
 
 ## 10. Known limitations / future work
 
-1. **In-memory rate limiter** (`lib/rate-limit.ts`) is per-instance — fine for one VM; a
-   shared store (Redis) is needed only if horizontally scaled.
-2. **Porchetta reminders** have no "already sent" flag — run the cron once per cycle
-   (e.g. Fridays). A `reminded_at` column would make it fully idempotent.
-3. **Media uploads**: product/shop images are URLs (no file upload UI yet); many images
-   are still Unsplash placeholders pending real photography.
-4. **Stripe** is wired for test mode; going live needs live keys + a configured webhook.
-5. **Email deliverability**: Gmail SMTP is for testing; production wants a domain mailbox
-   or a provider (Resend/Postmark) — an env-only swap (`lib/mail/mailer.ts` isolates it).
-6. **Reference material** (`airtable/`, `figma/`, … `DESIGN.md` files, `.superdesign/`,
-   `*-prompt.md`) are design studies, not app code, and are excluded from the Docker image.
-7. **Automated test suite** (Playwright/unit) not yet added — verification so far is the
-   manual end-to-end pass in §9.
+_Confirmed by the 2026-07-21 audit; these feed the enhancement plan. Grouped by kind._
+
+**Security**
+1. **`TRUST_PROXY` defaults `true`** (`lib/env.ts`). When the app is not actually behind a
+   proxy that overwrites `X-Forwarded-For`, clients can spoof the header and evade **every**
+   rate limiter (including login brute-force). Should default `false`.
+2. **Insecure defaults are only rejected when `NODE_ENV === "production"`.** If `NODE_ENV`
+   is unset/`development` in a container, the default admin password, `dev-cron-secret`, and
+   a non-`Secure` cookie all apply silently. The guard should fail closed for any
+   non-`development` value.
+3. **`requireAdmin()` also allows `staff`.** Staff can therefore adjust loyalty points
+   (money-equivalent) and export customer PII CSV. Those should move behind
+   `requireRole("admin")`. (No staff→admin escalation path exists — role changes are
+   admin-only.)
+4. **Email templates interpolate user-supplied fields without HTML-escaping**
+   (`lib/mail/templates.ts`) — stored-HTML-injection smell in owner-facing mail.
+5. **scrypt cost** uses Node defaults (N=2¹⁴, below current OWASP guidance); **sessions** are
+   30-day with no idle timeout or rotation.
+
+**Correctness**
+6. **Porchetta reminders** have no "already sent" flag (`lib/automation.ts`) — every run
+   re-emails the whole upcoming set. A `remindedAt` column + filter is needed for real
+   idempotency.
+7. **`getOrCreateLoyaltyAccount`** is a select-then-insert race (not an upsert/transaction).
+8. **Order numbers** (`ORD-YYYY-NNNN`) use a 4-digit suffix (10k/yr) with no retry on the
+   unique-constraint collision.
+9. **Outbox `queued`/`failed` rows are never drained or retried**, and broadcasts send
+   unbatched (an SMTP provider will throttle a real list). `runAction` returns raw
+   `err.message` to the client (leak on unexpected errors).
+
+**Infrastructure**
+10. **In-memory rate limiter** (`lib/rate-limit.ts`) is per-instance — fine for one VM; a
+    shared store (Redis) is needed only if horizontally scaled.
+11. **No backups, healthcheck, resource limits, or non-root user** in the Docker/Compose
+    setup; the entrypoint swallows seed/migration failure (can boot in a broken state).
+12. **`output: "standalone"` is NOT actually enabled** (`next.config.ts` leaves it as a
+    note); the runtime image still ships the full `node_modules` + `tsx`. Docs/roadmap
+    previously claimed standalone — corrected here.
+
+**Product / content**
+13. **Media uploads**: product/shop/reward images are URLs (no file-upload UI yet); many
+    images are still Unsplash placeholders pending real photography.
+14. **Stripe** is wired for test mode; going live needs live keys + a configured webhook.
+15. **Email deliverability**: Gmail SMTP is for testing; production wants a domain mailbox
+    or a provider (Resend/Postmark) — an env-only swap (`lib/mail/mailer.ts` isolates it).
+16. **Automated test suite** (Playwright/unit) not yet added — verification so far is the
+    manual end-to-end pass in §9.
+17. **Reference material** (`airtable/`, `figma/`, … `DESIGN.md` files, `.superdesign/`,
+    `*-prompt.md`) are design studies, not app code, and are excluded from the Docker image.
 
 ---
 

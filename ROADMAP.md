@@ -202,3 +202,21 @@ _Updated as phases land._
   (relaxed one advisory hooks rule for the SSR mount idiom). Smoke test: 13 public routes
   200, all `/admin/*` gated (307). Regenerated `DOCUMENTATION.md` + `README.md` to match
   the finished platform. **All phases complete.**
+- **2026-07 — Admin-hardening pass (in progress).** Added user management
+  (`/admin/users`, admin-only: role change + password reset, last-admin guard), rewards CRUD
+  (`/admin/rewards`), per-order detail (`/admin/orders/[id]`), and CSV export
+  (`/api/admin/export/[entity]`). Refactored every admin mutation onto a shared
+  `runAction`/`ActionState` pattern with inline form feedback (`components/admin/ActionForm.tsx`,
+  `lib/admin/action-state.ts`, `lib/validation/admin.ts`). Schema migrations `0001`
+  (re-key `users` onto `username`, `email` nullable) and `0002` (CHECK constraints, foreign
+  keys, indexes, shop service flags); auto-migrate now gated behind `RUN_MIGRATIONS_ON_BOOT`
+  and run at container start. Typecheck clean.
+- **2026-07-21 — Full audit.** Deep-read the working tree (data layer, auth/security, routes,
+  business logic, infra). Findings recorded in `DOCUMENTATION.md` §10 and drive the
+  production-hardening plan (security defaults, reminder idempotency, backups/healthcheck,
+  standalone image, test harness).
+
+> **Correction:** earlier notes and §3/§4 below describe `output: "standalone"` and Postgres
+> as the target. Reality: the app ships on **SQLite** (locked decision, §5) and standalone
+> output is **not yet enabled** in `next.config.ts` — enabling it is a task in the hardening
+> plan, not a completed item.
