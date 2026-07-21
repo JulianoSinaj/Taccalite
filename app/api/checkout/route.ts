@@ -8,10 +8,15 @@ import { getStripe } from "@/lib/payments/stripe";
 import { getCurrentUser } from "@/lib/auth/session";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { absoluteUrl } from "@/lib/site";
+import { isSameOrigin } from "@/lib/security/origin";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  if (!isSameOrigin(request)) {
+    return NextResponse.json({ ok: false, error: "Origine non consentita" }, { status: 403 });
+  }
+
   const limited = rateLimit(`checkout:${clientIp(request)}`, { limit: 10, windowMs: 60_000 });
   if (!limited.ok) {
     return NextResponse.json({ ok: false, error: "Troppe richieste. Riprova tra poco." }, { status: 429 });

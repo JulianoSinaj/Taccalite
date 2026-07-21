@@ -2,7 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
-import { hashPasswordAsync, verifyPasswordAsync, DUMMY_PASSWORD_HASH } from "./password";
+import { hashPasswordAsync, verifyPasswordAsync, needsRehash, DUMMY_PASSWORD_HASH } from "./password";
 import { createSession } from "./session";
 import { getOrCreateLoyaltyAccount, addPoints } from "@/lib/loyalty";
 import { sendMail } from "@/lib/mail/mailer";
@@ -48,6 +48,12 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
   const ok = await verifyPasswordAsync(input.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
   if (!user || !ok) {
     return { ok: false, error: "Username o password non corretti" };
+  }
+  // Opportunistically upgrade a hash stored with weaker/older KDF params — this
+  // is the only point the plaintext is in hand, so accounts harden silently.
+  if (needsRehash(user.passwordHash)) {
+    const upgraded = await hashPasswordAsync(input.password);
+    await db.update(users).set({ passwordHash: upgraded }).where(eq(users.id, user.id));
   }
   await createSession(user.id);
   return { ok: true, userId: user.id };

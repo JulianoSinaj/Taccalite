@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
-import { requireRole } from "@/lib/auth/session";
+import { requireRole, deleteUserSessions } from "@/lib/auth/session";
 import { hashPasswordAsync } from "@/lib/auth/password";
 import { countAdmins } from "@/lib/admin/queries";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
@@ -25,6 +25,9 @@ export async function setUserRole(_prev: ActionState, fd: FormData): Promise<Act
     }
 
     await db.update(users).set({ role: d.role }).where(eq(users.id, d.id));
+    // Force re-auth so the new privilege level takes effect immediately (a
+    // demotion must not keep an elevated session alive).
+    await deleteUserSessions(d.id);
     revalidatePath("/admin/users");
     return ok(`Ruolo aggiornato a "${d.role}".`);
   });
@@ -37,6 +40,8 @@ export async function resetUserPassword(_prev: ActionState, fd: FormData): Promi
     const d = parseForm(userPasswordInput, fd);
     const passwordHash = await hashPasswordAsync(d.password);
     await db.update(users).set({ passwordHash }).where(eq(users.id, d.id));
+    // A password reset must log the user out everywhere.
+    await deleteUserSessions(d.id);
     revalidatePath("/admin/users");
     return ok("Password reimpostata.");
   });

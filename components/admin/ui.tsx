@@ -120,23 +120,26 @@ export function SearchBox({
   );
 }
 
-/** Prev/next pagination that preserves the current query string. */
+/** Prev/next pagination that preserves the current query string.
+ *  `pageParam` lets a page host two independent paginators (e.g. "page" + "rpage"). */
 export function Pagination({
   basePath,
   page,
   pageCount,
   params = {},
+  pageParam = "page",
 }: {
   basePath: string;
   page: number;
   pageCount: number;
   params?: Record<string, string | undefined>;
+  pageParam?: string;
 }) {
   if (pageCount <= 1) return null;
   const href = (p: number) => {
     const sp = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v) sp.set(k, v);
-    sp.set("page", String(p));
+    sp.set(pageParam, String(p));
     return `${basePath}?${sp.toString()}`;
   };
   const btn = "rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase";

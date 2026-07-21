@@ -85,11 +85,12 @@ export const env = {
     secure: bool("SMTP_SECURE", false),
     user: str("SMTP_USER"),
     pass: str("SMTP_PASS"),
-    from: str("MAIL_FROM", "Norcineria Taccalite <norcineriataccalitepaolo@gmail.com>"),
+    from: str("MAIL_FROM", "Norcineria Taccalite <no-reply@example.com>"),
   },
 
-  /** Where reservation/order notifications for the shop are sent. */
-  ownerEmail: str("OWNER_EMAIL", "norcineriataccalitepaolo@gmail.com"),
+  /** Where reservation/order notifications for the shop are sent. Placeholder by
+   *  default so a misconfigured server never emails a real inbox — set OWNER_EMAIL. */
+  ownerEmail: str("OWNER_EMAIL", "owner@example.com"),
 
   /** Stripe (test mode). If secret is empty, checkout runs in "simulate" mode. */
   stripe: {

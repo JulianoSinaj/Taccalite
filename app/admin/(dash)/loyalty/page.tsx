@@ -1,23 +1,25 @@
 import { AdminHeader, Panel, StatusBadge, inputCls, fmtDate, SearchBox, Pagination } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
-import { getCustomersPage, getRedemptions } from "@/lib/admin/queries";
+import { getCustomersPage, getRedemptionsPage } from "@/lib/admin/queries";
 import { adjustPoints, updateRedemptionStatus } from "@/lib/admin/actions";
 import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
-type SP = { searchParams: Promise<{ q?: string; page?: string }> };
+type SP = { searchParams: Promise<{ q?: string; page?: string; rpage?: string }> };
 
 export default async function AdminLoyalty({ searchParams }: SP) {
-  const { q, page: pageStr } = await searchParams;
+  const { q, page: pageStr, rpage: rpageStr } = await searchParams;
   const page = Number(pageStr) || 1;
+  const rpage = Number(rpageStr) || 1;
   // Points adjustment and bulk PII export are admin-only (see the matching
   // server-side guards); hide the controls from staff so they don't 403.
-  const [{ rows: customers, total, pageCount }, redemptions, admin] = await Promise.all([
-    getCustomersPage({ q, page }),
-    getRedemptions(),
-    isAdmin(),
-  ]);
+  const [{ rows: customers, total, pageCount }, { rows: redemptions, pageCount: rPageCount }, admin] =
+    await Promise.all([
+      getCustomersPage({ q, page }),
+      getRedemptionsPage({ page: rpage }),
+      isAdmin(),
+    ]);
 
   return (
     <div>
@@ -107,6 +109,14 @@ export default async function AdminLoyalty({ searchParams }: SP) {
           ))}
         </div>
       )}
+
+      <Pagination
+        basePath="/admin/loyalty"
+        page={rpage}
+        pageCount={rPageCount}
+        pageParam="rpage"
+        params={{ q, page: pageStr }}
+      />
     </div>
   );
 }

@@ -53,13 +53,25 @@ export async function getDashboardStats() {
   };
 }
 
-export const getReservations = (status?: string, shopSlug?: string) => {
+/** Paginated reservations list, preserving the status + shop filters. */
+export async function getReservationsPage(opts: { status?: string; shopSlug?: string; page?: number }) {
+  const page = Math.max(1, opts.page ?? 1);
   const conds: SQL[] = [];
-  if (status && status !== "all") conds.push(eq(reservations.status, status as "pending"));
-  if (shopSlug && shopSlug !== "all") conds.push(eq(reservations.shopSlug, shopSlug));
-  const q = db.select().from(reservations).orderBy(desc(reservations.createdAt));
-  return conds.length ? q.where(and(...conds)) : q;
-};
+  if (opts.status && opts.status !== "all") conds.push(eq(reservations.status, opts.status as "pending"));
+  if (opts.shopSlug && opts.shopSlug !== "all") conds.push(eq(reservations.shopSlug, opts.shopSlug));
+  const where = conds.length ? and(...conds) : undefined;
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select()
+      .from(reservations)
+      .where(where)
+      .orderBy(desc(reservations.createdAt))
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    db.select({ total: sql<number>`count(*)` }).from(reservations).where(where),
+  ]);
+  return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+}
 
 /** Upcoming (today onward) active reservations, ordered by date+time, for the
  *  agenda / porchetta prep views. */
@@ -172,19 +184,28 @@ export async function adminGetOrder(id: string) {
   return { order, items };
 }
 
-export const adminGetUsers = () =>
-  db
-    .select({
-      id: users.id,
-      username: users.username,
-      email: users.email,
-      name: users.name,
-      role: users.role,
-      phone: users.phone,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .orderBy(desc(users.createdAt));
+/** Paginated users list, selecting the same columns as the old adminGetUsers. */
+export async function getUsersPage(opts: { page?: number }) {
+  const page = Math.max(1, opts.page ?? 1);
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        phone: users.phone,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .orderBy(desc(users.createdAt))
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    db.select({ total: sql<number>`count(*)` }).from(users),
+  ]);
+  return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+}
 
 export const adminGetUser = (id: string) =>
   db
@@ -227,8 +248,20 @@ export async function getCustomersWithPoints() {
     .orderBy(desc(users.createdAt));
 }
 
-export const getRedemptions = () =>
-  db.select().from(redemptions).orderBy(desc(redemptions.createdAt));
+/** Paginated redemptions list. */
+export async function getRedemptionsPage(opts: { page?: number }) {
+  const page = Math.max(1, opts.page ?? 1);
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select()
+      .from(redemptions)
+      .orderBy(desc(redemptions.createdAt))
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    db.select({ total: sql<number>`count(*)` }).from(redemptions),
+  ]);
+  return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+}
 
 export const getRecentLoyaltyTx = (userId: string) =>
   db
@@ -238,8 +271,25 @@ export const getRecentLoyaltyTx = (userId: string) =>
     .orderBy(desc(loyaltyTransactions.createdAt))
     .limit(50);
 
-export const getSubscribers = () =>
-  db.select().from(newsletterSubscribers).orderBy(desc(newsletterSubscribers.createdAt));
+/** Paginated newsletter subscribers list. `confirmed` is the full-table count of
+ *  confirmed subscribers (used by the broadcast form / subtitle), independent of paging. */
+export async function getSubscribersPage(opts: { page?: number }) {
+  const page = Math.max(1, opts.page ?? 1);
+  const [rows, [{ total }], [{ confirmed }]] = await Promise.all([
+    db
+      .select()
+      .from(newsletterSubscribers)
+      .orderBy(desc(newsletterSubscribers.createdAt))
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    db.select({ total: sql<number>`count(*)` }).from(newsletterSubscribers),
+    db
+      .select({ confirmed: sql<number>`count(*)` })
+      .from(newsletterSubscribers)
+      .where(eq(newsletterSubscribers.status, "confirmed")),
+  ]);
+  return { rows, total, confirmed, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+}
 
 export const getOutbox = () => db.select().from(emailOutbox).orderBy(desc(emailOutbox.createdAt)).limit(200);
 

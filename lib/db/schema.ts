@@ -132,6 +132,12 @@ export const sessions = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    // Sliding idle-timeout marker: refreshed (at most once per slide interval) on
+    // each authenticated access so a long-abandoned session expires before its
+    // 30-day absolute cap.
+    lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" })
+      .$defaultFn(() => new Date())
+      .default(nowMs),
     createdAt: createdAt(),
   },
   (t) => [index("sessions_user_idx").on(t.userId), index("sessions_expires_idx").on(t.expiresAt)],

@@ -7,10 +7,14 @@ import { getCustomersWithPoints } from "@/lib/admin/queries";
 
 export const runtime = "nodejs";
 
-/** Serialize a row set to CSV (RFC-4180-ish quoting). */
+/** Serialize a row set to CSV (RFC-4180-ish quoting) with spreadsheet
+ *  formula-injection neutralization: a cell that would be interpreted as a
+ *  formula (leading = + - @, or a tab/CR) is prefixed with a single quote so
+ *  Excel/Sheets treats it as text, not an executable expression. */
 function toCsv(headers: string[], rows: (string | number | null | undefined)[][]): string {
   const esc = (v: string | number | null | undefined) => {
-    const s = v == null ? "" : String(v);
+    let s = v == null ? "" : String(v);
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return [headers, ...rows].map((r) => r.map(esc).join(",")).join("\r\n");

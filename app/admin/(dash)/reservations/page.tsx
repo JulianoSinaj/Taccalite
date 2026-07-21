@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, inputCls, fmtDate } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, inputCls, fmtDate, Pagination } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
-import { getReservations, adminGetShops } from "@/lib/admin/queries";
+import { getReservationsPage, adminGetShops } from "@/lib/admin/queries";
 import { updateReservationStatus } from "@/lib/admin/actions";
 import { isAdmin } from "@/lib/auth/session";
 
@@ -14,12 +14,13 @@ const TYPE_LABEL: Record<string, string> = {
 };
 const FILTERS = ["all", "pending", "confirmed", "completed", "cancelled"];
 
-type SP = { searchParams: Promise<{ stato?: string; negozio?: string }> };
+type SP = { searchParams: Promise<{ stato?: string; negozio?: string; page?: string }> };
 
 export default async function AdminReservations({ searchParams }: SP) {
-  const { stato = "all", negozio = "all" } = await searchParams;
-  const [rows, shops, admin] = await Promise.all([
-    getReservations(stato, negozio),
+  const { stato = "all", negozio = "all", page: pageStr } = await searchParams;
+  const page = Number(pageStr) || 1;
+  const [{ rows, total, pageCount }, shops, admin] = await Promise.all([
+    getReservationsPage({ status: stato, shopSlug: negozio, page }),
     adminGetShops(),
     isAdmin(),
   ]);
@@ -35,7 +36,7 @@ export default async function AdminReservations({ searchParams }: SP) {
     <div>
       <AdminHeader
         title="Prenotazioni"
-        subtitle={`${rows.length} richieste`}
+        subtitle={`${total} richieste`}
         action={
           <div className="flex items-center gap-2">
             <Link
@@ -144,6 +145,8 @@ export default async function AdminReservations({ searchParams }: SP) {
           ))}
         </div>
       )}
+
+      <Pagination basePath="/admin/reservations" page={page} pageCount={pageCount} params={{ stato, negozio }} />
     </div>
   );
 }

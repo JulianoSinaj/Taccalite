@@ -1,20 +1,26 @@
-import { AdminHeader, Panel, StatusBadge, inputCls, labelCls, fmtDate } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, inputCls, labelCls, fmtDate, Pagination } from "@/components/admin/ui";
 import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
-import { getSubscribers } from "@/lib/admin/queries";
+import { getSubscribersPage } from "@/lib/admin/queries";
 import { removeSubscriber, sendBroadcast } from "@/lib/admin/actions";
 import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminNewsletter() {
-  const [subs, admin] = await Promise.all([getSubscribers(), isAdmin()]);
-  const confirmed = subs.filter((s) => s.status === "confirmed").length;
+type SP = { searchParams: Promise<{ page?: string }> };
+
+export default async function AdminNewsletter({ searchParams }: SP) {
+  const { page: pageStr } = await searchParams;
+  const page = Number(pageStr) || 1;
+  const [{ rows: subs, total, confirmed, pageCount }, admin] = await Promise.all([
+    getSubscribersPage({ page }),
+    isAdmin(),
+  ]);
 
   return (
     <div>
       <AdminHeader
         title="Newsletter"
-        subtitle={`${confirmed} iscritti confermati · ${subs.length} totali`}
+        subtitle={`${confirmed} iscritti confermati · ${total} totali`}
         action={
           admin ? (
             // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
@@ -93,6 +99,8 @@ export default async function AdminNewsletter() {
           </table>
         </Panel>
       )}
+
+      <Pagination basePath="/admin/newsletter" page={page} pageCount={pageCount} />
     </div>
   );
 }

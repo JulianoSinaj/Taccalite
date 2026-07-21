@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { AdminHeader, Panel, inputCls, fmtDate } from "@/components/admin/ui";
+import { AdminHeader, Panel, inputCls, fmtDate, Pagination } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
-import { adminGetUsers } from "@/lib/admin/queries";
+import { getUsersPage } from "@/lib/admin/queries";
 import { isAdmin } from "@/lib/auth/session";
 import { setUserRole, resetUserPassword } from "@/lib/admin/user-actions";
 
@@ -13,15 +13,19 @@ const ROLE_LABEL: Record<string, string> = {
   admin: "Amministratore",
 };
 
-export default async function AdminUsers() {
+type SP = { searchParams: Promise<{ page?: string }> };
+
+export default async function AdminUsers({ searchParams }: SP) {
   // User management is admin-only (defence-in-depth beyond the nav gating).
   if (!(await isAdmin())) redirect("/admin");
 
-  const users = await adminGetUsers();
+  const { page: pageStr } = await searchParams;
+  const page = Number(pageStr) || 1;
+  const { rows: users, total, pageCount } = await getUsersPage({ page });
 
   return (
     <div>
-      <AdminHeader title="Utenti" subtitle={`${users.length} account · gestisci ruoli e password`} />
+      <AdminHeader title="Utenti" subtitle={`${total} account · gestisci ruoli e password`} />
 
       <div className="space-y-3">
         {users.map((u) => (
@@ -63,6 +67,8 @@ export default async function AdminUsers() {
           </Panel>
         ))}
       </div>
+
+      <Pagination basePath="/admin/users" page={page} pageCount={pageCount} />
     </div>
   );
 }

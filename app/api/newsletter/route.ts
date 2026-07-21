@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { subscribeNewsletter } from "@/lib/newsletter";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
+import { isSameOrigin } from "@/lib/security/origin";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,10 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
+  if (!isSameOrigin(request)) {
+    return NextResponse.json({ ok: false, error: "Origine non consentita" }, { status: 403 });
+  }
+
   const limited = rateLimit(`newsletter:${clientIp(request)}`, { limit: 5, windowMs: 60_000 });
   if (!limited.ok) {
     return NextResponse.json({ ok: false, error: "Troppe richieste. Riprova tra poco." }, { status: 429 });

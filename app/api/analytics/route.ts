@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordPageView } from "@/lib/analytics";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
+import { isSameOrigin } from "@/lib/security/origin";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,9 @@ const schema = z.object({
 /** First-party analytics beacon. Fire-and-forget; always 2xx so the client never
  *  surfaces an error. Rate-limited, and admin/api paths are never recorded. */
 export async function POST(request: Request) {
+  // Only accept beacons fired from our own pages; ignore cross-origin silently.
+  if (!isSameOrigin(request)) return NextResponse.json({ ok: true }, { status: 202 });
+
   const rl = rateLimit(`analytics:${clientIp(request)}`, { limit: 120, windowMs: 60_000 });
   if (!rl.ok) return NextResponse.json({ ok: true }, { status: 202 });
 

@@ -111,15 +111,23 @@ export async function runPointsExpiry(
   if (!days || days <= 0) return { accountsExpired: 0, pointsExpired: 0 };
   const cutoffMs = now.getTime() - days * 24 * 60 * 60 * 1000;
 
-  const accounts = await db.select().from(loyaltyAccounts).where(gt(loyaltyAccounts.points, 0));
+  // One grouped query for every account's balance + last activity, instead of a
+  // per-account "max(createdAt)" round-trip (the previous N+1).
+  const accounts = await db
+    .select({
+      userId: loyaltyAccounts.userId,
+      points: loyaltyAccounts.points,
+      lastActivity: sql<number | null>`max(${loyaltyTransactions.createdAt})`,
+    })
+    .from(loyaltyAccounts)
+    .leftJoin(loyaltyTransactions, eq(loyaltyTransactions.userId, loyaltyAccounts.userId))
+    .where(gt(loyaltyAccounts.points, 0))
+    .groupBy(loyaltyAccounts.userId);
+
   let accountsExpired = 0;
   let pointsExpired = 0;
   for (const acc of accounts) {
-    const [last] = await db
-      .select({ latest: sql<number | null>`max(${loyaltyTransactions.createdAt})` })
-      .from(loyaltyTransactions)
-      .where(eq(loyaltyTransactions.userId, acc.userId));
-    const latestMs = last?.latest ?? 0;
+    const latestMs = acc.lastActivity ?? 0;
     if (latestMs < cutoffMs) {
       await addPoints(acc.userId, -acc.points, "Punti scaduti per inattività");
       accountsExpired += 1;
