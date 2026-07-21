@@ -29,11 +29,28 @@ export async function recordPageView(rawPath: string, rawReferrer?: string | nul
 
 const dayExpr = sql<string>`date(${pageViews.createdAt} / 1000, 'unixepoch')`;
 
-/** Aggregate stats for the admin analytics dashboard. */
-export async function getAnalyticsSummary(now = new Date()) {
+/** Allowed analytics windows (days). Anything else is clamped to the nearest. */
+export const ANALYTICS_RANGES = [7, 30, 90] as const;
+export type AnalyticsRange = (typeof ANALYTICS_RANGES)[number];
+
+/** Normalize an arbitrary value to one of the supported ranges (default 30). */
+export function normalizeRange(value: unknown): AnalyticsRange {
+  const n = Number(value);
+  return (ANALYTICS_RANGES as readonly number[]).includes(n) ? (n as AnalyticsRange) : 30;
+}
+
+/**
+ * Aggregate stats for the admin analytics dashboard.
+ *
+ * `rangeDays` (7 / 30 / 90) drives the top-paths, top-referrers and the daily
+ * series; the last7/last30/total cards are always computed. Default 30 keeps
+ * the historical behaviour for existing callers.
+ */
+export async function getAnalyticsSummary(now = new Date(), rangeDays = 30) {
+  const range = normalizeRange(rangeDays);
   const since7 = new Date(now.getTime() - 7 * DAY_MS);
   const since30 = new Date(now.getTime() - 30 * DAY_MS);
-  const since14 = new Date(now.getTime() - 14 * DAY_MS);
+  const sinceRange = new Date(now.getTime() - range * DAY_MS);
 
   const [total] = await db.select({ n: sql<number>`count(*)` }).from(pageViews);
   const [last7] = await db
@@ -48,7 +65,7 @@ export async function getAnalyticsSummary(now = new Date()) {
   const topPaths = await db
     .select({ path: pageViews.path, n: sql<number>`count(*)` })
     .from(pageViews)
-    .where(gte(pageViews.createdAt, since30))
+    .where(gte(pageViews.createdAt, sinceRange))
     .groupBy(pageViews.path)
     .orderBy(desc(sql`count(*)`))
     .limit(10);
@@ -56,7 +73,7 @@ export async function getAnalyticsSummary(now = new Date()) {
   const topReferrers = await db
     .select({ referrer: pageViews.referrer, n: sql<number>`count(*)` })
     .from(pageViews)
-    .where(and(gte(pageViews.createdAt, since30), isNotNull(pageViews.referrer)))
+    .where(and(gte(pageViews.createdAt, sinceRange), isNotNull(pageViews.referrer)))
     .groupBy(pageViews.referrer)
     .orderBy(desc(sql`count(*)`))
     .limit(8);
@@ -64,14 +81,14 @@ export async function getAnalyticsSummary(now = new Date()) {
   const dailyRows = await db
     .select({ day: dayExpr, n: sql<number>`count(*)` })
     .from(pageViews)
-    .where(gte(pageViews.createdAt, since14))
+    .where(gte(pageViews.createdAt, sinceRange))
     .groupBy(dayExpr)
     .orderBy(dayExpr);
 
-  // Fill a contiguous 14-day series (days with no views → 0) for a clean chart.
+  // Fill a contiguous `range`-day series (days with no views → 0) for a clean chart.
   const counts = new Map(dailyRows.map((d) => [d.day, d.n]));
   const daily: { day: string; n: number }[] = [];
-  for (let i = 13; i >= 0; i--) {
+  for (let i = range - 1; i >= 0; i--) {
     const day = new Date(now.getTime() - i * DAY_MS).toISOString().slice(0, 10);
     daily.push({ day, n: counts.get(day) ?? 0 });
   }
@@ -80,6 +97,7 @@ export async function getAnalyticsSummary(now = new Date()) {
     total: total?.n ?? 0,
     last7: last7?.n ?? 0,
     last30: last30?.n ?? 0,
+    rangeDays: range,
     topPaths,
     topReferrers,
     daily,

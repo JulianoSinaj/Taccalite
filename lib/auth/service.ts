@@ -49,6 +49,9 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
   if (!user || !ok) {
     return { ok: false, error: "Username o password non corretti" };
   }
+  if (!user.active) {
+    return { ok: false, error: "Questo account è stato disattivato." };
+  }
   // Opportunistically upgrade a hash stored with weaker/older KDF params — this
   // is the only point the plaintext is in hand, so accounts harden silently.
   if (needsRehash(user.passwordHash)) {

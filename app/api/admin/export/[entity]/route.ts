@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
-import { desc } from "drizzle-orm";
+import { desc, gte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { orders, reservations, newsletterSubscribers } from "@/lib/db/schema";
+import { orders, reservations, newsletterSubscribers, pageViews } from "@/lib/db/schema";
 import { requireRole } from "@/lib/auth/session";
 import { getCustomersWithPoints } from "@/lib/admin/queries";
+import { normalizeRange } from "@/lib/analytics";
 import { toCsv } from "@/lib/csv";
 
 export const runtime = "nodejs";
 
 const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : "");
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-export async function GET(_request: Request, ctx: { params: Promise<{ entity: string }> }) {
+export async function GET(request: Request, ctx: { params: Promise<{ entity: string }> }) {
   try {
     // Bulk CSV export is a mass-PII operation — full admins only, not staff.
     await requireRole("admin");
@@ -57,6 +59,22 @@ export async function GET(_request: Request, ctx: { params: Promise<{ entity: st
       csv = toCsv(
         ["email", "status", "source", "confirmedAt", "created"],
         rows.map((s) => [s.email, s.status, s.source, iso(s.confirmedAt), iso(s.createdAt)]),
+      );
+      break;
+    }
+    case "analytics": {
+      const range = normalizeRange(new URL(request.url).searchParams.get("giorni"));
+      const since = new Date(Date.now() - range * DAY_MS);
+      const dayExpr = sql<string>`date(${pageViews.createdAt} / 1000, 'unixepoch')`;
+      const rows = await db
+        .select({ day: dayExpr, n: sql<number>`count(*)` })
+        .from(pageViews)
+        .where(gte(pageViews.createdAt, since))
+        .groupBy(dayExpr)
+        .orderBy(dayExpr);
+      csv = toCsv(
+        ["date", "views"],
+        rows.map((r) => [r.day, r.n]),
       );
       break;
     }

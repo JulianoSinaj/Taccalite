@@ -19,7 +19,13 @@ import { getShopBySlug } from "@/lib/db/queries";
 import { addPoints } from "@/lib/loyalty";
 import { sendMail } from "@/lib/mail/mailer";
 import { broadcastToSubscribers } from "@/lib/automation";
-import { reservationStatusEmail, porchettaReadyEmail, type ReservationEmailData } from "@/lib/mail/templates";
+import { env } from "@/lib/env";
+import {
+  reservationStatusEmail,
+  porchettaReadyEmail,
+  newsletterBroadcast,
+  type ReservationEmailData,
+} from "@/lib/mail/templates";
 import { saveUploadedImage } from "@/lib/media";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import {
@@ -364,25 +370,54 @@ export async function removeSubscriber(_prev: ActionState, fd: FormData): Promis
   });
 }
 
+/** Convert the admin's plaintext message into the broadcast body HTML: blank
+ *  lines become paragraphs, single newlines become <br>. */
+function broadcastBodyHtml(bodyText: string): string {
+  return bodyText
+    .split(/\n{2,}/)
+    .map(
+      (p) =>
+        `<p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 14px;">${p.replace(/\n/g, "<br>")}</p>`,
+    )
+    .join("");
+}
+
 export async function sendBroadcast(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     await requireAdmin();
     const subject = (fd.get("subject") ?? "").toString().trim();
     const bodyText = (fd.get("body") ?? "").toString().trim();
+    const source = (fd.get("source") ?? "").toString().trim();
     if (!subject || !bodyText) throw new ActionError("Oggetto e testo sono obbligatori");
-    const bodyHtml = bodyText
-      .split(/\n{2,}/)
-      .map(
-        (p) =>
-          `<p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 14px;">${p.replace(/\n/g, "<br>")}</p>`,
-      )
-      .join("");
-    const { queued, sent } = await broadcastToSubscribers(subject, bodyHtml);
+    const bodyHtml = broadcastBodyHtml(bodyText);
+    const { queued, sent } = await broadcastToSubscribers(
+      subject,
+      bodyHtml,
+      source ? { source } : {},
+    );
     revalidatePath("/admin/newsletter");
     revalidatePath("/admin/outbox");
     return ok(
       `Newsletter accodata per ${queued} iscritti${sent ? ` (${sent} già inviate)` : ""}.`,
     );
+  });
+}
+
+/** Send the composed subject + body as a single preview email to the owner, so
+ *  it can be reviewed before the real broadcast. Uses a dummy unsubscribe URL. */
+export async function sendTestBroadcast(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    await requireAdmin();
+    const subject = (fd.get("subject") ?? "").toString().trim();
+    const bodyText = (fd.get("body") ?? "").toString().trim();
+    if (!subject || !bodyText) throw new ActionError("Oggetto e testo sono obbligatori");
+    const bodyHtml = broadcastBodyHtml(bodyText);
+    await sendMail({
+      to: env.ownerEmail,
+      ...newsletterBroadcast(`[PROVA] ${subject}`, bodyHtml, "#"),
+    });
+    revalidatePath("/admin/outbox");
+    return ok(`Email di prova inviata a ${env.ownerEmail}.`);
   });
 }
 

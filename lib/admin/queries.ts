@@ -43,14 +43,69 @@ export async function getDashboardStats() {
     .from(redemptions)
     .where(eq(redemptions.status, "pending"));
 
+  // Actionable work-queue: paid orders not yet fulfilled.
+  const [toFulfil] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(orders)
+    .where(eq(orders.status, "paid"));
+  // Porchetta waitlist awaiting a decision.
+  const [waitlisted] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(reservations)
+    .where(and(eq(reservations.waitlisted, true), sql`${reservations.status} != 'cancelled'`));
+  // Failed emails needing attention.
+  const [failedEmails] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(emailOutbox)
+    .where(eq(emailOutbox.status, "failed"));
+
+  // Revenue from paid orders over rolling windows (integer cents).
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const rev = async (sinceMs: number) => {
+    const [r] = await db
+      .select({ sum: sql<number>`coalesce(sum(${orders.totalCents}), 0)` })
+      .from(orders)
+      .where(and(eq(orders.paymentStatus, "paid"), gte(orders.createdAt, new Date(sinceMs))));
+    return r?.sum ?? 0;
+  };
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+  const [revenueToday, revenue7d, revenue30d] = await Promise.all([
+    rev(startOfToday.getTime()),
+    rev(now - 7 * day),
+    rev(now - 30 * day),
+  ]);
+
   return {
     pendingReservations: pendingRes?.n ?? 0,
     totalReservations: totalRes?.n ?? 0,
     paidOrders: paidOrders?.n ?? 0,
+    ordersToFulfil: toFulfil?.n ?? 0,
+    waitlisted: waitlisted?.n ?? 0,
+    failedEmails: failedEmails?.n ?? 0,
     customers: customers?.n ?? 0,
     subscribers: subs?.n ?? 0,
     pendingRedemptions: pendingRedemptions?.n ?? 0,
+    revenueTodayCents: revenueToday,
+    revenue7dCents: revenue7d,
+    revenue30dCents: revenue30d,
   };
+}
+
+/** Today's reservations (not cancelled), for the dashboard work list. */
+export async function getTodayReservations() {
+  const today = new Date().toISOString().slice(0, 10);
+  return db
+    .select()
+    .from(reservations)
+    .where(and(eq(reservations.date, today), sql`${reservations.status} != 'cancelled'`))
+    .orderBy(reservations.time)
+    .limit(20);
+}
+
+/** The most recent orders, for the dashboard activity list. */
+export async function getRecentOrders(limit = 6) {
+  return db.select().from(orders).orderBy(desc(orders.createdAt)).limit(limit);
 }
 
 /** Paginated reservations list, preserving the status + shop filters. */
@@ -313,24 +368,62 @@ export const getRecentLoyaltyTx = (userId: string) =>
 
 /** Paginated newsletter subscribers list. `confirmed` is the full-table count of
  *  confirmed subscribers (used by the broadcast form / subtitle), independent of paging. */
-export async function getSubscribersPage(opts: { page?: number }) {
+export async function getSubscribersPage(opts: { page?: number; status?: string; source?: string; q?: string }) {
   const page = Math.max(1, opts.page ?? 1);
-  const [rows, [{ total }], [{ confirmed }]] = await Promise.all([
+  const conds: SQL[] = [];
+  if (opts.status && opts.status !== "all") conds.push(eq(newsletterSubscribers.status, opts.status as "confirmed"));
+  if (opts.source && opts.source !== "all") conds.push(eq(newsletterSubscribers.source, opts.source));
+  if (opts.q) conds.push(like(sql`lower(${newsletterSubscribers.email})`, `%${opts.q.toLowerCase()}%`));
+  const where = conds.length ? and(...conds) : undefined;
+  const [rows, [{ total }], [{ confirmed }], sources] = await Promise.all([
     db
       .select()
       .from(newsletterSubscribers)
+      .where(where)
       .orderBy(desc(newsletterSubscribers.createdAt))
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
-    db.select({ total: sql<number>`count(*)` }).from(newsletterSubscribers),
+    db.select({ total: sql<number>`count(*)` }).from(newsletterSubscribers).where(where),
     db
       .select({ confirmed: sql<number>`count(*)` })
       .from(newsletterSubscribers)
       .where(eq(newsletterSubscribers.status, "confirmed")),
+    db.selectDistinct({ source: newsletterSubscribers.source }).from(newsletterSubscribers),
   ]);
-  return { rows, total, confirmed, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+  return {
+    rows,
+    total,
+    confirmed,
+    page,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    sources: sources.map((s) => s.source).filter((s): s is string => !!s),
+  };
 }
 
 export const getOutbox = () => db.select().from(emailOutbox).orderBy(desc(emailOutbox.createdAt)).limit(200);
+
+/** Paginated + status-filterable email outbox. */
+export async function getOutboxPage(opts: { page?: number; status?: string; q?: string }) {
+  const page = Math.max(1, opts.page ?? 1);
+  const conds: SQL[] = [];
+  if (opts.status && opts.status !== "all") conds.push(eq(emailOutbox.status, opts.status as "sent"));
+  if (opts.q) {
+    const term = `%${opts.q.toLowerCase()}%`;
+    conds.push(or(like(sql`lower(${emailOutbox.toAddress})`, term), like(sql`lower(${emailOutbox.subject})`, term))!);
+  }
+  const where = conds.length ? and(...conds) : undefined;
+  const [rows, [{ total }], [{ failed }]] = await Promise.all([
+    db
+      .select()
+      .from(emailOutbox)
+      .where(where)
+      .orderBy(desc(emailOutbox.createdAt))
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    db.select({ total: sql<number>`count(*)` }).from(emailOutbox).where(where),
+    db.select({ failed: sql<number>`count(*)` }).from(emailOutbox).where(eq(emailOutbox.status, "failed")),
+  ]);
+  return { rows, total, failed, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+}
 
 export const getAllSettings = () => db.select().from(settings).orderBy(settings.key);

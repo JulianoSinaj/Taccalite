@@ -76,7 +76,11 @@ export async function runPorchettaReminders(today = new Date()): Promise<{ sent:
 }
 
 /**
- * Send an admin-composed broadcast to all confirmed subscribers.
+ * Send an admin-composed broadcast to confirmed subscribers.
+ *
+ * By default every confirmed subscriber is targeted; pass `opts.source` to
+ * segment the send to only those confirmed subscribers whose `source` matches
+ * (e.g. a single signup origin).
  *
  * Every message is enqueued to the outbox (fast, no blocking), then a throttled
  * first batch is sent inline; the cron `drainOutbox` sweep delivers any
@@ -86,11 +90,14 @@ export async function runPorchettaReminders(today = new Date()): Promise<{ sent:
 export async function broadcastToSubscribers(
   subject: string,
   bodyHtml: string,
+  opts: { source?: string } = {},
 ): Promise<{ queued: number; sent: number }> {
+  const conds = [eq(newsletterSubscribers.status, "confirmed")];
+  if (opts.source) conds.push(eq(newsletterSubscribers.source, opts.source));
   const subs = await db
     .select()
     .from(newsletterSubscribers)
-    .where(eq(newsletterSubscribers.status, "confirmed"));
+    .where(and(...conds));
 
   for (const s of subs) {
     const unsubUrl = absoluteUrl(`/api/newsletter/unsubscribe?token=${s.token}`);

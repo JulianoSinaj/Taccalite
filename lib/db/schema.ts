@@ -119,6 +119,8 @@ export const users = sqliteTable(
     passwordHash: text("password_hash").notNull(),
     phone: text("phone"),
     role: text("role", { enum: ["customer", "staff", "admin"] }).notNull().default("customer"),
+    // Deactivated accounts cannot log in (staff offboarding / suspension).
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
     marketingConsent: integer("marketing_consent", { mode: "boolean" }).notNull().default(false),
     emailVerifiedAt: integer("email_verified_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),

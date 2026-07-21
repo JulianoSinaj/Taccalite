@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminHeader, Panel } from "@/components/admin/ui";
-import { getAnalyticsSummary } from "@/lib/analytics";
+import { getAnalyticsSummary, normalizeRange, ANALYTICS_RANGES } from "@/lib/analytics";
 import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -14,14 +15,49 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
-export default async function AdminAnalytics() {
+type SP = {
+  searchParams: Promise<{ giorni?: string }>;
+};
+
+export default async function AdminAnalytics({ searchParams }: SP) {
   if (!(await isAdmin())) redirect("/admin");
-  const s = await getAnalyticsSummary();
+  const { giorni } = await searchParams;
+  const range = normalizeRange(giorni);
+
+  const s = await getAnalyticsSummary(new Date(), range);
   const maxDaily = Math.max(1, ...s.daily.map((d) => d.n));
+  // Above ~30 bars the per-day labels overlap, so we drop them for the 90-day view.
+  const showDayLabels = s.daily.length <= 31;
 
   return (
     <div>
-      <AdminHeader title="Statistiche" subtitle="Visite del sito — senza cookie, senza dati personali" />
+      <AdminHeader
+        title="Statistiche"
+        subtitle="Visite del sito — senza cookie, senza dati personali"
+        action={
+          <a
+            href={`/api/admin/export/analytics?giorni=${range}`}
+            download
+            className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+          >
+            Esporta CSV
+          </a>
+        }
+      />
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        {ANALYTICS_RANGES.map((r) => (
+          <Link
+            key={r}
+            href={`/admin/analytics?giorni=${r}`}
+            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+              range === r ? "bg-brown-950 text-cream" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
+            }`}
+          >
+            {r} giorni
+          </Link>
+        ))}
+      </div>
 
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Stat label="Ultimi 7 giorni" value={s.last7} />
@@ -30,8 +66,8 @@ export default async function AdminAnalytics() {
       </div>
 
       <Panel className="mb-8">
-        <h2 className="font-display mb-4 text-xl text-brown-950">Visite giornaliere · 14 giorni</h2>
-        <div className="flex h-40 items-end gap-1.5">
+        <h2 className="font-display mb-4 text-xl text-brown-950">Visite giornaliere · {range} giorni</h2>
+        <div className="flex h-40 items-end gap-1">
           {s.daily.map((d) => (
             <div
               key={d.day}
@@ -42,7 +78,7 @@ export default async function AdminAnalytics() {
                 className="w-full rounded-t bg-gold"
                 style={{ height: `${Math.round((d.n / maxDaily) * 100)}%`, minHeight: d.n > 0 ? "4px" : "0" }}
               />
-              <span className="text-[9px] text-brown-800/50">{d.day.slice(8)}</span>
+              {showDayLabels && <span className="text-[9px] text-brown-800/50">{d.day.slice(8)}</span>}
             </div>
           ))}
         </div>
@@ -50,7 +86,7 @@ export default async function AdminAnalytics() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel>
-          <h2 className="font-display mb-4 text-xl text-brown-950">Pagine più viste · 30 giorni</h2>
+          <h2 className="font-display mb-4 text-xl text-brown-950">Pagine più viste · {range} giorni</h2>
           {s.topPaths.length === 0 ? (
             <p className="text-brown-800/70">Nessun dato ancora.</p>
           ) : (
@@ -66,7 +102,7 @@ export default async function AdminAnalytics() {
         </Panel>
 
         <Panel>
-          <h2 className="font-display mb-4 text-xl text-brown-950">Provenienza · 30 giorni</h2>
+          <h2 className="font-display mb-4 text-xl text-brown-950">Provenienza · {range} giorni</h2>
           {s.topReferrers.length === 0 ? (
             <p className="text-brown-800/70">Traffico diretto o nessun referrer.</p>
           ) : (
