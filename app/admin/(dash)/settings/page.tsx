@@ -154,10 +154,31 @@ const KNOWN: {
   },
   {
     key: "business.address",
-    label: "Sede legale",
-    help: "Indirizzo della sede legale riportato sui documenti.",
+    label: "Sede legale — indirizzo",
+    help: "Via e numero civico della sede legale (per la fattura elettronica).",
     control: "text",
     default: "",
+  },
+  {
+    key: "business.zip",
+    label: "Sede legale — CAP",
+    help: "CAP della sede legale (5 cifre).",
+    control: "text",
+    default: "60121",
+  },
+  {
+    key: "business.city",
+    label: "Sede legale — Comune",
+    help: "Comune della sede legale.",
+    control: "text",
+    default: "Ancona",
+  },
+  {
+    key: "business.province",
+    label: "Sede legale — Provincia",
+    help: "Sigla provincia (es. AN).",
+    control: "text",
+    default: "AN",
   },
   {
     key: "business.rea",

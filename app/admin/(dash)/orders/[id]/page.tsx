@@ -216,6 +216,20 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 </div>
               )}
             </dl>
+            {admin && (
+              <div className="mt-4 border-t border-brown-900/10 pt-4">
+                <a
+                  href={`/api/admin/invoice/${order.id}/xml`}
+                  download
+                  className="inline-block rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                >
+                  Fattura XML (SdI)
+                </a>
+                <p className="mt-2 text-xs text-brown-800/60">
+                  Formato FatturaPA FPR12, da trasmettere tramite un intermediario accreditato.
+                </p>
+              </div>
+            )}
             {canRefund && (
               <div className="mt-4 border-t border-brown-900/10 pt-4">
                 <ActionForm action={refundOrder} className="flex flex-col items-start gap-2">
