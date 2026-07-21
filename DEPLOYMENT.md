@@ -8,6 +8,15 @@ Two supported paths:
 
 Either way the app is a single Next.js container with **SQLite persisted on a volume**.
 
+> ⚠️ **Scheduled jobs & backups are NOT automatic.** A bare `docker compose up`
+> runs **ZERO** cron jobs and **ZERO** backups. The container ships no scheduler —
+> nothing drains the email outbox, sends porchetta reminders, expires points, or
+> snapshots the database until **you** add host crontab entries for
+> `/api/cron?job=all` (with the `CRON_SECRET` bearer token) and for
+> `scripts/backup.sh`. This is the single biggest operational gap. See **§4**
+> (cron) and **§7** (backups). *(Coolify users: use its Scheduled Tasks instead —
+> see §0 step 8.)*
+
 ---
 
 ## 0. Deploying with Coolify (recommended)
@@ -66,6 +75,14 @@ cp .env.example .env
 nano .env
 ```
 
+> ⚠️ **The shipped `.env.example` contains insecure defaults and a real address —
+> override them.** It carries `SESSION_SECRET=dev-insecure-secret-change-me-in-production`,
+> `CRON_SECRET=dev-cron-secret`, and `ADMIN_PASSWORD=taccalite-admin`, and it hard-codes
+> the owner's **real** `OWNER_EMAIL` (`norcineriataccalitepaolo@gmail.com`). You **must**
+> set fresh `SESSION_SECRET`, `CRON_SECRET`, and `ADMIN_PASSWORD`, and confirm
+> `OWNER_EMAIL` — the app's production guard **refuses to boot** with the insecure
+> defaults when `NODE_ENV=production`.
+
 Set at minimum in `.env`:
 
 | Variable | Value |
@@ -80,7 +97,10 @@ Set at minimum in `.env`:
 | SMTP\_\* / `MAIL_FROM` | when you have real email (see §5) |
 | `STRIPE_*` | when you enable payments (see §6) |
 
-Edit **`Caddyfile`** and replace `taccalite.it` with your real domain.
+Edit **`Caddyfile`** and replace **both**: the domain (`taccalite.it` /
+`www.taccalite.it`) with your real domain, **and** the ACME `email` in the global
+block (currently the placeholder `admin@taccalite.it`) with a real mailbox you
+monitor — Let's Encrypt sends certificate-expiry notices there.
 
 ## 3. Launch
 
@@ -101,6 +121,10 @@ Visit `https://taccalite.it`. The admin panel is at `https://taccalite.it/admin`
 (log in with `ADMIN_USERNAME` / `ADMIN_PASSWORD` — change the password after first login).
 
 ## 4. Scheduled jobs (cron)
+
+> ⚠️ **Required for path B — nothing schedules these for you.** Until you add the
+> crontab entries below, the outbox never drains (no newsletter/retry mail goes
+> out), reminders never fire, and points never expire.
 
 The cron endpoint is secured by the `CRON_SECRET` passed in the **`Authorization:
 Bearer`** header (never the query string, which leaks into access logs). Add host
@@ -161,8 +185,12 @@ A backup on the same VM is **not** disaster recovery — sync `./backups` off-bo
 (Hetzner Storage Box / S3 / `rclone`) on a schedule. A quick manual alternative:
 
 ```bash
-docker compose exec app node -e "require('better-sqlite3')('/app/data/taccalite.db').backup('/app/data/backup-'+Date.now()+'.db')"
+docker compose exec -T app node -e "require('better-sqlite3')('/app/data/taccalite.db').backup('/app/data/backup-'+Date.now()+'.db').then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
 ```
+
+better-sqlite3's `.backup()` returns a **Promise**; the older one-liner that
+dropped the `.then().catch()` could let the process exit before the copy
+finished. The form above (matching `scripts/backup.sh`) waits for completion.
 
 **Restore:** stop the stack (`docker compose down`), replace `data/taccalite.db`
 (and delete any stale `-wal`/`-shm` sidecars), then `docker compose up -d`.
@@ -196,3 +224,10 @@ Migrations apply automatically on startup; seeding is idempotent.
   in-memory rate limiter (`lib/rate-limit.ts`) would then need a shared store.
 - Keep `SESSION_SECRET` and `.env` secret and backed up. Rotating `SESSION_SECRET`
   logs everyone out.
+- **Image size (pending optimization, not a blocker):** `output: "standalone"` is
+  **not yet enabled** in `next.config.ts` (the line is commented out). The runtime
+  image therefore still ships the full `node_modules` plus `tsx` (the entrypoint
+  runs `npx tsx scripts/seed.ts` and `npx next start`), which means a larger image
+  and wider attack surface than a trimmed standalone build. Enabling standalone
+  (with `outputFileTracingIncludes` for the native better-sqlite3 binary + the
+  `drizzle/` migrations) is a known follow-up.

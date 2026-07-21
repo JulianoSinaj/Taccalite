@@ -216,6 +216,49 @@ _Updated as phases land._
   production-hardening plan (security defaults, reminder idempotency, backups/healthcheck,
   standalone image, test harness).
 
+_The following land on branch `feat/platform-hardening`._
+
+- **2026-07-21 — Phase A done** (`7b86f99`, security & correctness hardening). `TRUST_PROXY`
+  now defaults **false** (rate-limit ignores `X-Forwarded-For` unless opted in; trade-off: all
+  clients share one bucket without a trusted proxy). Insecure-default guard fails closed for any
+  non-`development` env (`enforceSecurity = !isDev`). Privileged ops moved to
+  `requireRole("admin")` (user role/password change, CSV export, shop create); content edits stay
+  admin-or-staff. Email templates escape all user fields via `esc()` (only admin newsletter HTML +
+  server-generated codes/URLs left raw). Order number → 6-digit with a transactional retry loop
+  (`MAX_ATTEMPTS=5`). `getOrCreateLoyaltyAccount` race fixed via `onConflictDoNothing` upsert.
+  `runAction` no longer leaks error internals. Migration `0003` adds `reservations.reminded_at`.
+- **2026-07-21 — Phase B done** (`bfb9dbd`, deploy hardening). Added `scripts/backup.sh` (SQLite
+  `.backup()` as a Promise), container `healthcheck` + `/api/health` probe, memory/CPU limits in
+  compose, `gosu` non-root runtime, `set -e` in the entrypoint. Caddy ACME email placeholder. Full
+  CSP added (still `unsafe-inline` for script/style — no nonce yet).
+- **2026-07-21 — Phase C done** (`8ee9fc4`, reliability). Outbox now actually drains:
+  `drainOutbox` is throttled with a per-message attempt cap (migration `0004` adds
+  `email_outbox.attempts` DEFAULT 0). Broadcasts enqueue then drain in batches of 50 instead of
+  sending unbatched. Porchetta reminders no longer re-send — `reminded_at` filter + stamp, set only
+  on success. Points expiry job (`runPointsExpiry`) shipped.
+- **2026-07-21 — D1 done** (`90203b4`, image uploads). Admin `ImageField` accepts a URL or a file
+  upload (jpg/png/webp/avif, 5 MB cap) for products, shops, rewards, and blog → written to
+  `<data-dir>/uploads`, served via `/api/media/[file]` with path-traversal guard.
+- **2026-07-21 — D2 + D3 done** (`ef96528`). D2: reservation **agenda** view
+  (`/admin/reservations/agenda` + `PrintButton`) and porchetta **prep** list. D3: customer **order
+  history** and **reward-unlocked** emails.
+- **2026-07-21 — D4a done** (`baa9918`, analytics). First-party **cookieless** page-view analytics:
+  `recordPageView` + `/api/analytics`, admin view at `/admin/analytics`. Stores path + referrer-host
+  only, no PII. Migration `0005` adds the `page_views` table (+2 indexes) — schema now 16 tables.
+- **2026-07-21 — Re-audit.** Deep-read the hardened tree; produced a residual-findings list feeding
+  the next hardening plan: **CSRF/Origin unchecked on hand-rolled JSON routes** (login/register/
+  checkout/newsletter/loyalty/prenotazioni — rely on SameSite=Lax only); **scrypt cost still
+  sub-OWASP** (N=2^14) with **no session rotation** on login and password reset not invalidating
+  sessions; **`output: "standalone"` still not enabled** (runtime image ships full `node_modules` +
+  `tsx`); **no scheduler ships** (cron + backups need a manually-added host crontab — bare
+  `docker compose up` runs zero jobs/backups); **no automated test suite** anywhere; **no
+  `loading.tsx`/`error.tsx`/`not-found.tsx` boundaries** (every route force-dynamic → framework
+  default error page on query failure); `subscribeNewsletter` **select-then-insert race** (same
+  class as the loyalty race, not fixed here); **unbounded admin list queries** (reservations,
+  redemptions, customers-with-points, admin products/users have no LIMIT; orders & customers are
+  paginated). Also noted: CSV formula injection, committed real `OWNER_EMAIL` in `.env.example`,
+  `recordPageView` unbatched write throughput, and several a11y gaps.
+
 > **Correction:** earlier notes and §3/§4 below describe `output: "standalone"` and Postgres
 > as the target. Reality: the app ships on **SQLite** (locked decision, §5) and standalone
 > output is **not yet enabled** in `next.config.ts` — enabling it is a task in the hardening
