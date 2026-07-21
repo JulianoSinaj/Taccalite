@@ -11,6 +11,7 @@ import { countAdmins } from "@/lib/admin/queries";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import { parseForm, userRoleInput, userPasswordInput } from "@/lib/validation/admin";
 import { logAudit } from "@/lib/audit";
+import { anonymizeUser } from "@/lib/gdpr";
 
 /** New-account fields. Username is normalised to lowercase and constrained to a
  *  safe handle charset; email is optional. */
@@ -165,5 +166,38 @@ export async function setUserActive(_prev: ActionState, fd: FormData): Promise<A
     });
     revalidatePath("/admin/users");
     return ok(d.active ? "Utente riattivato." : "Utente disattivato.");
+  });
+}
+
+/**
+ * GDPR erasure (art. 17): anonymize a customer's account, reservations and
+ * newsletter subscription. Admin-only; refuses to erase an admin account (demote
+ * first) and always retains order records under the fiscal-retention obligation.
+ */
+export async function anonymizeCustomer(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const id = String(fd.get("id") ?? "").trim();
+    if (!id) throw new ActionError("Utente non valido.");
+
+    const [target] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (!target) throw new ActionError("Utente non trovato.");
+    if (target.role === "admin") {
+      throw new ActionError("Non puoi anonimizzare un amministratore. Cambia prima il ruolo.");
+    }
+
+    const ok_ = await anonymizeUser(id);
+    if (!ok_) throw new ActionError("Anonimizzazione non riuscita.");
+
+    await logAudit({
+      actor,
+      action: "gdpr.erase",
+      entity: "user",
+      entityId: id,
+      summary: `Dati personali anonimizzati per ${target.username} (ordini conservati per obblighi fiscali)`,
+    });
+    revalidatePath("/admin/users");
+    revalidatePath(`/admin/loyalty/${id}`);
+    return ok("Dati personali anonimizzati. Gli ordini restano per obblighi fiscali.");
   });
 }

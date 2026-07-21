@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminHeader, Panel, StatusBadge, inputCls, labelCls, euro, fmtDate } from "@/components/admin/ui";
-import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
+import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { adminGetUser, getLoyaltyAccountForUser, getRecentLoyaltyTx } from "@/lib/admin/queries";
 import { getReservationsForUser, getRedemptionsForUser } from "@/lib/db/queries";
 import { getOrdersForUser } from "@/lib/orders";
 import { adjustPoints } from "@/lib/admin/actions";
+import { anonymizeCustomer } from "@/lib/admin/user-actions";
 import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -125,6 +126,38 @@ export default async function CustomerDetail({ params }: Params) {
               Usa un valore positivo per accreditare (es. <strong>+50</strong> per un bonus), negativo per
               scalare (es. <strong>−20</strong> per una correzione). Il motivo resta nello storico.
             </p>
+          </Panel>
+        </>
+      )}
+
+      {/* GDPR tools — admin only */}
+      {admin && user.role !== "admin" && (
+        <>
+          <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Privacy (GDPR)</h2>
+          <Panel className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-brown-950">Diritti dell&apos;interessato</p>
+              <p className="mt-1 text-xs text-brown-800/60">
+                Esporta tutti i dati del cliente (art. 15) o anonimizza l&apos;account e le
+                prenotazioni (art. 17). Gli ordini restano per obblighi fiscali.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href={`/api/admin/gdpr/${user.id}`}
+                download
+                className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              >
+                Esporta dati
+              </a>
+              <DeleteForm
+                action={anonymizeCustomer}
+                id={user.id}
+                confirm={`Anonimizzare definitivamente i dati di ${displayName}? L'operazione non è reversibile. Gli ordini restano per obblighi fiscali.`}
+              >
+                Anonimizza
+              </DeleteForm>
+            </div>
           </Panel>
         </>
       )}
