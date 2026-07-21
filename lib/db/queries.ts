@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, lte, ne, sql } from "drizzle-orm";
 import { db } from "./client";
 import * as schema from "./schema";
 
@@ -57,10 +57,14 @@ export const getProductBySlug = cache(async (slug: string) => {
 });
 
 export const getBlogPosts = cache(async () => {
+  // Scheduled publishing: a published post with a future date stays hidden until
+  // its date arrives. `date` is stored as ISO yyyy-mm-dd, so a lexicographic
+  // comparison against today is correct.
+  const today = new Date().toISOString().slice(0, 10);
   return db
     .select()
     .from(schema.blogPosts)
-    .where(eq(schema.blogPosts.published, true))
+    .where(and(eq(schema.blogPosts.published, true), lte(schema.blogPosts.date, today)))
     .orderBy(desc(schema.blogPosts.date));
 });
 

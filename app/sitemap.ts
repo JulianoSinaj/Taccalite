@@ -1,13 +1,17 @@
 import type { MetadataRoute } from "next";
 import { absoluteUrl } from "@/lib/site";
-import { getShops, getBlogPosts } from "@/lib/db/queries";
+import { getShops, getBlogPosts, getPurchasableProducts } from "@/lib/db/queries";
 
 // Read shop/blog URLs from the DB at request time, not at build (empty build-time DB).
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  const [shops, blogPosts] = await Promise.all([getShops(), getBlogPosts()]);
+  const [shops, blogPosts, products] = await Promise.all([
+    getShops(),
+    getBlogPosts(),
+    getPurchasableProducts(),
+  ]);
 
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: absoluteUrl("/"), lastModified: now, changeFrequency: "weekly", priority: 1 },
@@ -35,5 +39,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  return [...staticRoutes, ...shopRoutes, ...blogRoutes];
+  const productRoutes: MetadataRoute.Sitemap = products.map((p) => ({
+    url: absoluteUrl(`/negozio/${p.slug}`),
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.7,
+  }));
+
+  return [...staticRoutes, ...shopRoutes, ...productRoutes, ...blogRoutes];
 }
