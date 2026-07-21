@@ -32,13 +32,57 @@ export default function CheckoutClient({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Discount code (optional). The preview amount is validated server-side; the
+  // order endpoint re-validates authoritatively on submit. The applied preview
+  // captures the subtotal it was computed for — a later cart change (a percent
+  // code depends on the subtotal) makes it stale, so we derive `coupon` as valid
+  // only while the subtotal still matches, no reset-effect needed.
+  const [couponInput, setCouponInput] = useState("");
+  const [applied, setApplied] = useState<
+    { code: string; discountCents: number; freeShipping: boolean; atSubtotalCents: number } | null
+  >(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
+
+  const coupon = applied && applied.atSubtotalCents === subtotalCents ? applied : null;
+
+  async function applyCoupon() {
+    const code = couponInput.trim();
+    if (!code) return;
+    setCouponBusy(true);
+    setCouponError(null);
+    try {
+      const res = await fetch("/api/discounts/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, subtotalCents }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Codice non valido");
+      setApplied({
+        code: json.code,
+        discountCents: json.discountCents,
+        freeShipping: json.freeShipping,
+        atSubtotalCents: subtotalCents,
+      });
+    } catch (err) {
+      setApplied(null);
+      setCouponError(err instanceof Error ? err.message : "Codice non valido");
+    } finally {
+      setCouponBusy(false);
+    }
+  }
+
   // Display-only pricing — mirrors the server rules in lib/orders.ts. Shipping
   // applies only to shipping orders, and is waived once the subtotal reaches the
-  // free-shipping threshold (a threshold of 0 disables free shipping).
+  // free-shipping threshold (a threshold of 0 disables free shipping) or when a
+  // free-shipping coupon applies.
+  const discountCents = coupon?.discountCents ?? 0;
   const freeShipping =
-    fulfilment === "shipping" && freeShippingThresholdCents > 0 && subtotalCents >= freeShippingThresholdCents;
+    fulfilment === "shipping" &&
+    ((freeShippingThresholdCents > 0 && subtotalCents >= freeShippingThresholdCents) || !!coupon?.freeShipping);
   const effectiveShippingCents = fulfilment === "shipping" && !freeShipping ? shippingCents : 0;
-  const totalCents = subtotalCents + effectiveShippingCents;
+  const totalCents = Math.max(0, subtotalCents - discountCents + effectiveShippingCents);
   // Loyalty points are earned on the goods subtotal (server-authoritative on award).
   const pointsPreview = Math.floor((subtotalCents / 100) * pointsPerEuro);
 
@@ -58,6 +102,7 @@ export default function CheckoutClient({
       city: fd.get("city"),
       zip: fd.get("zip"),
       notes: fd.get("notes"),
+      discountCode: coupon?.code,
       company: fd.get("company"),
     };
     try {
@@ -126,11 +171,54 @@ export default function CheckoutClient({
             ))}
           </div>
 
+          {/* Coupon */}
+          <div className="mt-6 rounded-2xl border border-brown-900/10 bg-white/50 p-4">
+            <label className={labelCls} htmlFor="coupon">Codice sconto</label>
+            <div className="flex gap-2">
+              <input
+                id="coupon"
+                value={couponInput}
+                onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applyCoupon();
+                  }
+                }}
+                placeholder="es. BENVENUTO10"
+                className={`${inputCls} uppercase`}
+              />
+              <button
+                type="button"
+                onClick={applyCoupon}
+                disabled={couponBusy || !couponInput.trim()}
+                className="shrink-0 rounded-xl bg-brown-950 px-5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900 disabled:opacity-50"
+              >
+                {couponBusy ? "…" : "Applica"}
+              </button>
+            </div>
+            {couponError && <p className="mt-2 text-xs font-medium text-red-700">{couponError}</p>}
+            {coupon && (
+              <p className="mt-2 flex items-center justify-between text-xs font-medium text-emerald-700">
+                <span>Codice {coupon.code} applicato ✓</span>
+                <button type="button" onClick={() => { setApplied(null); setCouponInput(""); }} className="underline">
+                  Rimuovi
+                </button>
+              </p>
+            )}
+          </div>
+
           <div className="mt-6 space-y-2 border-t border-brown-900/10 pt-6 text-sm">
             <div className="flex justify-between text-brown-800/80">
               <span>Subtotale</span>
               <span>{formatEuro(subtotalCents)}</span>
             </div>
+            {discountCents > 0 && (
+              <div className="flex justify-between text-emerald-700">
+                <span>Sconto{coupon ? ` (${coupon.code})` : ""}</span>
+                <span>−{formatEuro(discountCents)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-brown-800/80">
               <span>Spedizione</span>
               <span>
