@@ -15,6 +15,7 @@ import {
   Package,
   Receipt,
   ScanLine,
+  ScrollText,
   Settings,
   ShieldCheck,
   ShoppingBag,
@@ -38,6 +39,7 @@ const items = [
   { href: "/admin/analytics", label: "Statistiche", icon: BarChart3, adminOnly: true },
   { href: "/admin/reports/iva", label: "Riepilogo IVA", icon: Receipt, adminOnly: true },
   { href: "/admin/users", label: "Utenti", icon: ShieldCheck, adminOnly: true },
+  { href: "/admin/audit", label: "Registro attività", icon: ScrollText, adminOnly: true },
   { href: "/admin/settings", label: "Impostazioni", icon: Settings, adminOnly: true },
 ];
 

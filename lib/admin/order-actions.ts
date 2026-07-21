@@ -11,6 +11,7 @@ import { getShopBySlug } from "@/lib/db/queries";
 import { orderStatusEmail } from "@/lib/mail/templates";
 import { sendMail } from "@/lib/mail/mailer";
 import { getStripe } from "@/lib/payments/stripe";
+import { logAudit } from "@/lib/audit";
 
 type OrderRow = typeof orders.$inferSelect;
 
@@ -48,7 +49,7 @@ async function notifyOrderStatus(
 
 export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireAdmin();
+    const actor = await requireAdmin();
     const d = parseForm(orderStatusInput, fd);
     const [order] = await db.select().from(orders).where(eq(orders.id, d.id)).limit(1);
     if (!order) throw new ActionError("Ordine non trovato.");
@@ -70,6 +71,17 @@ export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promi
       d.status !== order.status
     ) {
       await notifyOrderStatus({ ...order, status: d.status }, d.status);
+    }
+
+    if (d.status !== order.status) {
+      await logAudit({
+        actor,
+        action: "order.status",
+        entity: "order",
+        entityId: order.id,
+        summary: `Ordine ${order.orderNumber}: stato ${order.status} → ${d.status}`,
+        meta: { from: order.status, to: d.status, paymentStatus: d.paymentStatus },
+      });
     }
 
     revalidatePath("/admin/orders");
@@ -120,7 +132,7 @@ export async function setOrderTracking(_prev: ActionState, fd: FormData): Promis
  */
 export async function refundOrder(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireRole("admin");
+    const actor = await requireRole("admin");
     const id = String(fd.get("id") ?? "").trim();
     if (!id) throw new ActionError("Ordine non valido.");
 
@@ -155,6 +167,15 @@ export async function refundOrder(_prev: ActionState, fd: FormData): Promise<Act
       .where(eq(orders.id, id));
 
     await notifyOrderStatus({ ...order, status: "refunded", paymentStatus: "refunded" }, "refunded");
+
+    await logAudit({
+      actor,
+      action: "order.refund",
+      entity: "order",
+      entityId: order.id,
+      summary: `Rimborso di ${(order.totalCents / 100).toFixed(2)} € per l'ordine ${order.orderNumber}`,
+      meta: { totalCents: order.totalCents, stripe: Boolean(stripe && order.stripeSessionId) },
+    });
 
     revalidatePath(`/admin/orders/${id}`);
     revalidatePath("/admin/orders");

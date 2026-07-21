@@ -10,6 +10,7 @@ import { hashPasswordAsync } from "@/lib/auth/password";
 import { countAdmins } from "@/lib/admin/queries";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import { parseForm, userRoleInput, userPasswordInput } from "@/lib/validation/admin";
+import { logAudit } from "@/lib/audit";
 
 /** New-account fields. Username is normalised to lowercase and constrained to a
  *  safe handle charset; email is optional. */
@@ -44,7 +45,7 @@ const userActiveInput = z.object({
 /** Change a user's role. Admin-only; refuses to demote the last remaining admin. */
 export async function setUserRole(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireRole("admin");
+    const actor = await requireRole("admin");
     const d = parseForm(userRoleInput, fd);
 
     const [target] = await db.select().from(users).where(eq(users.id, d.id)).limit(1);
@@ -59,6 +60,14 @@ export async function setUserRole(_prev: ActionState, fd: FormData): Promise<Act
     // Force re-auth so the new privilege level takes effect immediately (a
     // demotion must not keep an elevated session alive).
     await deleteUserSessions(d.id);
+    await logAudit({
+      actor,
+      action: "user.role",
+      entity: "user",
+      entityId: target.id,
+      summary: `Ruolo di ${target.username}: ${target.role} → ${d.role}`,
+      meta: { from: target.role, to: d.role },
+    });
     revalidatePath("/admin/users");
     return ok(`Ruolo aggiornato a "${d.role}".`);
   });
@@ -67,12 +76,20 @@ export async function setUserRole(_prev: ActionState, fd: FormData): Promise<Act
 /** Reset a user's password. Admin-only. */
 export async function resetUserPassword(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireRole("admin");
+    const actor = await requireRole("admin");
     const d = parseForm(userPasswordInput, fd);
+    const [target] = await db.select().from(users).where(eq(users.id, d.id)).limit(1);
     const passwordHash = await hashPasswordAsync(d.password);
     await db.update(users).set({ passwordHash }).where(eq(users.id, d.id));
     // A password reset must log the user out everywhere.
     await deleteUserSessions(d.id);
+    await logAudit({
+      actor,
+      action: "user.password_reset",
+      entity: "user",
+      entityId: d.id,
+      summary: `Password reimpostata per ${target?.username ?? d.id}`,
+    });
     revalidatePath("/admin/users");
     return ok("Password reimpostata.");
   });
@@ -81,7 +98,7 @@ export async function resetUserPassword(_prev: ActionState, fd: FormData): Promi
 /** Create a new account. Admin-only; rejects a duplicate username. */
 export async function createUser(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireRole("admin");
+    const actor = await requireRole("admin");
     const d = parseForm(createUserInput, fd);
 
     const [existing] = await db
@@ -92,14 +109,25 @@ export async function createUser(_prev: ActionState, fd: FormData): Promise<Acti
     if (existing) throw new ActionError("Username già in uso.");
 
     const passwordHash = await hashPasswordAsync(d.password);
-    await db.insert(users).values({
-      username: d.username,
-      name: d.name,
-      email: d.email,
-      passwordHash,
-      role: d.role,
-    });
+    const [created] = await db
+      .insert(users)
+      .values({
+        username: d.username,
+        name: d.name,
+        email: d.email,
+        passwordHash,
+        role: d.role,
+      })
+      .returning({ id: users.id });
 
+    await logAudit({
+      actor,
+      action: "user.create",
+      entity: "user",
+      entityId: created?.id,
+      summary: `Nuovo utente ${d.username} (${d.role})`,
+      meta: { role: d.role },
+    });
     revalidatePath("/admin/users");
     return ok("Utente creato.");
   });
@@ -109,7 +137,7 @@ export async function createUser(_prev: ActionState, fd: FormData): Promise<Acti
  *  remaining admin and force-logs-out an account on deactivation. */
 export async function setUserActive(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireRole("admin");
+    const actor = await requireRole("admin");
     const d = parseForm(userActiveInput, fd);
 
     const [target] = await db.select().from(users).where(eq(users.id, d.id)).limit(1);
@@ -127,6 +155,14 @@ export async function setUserActive(_prev: ActionState, fd: FormData): Promise<A
       await deleteUserSessions(d.id);
     }
 
+    await logAudit({
+      actor,
+      action: "user.active",
+      entity: "user",
+      entityId: target.id,
+      summary: `${target.username} ${d.active ? "riattivato" : "disattivato"}`,
+      meta: { active: d.active },
+    });
     revalidatePath("/admin/users");
     return ok(d.active ? "Utente riattivato." : "Utente disattivato.");
   });

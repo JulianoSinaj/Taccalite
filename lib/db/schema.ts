@@ -429,6 +429,27 @@ export const pageViews = sqliteTable(
   (t) => [index("page_views_created_idx").on(t.createdAt), index("page_views_path_idx").on(t.path)],
 );
 
+// ── Audit log (who did which sensitive back-office action) ────────────────────
+export const auditLog = sqliteTable(
+  "audit_log",
+  {
+    id: id(),
+    // Actor snapshot (kept even if the user is later deleted — audit must persist).
+    actorId: text("actor_id"),
+    actorName: text("actor_name").notNull().default(""),
+    action: text("action").notNull(), // machine key, e.g. "order.refund"
+    entity: text("entity").notNull().default(""), // e.g. "order", "user", "setting"
+    entityId: text("entity_id"),
+    summary: text("summary").notNull().default(""), // human-readable Italian line
+    meta: text("meta", { mode: "json" }).$type<Record<string, unknown>>(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("audit_created_idx").on(t.createdAt),
+    index("audit_entity_idx").on(t.entity, t.entityId),
+  ],
+);
+
 // ── Inferred row types (canonical runtime shapes) ────────────────────────────
 export type ShopRow = typeof shops.$inferSelect;
 export type ProductRow = typeof products.$inferSelect;
@@ -438,3 +459,4 @@ export type ReservationRow = typeof reservations.$inferSelect;
 export type RewardRow = typeof rewards.$inferSelect;
 export type OrderRow = typeof orders.$inferSelect;
 export type OrderItemRow = typeof orderItems.$inferSelect;
+export type AuditLogRow = typeof auditLog.$inferSelect;

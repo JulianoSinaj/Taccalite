@@ -18,6 +18,7 @@ import {
   newsletterSubscribers,
   emailOutbox,
   settings,
+  auditLog,
 } from "@/lib/db/schema";
 
 export async function getDashboardStats() {
@@ -427,6 +428,23 @@ export async function getOutboxPage(opts: { page?: number; status?: string; q?: 
 }
 
 export const getAllSettings = () => db.select().from(settings).orderBy(settings.key);
+
+/** Paginated audit-log feed, newest first. Optional `entity` filter. */
+export async function getAuditPage(opts: { page?: number; entity?: string } = {}) {
+  const page = Math.max(1, opts.page ?? 1);
+  const where = opts.entity && opts.entity !== "all" ? eq(auditLog.entity, opts.entity) : undefined;
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select()
+      .from(auditLog)
+      .where(where)
+      .orderBy(desc(auditLog.createdAt))
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    db.select({ total: sql<number>`count(*)` }).from(auditLog).where(where),
+  ]);
+  return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+}
 
 /**
  * IVA report: for paid orders whose creation date falls in [from, to], the gross

@@ -27,6 +27,7 @@ import {
   type ReservationEmailData,
 } from "@/lib/mail/templates";
 import { saveUploadedImage } from "@/lib/media";
+import { logAudit } from "@/lib/audit";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import {
   parseForm,
@@ -248,8 +249,10 @@ export async function toggleProductFeatured(_prev: ActionState, fd: FormData): P
 
 export async function deleteProduct(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireAdmin();
-    await db.delete(products).where(eq(products.id, (fd.get("id") ?? "").toString()));
+    const actor = await requireAdmin();
+    const id = (fd.get("id") ?? "").toString();
+    await db.delete(products).where(eq(products.id, id));
+    await logAudit({ actor, action: "product.delete", entity: "product", entityId: id, summary: `Prodotto eliminato (${id})` });
     revalidatePath("/admin/products");
     return ok("Prodotto eliminato.");
   });
@@ -310,8 +313,10 @@ export async function toggleBlogPublished(_prev: ActionState, fd: FormData): Pro
 
 export async function deleteBlogPost(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireAdmin();
-    await db.delete(blogPosts).where(eq(blogPosts.id, (fd.get("id") ?? "").toString()));
+    const actor = await requireAdmin();
+    const id = (fd.get("id") ?? "").toString();
+    await db.delete(blogPosts).where(eq(blogPosts.id, id));
+    await logAudit({ actor, action: "blog.delete", entity: "blog_post", entityId: id, summary: `Articolo eliminato (${id})` });
     revalidatePath("/admin/blog");
     return ok("Articolo eliminato.");
   });
@@ -357,14 +362,16 @@ export async function saveShop(_prev: ActionState, fd: FormData): Promise<Action
 
 export async function deleteShop(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireRole("admin");
+    const actor = await requireRole("admin");
+    const id = (fd.get("id") ?? "").toString();
     try {
-      await db.delete(shops).where(eq(shops.id, (fd.get("id") ?? "").toString()));
+      await db.delete(shops).where(eq(shops.id, id));
     } catch {
       throw new ActionError(
         "Impossibile eliminare: la sede ha prodotti, ordini o prenotazioni collegati. Riassegnali prima.",
       );
     }
+    await logAudit({ actor, action: "shop.delete", entity: "shop", entityId: id, summary: `Sede eliminata (${id})` });
     revalidatePath("/admin/shops");
     revalidatePath("/negozi");
     return ok("Sede eliminata.");
@@ -410,8 +417,10 @@ export async function toggleRewardActive(_prev: ActionState, fd: FormData): Prom
 
 export async function deleteReward(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireAdmin();
-    await db.delete(rewards).where(eq(rewards.id, (fd.get("id") ?? "").toString()));
+    const actor = await requireAdmin();
+    const id = (fd.get("id") ?? "").toString();
+    await db.delete(rewards).where(eq(rewards.id, id));
+    await logAudit({ actor, action: "reward.delete", entity: "reward", entityId: id, summary: `Premio eliminato (${id})` });
     revalidatePath("/admin/rewards");
     return ok("Premio eliminato.");
   });
@@ -424,6 +433,14 @@ export async function adjustPoints(_prev: ActionState, fd: FormData): Promise<Ac
     const admin = await requireRole("admin");
     const d = parseForm(pointsInput, fd);
     await addPoints(d.userId, d.delta, d.reason || "Rettifica manuale", admin.id);
+    await logAudit({
+      actor: admin,
+      action: "loyalty.adjust",
+      entity: "user",
+      entityId: d.userId,
+      summary: `Rettifica punti ${d.delta > 0 ? "+" : ""}${d.delta}${d.reason ? ` — ${d.reason}` : ""}`,
+      meta: { delta: d.delta, reason: d.reason },
+    });
     revalidatePath("/admin/loyalty");
     return ok("Punti aggiornati.");
   });
@@ -527,7 +544,7 @@ export async function sendTestEmail(_prev: ActionState, fd: FormData): Promise<A
 // ── Settings (admin-only) ────────────────────────────────────────────────────
 export async function saveSetting(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireRole("admin");
+    const actor = await requireRole("admin");
     const d = parseForm(settingInput, fd);
     let value: unknown = d.value;
     // Text settings are stored verbatim; everything else round-trips through JSON
@@ -543,6 +560,14 @@ export async function saveSetting(_prev: ActionState, fd: FormData): Promise<Act
       .insert(settings)
       .values({ key: d.key, value })
       .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
+    await logAudit({
+      actor,
+      action: "setting.save",
+      entity: "setting",
+      entityId: d.key,
+      summary: `Impostazione ${d.key} = ${d.value}`,
+      meta: { key: d.key, value },
+    });
     revalidatePath("/admin/settings");
     return ok("Impostazione salvata.");
   });
