@@ -113,6 +113,13 @@
       "when": 1784671147064,
       "tag": "0015_brief_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1784671523582,
+      "tag": "0016_public_loki",
+      "breakpoints": true
     }
   ]
 }

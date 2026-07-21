@@ -38,6 +38,7 @@ import {
   shopInput,
   rewardInput,
   reservationStatusInput,
+  reservationDepositInput,
   redemptionStatusInput,
   pointsInput,
   settingInput,
@@ -129,6 +130,39 @@ export async function updateReservationStatus(_prev: ActionState, fd: FormData):
     }
     revalidatePath("/admin/reservations");
     return ok("Prenotazione aggiornata.");
+  });
+}
+
+/** Record a booking deposit (caparra): its amount and whether it's been received. */
+export async function setReservationDeposit(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const d = parseForm(reservationDepositInput, fd);
+
+    const [res] = await db.select().from(reservations).where(eq(reservations.id, d.id)).limit(1);
+    if (!res) throw new ActionError("Prenotazione non trovata");
+
+    await db
+      .update(reservations)
+      .set({
+        depositCents: d.depositEuros,
+        // Preserve an existing paid timestamp; set/clear based on the paid flag.
+        depositPaidAt: d.paid ? res.depositPaidAt ?? new Date() : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(reservations.id, d.id));
+
+    await logAudit({
+      actor,
+      action: "reservation.deposit",
+      entity: "reservation",
+      entityId: d.id,
+      summary: `Acconto ${(d.depositEuros / 100).toFixed(2)} € · ${d.paid ? "incassato" : "da incassare"} (${res.reference})`,
+      meta: { depositCents: d.depositEuros, paid: d.paid },
+    });
+
+    revalidatePath("/admin/reservations");
+    return ok("Acconto aggiornato.");
   });
 }
 

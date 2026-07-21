@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AdminHeader, Panel, StatusBadge, inputCls, labelCls, fmtDate, Pagination } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getReservationsPage, adminGetShops } from "@/lib/admin/queries";
-import { updateReservationStatus, promoteFromWaitlist } from "@/lib/admin/actions";
+import { updateReservationStatus, promoteFromWaitlist, setReservationDeposit } from "@/lib/admin/actions";
 import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -312,6 +312,32 @@ export default async function AdminReservations({ searchParams }: SP) {
                       className={inputCls}
                     />
                     <PendingButton tone="dark">Aggiorna</PendingButton>
+                  </ActionForm>
+
+                  <ActionForm action={setReservationDeposit} className="space-y-2 border-t border-brown-900/10 pt-2">
+                    <input type="hidden" name="id" value={r.id} />
+                    <label className={labelCls}>Acconto (caparra)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        name="depositEuros"
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        defaultValue={r.depositCents ? (r.depositCents / 100).toFixed(2) : ""}
+                        placeholder="€"
+                        className={`${inputCls} w-24`}
+                      />
+                      <label className="flex items-center gap-1.5 text-xs font-medium text-brown-900">
+                        <input type="checkbox" name="paid" defaultChecked={!!r.depositPaidAt} className="h-4 w-4 rounded accent-brown-950" />
+                        Incassato
+                      </label>
+                      <PendingButton tone="dark">Salva</PendingButton>
+                    </div>
+                    {r.depositCents > 0 && (
+                      <p className="text-xs text-brown-800/60">
+                        {r.depositPaidAt ? "✓ Acconto incassato" : "In attesa di incasso"}
+                      </p>
+                    )}
                   </ActionForm>
                 </div>
               </div>

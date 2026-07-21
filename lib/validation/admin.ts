@@ -170,6 +170,16 @@ export const manualOrderInput = z.object({
   markPaid: checkbox,
 });
 
+export const reservationDepositInput = z.object({
+  id: z.string().trim().min(1),
+  depositEuros: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (v && v !== "" ? Math.round(Number(v) * 100) : 0))
+    .refine((v) => Number.isFinite(v) && v >= 0, "Importo non valido"),
+  paid: checkbox,
+});
+
 export const stockAdjustInput = z.object({
   productId: z.string().trim().min(1),
   delta: z.coerce.number().int().refine((v) => v !== 0, "Inserisci una variazione diversa da zero"),

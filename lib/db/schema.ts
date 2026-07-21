@@ -302,6 +302,10 @@ export const reservations = sqliteTable(
     // When the "your porchetta is ready" pickup notice was sent (null = not sent);
     // makes that admin action idempotent.
     readyAt: integer("ready_at", { mode: "timestamp_ms" }),
+    // Optional deposit (caparra) to secure a booking. Amount in cents; paid stamp
+    // set when the shop records the deposit as received (cash / transfer / card).
+    depositCents: integer("deposit_cents").notNull().default(0),
+    depositPaidAt: integer("deposit_paid_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
