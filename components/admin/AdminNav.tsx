@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BarChart3,
   CalendarCheck,
   Croissant,
   Gift,
@@ -30,6 +31,7 @@ const items = [
   { href: "/admin/newsletter", label: "Newsletter", icon: Croissant },
   { href: "/admin/outbox", label: "Email", icon: Mail },
   // Admin-only.
+  { href: "/admin/analytics", label: "Statistiche", icon: BarChart3, adminOnly: true },
   { href: "/admin/users", label: "Utenti", icon: ShieldCheck, adminOnly: true },
   { href: "/admin/settings", label: "Impostazioni", icon: Settings, adminOnly: true },
 ];

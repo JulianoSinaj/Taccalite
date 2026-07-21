@@ -383,6 +383,18 @@ export const settings = sqliteTable("settings", {
   updatedAt: updatedAt(),
 });
 
+// ── Analytics (first-party, cookieless page views — no PII) ───────────────────
+export const pageViews = sqliteTable(
+  "page_views",
+  {
+    id: id(),
+    path: text("path").notNull(),
+    referrer: text("referrer"), // referrer host only (or null) — never a full URL with query
+    createdAt: createdAt(),
+  },
+  (t) => [index("page_views_created_idx").on(t.createdAt), index("page_views_path_idx").on(t.path)],
+);
+
 // ── Inferred row types (canonical runtime shapes) ────────────────────────────
 export type ShopRow = typeof shops.$inferSelect;
 export type ProductRow = typeof products.$inferSelect;

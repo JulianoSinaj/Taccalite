@@ -4,6 +4,7 @@ import IntroLoader from "@/components/IntroLoader";
 import SmoothScroll from "@/components/SmoothScroll";
 import PageTransition from "@/components/PageTransition";
 import CookieConsent from "@/components/CookieConsent";
+import Analytics from "@/components/Analytics";
 import { CartProvider } from "@/components/store/cart";
 import CartBar from "@/components/store/CartBar";
 
@@ -25,6 +26,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
       <Footer />
       <CookieConsent />
       <CartBar />
+      <Analytics />
     </CartProvider>
   );
 }
