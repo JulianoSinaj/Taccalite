@@ -1,17 +1,32 @@
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, inputCls, labelCls, fmtDate, Pagination } from "@/components/admin/ui";
+import {
+  AdminHeader,
+  Panel,
+  StatusBadge,
+  inputCls,
+  labelCls,
+  fmtDate,
+  Pagination,
+  reservationTypeLabel,
+} from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
+import { ReservationForm } from "@/components/admin/ReservationForm";
 import { getReservationsPage, adminGetShops } from "@/lib/admin/queries";
-import { updateReservationStatus, promoteFromWaitlist, setReservationDeposit } from "@/lib/admin/actions";
+import { reservationFilters, filterQuery } from "@/lib/admin/filters";
+import { BulkBar, BulkCheckbox } from "@/components/admin/BulkBar";
+import {
+  updateReservationStatus,
+  promoteFromWaitlist,
+  setReservationDeposit,
+  bulkUpdateReservationStatus,
+} from "@/lib/admin/reservation-actions";
 import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
-const TYPE_LABEL: Record<string, string> = {
-  table: "Tavolo",
-  porchetta: "Porchetta",
-  order: "Ordine",
-};
+/** Ties the row checkboxes to the bulk bar's form (see BulkBar). */
+const BULK_FORM = "bulk-reservations";
+
 const FILTERS = ["all", "pending", "confirmed", "completed", "cancelled"];
 const TYPE_FILTERS: { value: string; label: string }[] = [
   { value: "all", label: "Tutti" },
@@ -33,26 +48,12 @@ type SP = {
 };
 
 export default async function AdminReservations({ searchParams }: SP) {
-  const {
-    stato = "all",
-    negozio = "all",
-    tipo = "all",
-    q = "",
-    da = "",
-    a = "",
-    page: pageStr,
-  } = await searchParams;
-  const page = Number(pageStr) || 1;
+  const sp = await searchParams;
+  const { stato = "all", negozio = "all", tipo = "all", q = "", da = "", a = "" } = sp;
+  const page = Number(sp.page) || 1;
+  const filters = reservationFilters(sp);
   const [{ rows, total, pageCount }, shops, admin] = await Promise.all([
-    getReservationsPage({
-      status: stato,
-      shopSlug: negozio,
-      type: tipo,
-      q: q || undefined,
-      from: da || undefined,
-      to: a || undefined,
-      page,
-    }),
+    getReservationsPage({ ...filters, page }),
     adminGetShops(),
     isAdmin(),
   ]);
@@ -74,7 +75,13 @@ export default async function AdminReservations({ searchParams }: SP) {
         title="Prenotazioni"
         subtitle={`${total} richieste`}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/admin/reservations/new"
+              className="rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-gold-dark"
+            >
+              + Nuova prenotazione
+            </Link>
             <Link
               href="/admin/reservations/calendar"
               className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
@@ -88,9 +95,8 @@ export default async function AdminReservations({ searchParams }: SP) {
               Agenda / prep
             </Link>
             {admin ? (
-              // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
-              <a
-                href="/api/admin/export/reservations"
+                <a
+                href={`/api/admin/export/reservations${filterQuery(filters)}`}
                 download
                 className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
               >
@@ -201,15 +207,30 @@ export default async function AdminReservations({ searchParams }: SP) {
           <p className="text-brown-800/70">Nessuna prenotazione in questa vista.</p>
         </Panel>
       ) : (
+        <>
+        <BulkBar
+          formId={BULK_FORM}
+          action={bulkUpdateReservationStatus}
+          label="prenotazioni"
+          options={[
+            { value: "confirmed", label: "Conferma" },
+            { value: "completed", label: "Segna completate" },
+            { value: "cancelled", label: "Annulla" },
+            { value: "pending", label: "Rimetti in attesa" },
+          ]}
+          confirm={(n) => `Applicare l'azione a ${n} prenotazioni? I clienti con email riceveranno l'avviso.`}
+        />
         <div className="space-y-4">
           {rows.map((r) => (
             <Panel key={r.id}>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex gap-3">
+                <BulkCheckbox formId={BULK_FORM} id={r.id} label={`Seleziona prenotazione ${r.reference}`} />
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="font-mono text-xs font-bold text-brown-800/60">{r.reference}</span>
                     <span className="rounded-full bg-gold/15 px-2.5 py-1 text-[10px] font-bold tracking-widest text-gold-deep uppercase">
-                      {TYPE_LABEL[r.type] ?? r.type}
+                      {reservationTypeLabel(r.type)}
                     </span>
                     <StatusBadge status={r.status} />
                     {r.waitlisted && (
@@ -267,6 +288,7 @@ export default async function AdminReservations({ searchParams }: SP) {
                       {r.notes}
                     </p>
                   )}
+                </div>
                 </div>
 
                 <div className="w-full shrink-0 space-y-2 lg:w-64">
@@ -341,9 +363,21 @@ export default async function AdminReservations({ searchParams }: SP) {
                   </ActionForm>
                 </div>
               </div>
+
+              {/* Reschedule / correct the booking itself. Collapsed so the row
+                  stays scannable — status and deposit stay one click away above. */}
+              <details className="mt-4 border-t border-brown-900/10 pt-3">
+                <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                  Modifica / sposta prenotazione
+                </summary>
+                <div className="mt-4">
+                  <ReservationForm shops={shops} reservation={r} />
+                </div>
+              </details>
             </Panel>
           ))}
         </div>
+        </>
       )}
 
       <Pagination

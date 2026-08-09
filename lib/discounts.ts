@@ -74,3 +74,33 @@ export async function recordDiscountUse(id: string): Promise<void> {
     /* usage bookkeeping is non-fatal */
   }
 }
+
+/**
+ * Record a redemption by code (used when an order is *paid*, since the order
+ * stores the code text, not the id). Best-effort, atomic increment.
+ */
+export async function recordDiscountUseByCode(code: string): Promise<void> {
+  try {
+    await db
+      .update(discountCodes)
+      .set({ timesUsed: sql`${discountCodes.timesUsed} + 1` })
+      .where(eq(discountCodes.code, normalizeCode(code)));
+  } catch {
+    /* usage bookkeeping is non-fatal */
+  }
+}
+
+/**
+ * Release a redemption by code (used when a paid order is refunded/cancelled so a
+ * capped code isn't permanently burned). Floored at 0. Best-effort.
+ */
+export async function releaseDiscountUseByCode(code: string): Promise<void> {
+  try {
+    await db
+      .update(discountCodes)
+      .set({ timesUsed: sql`max(0, ${discountCodes.timesUsed} - 1)` })
+      .where(eq(discountCodes.code, normalizeCode(code)));
+  } catch {
+    /* usage bookkeeping is non-fatal */
+  }
+}

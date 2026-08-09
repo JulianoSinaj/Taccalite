@@ -87,6 +87,14 @@ export const products = sqliteTable(
     ingredients: text("ingredients"),
     purchasable: integer("purchasable", { mode: "boolean" }).notNull().default(false),
     stock: integer("stock"), // null = unlimited / made-to-order
+    // Per-product low-stock threshold; null falls back to store.lowStockThreshold.
+    // A slow-moving cured product and a daily fresh one need different points.
+    reorderPoint: integer("reorder_point"),
+    // Purchase cost (integer cents, VAT-excluded) for margin reporting, plus the
+    // purchasing metadata that makes a restock actionable. All optional.
+    costCents: integer("cost_cents"),
+    sku: text("sku"),
+    supplier: text("supplier"),
     // When a low-stock alert was last emailed to the owner; cleared when restocked
     // above the threshold, so a single dip doesn't spam repeat alerts.
     lowStockNotifiedAt: integer("low_stock_notified_at", { mode: "timestamp_ms" }),
@@ -170,9 +178,21 @@ export const users = sqliteTable(
     // Optional TOTP two-factor auth (base32 secret; only enforced once enabled).
     totpSecret: text("totp_secret"),
     totpEnabled: integer("totp_enabled", { mode: "boolean" }).notNull().default(false),
+    // Single-use 2FA recovery codes, stored as SHA-256 hashes (they are
+    // high-entropy random strings, so a fast hash is appropriate — a slow KDF
+    // here would mean hashing every code on every login attempt). `usedAt`
+    // marks a spent code instead of dropping it, so the UI can say how many
+    // remain of how many were issued.
+    totpRecoveryCodes: text("totp_recovery_codes", { mode: "json" })
+      .$type<{ hash: string; usedAt: number | null }[]>(),
     createdAt: createdAt(),
   },
-  (t) => [check("users_role_ck", sql`${t.role} in ('customer', 'staff', 'admin')`)],
+  (t) => [
+    // Dashboard counts customers by role + createdAt; the users list sorts by createdAt.
+    index("users_created_idx").on(t.createdAt),
+    index("users_role_idx").on(t.role),
+    check("users_role_ck", sql`${t.role} in ('customer', 'staff', 'admin')`),
+  ],
 );
 
 // ── Sessions (cookie-based) ──────────────────────────────────────────────────
@@ -265,6 +285,7 @@ export const redemptions = sqliteTable(
   (t) => [
     index("redemptions_user_idx").on(t.userId),
     index("redemptions_status_idx").on(t.status),
+    index("redemptions_created_idx").on(t.createdAt),
     check("redemptions_status_ck", sql`${t.status} in ('pending', 'fulfilled', 'cancelled')`),
     check("redemptions_points_ck", sql`${t.pointsSpent} >= 0`),
   ],
@@ -315,6 +336,7 @@ export const reservations = sqliteTable(
     index("reservations_user_idx").on(t.userId),
     index("reservations_shop_idx").on(t.shopSlug),
     index("reservations_cron_idx").on(t.type, t.status, t.date),
+    index("reservations_created_idx").on(t.createdAt),
     check("reservations_type_ck", sql`${t.type} in ('table', 'porchetta', 'order')`),
     check(
       "reservations_status_ck",
@@ -340,10 +362,51 @@ export const newsletterSubscribers = sqliteTable(
   (t) => [
     index("newsletter_token_idx").on(t.token),
     index("newsletter_status_idx").on(t.status),
+    // The admin list filters by source and enumerates the distinct values.
+    index("newsletter_source_idx").on(t.source),
     check(
       "newsletter_status_ck",
       sql`${t.status} in ('pending', 'confirmed', 'unsubscribed')`,
     ),
+  ],
+);
+
+/**
+ * Newsletter campaigns: a broadcast that survives being sent.
+ *
+ * Before this, `sendBroadcast` was fire-and-forget — the composed message left
+ * no record beyond the resulting outbox rows, so it could not be drafted,
+ * scheduled, reviewed or resent. A campaign holds the composed text plus its
+ * audience and outcome.
+ */
+export const newsletterCampaigns = sqliteTable(
+  "newsletter_campaigns",
+  {
+    id: id(),
+    subject: text("subject").notNull(),
+    // Plain text as the operator typed it; the HTML body is rendered at send
+    // time, so a template change applies to anything not yet sent.
+    body: text("body").notNull(),
+    // Subscriber `source` to target, or null for every confirmed subscriber.
+    segment: text("segment"),
+    status: text("status", { enum: ["draft", "scheduled", "sent", "failed"] })
+      .notNull()
+      .default("draft"),
+    // When a scheduled campaign is due (null for drafts and immediate sends).
+    scheduledFor: integer("scheduled_for", { mode: "timestamp_ms" }),
+    sentAt: integer("sent_at", { mode: "timestamp_ms" }),
+    // How many subscribers it was queued to, recorded at send time.
+    recipientCount: integer("recipient_count").notNull().default(0),
+    error: text("error"),
+    createdByUserId: text("created_by_user_id"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("campaigns_status_idx").on(t.status),
+    // The scheduler sweeps for due campaigns by (status, scheduledFor).
+    index("campaigns_due_idx").on(t.status, t.scheduledFor),
+    index("campaigns_created_idx").on(t.createdAt),
   ],
 );
 
@@ -379,11 +442,27 @@ export const orders = sqliteTable(
     paymentStatus: text("payment_status", { enum: ["unpaid", "paid", "refunded"] })
       .notNull()
       .default("unpaid"),
+    // When the money actually settled. Fiscal periods are defined by the payment
+    // date, not the date the order was placed — an order taken on the 31st and
+    // paid on the 1st belongs to the following month's VAT return.
+    paidAt: integer("paid_at", { mode: "timestamp_ms" }),
+    // Buyer's fiscal identity, needed for a valid electronic invoice. All
+    // optional: a private customer supplies only a codice fiscale (often not even
+    // that), a business supplies P.IVA plus an SDI destination code or PEC.
+    customerTaxCode: text("customer_tax_code"),
+    customerVatNumber: text("customer_vat_number"),
+    // 7-char SdI recipient code; "0000000" means "delivered via PEC or the
+    // recipient's own portal".
+    customerSdiCode: text("customer_sdi_code"),
+    customerPec: text("customer_pec"),
     stripeSessionId: text("stripe_session_id"),
     // Shipping fulfilment tracking, set by the owner when an order ships.
     carrier: text("carrier"),
     trackingNumber: text("tracking_number"),
+    // Notes the customer left at checkout.
     notes: text("notes"),
+    // Staff-only annotations (never shown to the customer, never emailed).
+    internalNotes: text("internal_notes"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -391,6 +470,14 @@ export const orders = sqliteTable(
     index("orders_status_idx").on(t.status),
     index("orders_user_idx").on(t.userId),
     index("orders_shop_idx").on(t.shopSlug),
+    // Hot paths: dashboard revenue windows, KPI insights, the IVA report, recent
+    // orders and the paginated list all filter/sort by createdAt (+ paymentStatus).
+    index("orders_created_idx").on(t.createdAt),
+    index("orders_paid_created_idx").on(t.paymentStatus, t.createdAt),
+    // The IVA report and fiscal exports select paid orders by settlement date.
+    index("orders_paid_at_idx").on(t.paymentStatus, t.paidAt),
+    // Webhook + refund resolve the order by its Stripe session id.
+    index("orders_stripe_session_idx").on(t.stripeSessionId),
     check(
       "orders_status_ck",
       sql`${t.status} in ('pending', 'paid', 'fulfilled', 'cancelled', 'refunded')`,
@@ -423,6 +510,8 @@ export const orderItems = sqliteTable(
   },
   (t) => [
     index("order_items_order_idx").on(t.orderId),
+    // Sales-by-product reporting keys off the stable product id, not the name.
+    index("order_items_product_idx").on(t.productId),
     check(
       "order_items_amounts_ck",
       sql`${t.unitPriceCents} >= 0 and ${t.lineTotalCents} >= 0 and ${t.quantity} > 0`,
@@ -477,6 +566,7 @@ export const emailOutbox = sqliteTable(
   },
   (t) => [
     index("email_outbox_status_idx").on(t.status),
+    index("email_outbox_created_idx").on(t.createdAt),
     check("email_outbox_status_ck", sql`${t.status} in ('queued', 'sent', 'failed')`),
   ],
 );
@@ -533,3 +623,4 @@ export type OrderItemRow = typeof orderItems.$inferSelect;
 export type AuditLogRow = typeof auditLog.$inferSelect;
 export type DiscountCodeRow = typeof discountCodes.$inferSelect;
 export type StockMovementRow = typeof stockMovements.$inferSelect;
+export type NewsletterCampaignRow = typeof newsletterCampaigns.$inferSelect;

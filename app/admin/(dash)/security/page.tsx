@@ -1,12 +1,19 @@
 import QRCode from "qrcode";
 import { eq } from "drizzle-orm";
-import { AdminHeader, Panel, inputCls, labelCls } from "@/components/admin/ui";
+import { AdminHeader, Panel, inputCls, labelCls, fmtDateTime } from "@/components/admin/ui";
 import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
+import { CodeRevealForm } from "@/components/admin/RecoveryCodes";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
-import { requireAdmin } from "@/lib/auth/session";
+import { requireAdmin, listUserSessions } from "@/lib/auth/session";
 import { generateTotpSecret, otpauthUri } from "@/lib/auth/totp";
-import { confirmTotp, disableTotp } from "@/lib/admin/security-actions";
+import { remainingRecoveryCodes } from "@/lib/auth/recovery-codes";
+import {
+  confirmTotp,
+  disableTotp,
+  regenerateRecoveryCodes,
+  signOutOtherSessions,
+} from "@/lib/admin/security-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,17 +33,47 @@ export default async function SecurityPage() {
   const uri = user?.totpSecret ? otpauthUri(user.totpSecret, user.username) : "";
   const qrDataUrl = uri ? await QRCode.toDataURL(uri, { margin: 1, width: 220 }) : "";
 
+  const storedCodes = user?.totpRecoveryCodes ?? [];
+  const remaining = remainingRecoveryCodes(storedCodes);
+  const sessions = await listUserSessions(actor.id);
+
   return (
     <div>
-      <AdminHeader title="Sicurezza" subtitle="Verifica in due passaggi (2FA) per il tuo account" />
+      <AdminHeader title="Sicurezza" subtitle="Verifica in due passaggi e sessioni attive" />
 
       {enabled ? (
-        <Panel className="max-w-xl">
+        <Panel className="max-w-2xl">
           <p className="text-sm font-semibold text-emerald-700">✓ La verifica in due passaggi è attiva.</p>
           <p className="mt-2 text-sm text-brown-800/70">
             Al prossimo accesso ti verrà chiesto il codice a 6 cifre dalla tua app di autenticazione.
           </p>
-          <div className="mt-4">
+
+          <div className="mt-6 border-t border-brown-900/10 pt-5">
+            <h3 className="font-display text-lg text-brown-950">Codici di recupero</h3>
+            <p className="mt-1 mb-3 text-sm text-brown-800/70">
+              Servono per entrare se perdi il telefono. Ogni codice vale un solo accesso.
+            </p>
+            {remaining === 0 && (
+              <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Non hai codici di recupero validi: senza l&apos;app di autenticazione non potresti
+                più accedere. Generane subito.
+              </p>
+            )}
+            <CodeRevealForm
+              action={regenerateRecoveryCodes}
+              buttonLabel={storedCodes.length > 0 ? "Rigenera codici" : "Genera codici"}
+              confirm={
+                storedCodes.length > 0
+                  ? "Generare nuovi codici? Quelli attuali smetteranno di funzionare."
+                  : undefined
+              }
+              meta={
+                storedCodes.length > 0 ? `${remaining} di ${storedCodes.length} ancora validi` : undefined
+              }
+            />
+          </div>
+
+          <div className="mt-6 border-t border-brown-900/10 pt-5">
             <DeleteForm
               action={disableTotp}
               id={actor.id}
@@ -53,6 +90,7 @@ export default async function SecurityPage() {
             <li>Apri un&apos;app di autenticazione (Google Authenticator, Authy, 1Password…).</li>
             <li>Scansiona il QR qui sotto (oppure inserisci il codice manuale).</li>
             <li>Inserisci il codice a 6 cifre generato per confermare.</li>
+            <li>Salva i codici di recupero che ti verranno mostrati.</li>
           </ol>
 
           {qrDataUrl && (
@@ -66,15 +104,65 @@ export default async function SecurityPage() {
             </div>
           )}
 
-          <ActionForm action={confirmTotp} className="mt-6 flex flex-wrap items-end gap-3">
-            <div>
-              <label className={labelCls} htmlFor="code">Codice di verifica</label>
-              <input id="code" name="code" inputMode="numeric" placeholder="123456" required className={`${inputCls} w-40`} />
-            </div>
-            <PendingButton>Attiva 2FA</PendingButton>
-          </ActionForm>
+          <div className="mt-6">
+            <CodeRevealForm action={confirmTotp} buttonLabel="Attiva 2FA" tone="gold">
+              <div>
+                <label className={labelCls} htmlFor="code">
+                  Codice di verifica
+                </label>
+                <input
+                  id="code"
+                  name="code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  required
+                  className={`${inputCls} w-40`}
+                />
+              </div>
+            </CodeRevealForm>
+          </div>
         </Panel>
       )}
+
+      <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Sessioni attive</h2>
+      <Panel className="max-w-2xl">
+        <ul className="divide-y divide-brown-900/10">
+          {sessions.map((s, i) => (
+            <li key={i} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0">
+              <div>
+                <p className="text-sm font-semibold text-brown-950">
+                  {s.isCurrent ? "Questo dispositivo" : "Altra sessione"}
+                </p>
+                <p className="text-xs text-brown-800/60">
+                  Ultimo accesso {fmtDateTime(s.lastSeenAt)} · scade il {fmtDateTime(s.expiresAt)}
+                </p>
+              </div>
+              {s.isCurrent && (
+                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold tracking-widest text-emerald-800 uppercase">
+                  Attuale
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        {sessions.length > 1 && (
+          <div className="mt-4 border-t border-brown-900/10 pt-4">
+            <ActionForm action={signOutOtherSessions}>
+              <PendingButton
+                tone="danger"
+                confirm="Chiudere tutte le altre sessioni? Gli altri dispositivi dovranno accedere di nuovo."
+              >
+                Chiudi le altre sessioni
+              </PendingButton>
+            </ActionForm>
+          </div>
+        )}
+        <p className="mt-3 text-xs text-brown-800/60">
+          Le sessioni scadono da sole dopo 30 giorni, o dopo 7 giorni di inattività.
+        </p>
+      </Panel>
     </div>
   );
 }

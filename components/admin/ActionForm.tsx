@@ -58,14 +58,18 @@ export function ActionForm({
   action,
   children,
   className = "",
+  id,
 }: {
   action: Action;
   children: ReactNode;
   className?: string;
+  /** Lets inputs elsewhere on the page join this form via `form="<id>"` —
+   *  used by the bulk bars, whose checkboxes live inside the rows. */
+  id?: string;
 }) {
   const [state, formAction] = useActionState(action, idleState);
   return (
-    <form action={formAction} className={className}>
+    <form id={id} action={formAction} className={className}>
       {children}
       <Feedback state={state} />
     </form>

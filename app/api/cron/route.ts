@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
-import {
-  runPorchettaReminders,
-  runMaintenance,
-  runPointsExpiry,
-  runOwnerDigest,
-} from "@/lib/automation";
+import { CRON_JOBS, runCronJob } from "@/lib/automation";
 import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -24,6 +19,11 @@ function secretMatches(provided: string | null | undefined): boolean {
  * `Authorization: Bearer <secret>` header (never the query string, which leaks
  * into proxy/access logs). Point a system cron / scheduler at:
  *   curl -s -H "Authorization: Bearer <CRON_SECRET>" "https://<host>/api/cron?job=all"
+ *
+ * The job list lives in `lib/automation`. Every run stamps its outcome into
+ * settings, so Impostazioni can show whether the scheduler is actually firing.
+ * Jobs that must not repeat within a period (the owner digest) self-limit, so
+ * the frequent `job=all` sweep stays safe.
  */
 async function handle(request: Request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -31,22 +31,15 @@ async function handle(request: Request) {
     return NextResponse.json({ ok: false, error: "Non autorizzato" }, { status: 401 });
   }
 
-  const url = new URL(request.url);
-  const job = url.searchParams.get("job") ?? "all";
-  const results: Record<string, unknown> = {};
+  const job = new URL(request.url).searchParams.get("job") ?? "all";
+  const selected = job === "all" ? CRON_JOBS : CRON_JOBS.filter((j) => j.key === job);
+  if (selected.length === 0) {
+    return NextResponse.json({ ok: false, error: `Job sconosciuto: ${job}` }, { status: 400 });
+  }
 
-  if (job === "porchetta-reminders" || job === "all") {
-    results.porchettaReminders = await runPorchettaReminders();
-  }
-  if (job === "maintenance" || job === "all") {
-    results.maintenance = await runMaintenance();
-  }
-  if (job === "points-expiry" || job === "all") {
-    results.pointsExpiry = await runPointsExpiry();
-  }
-  // Self-limits to one send per day, so it's safe inside the frequent `all` sweep.
-  if (job === "owner-digest" || job === "all") {
-    results.ownerDigest = await runOwnerDigest();
+  const results: Record<string, unknown> = {};
+  for (const j of selected) {
+    results[j.key] = await runCronJob(j);
   }
 
   return NextResponse.json({ ok: true, job, results });

@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
-import { nanoid } from "nanoid";
 import { db } from "@/lib/db/client";
+import { resolveSlug } from "@/lib/slug";
+import { isLowStock } from "@/lib/inventory";
 import {
-  reservations,
   products,
   blogPosts,
   shops,
@@ -16,17 +16,9 @@ import {
   stockMovements,
 } from "@/lib/db/schema";
 import { requireAdmin, requireRole } from "@/lib/auth/session";
-import { getShopBySlug, getSetting } from "@/lib/db/queries";
+import { getSetting } from "@/lib/db/queries";
 import { addPoints } from "@/lib/loyalty";
 import { sendMail } from "@/lib/mail/mailer";
-import { broadcastToSubscribers } from "@/lib/automation";
-import { env } from "@/lib/env";
-import {
-  reservationStatusEmail,
-  porchettaReadyEmail,
-  newsletterBroadcast,
-  type ReservationEmailData,
-} from "@/lib/mail/templates";
 import { saveUploadedImage } from "@/lib/media";
 import { logAudit } from "@/lib/audit";
 import { notifyBackInStock } from "@/lib/stock-notify";
@@ -37,8 +29,6 @@ import {
   blogInput,
   shopInput,
   rewardInput,
-  reservationStatusInput,
-  reservationDepositInput,
   redemptionStatusInput,
   pointsInput,
   settingInput,
@@ -63,24 +53,6 @@ function parseLines(raw?: string) {
     .filter(Boolean);
 }
 
-/** Build a URL slug from free text: lowercase, accents stripped, spaces/other
- *  characters → hyphens, repeats collapsed, edges trimmed. May return "". */
-function slugify(input: string): string {
-  return input
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "") // drop combining accent marks
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-") // spaces & non [a-z0-9] → hyphen
-    .replace(/-+/g, "-") // collapse repeats
-    .replace(/^-|-$/g, ""); // trim leading/trailing hyphens
-}
-
-/** True if another blog post already uses this slug (ignoring the row `excludeId`). */
-async function blogSlugTaken(slug: string, excludeId?: string): Promise<boolean> {
-  const rows = await db.select({ id: blogPosts.id }).from(blogPosts).where(eq(blogPosts.slug, slug));
-  return rows.some((r) => r.id !== excludeId);
-}
-
 /**
  * If the form carried an uploaded image file (`imageFile`), store it on the
  * persisted volume and overwrite the `image` field with its served path. Call
@@ -97,124 +69,7 @@ async function applyImageUpload(fd: FormData): Promise<void> {
   }
 }
 
-// ── Reservations ─────────────────────────────────────────────────────────────
-export async function updateReservationStatus(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  return runAction(async () => {
-    await requireAdmin();
-    const data = parseForm(reservationStatusInput, fd);
-
-    const [res] = await db.select().from(reservations).where(eq(reservations.id, data.id)).limit(1);
-    if (!res) throw new ActionError("Prenotazione non trovata");
-
-    await db
-      .update(reservations)
-      .set({ status: data.status, adminNotes: data.adminNotes ?? res.adminNotes, updatedAt: new Date() })
-      .where(eq(reservations.id, data.id));
-
-    if ((data.status === "confirmed" || data.status === "cancelled") && res.email) {
-      const shop = await getShopBySlug(res.shopSlug);
-      const emailData: ReservationEmailData = {
-        reference: res.reference,
-        type: res.type,
-        name: res.name,
-        phone: res.phone,
-        email: res.email,
-        date: res.date,
-        time: res.time,
-        guests: res.guests,
-        quantityKg: res.quantityKg,
-        shopName: shop?.name ?? res.shopSlug,
-        notes: res.notes,
-      };
-      await sendMail({ to: res.email, ...reservationStatusEmail(emailData, data.status) }).catch(() => {});
-    }
-    revalidatePath("/admin/reservations");
-    return ok("Prenotazione aggiornata.");
-  });
-}
-
-/** Record a booking deposit (caparra): its amount and whether it's been received. */
-export async function setReservationDeposit(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  return runAction(async () => {
-    const actor = await requireAdmin();
-    const d = parseForm(reservationDepositInput, fd);
-
-    const [res] = await db.select().from(reservations).where(eq(reservations.id, d.id)).limit(1);
-    if (!res) throw new ActionError("Prenotazione non trovata");
-
-    await db
-      .update(reservations)
-      .set({
-        depositCents: d.depositEuros,
-        // Preserve an existing paid timestamp; set/clear based on the paid flag.
-        depositPaidAt: d.paid ? res.depositPaidAt ?? new Date() : null,
-        updatedAt: new Date(),
-      })
-      .where(eq(reservations.id, d.id));
-
-    await logAudit({
-      actor,
-      action: "reservation.deposit",
-      entity: "reservation",
-      entityId: d.id,
-      summary: `Acconto ${(d.depositEuros / 100).toFixed(2)} € · ${d.paid ? "incassato" : "da incassare"} (${res.reference})`,
-      meta: { depositCents: d.depositEuros, paid: d.paid },
-    });
-
-    revalidatePath("/admin/reservations");
-    return ok("Acconto aggiornato.");
-  });
-}
-
-/** Owner marks a porchetta pre-order ready and emails the customer. Idempotent. */
-export async function markPorchettaReady(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  return runAction(async () => {
-    await requireAdmin();
-    const id = (fd.get("id") ?? "").toString();
-
-    const [res] = await db.select().from(reservations).where(eq(reservations.id, id)).limit(1);
-    if (!res) throw new ActionError("Prenotazione non trovata");
-    if (res.type !== "porchetta") throw new ActionError("Disponibile solo per la porchetta.");
-    if (res.readyAt) return ok("Avviso di ritiro già inviato.");
-    if (!res.email) throw new ActionError("Nessuna email per questa prenotazione.");
-
-    const shop = await getShopBySlug(res.shopSlug);
-    const pickup = shop ? { name: shop.name, address: shop.address } : null;
-    await sendMail({
-      to: res.email,
-      ...porchettaReadyEmail(res.name, res.date, res.quantityKg, pickup),
-    }).catch(() => {});
-
-    await db
-      .update(reservations)
-      .set({ readyAt: new Date(), updatedAt: new Date() })
-      .where(eq(reservations.id, id));
-
-    revalidatePath("/admin/reservations/agenda");
-    revalidatePath("/admin/reservations");
-    return ok("Avviso di ritiro inviato.");
-  });
-}
-
-/** Owner confirms a waitlisted porchetta order (removes it from the waitlist). */
-export async function promoteFromWaitlist(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  return runAction(async () => {
-    await requireAdmin();
-    const id = (fd.get("id") ?? "").toString();
-
-    const [res] = await db.select().from(reservations).where(eq(reservations.id, id)).limit(1);
-    if (!res) throw new ActionError("Prenotazione non trovata");
-
-    await db
-      .update(reservations)
-      .set({ waitlisted: false, updatedAt: new Date() })
-      .where(eq(reservations.id, id));
-
-    revalidatePath("/admin/reservations");
-    revalidatePath("/admin/reservations/agenda");
-    return ok("Prenotazione confermata dalla lista d'attesa.");
-  });
-}
+// NB: reservation actions live in `lib/admin/reservation-actions.ts`.
 
 // ── Products ─────────────────────────────────────────────────────────────────
 export async function saveProduct(_prev: ActionState, fd: FormData): Promise<ActionState> {
@@ -225,9 +80,21 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
     // Restocking above the low-stock threshold via the editor clears the alert
     // stamp so a future dip can alert again.
     const threshold = await getSetting<number>("store.lowStockThreshold", 5);
-    const clearLowStock = d.stock != null && d.stock > threshold;
+    // Restocking above the product's own reorder point (or the shop default)
+    // clears the alert stamp so a future dip can alert again.
+    const clearLowStock =
+      d.stock != null && !isLowStock({ stock: d.stock, reorderPoint: d.reorderPoint }, threshold);
     const values = {
-      slug: d.slug || nanoid(8),
+      // A readable slug from the product name, so catalogue URLs are
+      // /negozio/salame-di-cinta rather than a random id.
+      slug: await resolveSlug({
+        table: products,
+        slugColumn: products.slug,
+        idColumn: products.id,
+        explicit: d.slug,
+        fallbackText: d.name,
+        excludeId: d.id,
+      }),
       name: d.name,
       shopSlug: d.shopSlug,
       category: d.category ?? "",
@@ -235,7 +102,8 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
       imageLabel: d.imageLabel ?? "",
       image: d.image ?? "",
       priceCents: d.priceEuros,
-      unit: d.unit ?? null,
+      // Something sold by weight is priced per kg unless told otherwise.
+      unit: d.unit ?? (d.soldByWeight ? "kg" : null),
       vatRateBps: d.vatRate,
       soldByWeight: d.soldByWeight,
       // Allergens accepted as a comma/newline separated list, stored as an array.
@@ -247,6 +115,10 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
       ingredients: d.ingredients ?? null,
       purchasable: d.purchasable,
       stock: d.stock,
+      reorderPoint: d.reorderPoint,
+      costCents: d.costEuros,
+      sku: d.sku ?? null,
+      supplier: d.supplier ?? null,
       ...(clearLowStock ? { lowStockNotifiedAt: null } : {}),
       featured: d.featured,
       active: d.active,
@@ -328,13 +200,14 @@ export async function adjustStock(_prev: ActionState, fd: FormData): Promise<Act
 
     const newStock = Math.max(0, product.stock + d.delta);
     const threshold = await getSetting<number>("store.lowStockThreshold", 5);
+    const stillLow = isLowStock({ stock: newStock, reorderPoint: product.reorderPoint }, threshold);
 
     await db
       .update(products)
       .set({
         stock: newStock,
-        // Clear the low-stock alert stamp when back above the threshold.
-        ...(newStock > threshold ? { lowStockNotifiedAt: null } : {}),
+        // Clear the low-stock alert stamp when back above the reorder point.
+        ...(stillLow ? {} : { lowStockNotifiedAt: null }),
       })
       .where(eq(products.id, d.productId));
 
@@ -367,6 +240,16 @@ export async function adjustStock(_prev: ActionState, fd: FormData): Promise<Act
   });
 }
 
+/** First paragraph of a post, trimmed to a listing-friendly length. */
+function excerptFrom(paragraphs: string[], max = 200): string {
+  const first = paragraphs[0] ?? "";
+  if (first.length <= max) return first;
+  // Cut at the last word boundary before the limit so we don't split a word.
+  const cut = first.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 40 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
+
 // ── Blog ─────────────────────────────────────────────────────────────────────
 export async function saveBlogPost(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
@@ -377,19 +260,21 @@ export async function saveBlogPost(_prev: ActionState, fd: FormData): Promise<Ac
       .split(/\n{2,}/)
       .map((p) => p.trim())
       .filter(Boolean);
-    // Prefer a readable slug derived from the title; fall back to a short random
-    // suffix only when the title yields nothing usable or the slug is taken.
-    let slug = d.slug;
-    if (!slug) {
-      const base = slugify(d.title);
-      slug = base && !(await blogSlugTaken(base, d.id)) ? base : `${base ? `${base}-` : ""}${nanoid(6)}`;
-    }
     const values = {
-      slug,
+      slug: await resolveSlug({
+        table: blogPosts,
+        slugColumn: blogPosts.slug,
+        idColumn: blogPosts.id,
+        explicit: d.slug,
+        fallbackText: d.title,
+        excludeId: d.id,
+      }),
       title: d.title,
       date: d.date || new Date().toISOString().slice(0, 10),
       category: d.category ?? "",
-      excerpt: d.excerpt ?? "",
+      // A blank excerpt is derived from the opening paragraph, so a post always
+      // has something to show in listings and link previews.
+      excerpt: d.excerpt ?? excerptFrom(content),
       content,
       imageLabel: d.imageLabel ?? "",
       image: d.image ?? null,
@@ -494,7 +379,14 @@ export async function saveReward(_prev: ActionState, fd: FormData): Promise<Acti
     await applyImageUpload(fd);
     const d = parseForm(rewardInput, fd);
     const values = {
-      slug: d.slug || nanoid(8),
+      slug: await resolveSlug({
+        table: rewards,
+        slugColumn: rewards.slug,
+        idColumn: rewards.id,
+        explicit: d.slug,
+        fallbackText: d.name,
+        excludeId: d.id,
+      }),
       name: d.name,
       description: d.description ?? "",
       points: d.points,
@@ -541,28 +433,61 @@ export async function adjustPoints(_prev: ActionState, fd: FormData): Promise<Ac
     // Points are money-equivalent — restrict manual adjustment to full admins.
     const admin = await requireRole("admin");
     const d = parseForm(pointsInput, fd);
-    await addPoints(d.userId, d.delta, d.reason || "Rettifica manuale", admin.id);
+    // `applied` differs from the requested delta only when a debit was clamped at
+    // zero — log what actually happened so the audit matches the ledger + balance.
+    const { applied } = await addPoints(d.userId, d.delta, d.reason || "Rettifica manuale", admin.id);
     await logAudit({
       actor: admin,
       action: "loyalty.adjust",
       entity: "user",
       entityId: d.userId,
-      summary: `Rettifica punti ${d.delta > 0 ? "+" : ""}${d.delta}${d.reason ? ` — ${d.reason}` : ""}`,
-      meta: { delta: d.delta, reason: d.reason },
+      summary: `Rettifica punti ${applied > 0 ? "+" : ""}${applied}${applied !== d.delta ? ` (richiesti ${d.delta})` : ""}${d.reason ? ` — ${d.reason}` : ""}`,
+      meta: { delta: d.delta, applied, reason: d.reason },
     });
     revalidatePath("/admin/loyalty");
-    return ok("Punti aggiornati.");
+    return ok(
+      applied === d.delta
+        ? "Punti aggiornati."
+        : `Punti aggiornati (applicati ${applied} — saldo non può scendere sotto zero).`,
+    );
   });
 }
 
 export async function updateRedemptionStatus(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireAdmin();
+    const actor = await requireAdmin();
     const d = parseForm(redemptionStatusInput, fd);
+    const [redemption] = await db.select().from(redemptions).where(eq(redemptions.id, d.id)).limit(1);
+    if (!redemption) throw new ActionError("Riscatto non trovato.");
+    if (redemption.status === d.status) return ok("Nessuna modifica.");
+
+    // Cancelling a redemption returns the spent points to the customer — exactly
+    // once (guarded by the from-status), with its own ledger entry via addPoints.
+    if (d.status === "cancelled" && redemption.status !== "cancelled") {
+      await addPoints(
+        redemption.userId,
+        redemption.pointsSpent,
+        `Riscatto annullato: ${redemption.rewardName}`,
+        actor.id,
+      );
+    }
+
     await db
       .update(redemptions)
       .set({ status: d.status, fulfilledAt: d.status === "fulfilled" ? new Date() : null })
       .where(eq(redemptions.id, d.id));
+
+    await logAudit({
+      actor,
+      action: "redemption.status",
+      entity: "redemption",
+      entityId: redemption.id,
+      summary: `Riscatto "${redemption.rewardName}": ${redemption.status} → ${d.status}${
+        d.status === "cancelled" ? ` (+${redemption.pointsSpent} punti restituiti)` : ""
+      }`,
+      meta: { from: redemption.status, to: d.status, pointsSpent: redemption.pointsSpent },
+    });
+
     revalidatePath("/admin/loyalty");
     return ok("Riscatto aggiornato.");
   });
@@ -581,56 +506,8 @@ export async function removeSubscriber(_prev: ActionState, fd: FormData): Promis
   });
 }
 
-/** Convert the admin's plaintext message into the broadcast body HTML: blank
- *  lines become paragraphs, single newlines become <br>. */
-function broadcastBodyHtml(bodyText: string): string {
-  return bodyText
-    .split(/\n{2,}/)
-    .map(
-      (p) =>
-        `<p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 14px;">${p.replace(/\n/g, "<br>")}</p>`,
-    )
-    .join("");
-}
-
-export async function sendBroadcast(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  return runAction(async () => {
-    await requireAdmin();
-    const subject = (fd.get("subject") ?? "").toString().trim();
-    const bodyText = (fd.get("body") ?? "").toString().trim();
-    const source = (fd.get("source") ?? "").toString().trim();
-    if (!subject || !bodyText) throw new ActionError("Oggetto e testo sono obbligatori");
-    const bodyHtml = broadcastBodyHtml(bodyText);
-    const { queued, sent } = await broadcastToSubscribers(
-      subject,
-      bodyHtml,
-      source ? { source } : {},
-    );
-    revalidatePath("/admin/newsletter");
-    revalidatePath("/admin/outbox");
-    return ok(
-      `Newsletter accodata per ${queued} iscritti${sent ? ` (${sent} già inviate)` : ""}.`,
-    );
-  });
-}
-
-/** Send the composed subject + body as a single preview email to the owner, so
- *  it can be reviewed before the real broadcast. Uses a dummy unsubscribe URL. */
-export async function sendTestBroadcast(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  return runAction(async () => {
-    await requireAdmin();
-    const subject = (fd.get("subject") ?? "").toString().trim();
-    const bodyText = (fd.get("body") ?? "").toString().trim();
-    if (!subject || !bodyText) throw new ActionError("Oggetto e testo sono obbligatori");
-    const bodyHtml = broadcastBodyHtml(bodyText);
-    await sendMail({
-      to: env.ownerEmail,
-      ...newsletterBroadcast(`[PROVA] ${subject}`, bodyHtml, "#"),
-    });
-    revalidatePath("/admin/outbox");
-    return ok(`Email di prova inviata a ${env.ownerEmail}.`);
-  });
-}
+// NB: broadcasts now go through `lib/admin/campaign-actions.ts` — every send is
+// recorded as a campaign first, so it can be drafted, scheduled and reviewed.
 
 // ── Email test ───────────────────────────────────────────────────────────────
 export async function sendTestEmail(_prev: ActionState, fd: FormData): Promise<ActionState> {

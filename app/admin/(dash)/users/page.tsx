@@ -1,21 +1,29 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { inArray } from "drizzle-orm";
-import { AdminHeader, Panel, inputCls, labelCls, fmtDate, Pagination } from "@/components/admin/ui";
+import {
+  AdminHeader,
+  Panel,
+  inputCls,
+  labelCls,
+  fmtDate,
+  Pagination,
+  roleLabel,
+  NewButton,
+} from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getUsersPage } from "@/lib/admin/queries";
 import { db } from "@/lib/db/client";
 import { users as usersTable } from "@/lib/db/schema";
 import { isAdmin } from "@/lib/auth/session";
-import { setUserRole, resetUserPassword, createUser, setUserActive } from "@/lib/admin/user-actions";
+import {
+  setUserRole,
+  resetUserPassword,
+  setUserActive,
+  updateUserProfile,
+} from "@/lib/admin/user-actions";
 
 export const dynamic = "force-dynamic";
-
-const ROLE_LABEL: Record<string, string> = {
-  customer: "Cliente",
-  staff: "Staff",
-  admin: "Amministratore",
-};
 
 type SP = { searchParams: Promise<{ page?: string }> };
 
@@ -37,58 +45,11 @@ export default async function AdminUsers({ searchParams }: SP) {
 
   return (
     <div>
-      <AdminHeader title="Utenti" subtitle={`${total} account · gestisci ruoli e password`} />
-
-      <details className="mb-6">
-        <summary className="w-fit cursor-pointer rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase">
-          + Nuovo utente
-        </summary>
-        <Panel className="mt-4">
-          <ActionForm action={createUser} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className={labelCls}>Username</label>
-              <input
-                name="username"
-                required
-                minLength={3}
-                maxLength={40}
-                placeholder="es. mario.rossi"
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Nome</label>
-              <input name="name" required maxLength={200} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Email (facoltativa)</label>
-              <input name="email" type="email" maxLength={200} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Ruolo</label>
-              <select name="role" defaultValue="customer" className={inputCls}>
-                <option value="customer">Cliente</option>
-                <option value="staff">Staff</option>
-                <option value="admin">Amministratore</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Password</label>
-              <input
-                name="password"
-                type="text"
-                required
-                minLength={8}
-                placeholder="min. 8 caratteri"
-                className={inputCls}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <PendingButton>Crea utente</PendingButton>
-            </div>
-          </ActionForm>
-        </Panel>
-      </details>
+      <AdminHeader
+        title="Utenti"
+        subtitle={`${total} account · gestisci ruoli e password`}
+        action={<NewButton href="/admin/users/new">+ Nuovo utente</NewButton>}
+      />
 
       {users.length === 0 ? (
         <Panel>
@@ -99,12 +60,13 @@ export default async function AdminUsers({ searchParams }: SP) {
         {users.map((u) => {
           const active = activeMap.get(u.id) ?? true;
           return (
-          <Panel key={u.id} className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <Panel key={u.id}>
+           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="font-display text-lg text-brown-950">
                 {u.name || u.username}{" "}
                 <span className="ml-1 rounded-full bg-brown-900/10 px-2 py-0.5 text-[10px] font-bold uppercase">
-                  {ROLE_LABEL[u.role] ?? u.role}
+                  {roleLabel(u.role)}
                 </span>
                 <span
                   className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
@@ -162,6 +124,34 @@ export default async function AdminUsers({ searchParams }: SP) {
                 )}
               </ActionForm>
             </div>
+           </div>
+
+            {/* Contact details. Collapsed so the row stays scannable; username and
+                role are changed through their own guarded controls above. */}
+            <details className="mt-3 border-t border-brown-900/10 pt-3">
+              <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                Modifica anagrafica
+              </summary>
+              <ActionForm action={updateUserProfile} className="mt-3 flex flex-wrap items-end gap-3">
+                <input type="hidden" name="id" value={u.id} />
+                <div className="min-w-48 flex-1">
+                  <label className={labelCls} htmlFor={`name-${u.id}`}>Nome</label>
+                  <input id={`name-${u.id}`} name="name" required maxLength={200} defaultValue={u.name ?? ""} className={inputCls} />
+                </div>
+                <div className="min-w-48 flex-1">
+                  <label className={labelCls} htmlFor={`email-${u.id}`}>Email</label>
+                  <input id={`email-${u.id}`} name="email" type="email" maxLength={200} defaultValue={u.email ?? ""} className={inputCls} />
+                </div>
+                <div className="min-w-40">
+                  <label className={labelCls} htmlFor={`phone-${u.id}`}>Telefono</label>
+                  <input id={`phone-${u.id}`} name="phone" maxLength={40} defaultValue={u.phone ?? ""} className={inputCls} />
+                </div>
+                <PendingButton tone="dark">Salva anagrafica</PendingButton>
+              </ActionForm>
+              <p className="mt-2 text-xs text-brown-800/60">
+                Cambiando l&apos;email, l&apos;indirizzo torna &laquo;da verificare&raquo;.
+              </p>
+            </details>
           </Panel>
           );
         })}

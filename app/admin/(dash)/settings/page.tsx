@@ -1,10 +1,13 @@
 import { redirect } from "next/navigation";
-import { AdminHeader, Panel, inputCls, labelCls } from "@/components/admin/ui";
+import { AdminHeader, Panel, inputCls, labelCls, fmtDateTime } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getAllSettings } from "@/lib/admin/queries";
 import { saveSetting, sendTestEmail } from "@/lib/admin/actions";
+import { runAutomationNow } from "@/lib/admin/automation-actions";
+import { CRON_JOBS, getCronStatus } from "@/lib/automation";
 import { isAdmin } from "@/lib/auth/session";
 import { smtpConfigured, stripeConfigured, env } from "@/lib/env";
+import { VAT_RATES_BPS, vatRateLabel } from "@/lib/fiscal";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +22,7 @@ const DAYS: { value: string; label: string }[] = [
   { value: "sunday", label: "Domenica" },
 ];
 
-type Control = "number" | "boolean" | "day" | "text";
+type Control = "number" | "boolean" | "day" | "text" | "vat";
 
 /** Typed settings we know how to render as friendly form fields. Anything not
  *  listed here falls back to the raw JSON editor below. The `value` posted must
@@ -122,6 +125,22 @@ const KNOWN: {
     default: 0,
     min: 0,
     step: 100,
+  },
+  {
+    key: "orders.autoFulfilPickupDays",
+    label: "Chiusura automatica ritiri (giorni)",
+    help: "Dopo quanti giorni un ordine da ritiro pagato viene segnato come evaso in automatico. Imposta 0 per chiuderli sempre a mano.",
+    control: "number",
+    default: 0,
+    min: 0,
+    step: 1,
+  },
+  {
+    key: "store.shippingVatRate",
+    label: "Aliquota IVA sulla spedizione",
+    help: "Aliquota applicata al costo di spedizione nel riepilogo IVA, nel dettaglio ordine e nella fattura elettronica.",
+    control: "vat",
+    default: 22,
   },
   {
     key: "loyalty.enabled",
@@ -231,6 +250,19 @@ function SettingField({
       </>
     );
   }
+  if (def.control === "vat") {
+    // Stored as a whole percent (22), rendered from the canonical bps rates.
+    const current = typeof value === "number" ? value : Number(def.default);
+    return (
+      <select name="value" defaultValue={String(current)} className={`${inputCls} max-w-xs`}>
+        {VAT_RATES_BPS.map((bps) => (
+          <option key={bps} value={String(bps / 100)}>
+            {vatRateLabel(bps)}
+          </option>
+        ))}
+      </select>
+    );
+  }
   if (def.control === "day") {
     const current = typeof value === "string" ? value : String(def.default);
     return (
@@ -261,7 +293,7 @@ function SettingField({
 export default async function AdminSettings() {
   // Settings are admin-only (staff are redirected away; nav also hides the link).
   if (!(await isAdmin())) redirect("/admin");
-  const settings = await getAllSettings();
+  const [settings, cronStatus] = await Promise.all([getAllSettings(), getCronStatus()]);
 
   const stored = new Map(settings.map((s) => [s.key, s.value]));
   const knownKeys = new Set(KNOWN.map((k) => k.key));
@@ -308,6 +340,41 @@ export default async function AdminSettings() {
             registrati in modalità simulazione.
           </p>
         </Panel>
+      </div>
+
+      <h2 className="font-display mt-10 mb-1 text-xl text-brown-950">Automazioni</h2>
+      <p className="mb-3 text-xs text-brown-800/60">
+        Girano da sole se lo scheduler chiama <code>/api/cron?job=all</code>. Qui vedi quando
+        ognuna ha lavorato l&apos;ultima volta e puoi lanciarla subito.
+      </p>
+      <div className="space-y-3">
+        {CRON_JOBS.map((job) => {
+          const last = cronStatus[job.key];
+          return (
+            <Panel key={job.key} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex-1">
+                <p className="font-semibold text-brown-950">
+                  {job.label}{" "}
+                  {last && !last.ok && (
+                    <span className="ml-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700 uppercase">
+                      Errore
+                    </span>
+                  )}
+                </p>
+                <p className="mt-0.5 text-xs text-brown-800/60">{job.description}</p>
+                <p className="mt-1 text-xs text-brown-800/50">
+                  {last
+                    ? `Ultima esecuzione: ${fmtDateTime(last.at)}${last.ok ? "" : ` — ${last.error}`}`
+                    : "Mai eseguita."}
+                </p>
+              </div>
+              <ActionForm action={runAutomationNow} className="shrink-0">
+                <input type="hidden" name="job" value={job.key} />
+                <PendingButton tone="dark">Esegui ora</PendingButton>
+              </ActionForm>
+            </Panel>
+          );
+        })}
       </div>
 
       <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Parametri operativi</h2>

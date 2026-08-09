@@ -1,6 +1,6 @@
 import "server-only";
 import { customAlphabet } from "nanoid";
-import { and, desc, eq, gt, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, lte } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { loyaltyAccounts, loyaltyTransactions, redemptions, rewards, users } from "@/lib/db/schema";
 import { sendMail } from "@/lib/mail/mailer";
@@ -10,22 +10,41 @@ import { getSetting } from "@/lib/db/queries";
 /** Thrown inside the redeem transaction to roll it back on insufficient points. */
 class InsufficientPointsError extends Error {}
 
-const cardCode = customAlphabet("0123456789", 4);
+// 6 digits → a 1,000,000 namespace per year; combined with retry-on-collision
+// below, a duplicate card number never surfaces as an error to the customer.
+const cardCode = customAlphabet("0123456789", 6);
 
 export function generateCardNumber(): string {
   return `TAC-${new Date().getFullYear()}-${cardCode()}`;
 }
 
+/** True when an error is the unique-constraint violation on the card number. */
+function isDuplicateCardNumber(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    /UNIQUE constraint failed:\s*loyalty_accounts\.card_number/i.test(err.message)
+  );
+}
+
 /** Fetch (or lazily create) a customer's loyalty account. */
 export async function getOrCreateLoyaltyAccount(userId: string) {
-  // Atomic upsert instead of select-then-insert: two concurrent first-touch
-  // calls would otherwise both see no row and both insert, and the second would
-  // hit the unique(userId) constraint. `onConflictDoNothing` on userId makes the
-  // insert idempotent; we then read the row back (whether just created or not).
-  await db
-    .insert(loyaltyAccounts)
-    .values({ userId, points: 0, cardNumber: generateCardNumber() })
-    .onConflictDoNothing({ target: loyaltyAccounts.userId });
+  // Atomic upsert instead of select-then-insert: two concurrent first-touch calls
+  // would otherwise both see no row and both insert. `onConflictDoNothing` on
+  // userId makes the insert idempotent — but it does NOT cover the separate
+  // unique(cardNumber): a random card collision (likely as the base grows) would
+  // otherwise throw and break account creation. So retry with a fresh number.
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    try {
+      await db
+        .insert(loyaltyAccounts)
+        .values({ userId, points: 0, cardNumber: generateCardNumber() })
+        .onConflictDoNothing({ target: loyaltyAccounts.userId });
+      break;
+    } catch (err) {
+      if (isDuplicateCardNumber(err) && attempt < 6) continue;
+      throw err;
+    }
+  }
 
   const [account] = await db
     .select()
@@ -123,52 +142,62 @@ export async function getLoyaltySummary(userId: string) {
 /**
  * Credit or debit points and record the ledger entry — atomically.
  *
- * The balance is mutated with a single `points = MAX(0, points + delta)` UPDATE
- * inside a transaction that also writes the ledger row, so concurrent accruals
- * can't lose an update or record a `balanceAfter` that disagrees with the account.
+ * The balance is clamped to never go negative (satisfies the `>= 0` CHECK and is
+ * correct for expiry), but the ledger records the delta **actually applied**
+ * (`next − prev`), not the requested one, so summing the ledger always equals the
+ * stored balance. Read + write happen inside one synchronous better-sqlite3
+ * transaction on the single app connection, so no concurrent write interleaves.
+ *
+ * Returns the new balance and the delta actually applied (which differs from the
+ * requested delta only when a debit was clamped at zero).
  */
 export async function addPoints(
   userId: string,
   delta: number,
   reason: string,
   byUserId?: string,
-): Promise<{ points: number }> {
+): Promise<{ points: number; applied: number }> {
   await getOrCreateLoyaltyAccount(userId); // ensure the account row exists
 
   const result = db.transaction((tx) => {
-    const [updated] = tx
-      .update(loyaltyAccounts)
-      .set({ points: sql`max(0, ${loyaltyAccounts.points} + ${delta})` })
+    const [before] = tx
+      .select({ points: loyaltyAccounts.points })
+      .from(loyaltyAccounts)
       .where(eq(loyaltyAccounts.userId, userId))
-      .returning({ points: loyaltyAccounts.points })
       .all();
+    const prev = before?.points ?? 0;
+    const next = Math.max(0, prev + delta);
+    const applied = next - prev;
+
+    tx.update(loyaltyAccounts)
+      .set({ points: next })
+      .where(eq(loyaltyAccounts.userId, userId))
+      .run();
 
     tx.insert(loyaltyTransactions)
       .values({
         userId,
-        delta,
-        balanceAfter: updated.points,
+        delta: applied,
+        balanceAfter: next,
         reason,
         createdByUserId: byUserId ?? null,
       })
       .run();
 
-    return { points: updated.points };
+    return { points: next, applied, prev };
   });
 
-  // On accrual, tell the customer about any reward they can now afford. For a
-  // positive delta the balance rose by exactly `delta` (it was already ≥ 0), so
-  // the previous balance is `result.points - delta`. Best-effort — never fails
-  // the points operation.
-  if (delta > 0) {
+  // On a real accrual, tell the customer about any reward they can now afford.
+  // Best-effort — never fails the points operation.
+  if (result.applied > 0) {
     try {
-      await notifyRewardsUnlocked(userId, result.points - delta, result.points);
+      await notifyRewardsUnlocked(userId, result.prev, result.points);
     } catch {
       // ignore — the points are already recorded; the email is non-critical
     }
   }
 
-  return result;
+  return { points: result.points, applied: result.applied };
 }
 
 /** Email the customer if their balance just crossed one or more reward thresholds. */

@@ -172,6 +172,24 @@ describe("createOrder — server-authoritative pricing", () => {
   it("throws on pickup at a store-disabled shop", async () => {
     await expect(createOrder(checkout({ shopSlug: "chiuso" }))).rejects.toThrow();
   });
+
+  it("refuses to oversell a stock-tracked product but allows within-stock orders", async () => {
+    await db.update(products).set({ stock: 2 }).where(eq(products.slug, "ciauscolo"));
+    try {
+      await expect(
+        createOrder(checkout({ items: [{ slug: "ciauscolo", quantity: 5 }] }), USER_ID),
+      ).rejects.toThrow(/Scorte insufficienti/);
+
+      const okOrder = await createOrder(
+        checkout({ items: [{ slug: "ciauscolo", quantity: 2 }] }),
+        USER_ID,
+      );
+      expect(okOrder.totalCents).toBe(900); // 450 * 2
+    } finally {
+      // Restore the fixture to unlimited stock for the other tests.
+      await db.update(products).set({ stock: null }).where(eq(products.slug, "ciauscolo"));
+    }
+  });
 });
 
 describe("finalizeOrder — idempotent paid flip + single loyalty accrual", () => {
@@ -223,10 +241,11 @@ describe("addPoints — credit/debit ledger", () => {
     expect(txns[0].balanceAfter).toBe(50);
   });
 
-  it("never lets the balance go below 0 on an over-debit", async () => {
+  it("clamps at 0 on an over-debit and records the APPLIED delta so the ledger reconciles", async () => {
     await addPoints(USER_ID, 50, "seed");
-    const { points } = await addPoints(USER_ID, -100, "over-debit");
+    const { points, applied } = await addPoints(USER_ID, -100, "over-debit");
     expect(points).toBe(0);
+    expect(applied).toBe(-50); // only the 50 that existed could actually be removed
 
     const account = await getOrCreateLoyaltyAccount(USER_ID);
     expect(account.points).toBe(0);
@@ -235,10 +254,13 @@ describe("addPoints — credit/debit ledger", () => {
       .select()
       .from(loyaltyTransactions)
       .where(eq(loyaltyTransactions.userId, USER_ID));
-    // Ledger records the debit with a clamped balanceAfter of 0.
+    // The ledger records the delta actually applied (−50), not the requested −100.
     const last = txns[txns.length - 1];
-    expect(last.delta).toBe(-100);
+    expect(last.delta).toBe(-50);
     expect(last.balanceAfter).toBe(0);
+    // Summed ledger deltas always equal the stored balance — the whole point.
+    const ledgerSum = txns.reduce((s, t) => s + t.delta, 0);
+    expect(ledgerSum).toBe(account.points);
   });
 });
 

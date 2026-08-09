@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { randomBytes } from "node:crypto";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, desc, eq, gt, lt, ne } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { sessions, users, type UserRow } from "@/lib/db/schema";
 import { env } from "@/lib/env";
@@ -96,6 +96,43 @@ export async function destroySession(): Promise<void> {
  *  reset, role change) so an old cookie can't outlive the change. */
 export async function deleteUserSessions(userId: string): Promise<{ deleted: number }> {
   const res = await db.delete(sessions).where(eq(sessions.userId, userId));
+  return { deleted: res.changes ?? 0 };
+}
+
+/**
+ * A user's live sessions, newest activity first, flagging which one is making
+ * this request so the UI can label it "questo dispositivo".
+ */
+export async function listUserSessions(userId: string) {
+  const store = await cookies();
+  const current = store.get(COOKIE)?.value;
+  const rows = await db
+    .select({
+      id: sessions.id,
+      lastSeenAt: sessions.lastSeenAt,
+      expiresAt: sessions.expiresAt,
+      createdAt: sessions.createdAt,
+    })
+    .from(sessions)
+    .where(and(eq(sessions.userId, userId), gt(sessions.expiresAt, new Date())))
+    .orderBy(desc(sessions.lastSeenAt));
+
+  // Never hand a raw session token to the UI — it is a bearer credential. The
+  // caller only needs to know which row is the current one.
+  return rows.map(({ id, ...rest }) => ({ ...rest, isCurrent: id === current }));
+}
+
+/**
+ * Sign out everywhere except the device making this request — the standard
+ * response to "I think someone else has my password".
+ */
+export async function deleteOtherUserSessions(userId: string): Promise<{ deleted: number }> {
+  const store = await cookies();
+  const current = store.get(COOKIE)?.value;
+  const where = current
+    ? and(eq(sessions.userId, userId), ne(sessions.id, current))
+    : eq(sessions.userId, userId);
+  const res = await db.delete(sessions).where(where);
   return { deleted: res.changes ?? 0 };
 }
 

@@ -1,4 +1,31 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+
+/** "← Back to <section>" link above a detail/create page's header. */
+export function BackLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-brown-800/70 hover:text-brown-950 print:hidden"
+    >
+      <ArrowLeft className="size-4" />
+      {children}
+    </Link>
+  );
+}
+
+/** The pill link used for the primary "+ New …" action in a list header. */
+export function NewButton({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-gold-dark"
+    >
+      {children}
+    </Link>
+  );
+}
 
 export function AdminHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
@@ -52,6 +79,34 @@ const statusLabels: Record<string, string> = {
 
 export function statusLabel(status: string): string {
   return statusLabels[status] ?? status;
+}
+
+/** The three reservation kinds, in the order they're offered to an operator. */
+export const RESERVATION_TYPES = [
+  { value: "table", label: "Tavolo" },
+  { value: "porchetta", label: "Porchetta" },
+  { value: "order", label: "Ordine speciale" },
+] as const;
+
+const reservationTypeLabels: Record<string, string> = {
+  table: "Tavolo",
+  porchetta: "Porchetta",
+  order: "Ordine",
+};
+
+export function reservationTypeLabel(type: string): string {
+  return reservationTypeLabels[type] ?? type;
+}
+
+/** Account roles, for badges and selects. */
+const roleLabels: Record<string, string> = {
+  customer: "Cliente",
+  staff: "Staff",
+  admin: "Amministratore",
+};
+
+export function roleLabel(role: string): string {
+  return roleLabels[role] ?? role;
 }
 
 export function StatusBadge({ status }: { status: string }) {
@@ -174,4 +229,15 @@ export function euro(cents: number | null | undefined): string {
 export function fmtDate(d: Date | string | null | undefined): string {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+export function fmtDateTime(d: Date | string | null | undefined): string {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("it-IT", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

@@ -1,0 +1,1 @@
+CREATE INDEX `newsletter_source_idx` ON `newsletter_subscribers` (`source`);

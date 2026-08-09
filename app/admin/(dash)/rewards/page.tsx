@@ -1,31 +1,48 @@
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge } from "@/components/admin/ui";
-import { RewardForm } from "@/components/admin/forms";
+import { AdminHeader, Panel, StatusBadge, NewButton, Pagination } from "@/components/admin/ui";
+import { FilterChips, FilterSearch } from "@/components/admin/FilterBar";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
-import { adminGetRewards } from "@/lib/admin/queries";
+import { getRewardsPage } from "@/lib/admin/queries";
+import { rewardFilters } from "@/lib/admin/filters";
 import { deleteReward, toggleRewardActive } from "@/lib/admin/actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminRewards() {
-  const rewards = await adminGetRewards();
+const BASE = "/admin/rewards";
+
+const STATUS_CHIPS = [
+  { value: "all", label: "Tutti" },
+  { value: "attivi", label: "Attivi" },
+  { value: "disattivati", label: "Disattivati" },
+];
+
+type SP = { searchParams: Promise<{ stato?: string; q?: string; page?: string }> };
+
+export default async function AdminRewards({ searchParams }: SP) {
+  const sp = await searchParams;
+  const page = Number(sp.page) || 1;
+  const filters = rewardFilters(sp);
+  const { rows: rewards, total, pageCount } = await getRewardsPage({ ...filters, page });
+  const filtered = Object.values(filters).some((v) => v && v !== "all");
 
   return (
     <div>
-      <AdminHeader title="Premi" subtitle={`${rewards.length} premi nel catalogo fedeltà`} />
+      <AdminHeader
+        title="Premi"
+        subtitle={`${total} premi nel catalogo fedeltà`}
+        action={<NewButton href="/admin/rewards/new">+ Nuovo premio</NewButton>}
+      />
 
-      <details className="mb-6">
-        <summary className="w-fit cursor-pointer rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase">
-          + Nuovo premio
-        </summary>
-        <Panel className="mt-4">
-          <RewardForm />
-        </Panel>
-      </details>
+      <FilterChips basePath={BASE} params={filters} name="stato" options={STATUS_CHIPS} tone="dark" />
+      <FilterSearch basePath={BASE} params={filters} placeholder="Nome o slug…" />
 
       {rewards.length === 0 ? (
         <Panel>
-          <p className="text-brown-800/70">Nessun premio ancora. Creane uno qui sopra.</p>
+          <p className="text-brown-800/70">
+            {filtered
+              ? "Nessun premio corrisponde ai filtri."
+              : "Nessun premio ancora. Creane uno con «Nuovo premio»."}
+          </p>
         </Panel>
       ) : (
         <div className="space-y-3">
@@ -58,6 +75,8 @@ export default async function AdminRewards() {
           ))}
         </div>
       )}
+
+      <Pagination basePath={BASE} page={page} pageCount={pageCount} params={filters} />
     </div>
   );
 }

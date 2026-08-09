@@ -1,6 +1,6 @@
 import "server-only";
 import type { OrderRow, OrderItemRow } from "@/lib/db/schema";
-import { splitGross, vatBreakdown } from "@/lib/fiscal";
+import { splitGross, orderVatBuckets } from "@/lib/fiscal";
 
 /**
  * FatturaPA (fattura elettronica) XML builder — FormatoTrasmissione FPR12, the
@@ -44,21 +44,43 @@ function xml(v: string | number | null | undefined): string {
 
 const eur = (cents: number) => (cents / 100).toFixed(2);
 
+/** Uppercase, strip spaces/punctuation — the form SdI expects for fiscal codes. */
+function normalizeCode(v: string | null | undefined): string {
+  return (v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 export function buildFatturaXml(
   order: OrderRow,
   items: OrderItemRow[],
   fiscal: FiscalIdentity,
   progressivo: string,
+  shippingVatBps = 2200,
 ): string {
-  const dataDoc = (order.createdAt ? new Date(order.createdAt) : new Date()).toISOString().slice(0, 10);
+  // Invoice date = when the sale settled, falling back to when it was placed.
+  const dataSource = order.paidAt ?? order.createdAt;
+  const dataDoc = (dataSource ? new Date(dataSource) : new Date()).toISOString().slice(0, 10);
   const addr = order.shippingAddress ?? {};
-  const vat = vatBreakdown(items.map((i) => ({ grossCents: i.lineTotalCents, vatRateBps: i.vatRateBps })));
-  // Shipping, if any, as a summary line at 22% (transport standard rate).
-  const shippingRateBps = 2200;
-  const netTotalCents =
-    vat.reduce((s, b) => s + b.imponibileCents, 0) +
-    (order.shippingCents > 0 ? splitGross(order.shippingCents, shippingRateBps).imponibileCents : 0);
-  void netTotalCents;
+
+  // Buyer fiscal identity. SdI requires *something* here: a business gives a
+  // P.IVA and a 7-char recipient code (or a PEC); a private customer gives a
+  // codice fiscale and the catch-all "0000000" destination. Codes are normalised
+  // because SdI rejects lowercase and spacing.
+  const buyerVat = normalizeCode(order.customerVatNumber);
+  const buyerTaxCode = normalizeCode(order.customerTaxCode);
+  const pec = order.customerPec?.trim() || "";
+  const sdiRaw = normalizeCode(order.customerSdiCode);
+  const sdiCode = sdiRaw.length === 7 ? sdiRaw : "0000000";
+  const shippingRateBps = shippingVatBps;
+  // VAT summary reconciled with ImportoTotaleDocumento: line grosses net of the
+  // apportioned discount, plus shipping at its configured rate. A cart-level
+  // discount is declared as a document ScontoMaggiorazione so the line totals
+  // (which are gross-derived and pre-discount) still reconcile to the total.
+  const buckets = orderVatBuckets({
+    items: items.map((i) => ({ grossCents: i.lineTotalCents, vatRateBps: i.vatRateBps })),
+    discountCents: order.discountCents,
+    shippingCents: order.shippingCents,
+    shippingVatBps: shippingRateBps,
+  });
 
   const lines = items
     .map((it, idx) => {
@@ -90,12 +112,8 @@ export function buildFatturaXml(
         })()
       : "";
 
-  // Summary blocks: one per VAT rate present (goods + shipping merged).
-  const allBuckets = vatBreakdown([
-    ...items.map((i) => ({ grossCents: i.lineTotalCents, vatRateBps: i.vatRateBps })),
-    ...(order.shippingCents > 0 ? [{ grossCents: order.shippingCents, vatRateBps: shippingRateBps }] : []),
-  ]);
-  const riepilogo = allBuckets
+  // Summary blocks: one per VAT rate present (goods net of discount + shipping).
+  const riepilogo = buckets
     .map(
       (b) => `      <DatiRiepilogo>
         <AliquotaIVA>${(b.rateBps / 100).toFixed(2)}</AliquotaIVA>
@@ -105,6 +123,16 @@ export function buildFatturaXml(
       </DatiRiepilogo>`,
     )
     .join("\n");
+
+  // A cart-level coupon is declared once at document level (type SC = sconto).
+  const scontoBlock =
+    order.discountCents > 0
+      ? `
+        <ScontoMaggiorazione>
+          <Tipo>SC</Tipo>
+          <Importo>${eur(order.discountCents)}</Importo>
+        </ScontoMaggiorazione>`
+      : "";
 
   const idPaese = "IT";
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -117,7 +145,9 @@ export function buildFatturaXml(
       </IdTrasmittente>
       <ProgressivoInvio>${xml(progressivo)}</ProgressivoInvio>
       <FormatoTrasmissione>FPR12</FormatoTrasmissione>
-      <CodiceDestinatario>0000000</CodiceDestinatario>
+      <CodiceDestinatario>${xml(sdiCode)}</CodiceDestinatario>${
+        pec ? `\n      <PECDestinatario>${xml(pec)}</PECDestinatario>` : ""
+      }
     </DatiTrasmissione>
     <CedentePrestatore>
       <DatiAnagrafici>
@@ -140,7 +170,17 @@ export function buildFatturaXml(
       </Sede>
     </CedentePrestatore>
     <CessionarioCommittente>
-      <DatiAnagrafici>
+      <DatiAnagrafici>${
+        buyerVat
+          ? `
+        <IdFiscaleIVA>
+          <IdPaese>${idPaese}</IdPaese>
+          <IdCodice>${xml(buyerVat)}</IdCodice>
+        </IdFiscaleIVA>`
+          : ""
+      }${
+        buyerTaxCode ? `\n        <CodiceFiscale>${xml(buyerTaxCode)}</CodiceFiscale>` : ""
+      }
         <Anagrafica>
           <Denominazione>${xml(order.name)}</Denominazione>
         </Anagrafica>
@@ -159,7 +199,7 @@ export function buildFatturaXml(
         <TipoDocumento>TD01</TipoDocumento>
         <Divisa>EUR</Divisa>
         <Data>${dataDoc}</Data>
-        <Numero>${xml(order.orderNumber)}</Numero>
+        <Numero>${xml(order.orderNumber)}</Numero>${scontoBlock}
         <ImportoTotaleDocumento>${eur(order.totalCents)}</ImportoTotaleDocumento>
       </DatiGeneraliDocumento>
     </DatiGenerali>

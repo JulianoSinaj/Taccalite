@@ -1,8 +1,35 @@
 import "server-only";
-import { and, desc, eq, gte, inArray, like, lt, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 
 export const PAGE_SIZE = 25;
 import { db } from "@/lib/db/client";
+import { getSetting } from "@/lib/db/queries";
+import { orderVatBuckets, aggregateVatBuckets, type VatBucket } from "@/lib/fiscal";
+import { dateInRome, startOfTodayRome } from "@/lib/time";
+import {
+  ordersWhere,
+  reservationsWhere,
+  customersWhere,
+  subscribersWhere,
+  outboxWhere,
+  productsWhere,
+  blogWhere,
+  rewardsWhere,
+  discountsWhere,
+  auditWhere,
+  orderByFor,
+  type SortSpec,
+  type OrderFilters,
+  type ReservationFilters,
+  type CustomerFilters,
+  type SubscriberFilters,
+  type OutboxFilters,
+  type ProductFilters,
+  type BlogFilters,
+  type RewardFilters,
+  type DiscountFilters,
+  type AuditFilters,
+} from "@/lib/admin/filters";
 import {
   reservations,
   orders,
@@ -72,7 +99,7 @@ export async function getDashboardStats() {
       .where(and(eq(orders.paymentStatus, "paid"), gte(orders.createdAt, new Date(sinceMs))));
     return r?.sum ?? 0;
   };
-  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+  const startOfToday = startOfTodayRome();
   const [revenueToday, revenue7d, revenue30d] = await Promise.all([
     rev(startOfToday.getTime()),
     rev(now - 7 * day),
@@ -138,16 +165,20 @@ export async function getDashboardInsights() {
       .where(and(paid, gte(orders.createdAt, p30)))
       .groupBy(dayExpr)
       .orderBy(dayExpr),
+    // Group on the stable product id, not the line's name snapshot: renaming a
+    // product used to split its sales history into two rows. Lines with no
+    // productId (a since-deleted product) fall back to grouping by name so their
+    // revenue still shows. `max(name)` picks a single display label per group.
     db
       .select({
-        name: orderItems.name,
+        name: sql<string>`max(${orderItems.name})`,
         cents: sql<number>`coalesce(sum(${orderItems.lineTotalCents}), 0)`,
         qty: sql<number>`coalesce(sum(${orderItems.quantity}), 0)`,
       })
       .from(orderItems)
       .innerJoin(orders, eq(orderItems.orderId, orders.id))
       .where(and(paid, gte(orders.createdAt, p30)))
-      .groupBy(orderItems.name)
+      .groupBy(sql`coalesce(${orderItems.productId}, ${orderItems.name})`)
       .orderBy(desc(sql`sum(${orderItems.lineTotalCents})`))
       .limit(5),
   ]);
@@ -176,7 +207,7 @@ export async function getDashboardInsights() {
 
 /** Today's reservations (not cancelled), for the dashboard work list. */
 export async function getTodayReservations() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dateInRome();
   return db
     .select()
     .from(reservations)
@@ -190,35 +221,10 @@ export async function getRecentOrders(limit = 6) {
   return db.select().from(orders).orderBy(desc(orders.createdAt)).limit(limit);
 }
 
-/** Paginated reservations list, preserving the status + shop filters. */
-export async function getReservationsPage(opts: {
-  status?: string;
-  shopSlug?: string;
-  type?: string;
-  q?: string;
-  from?: string;
-  to?: string;
-  page?: number;
-}) {
+/** Paginated reservations list for the given filters (see `lib/admin/filters`). */
+export async function getReservationsPage(opts: ReservationFilters & { page?: number }) {
   const page = Math.max(1, opts.page ?? 1);
-  const conds: SQL[] = [];
-  if (opts.status && opts.status !== "all") conds.push(eq(reservations.status, opts.status as "pending"));
-  if (opts.shopSlug && opts.shopSlug !== "all") conds.push(eq(reservations.shopSlug, opts.shopSlug));
-  if (opts.type && opts.type !== "all") conds.push(eq(reservations.type, opts.type as "table"));
-  if (opts.from) conds.push(gte(reservations.date, opts.from));
-  if (opts.to) conds.push(lte(reservations.date, opts.to));
-  if (opts.q) {
-    const term = `%${opts.q.toLowerCase()}%`;
-    conds.push(
-      or(
-        like(sql`lower(${reservations.reference})`, term),
-        like(sql`lower(${reservations.name})`, term),
-        like(sql`lower(${reservations.phone})`, term),
-        like(sql`lower(coalesce(${reservations.email}, ''))`, term),
-      )!,
-    );
-  }
-  const where = conds.length ? and(...conds) : undefined;
+  const where = reservationsWhere(opts);
   const [rows, [{ total }]] = await Promise.all([
     db
       .select()
@@ -235,7 +241,7 @@ export async function getReservationsPage(opts: {
 /** Upcoming (today onward) active reservations, ordered by date+time, for the
  *  agenda / porchetta prep views. */
 export async function getUpcomingReservations() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dateInRome();
   return db
     .select()
     .from(reservations)
@@ -250,31 +256,10 @@ export const getOrdersList = (shopSlug?: string) => {
   return shopSlug && shopSlug !== "all" ? q.where(eq(orders.shopSlug, shopSlug)) : q;
 };
 
-/** Paginated + searchable orders list. Search matches order number / name / email. */
-export async function getOrdersPage(opts: { shopSlug?: string; q?: string; status?: string; fulfilment?: string; page?: number }) {
+/** Paginated orders list for the given filters (see `lib/admin/filters`). */
+export async function getOrdersPage(opts: OrderFilters & { page?: number }) {
   const page = Math.max(1, opts.page ?? 1);
-  const conds: SQL[] = [];
-  if (opts.shopSlug && opts.shopSlug !== "all") conds.push(eq(orders.shopSlug, opts.shopSlug));
-  if (opts.status && opts.status !== "all") {
-    // Special work-queue value: paid but not yet fulfilled.
-    if (opts.status === "to-fulfil") {
-      conds.push(eq(orders.status, "paid"));
-    } else {
-      conds.push(eq(orders.status, opts.status as "paid"));
-    }
-  }
-  if (opts.fulfilment && opts.fulfilment !== "all") conds.push(eq(orders.fulfilment, opts.fulfilment as "pickup"));
-  if (opts.q) {
-    const term = `%${opts.q.toLowerCase()}%`;
-    conds.push(
-      or(
-        like(sql`lower(${orders.orderNumber})`, term),
-        like(sql`lower(${orders.name})`, term),
-        like(sql`lower(${orders.email})`, term),
-      )!,
-    );
-  }
-  const where = conds.length ? and(...conds) : undefined;
+  const where = ordersWhere(opts);
   const [rows, [{ total }]] = await Promise.all([
     db
       .select()
@@ -288,18 +273,10 @@ export async function getOrdersPage(opts: { shopSlug?: string; q?: string; statu
   return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
 }
 
-/** Paginated + searchable customers list with points. Search matches name / username / card. */
-export async function getCustomersPage(opts: { q?: string; page?: number }) {
+/** Paginated customers list with points, for the given filters. */
+export async function getCustomersPage(opts: CustomerFilters & { page?: number }) {
   const page = Math.max(1, opts.page ?? 1);
-  let where: SQL | undefined;
-  if (opts.q) {
-    const term = `%${opts.q.toLowerCase()}%`;
-    where = or(
-      like(sql`lower(${users.name})`, term),
-      like(sql`lower(${users.username})`, term),
-      like(sql`lower(coalesce(${loyaltyAccounts.cardNumber}, ''))`, term),
-    );
-  }
+  const where = customersWhere(opts);
   const base = db
     .select({
       id: users.id,
@@ -329,7 +306,132 @@ export async function getCustomersPage(opts: { q?: string; page?: number }) {
   return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
 }
 
+/** Every product, unpaginated — for pickers (manual order) and selects, not lists. */
 export const adminGetProducts = () => db.select().from(products).orderBy(products.sortOrder);
+
+/**
+ * The VAT rate each category actually uses, so a new product in a known category
+ * can preselect it instead of always defaulting to 10%. Where a category is
+ * mixed, the most-used rate wins.
+ */
+export async function getCategoryVatDefaults(): Promise<Record<string, number>> {
+  const rows = await db
+    .select({
+      category: products.category,
+      vatRateBps: products.vatRateBps,
+      n: sql<number>`count(*)`,
+    })
+    .from(products)
+    .groupBy(products.category, products.vatRateBps)
+    .orderBy(desc(sql`count(*)`));
+
+  const out: Record<string, number> = {};
+  // Rows arrive most-frequent first, so the first hit per category wins.
+  for (const r of rows) if (r.category && !(r.category in out)) out[r.category] = r.vatRateBps;
+  return out;
+}
+
+/**
+ * Paginated catalogue list. Also returns the distinct categories present in the
+ * whole table (not just this page) so the category filter can offer them.
+ */
+export const PRODUCT_SORTS = ["nome", "prezzo", "giacenza", "categoria", "ordine"] as const;
+
+export async function getProductsPage(
+  opts: ProductFilters & { page?: number; lowStockThreshold: number; sort?: SortSpec },
+) {
+  const page = Math.max(1, opts.page ?? 1);
+  const where = productsWhere(opts, opts.lowStockThreshold);
+  const orderBy = opts.sort
+    ? orderByFor(
+        opts.sort,
+        {
+          nome: products.name,
+          prezzo: products.priceCents,
+          giacenza: products.stock,
+          categoria: products.category,
+          ordine: products.sortOrder,
+        },
+        products.sortOrder,
+      )
+    : asc(products.sortOrder);
+  const [rows, [{ total }], categories] = await Promise.all([
+    db
+      .select()
+      .from(products)
+      .where(where)
+      .orderBy(orderBy, products.name)
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    db.select({ total: sql<number>`count(*)` }).from(products).where(where),
+    db.selectDistinct({ category: products.category }).from(products).orderBy(products.category),
+  ]);
+  return {
+    rows,
+    total,
+    page,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    categories: categories.map((c) => c.category).filter(Boolean),
+  };
+}
+
+/** Paginated news list, with the distinct categories for the filter chips. */
+export async function getBlogPage(opts: BlogFilters & { page?: number }) {
+  const page = Math.max(1, opts.page ?? 1);
+  const where = blogWhere(opts);
+  const [rows, [{ total }], categories] = await Promise.all([
+    db
+      .select()
+      .from(blogPosts)
+      .where(where)
+      .orderBy(desc(blogPosts.date))
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    db.select({ total: sql<number>`count(*)` }).from(blogPosts).where(where),
+    db.selectDistinct({ category: blogPosts.category }).from(blogPosts).orderBy(blogPosts.category),
+  ]);
+  return {
+    rows,
+    total,
+    page,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    categories: categories.map((c) => c.category).filter(Boolean),
+  };
+}
+
+/** Paginated rewards catalogue. */
+export async function getRewardsPage(opts: RewardFilters & { page?: number }) {
+  const page = Math.max(1, opts.page ?? 1);
+  const where = rewardsWhere(opts);
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select()
+      .from(rewards)
+      .where(where)
+      .orderBy(rewards.sortOrder, rewards.name)
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    db.select({ total: sql<number>`count(*)` }).from(rewards).where(where),
+  ]);
+  return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+}
+
+/** Paginated discount codes, newest first. */
+export async function getDiscountsPage(opts: DiscountFilters & { page?: number }) {
+  const page = Math.max(1, opts.page ?? 1);
+  const where = discountsWhere(opts);
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select()
+      .from(discountCodes)
+      .where(where)
+      .orderBy(desc(discountCodes.createdAt))
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    db.select({ total: sql<number>`count(*)` }).from(discountCodes).where(where),
+  ]);
+  return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+}
 export const adminGetProduct = (id: string) =>
   db.select().from(products).where(eq(products.id, id)).limit(1).then((r) => r[0] ?? null);
 
@@ -382,6 +484,7 @@ export const adminGetUser = (id: string) =>
       username: users.username,
       email: users.email,
       name: users.name,
+      phone: users.phone,
       role: users.role,
       createdAt: users.createdAt,
     })
@@ -407,8 +510,9 @@ export const getLoyaltyAccountForUser = (userId: string) =>
     .limit(1)
     .then((r) => r[0] ?? null);
 
-export async function getCustomersWithPoints() {
-  return db
+export async function getCustomersWithPoints(filters: CustomerFilters = {}) {
+  const where = customersWhere(filters);
+  const base = db
     .select({
       id: users.id,
       name: users.name,
@@ -421,8 +525,8 @@ export async function getCustomersWithPoints() {
       cardNumber: loyaltyAccounts.cardNumber,
     })
     .from(users)
-    .leftJoin(loyaltyAccounts, eq(loyaltyAccounts.userId, users.id))
-    .orderBy(desc(users.createdAt));
+    .leftJoin(loyaltyAccounts, eq(loyaltyAccounts.userId, users.id));
+  return (where ? base.where(where) : base).orderBy(desc(users.createdAt));
 }
 
 /** Paginated redemptions list. */
@@ -450,19 +554,29 @@ export const getRecentLoyaltyTx = (userId: string) =>
 
 /** Paginated newsletter subscribers list. `confirmed` is the full-table count of
  *  confirmed subscribers (used by the broadcast form / subtitle), independent of paging. */
-export async function getSubscribersPage(opts: { page?: number; status?: string; source?: string; q?: string }) {
+export const SUBSCRIBER_SORTS = ["email", "stato", "origine", "iscritto"] as const;
+
+export async function getSubscribersPage(opts: SubscriberFilters & { page?: number; sort?: SortSpec }) {
   const page = Math.max(1, opts.page ?? 1);
-  const conds: SQL[] = [];
-  if (opts.status && opts.status !== "all") conds.push(eq(newsletterSubscribers.status, opts.status as "confirmed"));
-  if (opts.source && opts.source !== "all") conds.push(eq(newsletterSubscribers.source, opts.source));
-  if (opts.q) conds.push(like(sql`lower(${newsletterSubscribers.email})`, `%${opts.q.toLowerCase()}%`));
-  const where = conds.length ? and(...conds) : undefined;
+  const where = subscribersWhere(opts);
+  const orderBy = opts.sort
+    ? orderByFor(
+        opts.sort,
+        {
+          email: newsletterSubscribers.email,
+          stato: newsletterSubscribers.status,
+          origine: newsletterSubscribers.source,
+          iscritto: newsletterSubscribers.createdAt,
+        },
+        newsletterSubscribers.createdAt,
+      )
+    : desc(newsletterSubscribers.createdAt);
   const [rows, [{ total }], [{ confirmed }], sources] = await Promise.all([
     db
       .select()
       .from(newsletterSubscribers)
       .where(where)
-      .orderBy(desc(newsletterSubscribers.createdAt))
+      .orderBy(orderBy)
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
     db.select({ total: sql<number>`count(*)` }).from(newsletterSubscribers).where(where),
@@ -485,15 +599,9 @@ export async function getSubscribersPage(opts: { page?: number; status?: string;
 export const getOutbox = () => db.select().from(emailOutbox).orderBy(desc(emailOutbox.createdAt)).limit(200);
 
 /** Paginated + status-filterable email outbox. */
-export async function getOutboxPage(opts: { page?: number; status?: string; q?: string }) {
+export async function getOutboxPage(opts: OutboxFilters & { page?: number }) {
   const page = Math.max(1, opts.page ?? 1);
-  const conds: SQL[] = [];
-  if (opts.status && opts.status !== "all") conds.push(eq(emailOutbox.status, opts.status as "sent"));
-  if (opts.q) {
-    const term = `%${opts.q.toLowerCase()}%`;
-    conds.push(or(like(sql`lower(${emailOutbox.toAddress})`, term), like(sql`lower(${emailOutbox.subject})`, term))!);
-  }
-  const where = conds.length ? and(...conds) : undefined;
+  const where = outboxWhere(opts);
   const [rows, [{ total }], [{ failed }]] = await Promise.all([
     db
       .select()
@@ -507,6 +615,27 @@ export async function getOutboxPage(opts: { page?: number; status?: string; q?: 
   ]);
   return { rows, total, failed, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
 }
+
+// ── Filtered exports ─────────────────────────────────────────────────────────
+// Unpaginated variants of the list queries, sharing the same WHERE builders, so
+// a CSV download returns exactly the rows the operator has filtered to on screen.
+
+export const getOrdersForExport = (f: OrderFilters) =>
+  db.select().from(orders).where(ordersWhere(f)).orderBy(desc(orders.createdAt));
+
+export const getReservationsForExport = (f: ReservationFilters) =>
+  db
+    .select()
+    .from(reservations)
+    .where(reservationsWhere(f))
+    .orderBy(desc(reservations.createdAt));
+
+export const getSubscribersForExport = (f: SubscriberFilters) =>
+  db
+    .select()
+    .from(newsletterSubscribers)
+    .where(subscribersWhere(f))
+    .orderBy(desc(newsletterSubscribers.createdAt));
 
 export const getAllSettings = () => db.select().from(settings).orderBy(settings.key);
 
@@ -529,11 +658,14 @@ export async function adminGetDiscount(id: string) {
   return row ?? null;
 }
 
-/** Paginated audit-log feed, newest first. Optional `entity` filter. */
-export async function getAuditPage(opts: { page?: number; entity?: string } = {}) {
+/**
+ * Paginated audit-log feed, newest first, plus the distinct actors and entities
+ * present in the whole log so the filters can offer them.
+ */
+export async function getAuditPage(opts: AuditFilters & { page?: number } = {}) {
   const page = Math.max(1, opts.page ?? 1);
-  const where = opts.entity && opts.entity !== "all" ? eq(auditLog.entity, opts.entity) : undefined;
-  const [rows, [{ total }]] = await Promise.all([
+  const where = auditWhere(opts);
+  const [rows, [{ total }], actors, entities] = await Promise.all([
     db
       .select()
       .from(auditLog)
@@ -542,40 +674,90 @@ export async function getAuditPage(opts: { page?: number; entity?: string } = {}
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
     db.select({ total: sql<number>`count(*)` }).from(auditLog).where(where),
+    db
+      .selectDistinct({ id: auditLog.actorId, name: auditLog.actorName })
+      .from(auditLog)
+      .orderBy(auditLog.actorName),
+    db.selectDistinct({ entity: auditLog.entity }).from(auditLog).orderBy(auditLog.entity),
   ]);
-  return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+  return {
+    rows,
+    total,
+    page,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    actors: actors.filter((a): a is { id: string; name: string } => !!a.id),
+    entities: entities.map((e) => e.entity).filter(Boolean),
+  };
 }
 
+/** Unpaginated audit feed for the CSV export, honouring the same filters. */
+export const getAuditForExport = (f: AuditFilters) =>
+  db.select().from(auditLog).where(auditWhere(f)).orderBy(desc(auditLog.createdAt));
+
 /**
- * IVA report: for paid orders whose creation date falls in [from, to], the gross
- * of every order line grouped by VAT rate, plus the gross of shipping. The caller
- * derives imponibile/imposta via `vatBreakdown` (prices are VAT-inclusive).
+ * The timestamp that puts an order in a fiscal period: when it was paid.
+ *
+ * Orders settled before `paidAt` existed fall back to their creation date, which
+ * is the best available approximation for that history and matches how those
+ * periods were previously reported.
+ */
+const fiscalDate = sql`coalesce(${orders.paidAt}, ${orders.createdAt})`;
+
+/**
+ * IVA report for paid orders whose payment date falls in [from, to]. Buckets are
+ * computed **per order** — line grosses, minus that order's discount apportioned
+ * across its rate buckets, plus shipping at the configured rate — then aggregated
+ * by rate. This makes the taxable base + tax reflect what customers actually paid
+ * (a raw line-gross group-by ignored coupons and over-declared VAT).
  *
  * Refunded orders are excluded (paymentStatus = 'paid' only), so the report
  * reflects net taxable takings for the period.
  */
 export async function getVatReport(from: Date, to: Date) {
+  const shippingVatPct = await getSetting<number>("store.shippingVatRate", 22);
+  const shippingVatBps = Math.round(shippingVatPct * 100);
+
   const paidInRange = and(
     eq(orders.paymentStatus, "paid"),
-    gte(orders.createdAt, from),
-    lte(orders.createdAt, to),
+    sql`${fiscalDate} >= ${from.getTime()}`,
+    sql`${fiscalDate} <= ${to.getTime()}`,
   );
 
-  const [lines, [shipping]] = await Promise.all([
-    db
-      .select({
-        vatRateBps: orderItems.vatRateBps,
-        grossCents: sql<number>`coalesce(sum(${orderItems.lineTotalCents}), 0)`,
-      })
-      .from(orderItems)
-      .innerJoin(orders, eq(orderItems.orderId, orders.id))
-      .where(paidInRange)
-      .groupBy(orderItems.vatRateBps),
-    db
-      .select({ grossCents: sql<number>`coalesce(sum(${orders.shippingCents}), 0)` })
-      .from(orders)
-      .where(paidInRange),
-  ]);
+  const ords = await db
+    .select({
+      id: orders.id,
+      discountCents: orders.discountCents,
+      shippingCents: orders.shippingCents,
+    })
+    .from(orders)
+    .where(paidInRange);
 
-  return { lines, shippingGrossCents: shipping?.grossCents ?? 0 };
+  if (ords.length === 0) return { buckets: [] as VatBucket[], shippingVatBps };
+
+  const items = await db
+    .select({
+      orderId: orderItems.orderId,
+      grossCents: orderItems.lineTotalCents,
+      vatRateBps: orderItems.vatRateBps,
+    })
+    .from(orderItems)
+    .where(inArray(orderItems.orderId, ords.map((o) => o.id)));
+
+  const itemsByOrder = new Map<string, { grossCents: number; vatRateBps: number }[]>();
+  for (const it of items) {
+    const arr = itemsByOrder.get(it.orderId) ?? [];
+    arr.push({ grossCents: it.grossCents, vatRateBps: it.vatRateBps });
+    itemsByOrder.set(it.orderId, arr);
+  }
+
+  const perOrder = ords.map((o) =>
+    orderVatBuckets({
+      items: itemsByOrder.get(o.id) ?? [],
+      discountCents: o.discountCents,
+      shippingCents: o.shippingCents,
+      shippingVatBps,
+    }),
+  );
+
+  return { buckets: aggregateVatBuckets(perOrder), shippingVatBps };
 }

@@ -1,14 +1,8 @@
 import Link from "next/link";
-import { AdminHeader, Panel } from "@/components/admin/ui";
+import { AdminHeader, Panel, reservationTypeLabel } from "@/components/admin/ui";
 import { getReservationsPage } from "@/lib/admin/queries";
 
 export const dynamic = "force-dynamic";
-
-const TYPE_LABEL: Record<string, string> = {
-  table: "Tavolo",
-  porchetta: "Porchetta",
-  order: "Ordine",
-};
 
 // Little entry colouring per reservation status.
 const STATUS_ENTRY: Record<string, string> = {
@@ -73,7 +67,7 @@ export default async function ReservationCalendar({ searchParams }: SP) {
   let capped = false;
   let page = 1;
   while (true) {
-    const { rows, pageCount } = await getReservationsPage({ from: weekStart, to: weekEnd, page });
+    const { rows, pageCount } = await getReservationsPage({ da: weekStart, a: weekEnd, page });
     collected.push(...rows);
     if (page >= pageCount) break;
     if (page >= MAX_PAGES) {
@@ -167,7 +161,7 @@ export default async function ReservationCalendar({ searchParams }: SP) {
                       <div className="flex items-center gap-1 font-semibold">
                         {r.time && <span className="tabular-nums">{r.time}</span>}
                         <span className="rounded bg-black/5 px-1 text-[9px] font-bold tracking-wider uppercase">
-                          {TYPE_LABEL[r.type] ?? r.type}
+                          {reservationTypeLabel(r.type)}
                         </span>
                       </div>
                       <div className="truncate" title={r.name}>

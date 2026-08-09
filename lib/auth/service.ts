@@ -8,6 +8,7 @@ import { getOrCreateLoyaltyAccount, addPoints } from "@/lib/loyalty";
 import { sendMail } from "@/lib/mail/mailer";
 import { welcomeEmail } from "@/lib/mail/templates";
 import { verifyTotp } from "@/lib/auth/totp";
+import { consumeRecoveryCode } from "@/lib/auth/recovery-codes";
 import type { RegisterInput, LoginInput } from "@/lib/validation/auth";
 
 const WELCOME_POINTS = 50;
@@ -63,7 +64,14 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
       return { ok: false, error: "Inserisci il codice di verifica.", twoFactorRequired: true };
     }
     if (!verifyTotp(user.totpSecret, input.code)) {
-      return { ok: false, error: "Codice di verifica non valido.", twoFactorRequired: true };
+      // Fall back to a single-use recovery code, so a lost authenticator isn't a
+      // lockout. A spent code is marked immediately, before the session is
+      // issued, so the same code can never be replayed.
+      const remaining = consumeRecoveryCode(user.totpRecoveryCodes, input.code);
+      if (!remaining) {
+        return { ok: false, error: "Codice di verifica non valido.", twoFactorRequired: true };
+      }
+      await db.update(users).set({ totpRecoveryCodes: remaining }).where(eq(users.id, user.id));
     }
   }
   // Opportunistically upgrade a hash stored with weaker/older KDF params — this

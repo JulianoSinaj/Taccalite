@@ -11,7 +11,7 @@ import {
   TrendingUp,
   ArrowRight,
 } from "lucide-react";
-import { AdminHeader, Panel, StatusBadge, euro } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, euro, reservationTypeLabel } from "@/components/admin/ui";
 import {
   getDashboardStats,
   getDashboardInsights,
@@ -21,12 +21,6 @@ import {
 import { smtpConfigured, stripeConfigured } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
-
-const typeLabels: Record<string, string> = {
-  table: "Tavolo",
-  porchetta: "Porchetta",
-  order: "Ordine",
-};
 
 /** Period-over-period delta as a rounded percentage. */
 function delta(cur: number, prev: number): { pct: number; up: boolean } | null {
@@ -264,7 +258,7 @@ export default async function AdminDashboard() {
                       {r.time ?? "—"}
                     </span>
                     <span className="shrink-0 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
-                      {typeLabels[r.type] ?? r.type}
+                      {reservationTypeLabel(r.type)}
                     </span>
                     <span className="flex-1 truncate text-sm text-brown-950">{r.name}</span>
                     <StatusBadge status={r.status} />
@@ -362,13 +356,16 @@ export default async function AdminDashboard() {
         <Panel>
           <h3 className="font-display text-lg text-brown-950">Azioni rapide</h3>
           <div className="mt-4 flex flex-wrap gap-3">
-            <Link href="/admin/reservations" className="rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900">
-              Prenotazioni
+            <Link href="/admin/reservations/new" className="rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900">
+              Nuova prenotazione
             </Link>
-            <Link href="/admin/products" className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15">
+            <Link href="/admin/orders/new" className="rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900">
+              Nuovo ordine
+            </Link>
+            <Link href="/admin/products/new" className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15">
               Nuovo prodotto
             </Link>
-            <Link href="/admin/blog" className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15">
+            <Link href="/admin/blog/new" className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15">
               Nuova news
             </Link>
           </div>

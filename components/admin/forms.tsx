@@ -5,6 +5,7 @@ import { inputCls, labelCls } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
 import { saveProduct, saveBlogPost, saveShop, saveReward } from "@/lib/admin/actions";
 import { saveDiscount } from "@/lib/admin/discount-actions";
+import { createUser } from "@/lib/admin/user-actions";
 import { VAT_RATES_BPS, vatRateLabel } from "@/lib/fiscal";
 import type { ProductRow, BlogPostRow, ShopRow, RewardRow, DiscountCodeRow } from "@/lib/db/schema";
 
@@ -76,7 +77,28 @@ function ImageField({ current }: { current?: string | null }) {
   );
 }
 
-export function ProductForm({ product, shops }: { product?: ProductRow | null; shops: ShopRow[] }) {
+export function ProductForm({
+  product,
+  shops,
+  categoryVat = {},
+}: {
+  product?: ProductRow | null;
+  shops: ShopRow[];
+  /** category → vatRateBps, derived from the catalogue (see getCategoryVatDefaults). */
+  categoryVat?: Record<string, number>;
+}) {
+  // For a NEW product, typing a known category preselects the rate that category
+  // already uses. An existing product keeps its stored rate — changing a saved
+  // product's category must not silently restate its VAT.
+  const [vatBps, setVatBps] = useState(product?.vatRateBps ?? 1000);
+  const knownCategories = Object.keys(categoryVat);
+
+  function onCategoryChange(value: string) {
+    if (product) return;
+    const suggested = categoryVat[value.trim()];
+    if (suggested != null) setVatBps(suggested);
+  }
+
   return (
     <ActionForm action={saveProduct} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {product && <input type="hidden" name="id" value={product.id} />}
@@ -86,7 +108,12 @@ export function ProductForm({ product, shops }: { product?: ProductRow | null; s
       </div>
       <div>
         <label className={labelCls}>Slug</label>
-        <input name="slug" defaultValue={product?.slug} placeholder="auto se vuoto" className={inputCls} />
+        <input
+          name="slug"
+          defaultValue={product?.slug}
+          placeholder="auto dal nome se vuoto"
+          className={inputCls}
+        />
       </div>
       <div>
         <label className={labelCls}>Negozio</label>
@@ -100,7 +127,18 @@ export function ProductForm({ product, shops }: { product?: ProductRow | null; s
       </div>
       <div>
         <label className={labelCls}>Categoria</label>
-        <input name="category" defaultValue={product?.category} className={inputCls} />
+        <input
+          name="category"
+          list="product-categories"
+          defaultValue={product?.category}
+          onChange={(e) => onCategoryChange(e.target.value)}
+          className={inputCls}
+        />
+        <datalist id="product-categories">
+          {knownCategories.map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
       </div>
       <div className="sm:col-span-2">
         <label className={labelCls}>Descrizione</label>
@@ -127,21 +165,69 @@ export function ProductForm({ product, shops }: { product?: ProductRow | null; s
       </div>
       <div>
         <label className={labelCls}>Unità (kg, pezzo…)</label>
-        <input name="unit" defaultValue={product?.unit ?? ""} className={inputCls} />
+        <input
+          name="unit"
+          defaultValue={product?.unit ?? ""}
+          placeholder="auto: kg se venduto a peso"
+          className={inputCls}
+        />
       </div>
       <div>
         <label className={labelCls}>Aliquota IVA</label>
-        <select name="vatRate" defaultValue={String((product?.vatRateBps ?? 1000) / 100)} className={inputCls}>
+        <select
+          name="vatRate"
+          value={String(vatBps / 100)}
+          onChange={(e) => setVatBps(Math.round(Number(e.target.value) * 100))}
+          className={inputCls}
+        >
           {VAT_RATES_BPS.map((bps) => (
             <option key={bps} value={String(bps / 100)}>
               {vatRateLabel(bps)}
             </option>
           ))}
         </select>
+        {!product && knownCategories.length > 0 && (
+          <p className="mt-1 text-xs text-brown-800/60">
+            Proposta in base alla categoria; puoi cambiarla.
+          </p>
+        )}
       </div>
       <div>
         <label className={labelCls}>Giacenza (vuoto = illimitata)</label>
-        <input name="stock" type="number" defaultValue={product?.stock ?? ""} className={inputCls} />
+        <input name="stock" type="number" min={0} defaultValue={product?.stock ?? ""} className={inputCls} />
+      </div>
+      <div>
+        <label className={labelCls}>Soglia di riordino</label>
+        <input
+          name="reorderPoint"
+          type="number"
+          min={0}
+          defaultValue={product?.reorderPoint ?? ""}
+          placeholder="vuoto = soglia generale"
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label className={labelCls}>Costo d&apos;acquisto (€, senza IVA)</label>
+        <input
+          name="costEuros"
+          type="number"
+          step="0.01"
+          min={0}
+          defaultValue={product?.costCents != null ? (product.costCents / 100).toFixed(2) : ""}
+          placeholder="per il calcolo del margine"
+          className={inputCls}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Codice / SKU</label>
+          <input name="sku" defaultValue={product?.sku ?? ""} className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls}>Fornitore</label>
+          <input name="supplier" defaultValue={product?.supplier ?? ""} className={inputCls} />
+        </div>
       </div>
       <div className="sm:col-span-2">
         <label className={labelCls}>Provenienza / tracciabilità</label>
@@ -367,6 +453,56 @@ export function DiscountForm({ discount }: { discount?: DiscountCodeRow | null }
       </div>
       <div className="sm:col-span-2">
         <PendingButton>{discount ? "Salva codice" : "Crea codice"}</PendingButton>
+      </div>
+    </ActionForm>
+  );
+}
+
+/** New-account form. Editing an existing account's details lives on the users
+ *  list (role, password and active state each have their own guarded action). */
+export function UserForm() {
+  return (
+    <ActionForm action={createUser} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div>
+        <label className={labelCls}>Username</label>
+        <input
+          name="username"
+          required
+          minLength={3}
+          maxLength={40}
+          placeholder="es. mario.rossi"
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label className={labelCls}>Nome</label>
+        <input name="name" required maxLength={200} className={inputCls} />
+      </div>
+      <div>
+        <label className={labelCls}>Email (facoltativa)</label>
+        <input name="email" type="email" maxLength={200} className={inputCls} />
+      </div>
+      <div>
+        <label className={labelCls}>Ruolo</label>
+        <select name="role" defaultValue="customer" className={inputCls}>
+          <option value="customer">Cliente</option>
+          <option value="staff">Staff</option>
+          <option value="admin">Amministratore</option>
+        </select>
+      </div>
+      <div>
+        <label className={labelCls}>Password</label>
+        <input
+          name="password"
+          type="text"
+          required
+          minLength={8}
+          placeholder="min. 8 caratteri"
+          className={inputCls}
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <PendingButton>Crea utente</PendingButton>
       </div>
     </ActionForm>
   );

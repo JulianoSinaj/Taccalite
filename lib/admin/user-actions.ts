@@ -9,7 +9,7 @@ import { requireRole, deleteUserSessions } from "@/lib/auth/session";
 import { hashPasswordAsync } from "@/lib/auth/password";
 import { countAdmins } from "@/lib/admin/queries";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
-import { parseForm, userRoleInput, userPasswordInput } from "@/lib/validation/admin";
+import { parseForm, userRoleInput, userPasswordInput, userProfileInput } from "@/lib/validation/admin";
 import { logAudit } from "@/lib/audit";
 import { anonymizeUser } from "@/lib/gdpr";
 
@@ -93,6 +93,65 @@ export async function resetUserPassword(_prev: ActionState, fd: FormData): Promi
     });
     revalidatePath("/admin/users");
     return ok("Password reimpostata.");
+  });
+}
+
+/**
+ * Update an account's contact details (name / email / phone). Admin-only.
+ *
+ * Changing the email clears `emailVerifiedAt` — the new address hasn't proven
+ * itself — and is rejected when another account already holds it (the column is
+ * unique). Role, username and password have their own guarded actions.
+ */
+export async function updateUserProfile(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const d = parseForm(userProfileInput, fd);
+
+    const [target] = await db.select().from(users).where(eq(users.id, d.id)).limit(1);
+    if (!target) throw new ActionError("Utente non trovato");
+
+    const emailChanged = (d.email ?? null) !== (target.email ?? null);
+    if (emailChanged && d.email) {
+      const [clash] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, d.email))
+        .limit(1);
+      if (clash && clash.id !== d.id) throw new ActionError("Email già in uso da un altro account.");
+    }
+
+    await db
+      .update(users)
+      .set({
+        name: d.name,
+        email: d.email ?? null,
+        phone: d.phone ?? null,
+        ...(emailChanged ? { emailVerifiedAt: null } : {}),
+      })
+      .where(eq(users.id, d.id));
+
+    // Describe what actually changed, so the audit trail is readable.
+    const changes: string[] = [];
+    if (d.name !== target.name) changes.push(`nome "${target.name}" → "${d.name}"`);
+    if (emailChanged) changes.push(`email ${target.email ?? "—"} → ${d.email ?? "—"}`);
+    if ((d.phone ?? null) !== (target.phone ?? null)) {
+      changes.push(`telefono ${target.phone ?? "—"} → ${d.phone ?? "—"}`);
+    }
+    if (changes.length === 0) return ok("Nessuna modifica.");
+
+    await logAudit({
+      actor,
+      action: "user.profile",
+      entity: "user",
+      entityId: target.id,
+      summary: `Anagrafica di ${target.username}: ${changes.join(", ")}`,
+      meta: { name: d.name, email: d.email ?? null, phone: d.phone ?? null },
+    });
+
+    revalidatePath("/admin/users");
+    revalidatePath(`/admin/loyalty/${d.id}`);
+    return ok("Anagrafica aggiornata.");
   });
 }
 

@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { AdminHeader, Panel } from "@/components/admin/ui";
-import { ShopForm } from "@/components/admin/forms";
+import { AdminHeader, Panel, NewButton } from "@/components/admin/ui";
 import { DeleteForm } from "@/components/admin/ActionForm";
 import { adminGetShops } from "@/lib/admin/queries";
+import { isAdmin } from "@/lib/auth/session";
 import { deleteShop } from "@/lib/admin/actions";
 
 export const dynamic = "force-dynamic";
@@ -20,24 +20,19 @@ function ServiceTag({ on, label }: { on: boolean; label: string }) {
 }
 
 export default async function AdminShops() {
-  const shops = await adminGetShops();
+  const [shops, admin] = await Promise.all([adminGetShops(), isAdmin()]);
 
   return (
     <div>
-      <AdminHeader title="Negozi" subtitle={`${shops.length} sedi · dati, orari, servizi`} />
-
-      <details className="mb-6">
-        <summary className="w-fit cursor-pointer rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase">
-          + Nuova sede
-        </summary>
-        <Panel className="mt-4">
-          <ShopForm />
-        </Panel>
-      </details>
+      <AdminHeader
+        title="Negozi"
+        subtitle={`${shops.length} sedi · dati, orari, servizi`}
+        action={admin ? <NewButton href="/admin/shops/new">+ Nuova sede</NewButton> : undefined}
+      />
 
       {shops.length === 0 ? (
         <Panel>
-          <p className="text-brown-800/70">Nessuna sede ancora. Aggiungine una con il pulsante qui sopra.</p>
+          <p className="text-brown-800/70">Nessuna sede ancora. Aggiungine una con «Nuova sede».</p>
         </Panel>
       ) : (
       <div className="space-y-3">

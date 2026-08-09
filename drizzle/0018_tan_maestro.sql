@@ -1,0 +1,1 @@
+ALTER TABLE `orders` ADD `internal_notes` text;

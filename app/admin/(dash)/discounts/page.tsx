@@ -1,14 +1,31 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AdminHeader, Panel, StatusBadge, euro, fmtDate } from "@/components/admin/ui";
-import { DiscountForm } from "@/components/admin/forms";
+import { AdminHeader, Panel, StatusBadge, euro, fmtDate, NewButton, Pagination } from "@/components/admin/ui";
+import { FilterChips, FilterSearch } from "@/components/admin/FilterBar";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
-import { adminGetDiscounts } from "@/lib/admin/queries";
+import { getDiscountsPage } from "@/lib/admin/queries";
+import { discountFilters } from "@/lib/admin/filters";
 import { deleteDiscount, toggleDiscountActive } from "@/lib/admin/discount-actions";
 import { isAdmin } from "@/lib/auth/session";
 import type { DiscountCodeRow } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
+
+const BASE = "/admin/discounts";
+
+const STATUS_CHIPS = [
+  { value: "all", label: "Tutti" },
+  { value: "attivi", label: "Attivi" },
+  { value: "disattivati", label: "Disattivati" },
+  { value: "esauriti", label: "Esauriti" },
+];
+
+const TYPE_CHIPS = [
+  { value: "all", label: "Tutti i tipi" },
+  { value: "percent", label: "Percentuale" },
+  { value: "fixed", label: "Importo fisso" },
+  { value: "free_shipping", label: "Spedizione gratis" },
+];
 
 /** Human description of what a code takes off. */
 function describe(d: DiscountCodeRow): string {
@@ -17,27 +34,36 @@ function describe(d: DiscountCodeRow): string {
   return "Spedizione gratuita";
 }
 
-export default async function AdminDiscounts() {
+type SP = { searchParams: Promise<{ stato?: string; tipo?: string; q?: string; page?: string }> };
+
+export default async function AdminDiscounts({ searchParams }: SP) {
   // Coupons move money — admin only.
   if (!(await isAdmin())) redirect("/admin");
-  const codes = await adminGetDiscounts();
+  const sp = await searchParams;
+  const page = Number(sp.page) || 1;
+  const filters = discountFilters(sp);
+  const { rows: codes, total, pageCount } = await getDiscountsPage({ ...filters, page });
+  const filtered = Object.values(filters).some((v) => v && v !== "all");
 
   return (
     <div>
-      <AdminHeader title="Codici sconto" subtitle={`${codes.length} codici · percentuali, importi fissi o spedizione gratuita`} />
+      <AdminHeader
+        title="Codici sconto"
+        subtitle={`${total} codici · percentuali, importi fissi o spedizione gratuita`}
+        action={<NewButton href="/admin/discounts/new">+ Nuovo codice</NewButton>}
+      />
 
-      <details className="mb-6">
-        <summary className="w-fit cursor-pointer rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase">
-          + Nuovo codice
-        </summary>
-        <Panel className="mt-4">
-          <DiscountForm />
-        </Panel>
-      </details>
+      <FilterChips basePath={BASE} params={filters} name="stato" options={STATUS_CHIPS} tone="dark" />
+      <FilterChips basePath={BASE} params={filters} name="tipo" options={TYPE_CHIPS} className="mb-4" />
+      <FilterSearch basePath={BASE} params={filters} placeholder="Codice…" />
 
       {codes.length === 0 ? (
         <Panel>
-          <p className="text-brown-800/70">Nessun codice sconto ancora. Creane uno qui sopra.</p>
+          <p className="text-brown-800/70">
+            {filtered
+              ? "Nessun codice corrisponde ai filtri."
+              : "Nessun codice sconto ancora. Creane uno con «Nuovo codice»."}
+          </p>
         </Panel>
       ) : (
         <div className="space-y-3">
@@ -77,6 +103,8 @@ export default async function AdminDiscounts() {
           })}
         </div>
       )}
+
+      <Pagination basePath={BASE} page={page} pageCount={pageCount} params={filters} />
     </div>
   );
 }

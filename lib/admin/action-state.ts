@@ -5,6 +5,12 @@
 export type ActionState = {
   status: "idle" | "success" | "error";
   message?: string;
+  /**
+   * One-time payload for the rare action whose result the server can't render
+   * again later — currently only freshly generated 2FA recovery codes, which are
+   * stored hashed and so are visible exactly once. Most actions leave this unset.
+   */
+  data?: unknown;
 };
 
 export const idleState: ActionState = { status: "idle" };
@@ -21,8 +27,8 @@ export class ActionError extends Error {
   }
 }
 
-export function ok(message = "Salvato."): ActionState {
-  return { status: "success", message };
+export function ok(message = "Salvato.", data?: unknown): ActionState {
+  return { status: "success", message, ...(data === undefined ? {} : { data }) };
 }
 
 export function fail(message = "Si è verificato un errore."): ActionState {

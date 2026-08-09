@@ -20,16 +20,18 @@ export async function GET(_request: Request, ctx: { params: Promise<{ orderId: s
   const data = await adminGetOrder(orderId);
   if (!data) return NextResponse.json({ ok: false, error: "Ordine non trovato" }, { status: 404 });
 
-  const [legalName, vatNumber, taxCode, address, zip, city, province, regime] = await Promise.all([
-    getSetting<string>("business.legalName", "Norcineria Taccalite"),
-    getSetting<string>("business.vatNumber", ""),
-    getSetting<string>("business.taxCode", ""),
-    getSetting<string>("business.address", ""),
-    getSetting<string>("business.zip", ""),
-    getSetting<string>("business.city", ""),
-    getSetting<string>("business.province", ""),
-    getSetting<string>("business.regime", "Ordinario"),
-  ]);
+  const [legalName, vatNumber, taxCode, address, zip, city, province, regime, shippingVatPct] =
+    await Promise.all([
+      getSetting<string>("business.legalName", "Norcineria Taccalite"),
+      getSetting<string>("business.vatNumber", ""),
+      getSetting<string>("business.taxCode", ""),
+      getSetting<string>("business.address", ""),
+      getSetting<string>("business.zip", ""),
+      getSetting<string>("business.city", ""),
+      getSetting<string>("business.province", ""),
+      getSetting<string>("business.regime", "Ordinario"),
+      getSetting<number>("store.shippingVatRate", 22),
+    ]);
 
   if (!vatNumber) {
     return NextResponse.json(
@@ -40,7 +42,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ orderId: s
 
   const fiscal: FiscalIdentity = { legalName, vatNumber, taxCode, address, zip, city, province, regime };
   const progressivo = data.order.id.replace(/[^A-Za-z0-9]/g, "").slice(0, 10) || "00001";
-  const xml = buildFatturaXml(data.order, data.items, fiscal, progressivo);
+  const xml = buildFatturaXml(data.order, data.items, fiscal, progressivo, Math.round(shippingVatPct * 100));
 
   await logAudit({
     actor,

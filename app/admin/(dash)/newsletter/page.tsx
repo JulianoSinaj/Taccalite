@@ -1,13 +1,49 @@
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, inputCls, labelCls, fmtDate, SearchBox, Pagination } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, fmtDate, fmtDateTime, Pagination } from "@/components/admin/ui";
+import { FilterChips, FilterSearch, chipsFrom } from "@/components/admin/FilterBar";
+import { DataTable, DensityToggle, densityFrom } from "@/components/admin/DataTable";
 import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
-import { getSubscribersPage } from "@/lib/admin/queries";
-import { removeSubscriber, sendBroadcast, sendTestBroadcast } from "@/lib/admin/actions";
+import { CampaignComposer } from "@/components/admin/CampaignComposer";
+import { getSubscribersPage, SUBSCRIBER_SORTS } from "@/lib/admin/queries";
+import { subscriberFilters, sortFilters, filterQuery } from "@/lib/admin/filters";
+import { removeSubscriber } from "@/lib/admin/actions";
+import { duplicateCampaign, deleteCampaign } from "@/lib/admin/campaign-actions";
+import { listCampaigns, getCampaign } from "@/lib/newsletter-campaigns";
 import { isAdmin } from "@/lib/auth/session";
+import type { NewsletterCampaignRow } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
-type SP = { searchParams: Promise<{ page?: string; stato?: string; origine?: string; q?: string }> };
+const BASE = "/admin/newsletter";
+
+type SP = {
+  searchParams: Promise<{
+    page?: string;
+    stato?: string;
+    origine?: string;
+    q?: string;
+    campagna?: string;
+    colonna?: string;
+    verso?: string;
+    densita?: string;
+  }>;
+};
+
+/** Badge for a campaign's lifecycle state. */
+function CampaignStatus({ campaign }: { campaign: NewsletterCampaignRow }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    draft: { label: "Bozza", cls: "bg-brown-900/10 text-brown-800" },
+    scheduled: { label: "Programmata", cls: "bg-amber-100 text-amber-800" },
+    sent: { label: "Inviata", cls: "bg-emerald-100 text-emerald-800" },
+    failed: { label: "Fallita", cls: "bg-red-100 text-red-700" },
+  };
+  const s = map[campaign.status] ?? map.draft;
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold tracking-widest uppercase ${s.cls}`}>
+      {s.label}
+    </span>
+  );
+}
 
 const STATUS_CHIPS: { value: string; label: string }[] = [
   { value: "all", label: "Tutti" },
@@ -16,61 +52,22 @@ const STATUS_CHIPS: { value: string; label: string }[] = [
   { value: "unsubscribed", label: "Disiscritti" },
 ];
 
-const chipCls = (active: boolean) =>
-  `rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
-    active ? "bg-gold text-brown-950" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
-  }`;
-
-// Client-side live preview + test-form mirror. Kept as an inline script so the
-// server page stays self-contained: it renders the composed plaintext body into
-// #nl-preview (paragraph per blank line, <br> per newline) and copies the
-// composed subject/body into the hidden "Invia prova" form fields.
-const composerScript = `
-(function () {
-  var subject = document.getElementById('nl-subject');
-  var body = document.getElementById('nl-body');
-  var preview = document.getElementById('nl-preview');
-  var tSubject = document.getElementById('nl-test-subject');
-  var tBody = document.getElementById('nl-test-body');
-  if (!subject || !body) return;
-  function esc(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-  function render() {
-    if (preview) {
-      var text = body.value.trim();
-      preview.innerHTML = text
-        ? text.split(/\\n{2,}/).map(function (p) {
-            return '<p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 14px;">' +
-              esc(p).replace(/\\n/g, '<br>') + '</p>';
-          }).join('')
-        : '<p style="color:#8a7b6c;font-size:13px;">L\\'anteprima comparirà qui.</p>';
-    }
-    if (tSubject) tSubject.value = subject.value;
-    if (tBody) tBody.value = body.value;
-  }
-  subject.addEventListener('input', render);
-  body.addEventListener('input', render);
-  render();
-})();
-`;
-
 export default async function AdminNewsletter({ searchParams }: SP) {
-  const { page: pageStr, stato = "all", origine = "all", q } = await searchParams;
-  const page = Number(pageStr) || 1;
-  const [{ rows: subs, total, confirmed, pageCount, sources }, admin] = await Promise.all([
-    getSubscribersPage({ page, status: stato, source: origine, q }),
-    isAdmin(),
-  ]);
-
-  // Preserve the active filters/search on chip links (dropping page).
-  const filterHref = (patch: Record<string, string>) => {
-    const sp = new URLSearchParams();
-    const base: Record<string, string> = { stato, origine, ...(q ? { q } : {}), ...patch };
-    for (const [k, v] of Object.entries(base)) if (v && v !== "all") sp.set(k, v);
-    const qs = sp.toString();
-    return qs ? `/admin/newsletter?${qs}` : "/admin/newsletter";
-  };
+  const sp = await searchParams;
+  const page = Number(sp.page) || 1;
+  const { stato = "all", origine = "all", q } = sp;
+  const filters = subscriberFilters(sp);
+  const sort = sortFilters(sp, SUBSCRIBER_SORTS, { colonna: "iscritto", verso: "desc" });
+  const density = densityFrom(sp.densita);
+  // Carried on every sort/density/page link so the view survives navigation.
+  const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso, densita: sp.densita };
+  const [{ rows: subs, total, confirmed, pageCount, sources }, admin, campaigns, editing] =
+    await Promise.all([
+      getSubscribersPage({ ...filters, page, sort }),
+      isAdmin(),
+      listCampaigns(),
+      sp.campagna ? getCampaign(sp.campagna) : Promise.resolve(null),
+    ]);
 
   return (
     <div>
@@ -79,9 +76,8 @@ export default async function AdminNewsletter({ searchParams }: SP) {
         subtitle={`${confirmed} iscritti confermati · ${total} nel filtro attuale`}
         action={
           admin ? (
-            // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
             <a
-              href="/api/admin/export/subscribers"
+              href={`/api/admin/export/subscribers${filterQuery(filters)}`}
               download
               className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
             >
@@ -91,161 +87,153 @@ export default async function AdminNewsletter({ searchParams }: SP) {
         }
       />
 
-      <details className="mb-6">
-        <summary className="cursor-pointer rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase w-fit">
-          ✉ Invia comunicazione
+      {/* Composer — a new draft, or the campaign named by ?campagna=<id>. */}
+      <details className="mb-6" open={!!editing}>
+        <summary className="w-fit cursor-pointer rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase">
+          ✉ {editing ? "Modifica comunicazione" : "Nuova comunicazione"}
         </summary>
         <Panel className="mt-4">
-          <ActionForm action={sendBroadcast} className="space-y-4">
-            <div>
-              <label className={labelCls}>Segmento destinatari</label>
-              <select name="source" defaultValue="" className={inputCls}>
-                <option value="">Tutti i confermati ({confirmed})</option>
-                {sources.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-brown-800/60">
-                Scegli un&apos;origine per inviare solo a quel segmento di iscritti confermati.
-              </p>
-            </div>
-            <div>
-              <label className={labelCls}>Oggetto</label>
-              <input
-                id="nl-subject"
-                name="subject"
-                required
-                className={inputCls}
-                placeholder="La porchetta del sabato è pronta!"
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Messaggio</label>
-              <textarea
-                id="nl-body"
-                name="body"
-                rows={6}
-                required
-                className={inputCls}
-                placeholder="Scrivi qui la tua comunicazione…"
-              />
-            </div>
-
-            <details className="rounded-lg border border-brown-900/10 bg-cream/40 p-3">
-              <summary className="cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
-                Anteprima messaggio
-              </summary>
-              <div id="nl-preview" className="mt-3 rounded-lg bg-white p-4">
-                <p className="text-[13px] text-brown-800/60">L&apos;anteprima comparirà qui.</p>
-              </div>
-            </details>
-
-            <p className="text-xs text-brown-800/60">
-              Inviata agli iscritti confermati del segmento scelto. Senza SMTP configurato, le email
-              restano nel registro Email (test).
+          <CampaignComposer campaign={editing} sources={sources} confirmedCount={confirmed} />
+          {editing && (
+            <p className="mt-4 border-t border-brown-900/10 pt-3 text-xs text-brown-800/60">
+              Stai modificando una campagna esistente.{" "}
+              <Link href="/admin/newsletter" className="font-semibold text-gold-deep underline">
+                Componi invece una nuova comunicazione
+              </Link>
+              .
             </p>
-            <PendingButton
-              confirm={`Confermi l'invio della newsletter? Riceverà fino a ${confirmed} iscritti confermati (o solo il segmento selezionato).`}
-            >
-              Invia a {confirmed} iscritti
-            </PendingButton>
-          </ActionForm>
-
-          {/* Separate form so the owner gets its own inline feedback; its subject
-              and body are mirrored from the composer above by composerScript. */}
-          <ActionForm action={sendTestBroadcast} className="mt-4 border-t border-brown-900/10 pt-4">
-            <input type="hidden" id="nl-test-subject" name="subject" />
-            <input type="hidden" id="nl-test-body" name="body" />
-            <div className="flex flex-wrap items-center gap-3">
-              <PendingButton tone="dark">Invia prova a me</PendingButton>
-              <span className="text-xs text-brown-800/60">
-                Ricevi un&apos;anteprima via email prima dell&apos;invio reale.
-              </span>
-            </div>
-          </ActionForm>
-
-          <script dangerouslySetInnerHTML={{ __html: composerScript }} />
+          )}
         </Panel>
       </details>
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        {STATUS_CHIPS.map((c) => (
-          <Link key={c.value} href={filterHref({ stato: c.value })} className={chipCls(stato === c.value)}>
-            {c.label}
-          </Link>
-        ))}
-      </div>
-
-      {sources.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          <Link href={filterHref({ origine: "all" })} className={chipCls(origine === "all")}>
-            Tutte le origini
-          </Link>
-          {sources.map((s) => (
-            <Link key={s} href={filterHref({ origine: s })} className={chipCls(origine === s)}>
-              {s}
-            </Link>
-          ))}
-        </div>
+      {/* Campaign history */}
+      {campaigns.length > 0 && (
+        <>
+          <h2 className="font-display mt-8 mb-3 text-xl text-brown-950">Comunicazioni</h2>
+          <div className="mb-8 space-y-3">
+            {campaigns.map((c) => (
+              <Panel key={c.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="flex flex-wrap items-center gap-2 font-semibold text-brown-950">
+                    {c.subject}
+                    <CampaignStatus campaign={c} />
+                  </p>
+                  <p className="mt-0.5 text-xs text-brown-800/60">
+                    {c.segment ? `Segmento ${c.segment}` : "Tutti i confermati"}
+                    {c.status === "sent" && ` · ${c.recipientCount} destinatari · ${fmtDateTime(c.sentAt)}`}
+                    {c.status === "scheduled" && ` · programmata per ${fmtDateTime(c.scheduledFor)}`}
+                    {c.status === "draft" && ` · bozza del ${fmtDate(c.createdAt)}`}
+                    {c.error && ` · ${c.error}`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {c.status === "sent" ? (
+                    <ActionForm action={duplicateCampaign} className="inline-flex">
+                      <input type="hidden" name="id" value={c.id} />
+                      <PendingButton tone="dark">Duplica</PendingButton>
+                    </ActionForm>
+                  ) : (
+                    <>
+                      <Link
+                        href={`/admin/newsletter?campagna=${c.id}`}
+                        className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                      >
+                        Modifica
+                      </Link>
+                      <DeleteForm
+                        action={deleteCampaign}
+                        id={c.id}
+                        confirm={`Eliminare la comunicazione "${c.subject}"?`}
+                      />
+                    </>
+                  )}
+                </div>
+              </Panel>
+            ))}
+          </div>
+        </>
       )}
 
-      <SearchBox
-        basePath="/admin/newsletter"
-        q={q}
-        placeholder="Cerca per email…"
-        hidden={{ stato, origine }}
+      <FilterChips basePath={BASE} params={linkParams} name="stato" options={STATUS_CHIPS} />
+      <FilterChips
+        basePath={BASE}
+        params={linkParams}
+        name="origine"
+        options={chipsFrom(sources, "Tutte le origini")}
+        className="mb-4"
       />
 
-      {subs.length === 0 ? (
-        <Panel>
-          <p className="text-brown-800/70">
-            {q || stato !== "all" || origine !== "all"
-              ? "Nessun iscritto corrisponde ai filtri."
-              : "Nessun iscritto ancora."}
-          </p>
-        </Panel>
-      ) : (
-        <Panel className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-brown-900/10 text-[10px] font-bold tracking-widest text-brown-800/60 uppercase">
-                <th className="pb-3">Email</th>
-                <th className="pb-3">Stato</th>
-                <th className="pb-3">Origine</th>
-                <th className="pb-3">Iscritto</th>
-                <th className="pb-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {subs.map((s) => (
-                <tr key={s.id} className="border-b border-brown-900/5">
-                  <td className="py-3 font-medium text-brown-950">{s.email}</td>
-                  <td className="py-3">
-                    <StatusBadge status={s.status === "confirmed" ? "confirmed" : s.status === "unsubscribed" ? "cancelled" : "pending"} />
-                  </td>
-                  <td className="py-3 text-brown-800/70">{s.source}</td>
-                  <td className="py-3 text-brown-800/70">{fmtDate(s.createdAt)}</td>
-                  <td className="py-3 text-right">
-                    {s.status !== "unsubscribed" && (
-                      <DeleteForm
-                        action={removeSubscriber}
-                        id={s.id}
-                        confirm={`Rimuovere ${s.email} dalla newsletter?`}
-                      >
-                        Rimuovi
-                      </DeleteForm>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Panel>
-      )}
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-[18rem] flex-1">
+          <FilterSearch basePath={BASE} params={linkParams} placeholder="Indirizzo email…" />
+        </div>
+        <DensityToggle basePath={BASE} params={linkParams} density={density} />
+      </div>
 
-      <Pagination basePath="/admin/newsletter" page={page} pageCount={pageCount} params={{ stato, origine, q }} />
+      <DataTable
+        rows={subs}
+        rowKey={(s) => s.id}
+        basePath={BASE}
+        params={linkParams}
+        sort={sort}
+        density={density}
+        empty={
+          q || stato !== "all" || origine !== "all"
+            ? "Nessun iscritto corrisponde ai filtri."
+            : "Nessun iscritto ancora."
+        }
+        columns={[
+          {
+            key: "email",
+            header: "Email",
+            sortable: true,
+            cell: (s) => <span className="font-medium text-brown-950">{s.email}</span>,
+          },
+          {
+            key: "stato",
+            header: "Stato",
+            sortable: true,
+            cell: (s) => (
+              <StatusBadge
+                status={
+                  s.status === "confirmed" ? "confirmed" : s.status === "unsubscribed" ? "cancelled" : "pending"
+                }
+              />
+            ),
+          },
+          {
+            key: "origine",
+            header: "Origine",
+            sortable: true,
+            hideOnMobile: true,
+            cell: (s) => <span className="text-brown-800/70">{s.source || "—"}</span>,
+          },
+          {
+            key: "iscritto",
+            header: "Iscritto",
+            sortable: true,
+            hideOnMobile: true,
+            cell: (s) => <span className="text-brown-800/70">{fmtDate(s.createdAt)}</span>,
+          },
+          {
+            key: "azioni",
+            header: <span className="sr-only">Azioni</span>,
+            align: "right",
+            cell: (s) =>
+              s.status !== "unsubscribed" ? (
+                <DeleteForm
+                  action={removeSubscriber}
+                  id={s.id}
+                  confirm={`Rimuovere ${s.email} dalla newsletter?`}
+                >
+                  Rimuovi
+                </DeleteForm>
+              ) : null,
+          },
+        ]}
+      />
+
+      <Pagination basePath={BASE} page={page} pageCount={pageCount} params={linkParams} />
     </div>
   );
 }

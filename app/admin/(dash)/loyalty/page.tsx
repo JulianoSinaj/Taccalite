@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AdminHeader, Panel, StatusBadge, inputCls, fmtDate, SearchBox, Pagination } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getCustomersPage, getRedemptionsPage } from "@/lib/admin/queries";
+import { customerFilters, filterQuery } from "@/lib/admin/filters";
 import { adjustPoints, updateRedemptionStatus } from "@/lib/admin/actions";
 import { isAdmin } from "@/lib/auth/session";
 
@@ -10,14 +11,16 @@ export const dynamic = "force-dynamic";
 type SP = { searchParams: Promise<{ q?: string; page?: string; rpage?: string }> };
 
 export default async function AdminLoyalty({ searchParams }: SP) {
-  const { q, page: pageStr, rpage: rpageStr } = await searchParams;
+  const sp = await searchParams;
+  const { q, page: pageStr, rpage: rpageStr } = sp;
   const page = Number(pageStr) || 1;
   const rpage = Number(rpageStr) || 1;
+  const filters = customerFilters(sp);
   // Points adjustment and bulk PII export are admin-only (see the matching
   // server-side guards); hide the controls from staff so they don't 403.
   const [{ rows: customers, total, pageCount }, { rows: redemptions, pageCount: rPageCount }, admin] =
     await Promise.all([
-      getCustomersPage({ q, page }),
+      getCustomersPage({ ...filters, page }),
       getRedemptionsPage({ page: rpage }),
       isAdmin(),
     ]);
@@ -29,9 +32,8 @@ export default async function AdminLoyalty({ searchParams }: SP) {
         subtitle={`${total} clienti`}
         action={
           admin ? (
-            // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
             <a
-              href="/api/admin/export/customers"
+              href={`/api/admin/export/customers${filterQuery(filters)}`}
               download
               className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
             >

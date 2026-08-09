@@ -26,9 +26,11 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   username,
   password: z.string().min(1, "Inserisci la password"),
-  // Optional TOTP code, supplied on the second step when 2FA is enabled.
+  // Optional second-factor input, supplied on the second step when 2FA is
+  // enabled. Either a 6-digit TOTP code or a recovery code ("A7K2M-9PQXT"),
+  // hence the wider bound and the non-numeric charset.
   code: z
-    .union([z.string().trim().max(10), z.literal("")])
+    .union([z.string().trim().max(20), z.literal("")])
     .optional()
     .transform((v) => (v ? v : undefined)),
 });

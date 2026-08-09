@@ -3,7 +3,7 @@ import { AdminHeader, Panel, euro, inputCls, labelCls } from "@/components/admin
 import { getVatReport } from "@/lib/admin/queries";
 import { getSetting } from "@/lib/db/queries";
 import { isAdmin } from "@/lib/auth/session";
-import { vatBreakdown, vatRateLabel, totalImposta } from "@/lib/fiscal";
+import { vatRateLabel, totalImposta } from "@/lib/fiscal";
 
 export const dynamic = "force-dynamic";
 
@@ -24,18 +24,10 @@ export default async function VatReport({ searchParams }: SP) {
   const from = da ? new Date(`${da}T00:00:00`) : defFrom;
   const to = a ? new Date(`${a}T23:59:59`) : now;
 
-  const [{ lines, shippingGrossCents }, shippingVatPct, legalName, vatNumber] = await Promise.all([
+  const [{ buckets, shippingVatBps }, legalName, vatNumber] = await Promise.all([
     getVatReport(from, to),
-    getSetting<number>("store.shippingVatRate", 22),
     getSetting<string>("business.legalName", "Norcineria Taccalite"),
     getSetting<string>("business.vatNumber", ""),
-  ]);
-
-  const shippingVatBps = Math.round(shippingVatPct * 100);
-  // Combine product lines with a shipping line (at its configured rate) into buckets.
-  const buckets = vatBreakdown([
-    ...lines.map((l) => ({ grossCents: l.grossCents, vatRateBps: l.vatRateBps })),
-    ...(shippingGrossCents > 0 ? [{ grossCents: shippingGrossCents, vatRateBps: shippingVatBps }] : []),
   ]);
 
   const totalGross = buckets.reduce((s, b) => s + b.grossCents, 0);

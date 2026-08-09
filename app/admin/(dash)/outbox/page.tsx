@@ -1,11 +1,14 @@
-import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, SearchBox, Pagination, fmtDate } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, Pagination, fmtDate } from "@/components/admin/ui";
+import { FilterChips, FilterSearch } from "@/components/admin/FilterBar";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getOutboxPage } from "@/lib/admin/queries";
+import { outboxFilters } from "@/lib/admin/filters";
 import { retryOutboxEmail, retryAllFailed } from "@/lib/admin/outbox-actions";
 import { smtpConfigured } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
+
+const BASE = "/admin/outbox";
 
 const FILTERS: { value: string; label: string }[] = [
   { value: "all", label: "Tutti" },
@@ -19,18 +22,10 @@ type SP = {
 };
 
 export default async function AdminOutbox({ searchParams }: SP) {
-  const { stato = "all", q = "", page: pageStr } = await searchParams;
-  const page = Number(pageStr) || 1;
-  const { rows, total, failed, pageCount } = await getOutboxPage({ page, status: stato, q: q || undefined });
-
-  const current = { stato, q };
-  const filterHref = (next: Partial<typeof current>) => {
-    const merged = { ...current, ...next };
-    const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries(merged)) if (v && v !== "all") sp.set(k, v);
-    const qs = sp.toString();
-    return qs ? `/admin/outbox?${qs}` : "/admin/outbox";
-  };
+  const sp = await searchParams;
+  const page = Number(sp.page) || 1;
+  const filters = outboxFilters(sp);
+  const { rows, total, failed, pageCount } = await getOutboxPage({ ...filters, page });
 
   return (
     <div>
@@ -62,26 +57,9 @@ export default async function AdminOutbox({ searchParams }: SP) {
         </div>
       )}
 
-      <div className="mb-3 flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
-          <Link
-            key={f.value}
-            href={filterHref({ stato: f.value })}
-            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
-              stato === f.value ? "bg-brown-950 text-cream" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
-            }`}
-          >
-            {f.label}
-          </Link>
-        ))}
-      </div>
+      <FilterChips basePath={BASE} params={filters} name="stato" options={FILTERS} tone="dark" className="mb-4" />
 
-      <SearchBox
-        basePath="/admin/outbox"
-        q={q}
-        placeholder="Cerca per destinatario o oggetto…"
-        hidden={stato !== "all" ? { stato } : {}}
-      />
+      <FilterSearch basePath={BASE} params={filters} placeholder="Destinatario o oggetto…" />
 
       {rows.length === 0 ? (
         <Panel>
@@ -116,7 +94,7 @@ export default async function AdminOutbox({ searchParams }: SP) {
         </div>
       )}
 
-      <Pagination basePath="/admin/outbox" page={page} pageCount={pageCount} params={{ stato: stato !== "all" ? stato : undefined, q: q || undefined }} />
+      <Pagination basePath={BASE} page={page} pageCount={pageCount} params={filters} />
     </div>
   );
 }

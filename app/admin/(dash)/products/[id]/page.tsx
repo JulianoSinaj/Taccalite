@@ -1,19 +1,29 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { AdminHeader, Panel, inputCls, labelCls, fmtDate } from "@/components/admin/ui";
+import { AdminHeader, Panel, BackLink, inputCls, labelCls, fmtDate, euro } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { ProductForm } from "@/components/admin/forms";
-import { adminGetProduct, adminGetShops, getStockMovements } from "@/lib/admin/queries";
+import {
+  adminGetProduct,
+  adminGetShops,
+  getStockMovements,
+  getCategoryVatDefaults,
+} from "@/lib/admin/queries";
 import { adjustStock } from "@/lib/admin/actions";
 import { pendingStockNotificationCount } from "@/lib/stock-notify";
+import { margin } from "@/lib/inventory";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditProduct({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [product, shops] = await Promise.all([adminGetProduct(id), adminGetShops()]);
+  const [product, shops, categoryVat] = await Promise.all([
+    adminGetProduct(id),
+    adminGetShops(),
+    getCategoryVatDefaults(),
+  ]);
   if (!product) notFound();
+
+  const productMargin = margin(product);
 
   const [movements, waiting] =
     product.stock != null
@@ -22,13 +32,46 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
 
   return (
     <div>
-      <Link href="/admin/products" className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-brown-800/70 hover:text-brown-950">
-        <ArrowLeft className="size-4" /> Prodotti
-      </Link>
+      <BackLink href="/admin/products">Prodotti</BackLink>
       <AdminHeader title={product.name} subtitle="Modifica prodotto" />
       <Panel>
-        <ProductForm product={product} shops={shops} />
+        <ProductForm product={product} shops={shops} categoryVat={categoryVat} />
       </Panel>
+
+      {/* Margin, once a purchase cost is on file. */}
+      {productMargin && (
+        <>
+          <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Marginalità</h2>
+          <Panel className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+              <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Prezzo ivato</p>
+              <p className="font-display mt-1 text-xl text-brown-950">{euro(product.priceCents)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Netto (imponibile)</p>
+              <p className="font-display mt-1 text-xl text-brown-950">{euro(productMargin.netCents)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Costo</p>
+              <p className="font-display mt-1 text-xl text-brown-950">{euro(product.costCents)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Margine</p>
+              <p
+                className={`font-display mt-1 text-xl font-bold ${
+                  productMargin.marginCents >= 0 ? "text-emerald-700" : "text-red-600"
+                }`}
+              >
+                {euro(productMargin.marginCents)} · {productMargin.marginPct}%
+              </p>
+            </div>
+          </Panel>
+          <p className="mt-2 text-xs text-brown-800/60">
+            Il margine confronta il costo con l&apos;imponibile (prezzo al netto dell&apos;IVA), non con
+            il prezzo esposto.
+          </p>
+        </>
+      )}
 
       {/* Inventory: quick stock adjustment + movement ledger */}
       <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Giacenza e movimenti</h2>

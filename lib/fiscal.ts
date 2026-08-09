@@ -63,3 +63,98 @@ export function vatBreakdown(lines: VatLine[]): VatBucket[] {
 export function totalImposta(buckets: VatBucket[]): number {
   return buckets.reduce((sum, b) => sum + b.impostaCents, 0);
 }
+
+/**
+ * Distribute an integer `total` across `weights` proportionally, using the
+ * largest-remainder method so the returned integer parts sum **exactly** to
+ * `total` (no cent created or lost). `total` must not exceed the weight sum.
+ */
+export function apportion(total: number, weights: number[]): number[] {
+  const n = weights.length;
+  if (n === 0) return [];
+  const sumW = weights.reduce((s, w) => s + w, 0);
+  if (total <= 0 || sumW <= 0) return weights.map(() => 0);
+  const exact = weights.map((w) => (total * w) / sumW);
+  const parts = exact.map((x) => Math.floor(x));
+  let assigned = parts.reduce((s, x) => s + x, 0);
+  // Hand out the leftover cents to the largest fractional remainders first.
+  const order = exact
+    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
+    .sort((a, b) => b.frac - a.frac);
+  let k = 0;
+  while (assigned < total && k < n * 2) {
+    parts[order[k % n].i] += 1;
+    assigned += 1;
+    k += 1;
+  }
+  return parts;
+}
+
+export type OrderVatInput = {
+  /** Line grosses (VAT-inclusive) with their snapshot rate. */
+  items: VatLine[];
+  /** Cart-level discount in cents (≥ 0), apportioned across the rate buckets. */
+  discountCents: number;
+  /** Shipping charged in cents (≥ 0), added under `shippingVatBps`. */
+  shippingCents: number;
+  /** VAT rate (bps) applied to shipping. */
+  shippingVatBps: number;
+};
+
+/**
+ * Reconciled VAT buckets for a single order. Starts from the line grosses, then:
+ *  1. apportions the cart discount across rate buckets pro-rata to each bucket's
+ *     share of the pre-discount subtotal (largest-remainder, exact to the cent);
+ *  2. adds shipping under its own rate.
+ * The sum of bucket grosses therefore equals `subtotal − discount + shipping` =
+ * the order total, so `imponibile + imposta` reconciles with what the customer
+ * actually paid — unlike a raw line-gross breakdown, which ignores both.
+ */
+export function orderVatBuckets(input: OrderVatInput): VatBucket[] {
+  const byRate = new Map<number, number>();
+  for (const l of input.items) {
+    if (!l.grossCents) continue;
+    byRate.set(l.vatRateBps, (byRate.get(l.vatRateBps) ?? 0) + l.grossCents);
+  }
+  const rates = [...byRate.keys()];
+  const grosses = rates.map((r) => byRate.get(r)!);
+  const subtotal = grosses.reduce((s, g) => s + g, 0);
+
+  // Never let a bogus discount exceed the goods subtotal.
+  const discount = Math.min(Math.max(0, Math.round(input.discountCents)), subtotal);
+  const discountByRate = apportion(discount, grosses);
+
+  const netByRate = new Map<number, number>();
+  rates.forEach((r, i) => netByRate.set(r, grosses[i] - discountByRate[i]));
+
+  const shipping = Math.max(0, Math.round(input.shippingCents));
+  if (shipping > 0) {
+    netByRate.set(input.shippingVatBps, (netByRate.get(input.shippingVatBps) ?? 0) + shipping);
+  }
+
+  return [...netByRate.entries()]
+    .filter(([, g]) => g > 0)
+    .sort((a, b) => a[0] - b[0])
+    .map(([rateBps, grossCents]) => {
+      const { imponibileCents, impostaCents } = splitGross(grossCents, rateBps);
+      return { rateBps, grossCents, imponibileCents, impostaCents };
+    });
+}
+
+/** Sum several orders' buckets into one bucket per rate (for a period report). */
+export function aggregateVatBuckets(perOrder: VatBucket[][]): VatBucket[] {
+  const byRate = new Map<number, VatBucket>();
+  for (const buckets of perOrder) {
+    for (const b of buckets) {
+      const cur = byRate.get(b.rateBps);
+      if (cur) {
+        cur.grossCents += b.grossCents;
+        cur.imponibileCents += b.imponibileCents;
+        cur.impostaCents += b.impostaCents;
+      } else {
+        byRate.set(b.rateBps, { ...b });
+      }
+    }
+  }
+  return [...byRate.values()].sort((a, b) => a.rateBps - b.rateBps);
+}

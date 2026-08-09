@@ -1,0 +1,175 @@
+"use client";
+
+import { useState } from "react";
+import { inputCls, labelCls, RESERVATION_TYPES } from "./ui";
+import { ActionForm, PendingButton } from "./ActionForm";
+import { createAdminReservation, updateReservationDetails } from "@/lib/admin/reservation-actions";
+import type { ReservationRow, ShopRow } from "@/lib/db/schema";
+
+/** Today as yyyy-mm-dd, for the default booking date on a new reservation. */
+function todayValue(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Create or reschedule a booking from the back-office.
+ *
+ * The `type` select drives which quantity field is relevant — guests for a
+ * table, kg for porchetta — so the operator only ever sees the field that
+ * applies. Both are still submitted; the server nulls the one that doesn't
+ * belong to the chosen type.
+ */
+export function ReservationForm({
+  shops,
+  reservation,
+  onDone,
+}: {
+  shops: ShopRow[];
+  reservation?: ReservationRow | null;
+  /** Rendered under the buttons — e.g. a "back to list" link on the create page. */
+  onDone?: React.ReactNode;
+}) {
+  const editing = !!reservation;
+  const [type, setType] = useState<string>(reservation?.type ?? "table");
+
+  return (
+    <ActionForm
+      action={editing ? updateReservationDetails : createAdminReservation}
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+    >
+      {editing && <input type="hidden" name="id" value={reservation.id} />}
+
+      <div>
+        <label className={labelCls}>Tipo</label>
+        <select
+          name="type"
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          className={inputCls}
+        >
+          {RESERVATION_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className={labelCls}>Negozio</label>
+        <select name="shopSlug" defaultValue={reservation?.shopSlug ?? shops[0]?.slug} className={inputCls}>
+          {shops.map((s) => (
+            <option key={s.slug} value={s.slug}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className={labelCls}>Nome cliente</label>
+        <input name="name" required maxLength={120} defaultValue={reservation?.name} className={inputCls} />
+      </div>
+
+      <div>
+        <label className={labelCls}>Telefono</label>
+        <input name="phone" required maxLength={40} defaultValue={reservation?.phone} className={inputCls} />
+      </div>
+
+      <div className="sm:col-span-2">
+        <label className={labelCls}>Email (facoltativa)</label>
+        <input
+          name="email"
+          type="email"
+          maxLength={200}
+          defaultValue={reservation?.email ?? ""}
+          placeholder="Serve per inviare conferma e promemoria"
+          className={inputCls}
+        />
+      </div>
+
+      <div>
+        <label className={labelCls}>Data</label>
+        <input
+          name="date"
+          type="date"
+          required
+          defaultValue={reservation?.date ?? todayValue()}
+          className={inputCls}
+        />
+      </div>
+
+      <div>
+        <label className={labelCls}>Ora {type === "porchetta" ? "(ritiro, facoltativa)" : ""}</label>
+        <input name="time" type="time" defaultValue={reservation?.time ?? ""} className={inputCls} />
+      </div>
+
+      {type === "table" && (
+        <div>
+          <label className={labelCls}>Ospiti</label>
+          <input
+            name="guests"
+            type="number"
+            min={1}
+            max={100}
+            defaultValue={reservation?.guests ?? ""}
+            className={inputCls}
+          />
+        </div>
+      )}
+
+      {type === "porchetta" && (
+        <div>
+          <label className={labelCls}>Quantità (kg)</label>
+          <input
+            name="quantityKg"
+            type="number"
+            step="0.5"
+            min={0.5}
+            max={200}
+            required
+            defaultValue={reservation?.quantityKg ?? ""}
+            className={inputCls}
+          />
+        </div>
+      )}
+
+      <div className="sm:col-span-2">
+        <label className={labelCls}>Note del cliente</label>
+        <textarea name="notes" rows={2} defaultValue={reservation?.notes ?? ""} className={inputCls} />
+      </div>
+
+      {!editing && (
+        <>
+          <div>
+            <label className={labelCls}>Stato iniziale</label>
+            <select name="status" defaultValue="confirmed" className={inputCls}>
+              <option value="confirmed">Confermata</option>
+              <option value="pending">In attesa</option>
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label className={labelCls}>Note interne</label>
+            <input name="adminNotes" maxLength={2000} className={inputCls} />
+          </div>
+        </>
+      )}
+
+      <div className="sm:col-span-2">
+        <label className="flex items-center gap-2 text-sm font-medium text-brown-900">
+          <input type="checkbox" name="notifyCustomer" className="h-4 w-4 rounded accent-brown-950" />
+          Invia {editing ? "il riepilogo aggiornato" : "la conferma"} al cliente via email
+        </label>
+        <p className="mt-1 text-xs text-brown-800/60">
+          Richiede un indirizzo email. Per una prenotazione presa al telefono di solito non serve.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+        <PendingButton>{editing ? "Salva modifiche" : "Crea prenotazione"}</PendingButton>
+        {onDone}
+      </div>
+    </ActionForm>
+  );
+}

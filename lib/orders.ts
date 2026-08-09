@@ -2,12 +2,13 @@ import "server-only";
 import { customAlphabet } from "nanoid";
 import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { orders, orderItems, products } from "@/lib/db/schema";
+import { orders, orderItems, products, stockMovements } from "@/lib/db/schema";
 import { getShopBySlug, getSetting } from "@/lib/db/queries";
-import { validateDiscount, recordDiscountUse } from "@/lib/discounts";
+import { validateDiscount, recordDiscountUseByCode } from "@/lib/discounts";
 import { sendMail } from "@/lib/mail/mailer";
 import { orderCustomerEmail, orderOwnerEmail, lowStockOwnerEmail, type OrderEmailData } from "@/lib/mail/templates";
 import { addPoints } from "@/lib/loyalty";
+import { isLowStock } from "@/lib/inventory";
 import { env } from "@/lib/env";
 import type { CheckoutInput } from "@/lib/validation/order";
 
@@ -55,6 +56,17 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
   if (lines.length === 0) throw new Error("Nessun prodotto valido nel carrello");
+
+  // Refuse to oversell stock-tracked products. Stock is only decremented at
+  // payment, so without this a stale cart / direct POST / concurrent buyer could
+  // place a paid order for more than exists (the decrement just floors at 0).
+  const shortages = lines.filter((l) => l.product.stock != null && l.product.stock < l.quantity);
+  if (shortages.length > 0) {
+    const names = shortages
+      .map((l) => `${l.product.name} (disponibili: ${l.product.stock})`)
+      .join(", ");
+    throw new Error(`Scorte insufficienti per: ${names}`);
+  }
 
   // For pickup, the chosen shop must exist and have the store enabled.
   if (input.fulfilment === "pickup") {
@@ -147,8 +159,9 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
 
   if (!order) throw new Error("Impossibile generare un numero d'ordine univoco");
 
-  // Count the redemption once the order exists.
-  if (discount) await recordDiscountUse(discount.id);
+  // NB: the coupon is counted when the order is *paid* (see finalizeOrder), not
+  // here — otherwise an abandoned/cancelled checkout would permanently burn a
+  // redemption and a capped code could be exhausted by shoppers who never pay.
 
   return {
     orderId: order.id,
@@ -156,6 +169,68 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
     totalCents,
     items: lines.map((l) => ({ name: l.product.name, quantity: l.quantity, lineTotalCents: l.lineTotalCents })),
   };
+}
+
+export type RecalcResult = {
+  subtotalCents: number;
+  discountCents: number;
+  shippingCents: number;
+  totalCents: number;
+  /** Set when a previously-applied coupon no longer qualifies (e.g. the edited
+   *  subtotal fell below its minimum, or it expired since the order was placed).
+   *  The caller surfaces this — the discount is dropped, not silently kept. */
+  droppedDiscountCode?: string;
+};
+
+/**
+ * Recompute an order's money from its *current* line items, fulfilment and
+ * coupon, and persist the result. The single pricing authority for edits, using
+ * the same rules as checkout: prices come from the stored lines, shipping from
+ * settings, and the coupon is re-validated against the new subtotal.
+ *
+ * Callers must restrict this to orders that have not been paid — a paid order's
+ * total is what the customer was actually charged, and rewriting it would
+ * desynchronise the books from the payment.
+ */
+export async function recalcOrderTotals(orderId: string): Promise<RecalcResult> {
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) throw new Error("Ordine non trovato");
+
+  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+  const subtotalCents = items.reduce((sum, i) => sum + i.lineTotalCents, 0);
+
+  // Re-validate the coupon against the new subtotal. A code that no longer
+  // qualifies is dropped rather than carried over at its old value.
+  const discount = order.discountCode
+    ? await validateDiscount(order.discountCode, subtotalCents)
+    : null;
+  const discountCents = discount?.discountCents ?? 0;
+  const droppedDiscountCode = order.discountCode && !discount ? order.discountCode : undefined;
+
+  const flatShippingCents = await getSetting<number>("store.shippingCents", SHIPPING_CENTS);
+  const freeShippingThresholdCents = await getSetting<number>("store.freeShippingThresholdCents", 0);
+  const shippingCents =
+    order.fulfilment === "shipping" &&
+    !discount?.freeShipping &&
+    (freeShippingThresholdCents === 0 || subtotalCents < freeShippingThresholdCents)
+      ? flatShippingCents
+      : 0;
+
+  const totalCents = Math.max(0, subtotalCents - discountCents + shippingCents);
+
+  await db
+    .update(orders)
+    .set({
+      subtotalCents,
+      discountCents,
+      discountCode: discount?.code ?? null,
+      shippingCents,
+      totalCents,
+      updatedAt: new Date(),
+    })
+    .where(eq(orders.id, orderId));
+
+  return { subtotalCents, discountCents, shippingCents, totalCents, droppedDiscountCode };
 }
 
 /** A customer's recent orders for their account history (newest first). */
@@ -216,9 +291,10 @@ export async function finalizeOrder(orderId: string): Promise<void> {
   // Atomically claim the order: flip unpaid → paid only if it isn't already paid.
   // Only the caller whose UPDATE actually changed a row proceeds to award points
   // and email, so concurrent webhook + success-page calls can't double-accrue.
+  const now = new Date();
   const [claimed] = db
     .update(orders)
-    .set({ status: "paid", paymentStatus: "paid", updatedAt: new Date() })
+    .set({ status: "paid", paymentStatus: "paid", paidAt: now, updatedAt: now })
     .where(and(eq(orders.id, orderId), ne(orders.paymentStatus, "paid")))
     .returning({ id: orders.id })
     .all();
@@ -226,6 +302,10 @@ export async function finalizeOrder(orderId: string): Promise<void> {
 
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   if (!order) return;
+
+  // Count the coupon now that the order is actually paid (idempotent: the claim
+  // above lets only the first finalize proceed).
+  if (order.discountCode) await recordDiscountUseByCode(order.discountCode);
 
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
   const shop = order.shopSlug ? await getShopBySlug(order.shopSlug) : null;
@@ -281,10 +361,22 @@ export async function finalizeOrder(orderId: string): Promise<void> {
           .returning({
             name: products.name,
             stock: products.stock,
+            reorderPoint: products.reorderPoint,
             lowStockNotifiedAt: products.lowStockNotifiedAt,
           })
           .all();
         if (!updated || updated.stock == null) continue;
+
+        // Ledger the order-driven decrement so on-hand can be reconciled from the
+        // movement history (not just manual adjustments).
+        db.insert(stockMovements)
+          .values({
+            productId,
+            delta: -qty,
+            reason: `Ordine ${order.orderNumber}`,
+            stockAfter: updated.stock,
+          })
+          .run();
 
         // Alert once per dip: collect products now at/under the threshold that
         // haven't already been notified. Stamping lowStockNotifiedAt below
@@ -293,7 +385,7 @@ export async function finalizeOrder(orderId: string): Promise<void> {
         // should be reset to null so a future dip can alert again — that reset
         // lives in the product-update action (lib/admin/actions.ts, owned by
         // another agent) and is intentionally not handled here.
-        if (updated.stock <= threshold && updated.lowStockNotifiedAt == null) {
+        if (isLowStock(updated, threshold) && updated.lowStockNotifiedAt == null) {
           lowStock.push({ name: updated.name, stock: updated.stock });
           notifyIds.push(productId);
         }
@@ -309,5 +401,41 @@ export async function finalizeOrder(orderId: string): Promise<void> {
     }
   } catch {
     // Swallowed on purpose — stock/alert bookkeeping is best-effort.
+  }
+}
+
+/**
+ * Return an order's goods to stock (used when a paid order is refunded or
+ * cancelled). Increments each stock-tracked product atomically and writes a
+ * compensating `stock_movements` row so the ledger reconciles. Best-effort:
+ * inventory bookkeeping must never block the refund/cancel itself. Callers must
+ * ensure this runs at most once per reversal (it is not itself idempotent).
+ */
+export async function restockOrderItems(
+  orderId: string,
+  reason: string,
+  byUserId?: string | null,
+): Promise<void> {
+  try {
+    const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+    const qtyByProduct = new Map<string, number>();
+    for (const it of items) {
+      if (!it.productId) continue;
+      qtyByProduct.set(it.productId, (qtyByProduct.get(it.productId) ?? 0) + it.quantity);
+    }
+    for (const [productId, qty] of qtyByProduct) {
+      const [updated] = db
+        .update(products)
+        .set({ stock: sql`${products.stock} + ${qty}` })
+        .where(and(eq(products.id, productId), isNotNull(products.stock)))
+        .returning({ stock: products.stock })
+        .all();
+      if (!updated || updated.stock == null) continue;
+      db.insert(stockMovements)
+        .values({ productId, delta: qty, reason, stockAfter: updated.stock, createdByUserId: byUserId ?? null })
+        .run();
+    }
+  } catch {
+    // Best-effort — a refund must not fail because inventory bookkeeping did.
   }
 }

@@ -1,12 +1,25 @@
 import { NextResponse } from "next/server";
-import { desc, gte, sql } from "drizzle-orm";
+import { gte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { orders, reservations, newsletterSubscribers, pageViews } from "@/lib/db/schema";
+import { pageViews } from "@/lib/db/schema";
 import { requireRole } from "@/lib/auth/session";
-import { getCustomersWithPoints, getVatReport } from "@/lib/admin/queries";
+import {
+  getCustomersWithPoints,
+  getOrdersForExport,
+  getReservationsForExport,
+  getSubscribersForExport,
+  getAuditForExport,
+  getVatReport,
+} from "@/lib/admin/queries";
+import {
+  orderFilters,
+  reservationFilters,
+  customerFilters,
+  subscriberFilters,
+  auditFilters,
+} from "@/lib/admin/filters";
 import { normalizeRange } from "@/lib/analytics";
-import { getSetting } from "@/lib/db/queries";
-import { vatBreakdown, vatRateLabel } from "@/lib/fiscal";
+import { vatRateLabel } from "@/lib/fiscal";
 import { toCsv } from "@/lib/csv";
 
 export const runtime = "nodejs";
@@ -23,11 +36,15 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
   }
 
   const { entity } = await ctx.params;
+  // The export mirrors whatever the operator has filtered to on screen: the list
+  // pages append their active filters to the download link, and both sides read
+  // them through the same `lib/admin/filters` helpers.
+  const params = new URL(request.url).searchParams;
   let csv: string;
 
   switch (entity) {
     case "orders": {
-      const rows = await db.select().from(orders).orderBy(desc(orders.createdAt));
+      const rows = await getOrdersForExport(orderFilters(params));
       csv = toCsv(
         ["orderNumber", "date", "name", "email", "phone", "status", "paymentStatus", "fulfilment", "shop", "totalEuros"],
         rows.map((o) => [
@@ -38,7 +55,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
       break;
     }
     case "customers": {
-      const rows = await getCustomersWithPoints();
+      const rows = await getCustomersWithPoints(customerFilters(params));
       csv = toCsv(
         ["username", "name", "email", "phone", "role", "points", "cardNumber", "joined"],
         rows.map((c) => [c.username, c.name, c.email, c.phone, c.role, c.points ?? 0, c.cardNumber, iso(c.createdAt)]),
@@ -46,7 +63,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
       break;
     }
     case "reservations": {
-      const rows = await db.select().from(reservations).orderBy(desc(reservations.createdAt));
+      const rows = await getReservationsForExport(reservationFilters(params));
       csv = toCsv(
         ["reference", "date", "type", "name", "phone", "email", "shop", "status", "guests", "quantityKg", "created"],
         rows.map((r) => [
@@ -57,15 +74,31 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
       break;
     }
     case "subscribers": {
-      const rows = await db.select().from(newsletterSubscribers).orderBy(desc(newsletterSubscribers.createdAt));
+      const rows = await getSubscribersForExport(subscriberFilters(params));
       csv = toCsv(
         ["email", "status", "source", "confirmedAt", "created"],
         rows.map((s) => [s.email, s.status, s.source, iso(s.confirmedAt), iso(s.createdAt)]),
       );
       break;
     }
+    case "audit": {
+      const rows = await getAuditForExport(auditFilters(params));
+      csv = toCsv(
+        ["timestamp", "actor", "action", "entity", "entityId", "summary", "meta"],
+        rows.map((r) => [
+          iso(r.createdAt),
+          r.actorName,
+          r.action,
+          r.entity,
+          r.entityId,
+          r.summary,
+          r.meta ? JSON.stringify(r.meta) : "",
+        ]),
+      );
+      break;
+    }
     case "analytics": {
-      const range = normalizeRange(new URL(request.url).searchParams.get("giorni"));
+      const range = normalizeRange(params.get("giorni"));
       const since = new Date(Date.now() - range * DAY_MS);
       const dayExpr = sql<string>`date(${pageViews.createdAt} / 1000, 'unixepoch')`;
       const rows = await db
@@ -81,22 +114,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
       break;
     }
     case "iva": {
-      const sp = new URL(request.url).searchParams;
-      const da = sp.get("da");
-      const a = sp.get("a");
+      const da = params.get("da");
+      const a = params.get("a");
       const now = new Date();
       const from = da ? new Date(`${da}T00:00:00`) : new Date(now.getFullYear(), now.getMonth(), 1);
       const to = a ? new Date(`${a}T23:59:59`) : now;
-      const [{ lines, shippingGrossCents }, shippingVatPct] = await Promise.all([
-        getVatReport(from, to),
-        getSetting<number>("store.shippingVatRate", 22),
-      ]);
-      const buckets = vatBreakdown([
-        ...lines.map((l) => ({ grossCents: l.grossCents, vatRateBps: l.vatRateBps })),
-        ...(shippingGrossCents > 0
-          ? [{ grossCents: shippingGrossCents, vatRateBps: Math.round(shippingVatPct * 100) }]
-          : []),
-      ]);
+      const { buckets } = await getVatReport(from, to);
       csv = toCsv(
         ["aliquota", "imponibileEuros", "impostaEuros", "totaleIvatoEuros"],
         buckets.map((b) => [

@@ -3,12 +3,17 @@ import { inArray } from "drizzle-orm";
 import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, SearchBox, Pagination } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getOrdersPage, adminGetShops } from "@/lib/admin/queries";
-import { updateOrderStatus } from "@/lib/admin/order-actions";
+import { orderFilters, filterQuery } from "@/lib/admin/filters";
+import { BulkBar, BulkCheckbox } from "@/components/admin/BulkBar";
+import { updateOrderStatus, bulkUpdateOrderStatus } from "@/lib/admin/order-actions";
 import { isAdmin } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { orderItems } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
+
+/** Ties the row checkboxes to the bulk bar's form (see BulkBar). */
+const BULK_FORM = "bulk-orders";
 
 type SP = {
   searchParams: Promise<{
@@ -41,10 +46,12 @@ const chipCls = (active: boolean) =>
   }`;
 
 export default async function AdminOrders({ searchParams }: SP) {
-  const { negozio = "all", q, stato = "all", tipo = "all", page: pageStr } = await searchParams;
+  const sp = await searchParams;
+  const { negozio = "all", q, stato = "all", tipo = "all", page: pageStr } = sp;
   const page = Number(pageStr) || 1;
+  const filters = orderFilters(sp);
   const [{ rows: orders, total, pageCount }, shops, admin] = await Promise.all([
-    getOrdersPage({ shopSlug: negozio, q, status: stato, fulfilment: tipo, page }),
+    getOrdersPage({ ...filters, page }),
     adminGetShops(),
     isAdmin(),
   ]);
@@ -97,9 +104,8 @@ export default async function AdminOrders({ searchParams }: SP) {
               + Nuovo ordine
             </Link>
             {admin ? (
-              // eslint-disable-next-line @next/next/no-html-link-for-pages -- API download route, not a page
-              <a
-                href="/api/admin/export/orders"
+                <a
+                href={`/api/admin/export/orders${filterQuery(filters)}`}
                 download
                 className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
               >
@@ -153,11 +159,25 @@ export default async function AdminOrders({ searchParams }: SP) {
           </p>
         </Panel>
       ) : (
+        <>
+        <BulkBar
+          formId={BULK_FORM}
+          action={bulkUpdateOrderStatus}
+          label="ordini"
+          options={[
+            { value: "fulfilled", label: "Segna evasi" },
+            { value: "pending", label: "Rimetti in attesa" },
+            { value: "cancelled", label: "Annulla" },
+          ]}
+          confirm={(n) => `Applicare l'azione a ${n} ordini? I clienti riceveranno le email previste.`}
+        />
         <div className="space-y-3">
           {orders.map((o) => {
             const prev = previewText(o.id);
             return (
               <Panel key={o.id} className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex gap-3">
+                <BulkCheckbox formId={BULK_FORM} id={o.id} label={`Seleziona ordine ${o.orderNumber}`} />
                 <div className="space-y-1">
                   <div className="flex items-center gap-3">
                     <span className="font-mono text-xs font-bold text-brown-800/60">{o.orderNumber}</span>
@@ -174,6 +194,7 @@ export default async function AdminOrders({ searchParams }: SP) {
                   </p>
                   {prev && <p className="text-xs text-brown-800/50">{prev}</p>}
                 </div>
+                </div>
                 <div className="flex flex-col items-end gap-2">
                   <div className="flex items-center gap-4">
                     <p className="font-display text-xl font-bold text-brown-950">{euro(o.totalCents)}</p>
@@ -184,19 +205,29 @@ export default async function AdminOrders({ searchParams }: SP) {
                       Dettaglio
                     </Link>
                   </div>
+                  {/* The overwhelmingly common next step for a paid pickup order
+                      is "handed over" — make it one tap instead of two selects. */}
+                  {o.status === "paid" && o.fulfilment === "pickup" && (
+                    <ActionForm action={updateOrderStatus} className="inline-flex">
+                      <input type="hidden" name="id" value={o.id} />
+                      <input type="hidden" name="status" value="fulfilled" />
+                      <input type="hidden" name="paymentStatus" value={o.paymentStatus} />
+                      <PendingButton tone="gold">✓ Consegnato</PendingButton>
+                    </ActionForm>
+                  )}
                   <ActionForm action={updateOrderStatus} className="flex flex-wrap items-center gap-2">
                     <input type="hidden" name="id" value={o.id} />
-                    <select name="status" defaultValue={o.status} className={`${inputCls} w-32`}>
+                    <select name="status" defaultValue={o.status} className={`${inputCls} w-32`} aria-label="Stato ordine">
                       <option value="pending">In attesa</option>
                       <option value="paid">Pagato</option>
                       <option value="fulfilled">Evaso</option>
                       <option value="cancelled">Annullato</option>
-                      <option value="refunded">Rimborsato</option>
+                      {o.status === "refunded" && <option value="refunded">Rimborsato</option>}
                     </select>
-                    <select name="paymentStatus" defaultValue={o.paymentStatus} className={`${inputCls} w-32`}>
+                    <select name="paymentStatus" defaultValue={o.paymentStatus} className={`${inputCls} w-32`} aria-label="Stato pagamento">
                       <option value="unpaid">Da pagare</option>
                       <option value="paid">Pagato</option>
-                      <option value="refunded">Rimborsato</option>
+                      {o.paymentStatus === "refunded" && <option value="refunded">Rimborsato</option>}
                     </select>
                     <PendingButton tone="dark">Aggiorna</PendingButton>
                   </ActionForm>
@@ -205,14 +236,10 @@ export default async function AdminOrders({ searchParams }: SP) {
             );
           })}
         </div>
+        </>
       )}
 
-      <Pagination
-        basePath="/admin/orders"
-        page={page}
-        pageCount={pageCount}
-        params={{ negozio, q, stato, tipo }}
-      />
+      <Pagination basePath="/admin/orders" page={page} pageCount={pageCount} params={filters} />
     </div>
   );
 }

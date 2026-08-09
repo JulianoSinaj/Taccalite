@@ -1,18 +1,12 @@
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, reservationTypeLabel } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getUpcomingReservations, adminGetShops } from "@/lib/admin/queries";
 import { getSetting } from "@/lib/db/queries";
-import { markPorchettaReady } from "@/lib/admin/actions";
-import { PrintButton } from "./PrintButton";
+import { markPorchettaReady } from "@/lib/admin/reservation-actions";
+import { PrintButton } from "@/components/admin/PrintButton";
 
 export const dynamic = "force-dynamic";
-
-const TYPE_LABEL: Record<string, string> = {
-  table: "Tavolo",
-  porchetta: "Porchetta",
-  order: "Ordine",
-};
 
 function formatDay(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
@@ -94,7 +88,7 @@ export default async function ReservationAgenda() {
                     <Panel key={r.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <span className="rounded-full bg-brown-900/10 px-2.5 py-0.5 text-[10px] font-bold tracking-widest uppercase">
-                          {TYPE_LABEL[r.type] ?? r.type}
+                          {reservationTypeLabel(r.type)}
                         </span>
                         <span className="font-semibold text-brown-950">{r.name}</span>
                         <span className="text-sm text-brown-800/70">{r.phone}</span>

@@ -1,31 +1,57 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, labelCls } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, labelCls, BackLink } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
-import { adminGetOrder, adminGetShops } from "@/lib/admin/queries";
+import { adminGetOrder, adminGetShops, adminGetProducts } from "@/lib/admin/queries";
+import { OrderDetailsForm, OrderItemsForm, OrderFiscalForm } from "@/components/admin/OrderEditor";
 import { updateOrderStatus, setOrderTracking, refundOrder } from "@/lib/admin/order-actions";
 import { isAdmin } from "@/lib/auth/session";
-import { vatBreakdown, vatRateLabel } from "@/lib/fiscal";
+import { getSetting } from "@/lib/db/queries";
+import { orderVatBuckets, vatRateLabel } from "@/lib/fiscal";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrderDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [data, shops, admin] = await Promise.all([adminGetOrder(id), adminGetShops(), isAdmin()]);
+  const [data, shops, admin, shippingVatPct, products] = await Promise.all([
+    adminGetOrder(id),
+    adminGetShops(),
+    isAdmin(),
+    getSetting<number>("store.shippingVatRate", 22),
+    adminGetProducts(),
+  ]);
   if (!data) notFound();
   const { order, items } = data;
+  // An order's lines and totals are frozen once the money is settled — the
+  // customer was charged a specific amount. Corrections then go through a refund.
+  const editable = order.paymentStatus === "unpaid" && order.status !== "cancelled";
   const shopName = order.shopSlug ? shops.find((s) => s.slug === order.shopSlug)?.name ?? order.shopSlug : null;
   const addr = order.shippingAddress;
   const canRefund = admin && order.paymentStatus === "paid" && order.status !== "refunded";
-  // IVA breakdown from the per-line snapshot rates (prices are VAT-inclusive).
-  const vat = vatBreakdown(items.map((i) => ({ grossCents: i.lineTotalCents, vatRateBps: i.vatRateBps })));
+  // IVA breakdown reconciled with the total: line grosses net of the apportioned
+  // discount, plus shipping at its configured rate (prices are VAT-inclusive).
+  const vat = orderVatBuckets({
+    items: items.map((i) => ({ grossCents: i.lineTotalCents, vatRateBps: i.vatRateBps })),
+    discountCents: order.discountCents,
+    shippingCents: order.shippingCents,
+    shippingVatBps: Math.round(shippingVatPct * 100),
+  });
 
   return (
     <div>
-      <AdminHeader title={`Ordine ${order.orderNumber}`} subtitle={fmtDate(order.createdAt)} />
-      <Link href="/admin/orders" className="mb-4 inline-block text-sm text-brown-800/70 hover:text-brown-950">
-        ← Torna agli ordini
-      </Link>
+      <AdminHeader
+        title={`Ordine ${order.orderNumber}`}
+        subtitle={fmtDate(order.createdAt)}
+        action={
+          <Link
+            href={`/admin/orders/${order.id}/packing-slip`}
+            className="rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+          >
+            Documento di consegna
+          </Link>
+        }
+      />
+      <BackLink href="/admin/orders">Ordini</BackLink>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
@@ -88,6 +114,16 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             )}
           </Panel>
 
+          {editable && (
+            <Panel>
+              <h3 className="font-display mb-1 text-lg text-brown-950">Modifica articoli</h3>
+              <p className="mb-4 text-xs text-brown-800/60">
+                Disponibile finché l&apos;ordine non è pagato.
+              </p>
+              <OrderItemsForm order={order} items={items} products={products} />
+            </Panel>
+          )}
+
           <Panel>
             <h3 className="font-display mb-3 text-lg text-brown-950">Cliente</h3>
             <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
@@ -135,6 +171,33 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 {order.notes}
               </p>
             )}
+            {order.internalNotes && (
+              <p className="mt-3 rounded-lg bg-gold/10 px-3 py-2 text-sm text-brown-900">
+                <span className="text-[10px] font-bold tracking-widest text-brown-800/60 uppercase">
+                  Nota interna
+                </span>
+                <br />
+                {order.internalNotes}
+              </p>
+            )}
+
+            {editable ? (
+              <details className="mt-4 border-t border-brown-900/10 pt-3">
+                <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                  Modifica dati e consegna
+                </summary>
+                <div className="mt-4">
+                  <OrderDetailsForm order={order} shops={shops} />
+                </div>
+              </details>
+            ) : (
+              <p className="mt-4 border-t border-brown-900/10 pt-3 text-xs text-brown-800/60">
+                Ordine {order.status === "cancelled" ? "annullato" : "già pagato"}: articoli e dati non
+                sono modificabili.{" "}
+                {order.status !== "cancelled" &&
+                  "Per correggerlo usa «Rimborsa» e registra un nuovo ordine."}
+              </p>
+            )}
           </Panel>
         </div>
 
@@ -154,7 +217,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   <option value="paid">Pagato</option>
                   <option value="fulfilled">Evaso</option>
                   <option value="cancelled">Annullato</option>
-                  <option value="refunded">Rimborsato</option>
+                  {order.status === "refunded" && <option value="refunded">Rimborsato</option>}
                 </select>
               </div>
               <div>
@@ -162,7 +225,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 <select name="paymentStatus" defaultValue={order.paymentStatus} className={inputCls}>
                   <option value="unpaid">Da pagare</option>
                   <option value="paid">Pagato</option>
-                  <option value="refunded">Rimborsato</option>
+                  {order.paymentStatus === "refunded" && <option value="refunded">Rimborsato</option>}
                 </select>
               </div>
               <PendingButton tone="dark">Aggiorna ordine</PendingButton>
@@ -228,6 +291,15 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 <p className="mt-2 text-xs text-brown-800/60">
                   Formato FatturaPA FPR12, da trasmettere tramite un intermediario accreditato.
                 </p>
+
+                <details className="mt-4" open={!order.customerTaxCode && !order.customerVatNumber}>
+                  <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                    Dati di fatturazione
+                  </summary>
+                  <div className="mt-3">
+                    <OrderFiscalForm order={order} />
+                  </div>
+                </details>
               </div>
             )}
             {canRefund && (

@@ -1,27 +1,25 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AdminHeader, Panel, StatusBadge, inputCls, labelCls, euro, fmtDate } from "@/components/admin/ui";
+import {
+  AdminHeader,
+  Panel,
+  StatusBadge,
+  inputCls,
+  labelCls,
+  euro,
+  fmtDate,
+  roleLabel,
+  reservationTypeLabel,
+} from "@/components/admin/ui";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { adminGetUser, getLoyaltyAccountForUser, getRecentLoyaltyTx } from "@/lib/admin/queries";
 import { getReservationsForUser, getRedemptionsForUser } from "@/lib/db/queries";
 import { getOrdersForUser } from "@/lib/orders";
 import { adjustPoints } from "@/lib/admin/actions";
-import { anonymizeCustomer } from "@/lib/admin/user-actions";
+import { anonymizeCustomer, updateUserProfile } from "@/lib/admin/user-actions";
 import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
-
-const ROLE_LABEL: Record<string, string> = {
-  customer: "Cliente",
-  staff: "Staff",
-  admin: "Amministratore",
-};
-
-const RES_TYPE_LABEL: Record<string, string> = {
-  table: "Tavolo",
-  porchetta: "Porchetta",
-  order: "Ordine",
-};
 
 /** Human-friendly summary of a reservation's date/time or kg quantity. */
 function reservationDetail(r: {
@@ -73,7 +71,7 @@ export default async function CustomerDetail({ params }: Params) {
           <p className="font-display text-2xl text-brown-950">
             {displayName}{" "}
             <span className="ml-1 rounded-full bg-brown-900/10 px-2 py-0.5 text-[10px] font-bold uppercase">
-              {ROLE_LABEL[user.role] ?? user.role}
+              {roleLabel(user.role)}
             </span>
           </p>
           <p className="mt-1 text-sm text-brown-800/70">
@@ -93,6 +91,35 @@ export default async function CustomerDetail({ params }: Params) {
           </div>
         </div>
       </Panel>
+
+      {/* Contact details — admin only */}
+      {admin && (
+        <>
+          <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Anagrafica</h2>
+          <Panel>
+            <ActionForm action={updateUserProfile} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="id" value={user.id} />
+              <div className="min-w-48 flex-1">
+                <label className={labelCls} htmlFor="profile-name">Nome</label>
+                <input id="profile-name" name="name" required maxLength={200} defaultValue={user.name ?? ""} className={inputCls} />
+              </div>
+              <div className="min-w-48 flex-1">
+                <label className={labelCls} htmlFor="profile-email">Email</label>
+                <input id="profile-email" name="email" type="email" maxLength={200} defaultValue={user.email ?? ""} className={inputCls} />
+              </div>
+              <div className="min-w-40">
+                <label className={labelCls} htmlFor="profile-phone">Telefono</label>
+                <input id="profile-phone" name="phone" maxLength={40} defaultValue={user.phone ?? ""} className={inputCls} />
+              </div>
+              <PendingButton tone="dark">Salva</PendingButton>
+            </ActionForm>
+            <p className="mt-3 text-xs text-brown-800/60">
+              Username e ruolo si modificano da <strong>Utenti</strong>. Cambiando l&apos;email,
+              l&apos;indirizzo torna &laquo;da verificare&raquo;.
+            </p>
+          </Panel>
+        </>
+      )}
 
       {/* Points adjustment — admin only */}
       {admin && (
@@ -238,7 +265,7 @@ export default async function CustomerDetail({ params }: Params) {
                 <StatusBadge status={r.status} />
                 <div>
                   <p className="font-semibold text-brown-950">
-                    {RES_TYPE_LABEL[r.type] ?? r.type}{" "}
+                    {reservationTypeLabel(r.type)}{" "}
                     <span className="text-xs font-normal text-brown-800/50">#{r.reference}</span>
                   </p>
                   <p className="text-xs text-brown-800/60">{reservationDetail(r)}</p>

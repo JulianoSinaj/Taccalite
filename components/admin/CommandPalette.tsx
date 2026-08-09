@@ -26,10 +26,14 @@ const COMMANDS: Cmd[] = [
   { label: "Registro attività", href: "/admin/audit", group: "Vai a", adminOnly: true },
   { label: "Impostazioni", href: "/admin/settings", group: "Vai a", adminOnly: true },
   // Azioni
+  { label: "Nuova prenotazione (banco/telefono)", href: "/admin/reservations/new", group: "Azioni", keywords: "booking tavolo porchetta" },
   { label: "Nuovo ordine (banco/telefono)", href: "/admin/orders/new", group: "Azioni", keywords: "vendita manuale" },
-  { label: "Nuovo prodotto", href: "/admin/products", group: "Azioni" },
-  { label: "Nuova news", href: "/admin/blog", group: "Azioni" },
-  { label: "Nuovo codice sconto", href: "/admin/discounts", group: "Azioni", adminOnly: true },
+  { label: "Nuovo prodotto", href: "/admin/products/new", group: "Azioni", keywords: "catalogo" },
+  { label: "Nuova news", href: "/admin/blog/new", group: "Azioni" },
+  { label: "Nuovo premio", href: "/admin/rewards/new", group: "Azioni", keywords: "fedeltà" },
+  { label: "Nuova sede", href: "/admin/shops/new", group: "Azioni", adminOnly: true, keywords: "negozio" },
+  { label: "Nuovo codice sconto", href: "/admin/discounts/new", group: "Azioni", adminOnly: true, keywords: "coupon" },
+  { label: "Nuovo utente", href: "/admin/users/new", group: "Azioni", adminOnly: true, keywords: "account staff" },
 ];
 
 export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {

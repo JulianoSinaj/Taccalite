@@ -144,6 +144,8 @@ async function main() {
     { key: "store.enabled", value: true },
     { key: "porchetta.weeklyCapacityKg", value: 0 },
     { key: "store.lowStockThreshold", value: 5 },
+    // Read by the IVA report, the order-detail breakdown and the FatturaPA XML.
+    { key: "store.shippingVatRate", value: 22 },
   ];
   for (const s of defaultSettings) {
     await db.insert(schema.settings).values(s).onConflictDoNothing({ target: schema.settings.key });

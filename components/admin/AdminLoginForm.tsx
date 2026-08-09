@@ -76,13 +76,17 @@ export default function AdminLoginForm({ wrongRole }: { wrongRole: boolean }) {
           <input
             id="code"
             name="code"
-            inputMode="numeric"
             autoComplete="one-time-code"
+            autoCapitalize="characters"
             autoFocus
+            maxLength={20}
             placeholder="123456"
             className={inputClasses}
           />
-          <p className="text-xs text-cream/50">Inserisci il codice a 6 cifre dalla tua app di autenticazione.</p>
+          <p className="text-xs text-cream/50">
+            Il codice a 6 cifre dalla tua app di autenticazione, oppure uno dei codici di recupero
+            (es. <span className="font-mono">A7K2M-9PQXT</span>) se non hai il telefono.
+          </p>
         </div>
       )}
 
