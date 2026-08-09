@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { inArray } from "drizzle-orm";
-import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, SearchBox, Pagination } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, Pagination } from "@/components/admin/ui";
+import {
+  SegmentedFilter,
+  FilterToolbar,
+  ActiveFilters,
+  labelFrom,
+} from "@/components/admin/FilterBar";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getOrdersPage, adminGetShops } from "@/lib/admin/queries";
 import { orderFilters, filterQuery } from "@/lib/admin/filters";
@@ -40,10 +46,7 @@ const FULFILMENT_CHIPS: { value: string; label: string }[] = [
   { value: "shipping", label: "Spedizione" },
 ];
 
-const chipCls = (active: boolean) =>
-  `rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
-    active ? "bg-gold text-brown-950" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
-  }`;
+const BASE = "/admin/orders";
 
 export default async function AdminOrders({ searchParams }: SP) {
   const sp = await searchParams;
@@ -81,14 +84,12 @@ export default async function AdminOrders({ searchParams }: SP) {
     return `${p.count} art. · ${shown}${more}`;
   };
 
-  // Preserve the active filters/search on chip links (dropping page).
-  const filterHref = (patch: Record<string, string>) => {
-    const sp = new URLSearchParams();
-    const base: Record<string, string> = { negozio, stato, tipo, ...(q ? { q } : {}), ...patch };
-    for (const [k, v] of Object.entries(base)) if (v && v !== "all") sp.set(k, v);
-    const qs = sp.toString();
-    return qs ? `/admin/orders?${qs}` : "/admin/orders";
-  };
+  // The active filter bag the shared chrome reads from.
+  const current = { negozio, stato, tipo, ...(q ? { q } : {}) };
+  const SHOP_CHIPS = [
+    { value: "all", label: "Tutte le sedi" },
+    ...shops.map((s) => ({ value: s.slug, label: s.name })),
+  ];
 
   return (
     <div>
@@ -116,38 +117,38 @@ export default async function AdminOrders({ searchParams }: SP) {
         }
       />
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Link href={filterHref({ negozio: "all" })} className={chipCls(negozio === "all")}>
-          Tutte le sedi
-        </Link>
-        {shops.map((s) => (
-          <Link key={s.slug} href={filterHref({ negozio: s.slug })} className={chipCls(negozio === s.slug)}>
-            {s.name}
-          </Link>
-        ))}
-      </div>
+      {/* Status is the facet the counter flips all day ("what's left to hand
+          over?"), so it stays one click away; shop and fulfilment are set once
+          and forgotten, so they live in the toolbar. */}
+      <SegmentedFilter
+        basePath={BASE}
+        params={current}
+        name="stato"
+        options={STATUS_CHIPS}
+        label="Filtra per stato ordine"
+      />
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        {STATUS_CHIPS.map((c) => (
-          <Link key={c.value} href={filterHref({ stato: c.value })} className={chipCls(stato === c.value)}>
-            {c.label}
-          </Link>
-        ))}
-      </div>
+      <FilterToolbar
+        basePath={BASE}
+        params={current}
+        searchPlaceholder="Numero, nome o email…"
+        carry={["stato"]}
+        formId="orders-filters"
+        facets={[
+          { name: "negozio", label: "Sede", options: SHOP_CHIPS },
+          { name: "tipo", label: "Consegna", options: FULFILMENT_CHIPS },
+        ]}
+      />
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        {FULFILMENT_CHIPS.map((c) => (
-          <Link key={c.value} href={filterHref({ tipo: c.value })} className={chipCls(tipo === c.value)}>
-            {c.label}
-          </Link>
-        ))}
-      </div>
-
-      <SearchBox
-        basePath="/admin/orders"
-        q={q}
-        placeholder="Cerca per numero, nome, email…"
-        hidden={{ negozio, stato, tipo }}
+      <ActiveFilters
+        basePath={BASE}
+        params={current}
+        labels={{
+          stato: { title: "Stato", format: labelFrom(STATUS_CHIPS) },
+          negozio: { title: "Sede", format: labelFrom(SHOP_CHIPS) },
+          tipo: { title: "Consegna", format: labelFrom(FULFILMENT_CHIPS) },
+          q: { title: "Ricerca", format: (v) => `“${v}”` },
+        }}
       />
 
       {orders.length === 0 ? (

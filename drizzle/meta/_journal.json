@@ -176,6 +176,20 @@
       "when": 1784934177615,
       "tag": "0024_fts_search",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1786276160004,
+      "tag": "0025_keen_earthquake",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1786285539429,
+      "tag": "0026_sweet_betty_ross",
+      "breakpoints": true
     }
   ]
 }

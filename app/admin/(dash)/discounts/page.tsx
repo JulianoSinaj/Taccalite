@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminHeader, Panel, StatusBadge, euro, fmtDate, NewButton, Pagination } from "@/components/admin/ui";
-import { FilterChips, FilterSearch } from "@/components/admin/FilterBar";
+import { SegmentedFilter, FilterToolbar, ActiveFilters, labelFrom } from "@/components/admin/FilterBar";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { getDiscountsPage } from "@/lib/admin/queries";
 import { discountFilters } from "@/lib/admin/filters";
@@ -53,9 +53,30 @@ export default async function AdminDiscounts({ searchParams }: SP) {
         action={<NewButton href="/admin/discounts/new">+ Nuovo codice</NewButton>}
       />
 
-      <FilterChips basePath={BASE} params={filters} name="stato" options={STATUS_CHIPS} tone="dark" />
-      <FilterChips basePath={BASE} params={filters} name="tipo" options={TYPE_CHIPS} className="mb-4" />
-      <FilterSearch basePath={BASE} params={filters} placeholder="Codice…" />
+      <SegmentedFilter
+        basePath={BASE}
+        params={filters}
+        name="stato"
+        options={STATUS_CHIPS}
+        label="Filtra per stato del codice"
+      />
+      <FilterToolbar
+        basePath={BASE}
+        params={filters}
+        searchPlaceholder="Codice…"
+        carry={["stato"]}
+        formId="discounts-filters"
+        facets={[{ name: "tipo", label: "Tipo", options: TYPE_CHIPS }]}
+      />
+      <ActiveFilters
+        basePath={BASE}
+        params={filters}
+        labels={{
+          stato: { title: "Stato", format: labelFrom(STATUS_CHIPS) },
+          tipo: { title: "Tipo", format: labelFrom(TYPE_CHIPS) },
+          q: { title: "Ricerca", format: (v) => `“${v}”` },
+        }}
+      />
 
       {codes.length === 0 ? (
         <Panel>

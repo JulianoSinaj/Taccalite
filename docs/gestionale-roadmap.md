@@ -56,16 +56,23 @@ Legend: `[✓]` shipped this session · `[~]` partially shipped · `[ ]` planned
 - `[✓]` **Discount codes / coupons** (percent / fixed / free-shipping, min-spend, usage
   limits, validity window, active) + admin CRUD + server-side validation, applied in
   `createOrder` (+ Stripe ad-hoc coupon so totals match) and shown on order detail.
-  `[ ]` Remaining: the customer-facing coupon **input field** in the storefront
-  `CheckoutClient` (deliberately deferred — left the live checkout UI untouched while
-  running unattended; the whole engine behind it is done and admin-manageable).
+  The customer-facing coupon field is live in `CheckoutClient`.
+- `[✓]` **Full Stripe payment lifecycle** — `checkout.session.expired` releases abandoned
+  orders, `charge.refunded` mirrors dashboard refunds back (restock + coupon release),
+  `payment_status` is verified before finalizing, and the PaymentIntent is stored so
+  refunds resolve without a round-trip. **Partial refunds** with a cumulative
+  `orders.refundedCents`; reversal side-effects fire once, on the transition to a full
+  refund. See DEPLOYMENT §6a for the events to enable.
 - `[✓]` **Audit log** of sensitive actions (refunds, role/price changes, deletes, point
   adjustments, settings) + admin viewer.
 - `[✓]` **Manual / draft orders** (counter & phone sales from admin — Batch H).
 - `[~]` **Inventory ops**: `[✓]` stock adjustment-with-reason + movement ledger (on the
   product editor) + auto-reset of the low-stock alert on restock. `[ ]` suppliers / POs.
-- `[~]` **Reservation deposits**: `[✓]` manual caparra tracking (Batch M).
-  `[ ]` Stripe-hosted deposit links + no-show auto-deposit still open.
+- `[~]` **Reservation deposits**: `[✓]` manual caparra tracking (Batch M) + a `no_show`
+  status that forfeits a held deposit (`depositForfeitedAt`), reversible if mis-clicked.
+  `[ ]` Stripe-hosted deposit links still open.
+- `[✓]` **Porchetta capacity is now race-free** — the day's booked-kg check and the insert
+  run in one transaction, so concurrent pre-orders can't both slip under the cap.
 - `[ ]` Weight-reconciliation at pack time for sold-by-weight orders.
 
 ### P2 — Differentiators
@@ -82,12 +89,21 @@ Legend: `[✓]` shipped this session · `[~]` partially shipped · `[ ]` planned
 
 ### P3 — Polish / scale
 
-- `[ ]` shadcn **DataTable** (sort / bulk-select / bulk actions / density) across
-  orders / products / customers / reservations.
+- `[✓]` **List filter chrome redesigned.** The stacked rows of unlabelled pills (three
+  rows / fourteen buttons on Ordini, three of them reading "Tutti") are replaced by one
+  segmented control for the page's primary facet, a single labelled toolbar for the rest
+  + search, and an "active filters" line with per-facet removal. Shared in
+  `components/admin/FilterBar.tsx`; adopted on ordini, prenotazioni, prodotti, news,
+  premi, sconti, newsletter, outbox, registro attività.
+- `[~]` shadcn **DataTable** (sort / bulk-select / bulk actions / density) — shipped on
+  prodotti + newsletter; `[ ]` ordini / clienti / prenotazioni still card-per-row.
 - `[ ]` **Dark mode** via semantic design tokens — DEFERRED: the admin uses literal
   `bg-white` + status tints, so a blind CSS-variable flip breaks panels; needs a token
   refactor + browser verification, unsafe to do unattended.
 - `[✓]` **⌘K command palette** (Batch N). `[ ]` saved filter views, breadcrumbs.
+- `[✓]` **Media orphan cleanup** — the daily maintenance job reconciles `<data-dir>/uploads`
+  against the four tables that carry an image and deletes what nothing references (24h age
+  guard so it can't race a live upload). Replaced photos no longer leak storage forever.
 - `[ ]` Gift cards / store credit, B2B price lists, multi-location stock, tiered loyalty.
 
 ---

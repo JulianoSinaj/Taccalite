@@ -50,6 +50,9 @@ const badgeStyles: Record<string, string> = {
   confirmed: "bg-emerald-100 text-emerald-800",
   completed: "bg-brown-900/10 text-brown-800",
   cancelled: "bg-red-100 text-red-700",
+  // Distinct from cancelled — an operator scanning the list needs to tell a
+  // courteous cancellation from a customer who simply never showed up.
+  no_show: "bg-orange-100 text-orange-800",
   paid: "bg-emerald-100 text-emerald-800",
   fulfilled: "bg-emerald-100 text-emerald-800",
   refunded: "bg-red-100 text-red-700",
@@ -67,6 +70,7 @@ const statusLabels: Record<string, string> = {
   confirmed: "Confermata",
   completed: "Completata",
   cancelled: "Annullata",
+  no_show: "Non presentato",
   paid: "Pagato",
   fulfilled: "Evaso",
   refunded: "Rimborsato",

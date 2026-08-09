@@ -11,6 +11,12 @@ import {
 } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { ReservationForm } from "@/components/admin/ReservationForm";
+import {
+  SegmentedFilter,
+  FilterToolbar,
+  ActiveFilters,
+  labelFrom,
+} from "@/components/admin/FilterBar";
 import { getReservationsPage, adminGetShops } from "@/lib/admin/queries";
 import { reservationFilters, filterQuery } from "@/lib/admin/filters";
 import { BulkBar, BulkCheckbox } from "@/components/admin/BulkBar";
@@ -27,7 +33,16 @@ export const dynamic = "force-dynamic";
 /** Ties the row checkboxes to the bulk bar's form (see BulkBar). */
 const BULK_FORM = "bulk-reservations";
 
-const FILTERS = ["all", "pending", "confirmed", "completed", "cancelled"];
+const BASE = "/admin/reservations";
+
+const FILTERS: { value: string; label: string }[] = [
+  { value: "all", label: "Tutte" },
+  { value: "pending", label: "In attesa" },
+  { value: "confirmed", label: "Confermate" },
+  { value: "completed", label: "Completate" },
+  { value: "cancelled", label: "Annullate" },
+  { value: "no_show", label: "Non presentati" },
+];
 const TYPE_FILTERS: { value: string; label: string }[] = [
   { value: "all", label: "Tutti" },
   { value: "table", label: "Tavolo" },
@@ -59,15 +74,12 @@ export default async function AdminReservations({ searchParams }: SP) {
   ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
 
-  // All active filters, so chips/pagination preserve one another.
+  // All active filters, so the filter chrome and pagination preserve one another.
   const current = { stato, negozio, tipo, q, da, a };
-  const filterHref = (next: Partial<typeof current>) => {
-    const merged = { ...current, ...next };
-    const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries(merged)) if (v && v !== "all") sp.set(k, v);
-    const qs = sp.toString();
-    return qs ? `/admin/reservations?${qs}` : "/admin/reservations";
-  };
+  const SHOP_CHIPS = [
+    { value: "all", label: "Tutte le sedi" },
+    ...shops.map((s) => ({ value: s.slug, label: s.name })),
+  ];
 
   return (
     <div>
@@ -107,73 +119,27 @@ export default async function AdminReservations({ searchParams }: SP) {
         }
       />
 
-      <div className="mb-3 flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
-          <Link
-            key={f}
-            href={filterHref({ stato: f })}
-            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
-              stato === f ? "bg-brown-950 text-cream" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
-            }`}
-          >
-            {f === "all" ? "Tutte" : f}
-          </Link>
-        ))}
-      </div>
+      {/* Triage state is what an operator flips through all morning; kind, shop
+          and the date range are how they narrow a search. */}
+      <SegmentedFilter
+        basePath={BASE}
+        params={current}
+        name="stato"
+        options={FILTERS}
+        label="Filtra per stato prenotazione"
+      />
 
-      <div className="mb-3 flex flex-wrap gap-2">
-        {TYPE_FILTERS.map((t) => (
-          <Link
-            key={t.value}
-            href={filterHref({ tipo: t.value })}
-            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
-              tipo === t.value ? "bg-gold-deep text-cream" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
-            }`}
-          >
-            {t.label}
-          </Link>
-        ))}
-      </div>
-
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Link
-          href={filterHref({ negozio: "all" })}
-          className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
-            negozio === "all" ? "bg-gold text-brown-950" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
-          }`}
-        >
-          Tutte le sedi
-        </Link>
-        {shops.map((s) => (
-          <Link
-            key={s.slug}
-            href={filterHref({ negozio: s.slug })}
-            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
-              negozio === s.slug ? "bg-gold text-brown-950" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
-            }`}
-          >
-            {s.name}
-          </Link>
-        ))}
-      </div>
-
-      {/* Search + date-range filter (GET; preserves chip selections via hidden inputs). */}
-      <form action="/admin/reservations" method="get" className="mb-6 flex flex-wrap items-end gap-3">
-        {stato !== "all" && <input type="hidden" name="stato" value={stato} />}
-        {negozio !== "all" && <input type="hidden" name="negozio" value={negozio} />}
-        {tipo !== "all" && <input type="hidden" name="tipo" value={tipo} />}
-        <div className="min-w-[14rem] flex-1">
-          <label className={labelCls} htmlFor="res-q">
-            Cerca
-          </label>
-          <input
-            id="res-q"
-            name="q"
-            defaultValue={q}
-            placeholder="Riferimento, nome, telefono, email…"
-            className={inputCls}
-          />
-        </div>
+      <FilterToolbar
+        basePath={BASE}
+        params={current}
+        searchPlaceholder="Riferimento, nome, telefono, email…"
+        carry={["stato"]}
+        formId="reservations-filters"
+        facets={[
+          { name: "tipo", label: "Tipo", options: TYPE_FILTERS },
+          { name: "negozio", label: "Sede", options: SHOP_CHIPS },
+        ]}
+      >
         <div>
           <label className={labelCls} htmlFor="res-da">
             Dal
@@ -186,21 +152,20 @@ export default async function AdminReservations({ searchParams }: SP) {
           </label>
           <input id="res-a" type="date" name="a" defaultValue={a} className={inputCls} />
         </div>
-        <button
-          type="submit"
-          className="rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
-        >
-          Filtra
-        </button>
-        {(q || da || a) && (
-          <Link
-            href={filterHref({ q: "", da: "", a: "" })}
-            className="rounded-full bg-brown-900/10 px-5 py-2.5 text-xs font-bold tracking-widest text-brown-800 uppercase hover:bg-brown-900/15"
-          >
-            Azzera
-          </Link>
-        )}
-      </form>
+      </FilterToolbar>
+
+      <ActiveFilters
+        basePath={BASE}
+        params={current}
+        labels={{
+          stato: { title: "Stato", format: labelFrom(FILTERS) },
+          tipo: { title: "Tipo", format: labelFrom(TYPE_FILTERS) },
+          negozio: { title: "Sede", format: labelFrom(SHOP_CHIPS) },
+          da: { title: "Dal" },
+          a: { title: "Al" },
+          q: { title: "Ricerca", format: (v) => `“${v}”` },
+        }}
+      />
 
       {rows.length === 0 ? (
         <Panel>
@@ -216,6 +181,7 @@ export default async function AdminReservations({ searchParams }: SP) {
             { value: "confirmed", label: "Conferma" },
             { value: "completed", label: "Segna completate" },
             { value: "cancelled", label: "Annulla" },
+            { value: "no_show", label: "Segna non presentati" },
             { value: "pending", label: "Rimetti in attesa" },
           ]}
           confirm={(n) => `Applicare l'azione a ${n} prenotazioni? I clienti con email riceveranno l'avviso.`}
@@ -326,6 +292,7 @@ export default async function AdminReservations({ searchParams }: SP) {
                       <option value="confirmed">Confermata</option>
                       <option value="completed">Completata</option>
                       <option value="cancelled">Annullata</option>
+                      <option value="no_show">Non presentato</option>
                     </select>
                     <input
                       name="adminNotes"
@@ -356,8 +323,14 @@ export default async function AdminReservations({ searchParams }: SP) {
                       <PendingButton tone="dark">Salva</PendingButton>
                     </div>
                     {r.depositCents > 0 && (
-                      <p className="text-xs text-brown-800/60">
-                        {r.depositPaidAt ? "✓ Acconto incassato" : "In attesa di incasso"}
+                      <p
+                        className={`text-xs ${r.depositForfeitedAt ? "font-medium text-orange-700" : "text-brown-800/60"}`}
+                      >
+                        {r.depositForfeitedAt
+                          ? "⚠ Acconto trattenuto (non presentato)"
+                          : r.depositPaidAt
+                            ? "✓ Acconto incassato"
+                            : "In attesa di incasso"}
                       </p>
                     )}
                   </ActionForm>

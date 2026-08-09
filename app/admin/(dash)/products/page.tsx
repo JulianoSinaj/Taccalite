@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { AdminHeader, StatusBadge, euro, NewButton, Pagination } from "@/components/admin/ui";
-import { FilterChips, FilterSearch, chipsFrom } from "@/components/admin/FilterBar";
+import {
+  SegmentedFilter,
+  FilterToolbar,
+  ActiveFilters,
+  chipsFrom,
+  labelFrom,
+} from "@/components/admin/FilterBar";
 import { DataTable, DensityToggle, densityFrom, type Column } from "@/components/admin/DataTable";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { getProductsPage, adminGetShops, PRODUCT_SORTS } from "@/lib/admin/queries";
@@ -58,6 +64,11 @@ export default async function AdminProducts({ searchParams }: SP) {
   // Carried on every sort/density/page link so the view survives navigation.
   const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso, densita: sp.densita };
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
+  const SHOP_CHIPS = [
+    { value: "all", label: "Tutte le sedi" },
+    ...shops.map((s) => ({ value: s.slug, label: s.name })),
+  ];
+  const CATEGORY_CHIPS = chipsFrom(categories, "Tutte le categorie");
 
   const columns: Column<ProductRow>[] = [
     {
@@ -162,29 +173,41 @@ export default async function AdminProducts({ searchParams }: SP) {
         action={<NewButton href="/admin/products/new">+ Nuovo prodotto</NewButton>}
       />
 
-      <FilterChips
+      {/* Stock is the catalogue's work queue — "what do I need to reorder" is
+          the question this page gets opened for. The rest are refinements. */}
+      <SegmentedFilter
         basePath={BASE}
         params={linkParams}
-        name="negozio"
-        options={[
-          { value: "all", label: "Tutte le sedi" },
-          ...shops.map((s) => ({ value: s.slug, label: s.name })),
-        ]}
-      />
-      <FilterChips basePath={BASE} params={linkParams} name="stato" options={STATUS_CHIPS} tone="dark" />
-      <FilterChips basePath={BASE} params={linkParams} name="scorte" options={STOCK_CHIPS} tone="deep" />
-      <FilterChips
-        basePath={BASE}
-        params={linkParams}
-        name="categoria"
-        options={chipsFrom(categories, "Tutte le categorie")}
-        className="mb-4"
+        name="scorte"
+        options={STOCK_CHIPS}
+        label="Filtra per scorte"
       />
 
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-[18rem] flex-1">
-          <FilterSearch basePath={BASE} params={linkParams} placeholder="Nome, slug o categoria…" />
-        </div>
+      <FilterToolbar
+        basePath={BASE}
+        params={linkParams}
+        searchPlaceholder="Nome, slug o categoria…"
+        carry={["scorte", "densita"]}
+        formId="products-filters"
+        facets={[
+          { name: "negozio", label: "Sede", options: SHOP_CHIPS },
+          { name: "categoria", label: "Categoria", options: CATEGORY_CHIPS },
+          { name: "stato", label: "Stato", options: STATUS_CHIPS },
+        ]}
+      />
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <ActiveFilters
+          basePath={BASE}
+          params={linkParams}
+          labels={{
+            scorte: { title: "Scorte", format: labelFrom(STOCK_CHIPS) },
+            negozio: { title: "Sede", format: labelFrom(SHOP_CHIPS) },
+            categoria: { title: "Categoria" },
+            stato: { title: "Stato", format: labelFrom(STATUS_CHIPS) },
+            q: { title: "Ricerca", format: (v) => `“${v}”` },
+          }}
+        />
         <DensityToggle basePath={BASE} params={linkParams} density={density} />
       </div>
 

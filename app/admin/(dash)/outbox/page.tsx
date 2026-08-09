@@ -1,5 +1,5 @@
 import { AdminHeader, Panel, StatusBadge, Pagination, fmtDate } from "@/components/admin/ui";
-import { FilterChips, FilterSearch } from "@/components/admin/FilterBar";
+import { SegmentedFilter, FilterToolbar, ActiveFilters, labelFrom } from "@/components/admin/FilterBar";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getOutboxPage } from "@/lib/admin/queries";
 import { outboxFilters } from "@/lib/admin/filters";
@@ -57,9 +57,28 @@ export default async function AdminOutbox({ searchParams }: SP) {
         </div>
       )}
 
-      <FilterChips basePath={BASE} params={filters} name="stato" options={FILTERS} tone="dark" className="mb-4" />
-
-      <FilterSearch basePath={BASE} params={filters} placeholder="Destinatario o oggetto…" />
+      <SegmentedFilter
+        basePath={BASE}
+        params={filters}
+        name="stato"
+        options={FILTERS}
+        label="Filtra per stato di invio"
+      />
+      <FilterToolbar
+        basePath={BASE}
+        params={filters}
+        searchPlaceholder="Destinatario o oggetto…"
+        carry={["stato"]}
+        formId="outbox-filters"
+      />
+      <ActiveFilters
+        basePath={BASE}
+        params={filters}
+        labels={{
+          stato: { title: "Stato", format: labelFrom(FILTERS) },
+          q: { title: "Ricerca", format: (v) => `“${v}”` },
+        }}
+      />
 
       {rows.length === 0 ? (
         <Panel>

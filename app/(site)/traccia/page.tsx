@@ -25,18 +25,22 @@ const TYPE_LABEL: Record<"table" | "porchetta" | "order", string> = {
   order: "Ordine speciale",
 };
 
-const STATUS_LABEL: Record<"pending" | "confirmed" | "completed" | "cancelled", string> = {
+type ReservationStatus = "pending" | "confirmed" | "completed" | "cancelled" | "no_show";
+
+const STATUS_LABEL: Record<ReservationStatus, string> = {
   pending: "In attesa di conferma",
   confirmed: "Confermata",
   completed: "Completata",
   cancelled: "Annullata",
+  no_show: "Non ritirata",
 };
 
-const STATUS_STYLE: Record<"pending" | "confirmed" | "completed" | "cancelled", string> = {
+const STATUS_STYLE: Record<ReservationStatus, string> = {
   pending: "bg-gold/20 text-brown-950",
   confirmed: "bg-gold text-brown-950",
   completed: "bg-brown-950 text-cream",
   cancelled: "bg-red-500/15 text-red-700",
+  no_show: "bg-orange-500/15 text-orange-700",
 };
 
 type OrderStatus = "pending" | "paid" | "fulfilled" | "cancelled" | "refunded";

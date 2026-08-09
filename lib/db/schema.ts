@@ -309,7 +309,10 @@ export const reservations = sqliteTable(
       .notNull()
       .references(() => shops.slug, { onDelete: "restrict", onUpdate: "cascade" }),
     notes: text("notes"),
-    status: text("status", { enum: ["pending", "confirmed", "completed", "cancelled"] })
+    // `no_show` is distinct from `cancelled`: the customer never called to cancel
+    // and never turned up. It is the only state in which a deposit is forfeit, and
+    // keeping the two apart is what makes no-show rate measurable at all.
+    status: text("status", { enum: ["pending", "confirmed", "completed", "cancelled", "no_show"] })
       .notNull()
       .default("pending"),
     adminNotes: text("admin_notes"),
@@ -327,6 +330,10 @@ export const reservations = sqliteTable(
     // set when the shop records the deposit as received (cash / transfer / card).
     depositCents: integer("deposit_cents").notNull().default(0),
     depositPaidAt: integer("deposit_paid_at", { mode: "timestamp_ms" }),
+    // Set when a paid deposit is kept after a no-show. Separate from
+    // `depositPaidAt` so the money is still traceable as received-then-forfeit
+    // rather than silently disappearing from the booking.
+    depositForfeitedAt: integer("deposit_forfeited_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -340,7 +347,7 @@ export const reservations = sqliteTable(
     check("reservations_type_ck", sql`${t.type} in ('table', 'porchetta', 'order')`),
     check(
       "reservations_status_ck",
-      sql`${t.status} in ('pending', 'confirmed', 'completed', 'cancelled')`,
+      sql`${t.status} in ('pending', 'confirmed', 'completed', 'cancelled', 'no_show')`,
     ),
   ],
 );
@@ -442,6 +449,11 @@ export const orders = sqliteTable(
     paymentStatus: text("payment_status", { enum: ["unpaid", "paid", "refunded"] })
       .notNull()
       .default("unpaid"),
+    // Cumulative amount given back, so a partial refund is representable. Stripe
+    // reports `amount_refunded` cumulatively too, which makes syncing a refund
+    // issued from the Stripe dashboard idempotent. `paymentStatus` only flips to
+    // 'refunded' once this reaches the order total.
+    refundedCents: integer("refunded_cents").notNull().default(0),
     // When the money actually settled. Fiscal periods are defined by the payment
     // date, not the date the order was placed — an order taken on the 31st and
     // paid on the 1st belongs to the following month's VAT return.
@@ -456,6 +468,10 @@ export const orders = sqliteTable(
     customerSdiCode: text("customer_sdi_code"),
     customerPec: text("customer_pec"),
     stripeSessionId: text("stripe_session_id"),
+    // Captured at finalize. Refund events name the PaymentIntent, not the
+    // Checkout Session, so without this every refund lookup had to round-trip
+    // to Stripe to translate one into the other.
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
     // Shipping fulfilment tracking, set by the owner when an order ships.
     carrier: text("carrier"),
     trackingNumber: text("tracking_number"),
@@ -478,6 +494,8 @@ export const orders = sqliteTable(
     index("orders_paid_at_idx").on(t.paymentStatus, t.paidAt),
     // Webhook + refund resolve the order by its Stripe session id.
     index("orders_stripe_session_idx").on(t.stripeSessionId),
+    // Refund/dispute webhooks arrive keyed on the PaymentIntent.
+    index("orders_stripe_pi_idx").on(t.stripePaymentIntentId),
     check(
       "orders_status_ck",
       sql`${t.status} in ('pending', 'paid', 'fulfilled', 'cancelled', 'refunded')`,
@@ -488,6 +506,7 @@ export const orders = sqliteTable(
       "orders_amounts_ck",
       sql`${t.subtotalCents} >= 0 and ${t.shippingCents} >= 0 and ${t.totalCents} >= 0`,
     ),
+    check("orders_refunded_ck", sql`${t.refundedCents} >= 0`),
   ],
 );
 

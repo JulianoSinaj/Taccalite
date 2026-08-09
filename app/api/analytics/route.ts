@@ -34,6 +34,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  await recordPageView(path, parsed.data.referrer ?? null);
+  await recordPageView(path, externalReferrer(parsed.data.referrer, request.url));
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Keep only referrers that are a genuine external acquisition source.
+ *
+ * The client already drops internal ones (`components/Analytics.tsx`), but a
+ * self-referrer stored here silently inflates "top referrers" forever, so the
+ * ingest side refuses them too rather than trusting the beacon.
+ */
+function externalReferrer(referrer: string | null | undefined, requestUrl: string): string | null {
+  if (!referrer) return null;
+  try {
+    if (new URL(referrer).origin === new URL(requestUrl).origin) return null;
+  } catch {
+    return null; // not a parseable URL — not a usable source
+  }
+  return referrer;
 }

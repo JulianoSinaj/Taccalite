@@ -22,7 +22,7 @@ type Reservation = {
   id: string;
   reference: string;
   type: "table" | "porchetta" | "order";
-  status: "pending" | "confirmed" | "completed" | "cancelled";
+  status: "pending" | "confirmed" | "completed" | "cancelled" | "no_show";
   waitlisted: boolean;
   date: string;
   time: string | null;
@@ -56,6 +56,9 @@ const RESERVATION_STATUS: Record<Reservation["status"], { label: string; cls: st
   confirmed: { label: "Confermata", cls: "bg-emerald-100 text-emerald-800" },
   completed: { label: "Completata", cls: "bg-brown-900/10 text-brown-800" },
   cancelled: { label: "Annullata", cls: "bg-red-100 text-red-700" },
+  // Shown to the customer rather than hidden: if a deposit was kept, they are
+  // entitled to see why on their own account page.
+  no_show: { label: "Non ritirata", cls: "bg-orange-100 text-orange-800" },
 };
 
 const REDEMPTION_STATUS: Record<Redemption["status"], { label: string; cls: string }> = {

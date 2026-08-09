@@ -200,20 +200,53 @@ export async function updateReservationDetails(_prev: ActionState, fd: FormData)
 // ── Status ───────────────────────────────────────────────────────────────────
 export async function updateReservationStatus(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireAdmin();
+    const actor = await requireAdmin();
     const data = parseForm(reservationStatusInput, fd);
     const res = await mustFindReservation(data.id);
 
+    // A no-show is the one state that forfeits a deposit the shop already holds.
+    // Moving the booking back out of no_show releases the forfeit again, so an
+    // operator who mis-clicked isn't left with money marked as kept.
+    const forfeiting = data.status === "no_show" && res.depositPaidAt != null;
+    const depositForfeitedAt = forfeiting ? res.depositForfeitedAt ?? new Date() : null;
+
     await db
       .update(reservations)
-      .set({ status: data.status, adminNotes: data.adminNotes ?? res.adminNotes, updatedAt: new Date() })
+      .set({
+        status: data.status,
+        adminNotes: data.adminNotes ?? res.adminNotes,
+        depositForfeitedAt,
+        updatedAt: new Date(),
+      })
       .where(eq(reservations.id, data.id));
 
+    // Only the two states the customer needs to hear about are emailed. A
+    // no-show notice would be salt in the wound and is a phone call, not an
+    // automated email.
     if ((data.status === "confirmed" || data.status === "cancelled") && res.email) {
       const emailData = await emailDataFor(res);
       await sendMail({ to: res.email, ...reservationStatusEmail(emailData, data.status) }).catch(() => {});
     }
+
+    await logAudit({
+      actor,
+      action: "reservation.status",
+      entity: "reservation",
+      entityId: res.id,
+      summary: `Prenotazione ${res.reference}: ${res.status} → ${data.status}`,
+      meta: {
+        from: res.status,
+        to: data.status,
+        ...(forfeiting ? { depositForfeitedCents: res.depositCents } : {}),
+      },
+    });
+
     revalidateReservations();
+    if (forfeiting) {
+      return ok(
+        `Prenotazione segnata come non presentata. Caparra di ${(res.depositCents / 100).toFixed(2)} € trattenuta.`,
+      );
+    }
     return ok("Prenotazione aggiornata.");
   });
 }
@@ -235,7 +268,7 @@ export async function bulkUpdateReservationStatus(
     const ids = fd.getAll("ids").map(String).filter(Boolean);
     const status = String(fd.get("status") ?? "");
     if (ids.length === 0) throw new ActionError("Seleziona almeno una prenotazione.");
-    if (!["pending", "confirmed", "completed", "cancelled"].includes(status)) {
+    if (!["pending", "confirmed", "completed", "cancelled", "no_show"].includes(status)) {
       throw new ActionError("Stato non valido.");
     }
 

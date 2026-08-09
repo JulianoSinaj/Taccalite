@@ -27,7 +27,9 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   const editable = order.paymentStatus === "unpaid" && order.status !== "cancelled";
   const shopName = order.shopSlug ? shops.find((s) => s.slug === order.shopSlug)?.name ?? order.shopSlug : null;
   const addr = order.shippingAddress;
-  const canRefund = admin && order.paymentStatus === "paid" && order.status !== "refunded";
+  const refundableCents = order.totalCents - order.refundedCents;
+  const canRefund =
+    admin && order.paymentStatus === "paid" && order.status !== "refunded" && refundableCents > 0;
   // IVA breakdown reconciled with the total: line grosses net of the apportioned
   // discount, plus shipping at its configured rate (prices are VAT-inclusive).
   const vat = orderVatBuckets({
@@ -86,6 +88,18 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 <span>Totale</span>
                 <span>{euro(order.totalCents)}</span>
               </div>
+              {order.refundedCents > 0 && (
+                <>
+                  <div className="flex justify-between pt-1 text-rose-700">
+                    <span>Rimborsato</span>
+                    <span>−{euro(order.refundedCents)}</span>
+                  </div>
+                  <div className="flex justify-between font-medium text-brown-950">
+                    <span>Incassato netto</span>
+                    <span>{euro(order.totalCents - order.refundedCents)}</span>
+                  </div>
+                </>
+              )}
             </div>
             {vat.length > 0 && (
               <div className="mt-4 border-t border-brown-900/10 pt-3">
@@ -306,9 +320,28 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               <div className="mt-4 border-t border-brown-900/10 pt-4">
                 <ActionForm action={refundOrder} className="flex flex-col items-start gap-2">
                   <input type="hidden" name="id" value={order.id} />
+                  <label className={labelCls} htmlFor="importoEuros">
+                    Importo da rimborsare (€)
+                  </label>
+                  <input
+                    id="importoEuros"
+                    name="importoEuros"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max={(refundableCents / 100).toFixed(2)}
+                    placeholder={`${(refundableCents / 100).toFixed(2)} (tutto)`}
+                    className={`${inputCls} max-w-[12rem]`}
+                  />
+                  <p className="text-xs text-brown-800/60">
+                    {order.refundedCents > 0
+                      ? `Già rimborsato ${euro(order.refundedCents)} · residuo ${euro(refundableCents)}.`
+                      : "Lascia vuoto per rimborsare l'intero importo."}{" "}
+                    Le scorte rientrano e il coupon si libera solo al rimborso totale.
+                  </p>
                   <PendingButton
                     tone="danger"
-                    confirm={`Confermi il rimborso di ${euro(order.totalCents)} per l'ordine ${order.orderNumber}? L'operazione non è reversibile.`}
+                    confirm={`Confermi il rimborso per l'ordine ${order.orderNumber}? L'operazione non è reversibile.`}
                   >
                     Rimborsa
                   </PendingButton>

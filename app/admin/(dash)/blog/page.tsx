@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { AdminHeader, Panel, StatusBadge, fmtDate, NewButton, Pagination } from "@/components/admin/ui";
-import { FilterChips, FilterSearch, chipsFrom } from "@/components/admin/FilterBar";
+import {
+  SegmentedFilter,
+  FilterToolbar,
+  ActiveFilters,
+  chipsFrom,
+  labelFrom,
+} from "@/components/admin/FilterBar";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { getBlogPage } from "@/lib/admin/queries";
 import { blogFilters } from "@/lib/admin/filters";
@@ -24,6 +30,7 @@ export default async function AdminBlog({ searchParams }: SP) {
   const filters = blogFilters(sp);
   const { rows: posts, total, pageCount, categories } = await getBlogPage({ ...filters, page });
   const filtered = Object.values(filters).some((v) => v && v !== "all");
+  const CATEGORY_CHIPS = chipsFrom(categories, "Tutte le categorie");
 
   return (
     <div>
@@ -33,15 +40,30 @@ export default async function AdminBlog({ searchParams }: SP) {
         action={<NewButton href="/admin/blog/new">+ Nuovo articolo</NewButton>}
       />
 
-      <FilterChips basePath={BASE} params={filters} name="stato" options={STATUS_CHIPS} tone="dark" />
-      <FilterChips
+      <SegmentedFilter
         basePath={BASE}
         params={filters}
-        name="categoria"
-        options={chipsFrom(categories, "Tutte le categorie")}
-        className="mb-4"
+        name="stato"
+        options={STATUS_CHIPS}
+        label="Filtra per stato di pubblicazione"
       />
-      <FilterSearch basePath={BASE} params={filters} placeholder="Titolo, slug o estratto…" />
+      <FilterToolbar
+        basePath={BASE}
+        params={filters}
+        searchPlaceholder="Titolo, slug o estratto…"
+        carry={["stato"]}
+        formId="blog-filters"
+        facets={[{ name: "categoria", label: "Categoria", options: CATEGORY_CHIPS }]}
+      />
+      <ActiveFilters
+        basePath={BASE}
+        params={filters}
+        labels={{
+          stato: { title: "Stato", format: labelFrom(STATUS_CHIPS) },
+          categoria: { title: "Categoria" },
+          q: { title: "Ricerca", format: (v) => `“${v}”` },
+        }}
+      />
 
       {posts.length === 0 ? (
         <Panel>

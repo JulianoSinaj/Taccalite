@@ -55,6 +55,26 @@ describe("checkPorchettaCapacity", () => {
     expect(overflows.exceeded).toBe(true);
   });
 
+  it("still counts a no-show against the day — the porchetta was made anyway", async () => {
+    await setCapacity(10);
+    await db.insert(reservations).values({
+      reference: "CAP-NS",
+      type: "porchetta",
+      name: "Assente",
+      phone: "9",
+      date: DATE,
+      quantityKg: 7,
+      shopSlug: SHOP,
+      status: "no_show",
+    });
+
+    // Unlike a cancellation, a no-show consumed the day's production: the shop
+    // roasted that porchetta and nobody came for it.
+    const cap = await checkPorchettaCapacity(DATE, 4);
+    expect(cap.bookedKg).toBe(7);
+    expect(cap.exceeded).toBe(true);
+  });
+
   it("excludes the reservation being rescheduled from its own day's total", async () => {
     await setCapacity(10);
     const [row] = await db

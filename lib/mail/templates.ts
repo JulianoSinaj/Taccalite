@@ -486,10 +486,14 @@ export function orderStatusEmail(
     carrier?: string | null;
     trackingNumber?: string | null;
     totalCents: number;
+    /** Amount actually given back. Defaults to the order total (full refund). */
+    refundAmountCents?: number | null;
+    /** True when money remains on the order after this refund. */
+    partialRefund?: boolean;
   },
   status: "fulfilled" | "cancelled" | "refunded",
 ): Built {
-  const euroTot = euro(d.totalCents);
+  const euroTot = euro(d.refundAmountCents ?? d.totalCents);
   let heading: string;
   let intro: string;
   let extraHtml = "";
@@ -511,6 +515,9 @@ export function orderStatusEmail(
   } else if (status === "cancelled") {
     heading = "Ordine annullato";
     intro = `il tuo ordine <strong>${esc(d.orderNumber)}</strong> è stato annullato. Per qualsiasi domanda, rispondi a questa email o chiamaci in bottega.`;
+  } else if (d.partialRefund) {
+    heading = "Rimborso parziale emesso";
+    intro = `abbiamo emesso un rimborso parziale di <strong>${euroTot}</strong> sull'ordine <strong>${esc(d.orderNumber)}</strong> (totale ordine ${euro(d.totalCents)}). L'accredito può richiedere alcuni giorni lavorativi.`;
   } else {
     heading = "Rimborso emesso";
     intro = `abbiamo emesso un rimborso di <strong>${euroTot}</strong> per l'ordine <strong>${esc(d.orderNumber)}</strong>. L'accredito può richiedere alcuni giorni lavorativi.`;

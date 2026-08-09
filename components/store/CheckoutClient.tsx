@@ -19,6 +19,7 @@ export default function CheckoutClient({
   shippingCents = 700,
   freeShippingThresholdCents = 0,
   user = null,
+  cancelled = false,
 }: {
   shops: { slug: string; name: string }[];
   pointsPerEuro?: number;
@@ -26,8 +27,10 @@ export default function CheckoutClient({
   shippingCents?: number;
   freeShippingThresholdCents?: number;
   user?: CheckoutUser | null;
+  /** The visitor came back from Stripe without paying (`?annullato=1`). */
+  cancelled?: boolean;
 }) {
-  const { items, subtotalCents, setQty, remove, clear } = useCart();
+  const { items, subtotalCents, setQty, remove } = useCart();
   const [fulfilment, setFulfilment] = useState<"pickup" | "shipping">("pickup");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +116,11 @@ export default function CheckoutClient({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Errore imprevisto");
-      clear();
+      // Deliberately NOT clearing the cart here. Stripe sends the customer back
+      // to `/checkout?annullato=1` if they abandon payment, and a cart emptied
+      // at redirect time would greet them with "Il carrello è vuoto" and lose
+      // the sale. The success page clears it once the order is actually paid
+      // (`components/store/ClearCart.tsx`).
       window.location.href = json.url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Errore imprevisto");
@@ -144,6 +151,17 @@ export default function CheckoutClient({
         {/* Cart */}
         <div>
           <h1 className="font-display mb-8 text-4xl tracking-tighter text-brown-950">Il tuo ordine</h1>
+          {cancelled && (
+            <div
+              role="status"
+              className="mb-8 rounded-2xl border border-gold-dark/40 bg-gold/15 px-5 py-4 text-sm text-brown-900"
+            >
+              <p className="font-semibold text-brown-950">Pagamento annullato</p>
+              <p className="mt-1 text-brown-900/80">
+                Nessun addebito è stato effettuato. Il tuo carrello è ancora qui: puoi riprovare quando vuoi.
+              </p>
+            </div>
+          )}
           <div className="space-y-4">
             {items.map((i) => (
               <div key={i.slug} className="flex items-center gap-4 rounded-2xl border border-brown-900/10 bg-white/60 p-4">

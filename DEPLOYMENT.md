@@ -187,9 +187,31 @@ Use **Admin → Impostazioni → "Invia prova"** to verify delivery.
 
 Without keys, checkout runs in **simulate mode** (orders are recorded and confirmed, no
 charge). To enable real (test or live) payments, set `STRIPE_SECRET_KEY` and
-`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, then optionally configure a webhook at
+`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, then configure a webhook at
 `https://taccalite.it/api/checkout/webhook` and set `STRIPE_WEBHOOK_SECRET`. The success
 page also finalizes orders as a webhook-free fallback.
+
+### 6a. Webhook events to enable
+
+In the Stripe dashboard (**Developers → Webhooks → your endpoint → Select events**),
+subscribe to **all four**. Only the first is needed to take money; the other three keep
+the gestionale's picture of reality in sync, and skipping them causes the silent drift
+noted beside each.
+
+| Event | What it does | If you don't enable it |
+| --- | --- | --- |
+| `checkout.session.completed` | Marks the order paid: decrements stock, accrues loyalty points, counts the coupon, emails the customer. | Orders only finalize when the customer lands back on the success page — one closed tab and the sale is stuck as pending. |
+| `checkout.session.async_payment_succeeded` | Same, for delayed methods where the money lands after checkout. | Bank-transfer-style payments never finalize. |
+| `checkout.session.expired` | Cancels an abandoned checkout (~24h). | Abandoned attempts pile up as "pending" in the orders list forever. |
+| `charge.refunded` | Mirrors a refund issued **from the Stripe dashboard** back into the order — restocks the goods and frees the coupon on a full refund. | A refund taken in Stripe leaves the order reading "paid" here: stock stays wrong and the VAT report over-declares. |
+
+> Refunds issued from the **gestionale** (Ordine → Rimborsa) don't depend on this — they
+> call Stripe directly. `charge.refunded` is what covers the other direction. Both paths
+> record the amount cumulatively, so the same refund arriving twice is a no-op.
+
+Partial refunds are supported: leave the amount blank to refund everything outstanding,
+or enter a smaller figure. Stock returns and the coupon is released only when an order
+reaches a **full** refund — a partial refund is treated as a price adjustment, not a return.
 
 ## 7. Backups & restore
 

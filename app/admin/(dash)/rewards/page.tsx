@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AdminHeader, Panel, StatusBadge, NewButton, Pagination } from "@/components/admin/ui";
-import { FilterChips, FilterSearch } from "@/components/admin/FilterBar";
+import { SegmentedFilter, FilterToolbar, ActiveFilters, labelFrom } from "@/components/admin/FilterBar";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { getRewardsPage } from "@/lib/admin/queries";
 import { rewardFilters } from "@/lib/admin/filters";
@@ -33,8 +33,28 @@ export default async function AdminRewards({ searchParams }: SP) {
         action={<NewButton href="/admin/rewards/new">+ Nuovo premio</NewButton>}
       />
 
-      <FilterChips basePath={BASE} params={filters} name="stato" options={STATUS_CHIPS} tone="dark" />
-      <FilterSearch basePath={BASE} params={filters} placeholder="Nome o slug…" />
+      <SegmentedFilter
+        basePath={BASE}
+        params={filters}
+        name="stato"
+        options={STATUS_CHIPS}
+        label="Filtra per stato"
+      />
+      <FilterToolbar
+        basePath={BASE}
+        params={filters}
+        searchPlaceholder="Nome o slug…"
+        carry={["stato"]}
+        formId="rewards-filters"
+      />
+      <ActiveFilters
+        basePath={BASE}
+        params={filters}
+        labels={{
+          stato: { title: "Stato", format: labelFrom(STATUS_CHIPS) },
+          q: { title: "Ricerca", format: (v) => `“${v}”` },
+        }}
+      />
 
       {rewards.length === 0 ? (
         <Panel>

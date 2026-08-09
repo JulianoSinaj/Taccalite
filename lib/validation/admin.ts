@@ -201,7 +201,7 @@ export const stockAdjustInput = z.object({
 
 export const reservationStatusInput = z.object({
   id: z.string().trim().min(1),
-  status: z.enum(["pending", "confirmed", "completed", "cancelled"]),
+  status: z.enum(["pending", "confirmed", "completed", "cancelled", "no_show"]),
   adminNotes: optionalText(2000),
 });
 

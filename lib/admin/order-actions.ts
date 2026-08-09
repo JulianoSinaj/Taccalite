@@ -17,7 +17,13 @@ import { getShopBySlug, getSetting } from "@/lib/db/queries";
 import { orderStatusEmail } from "@/lib/mail/templates";
 import { sendMail } from "@/lib/mail/mailer";
 import { getStripe } from "@/lib/payments/stripe";
-import { generateOrderNumber, finalizeOrder, restockOrderItems, recalcOrderTotals } from "@/lib/orders";
+import {
+  generateOrderNumber,
+  finalizeOrder,
+  restockOrderItems,
+  recalcOrderTotals,
+  recordRefund,
+} from "@/lib/orders";
 import { validateDiscount, recordDiscountUse, releaseDiscountUseByCode } from "@/lib/discounts";
 import { addPoints } from "@/lib/loyalty";
 import { logAudit } from "@/lib/audit";
@@ -32,6 +38,9 @@ type OrderRow = typeof orders.$inferSelect;
 async function notifyOrderStatus(
   order: OrderRow,
   status: "fulfilled" | "cancelled" | "refunded",
+  /** Refund detail, so a partial refund quotes the amount actually returned
+   *  rather than the order total. */
+  refund?: { refundAmountCents: number; partialRefund: boolean },
 ): Promise<void> {
   try {
     const shopName =
@@ -47,6 +56,8 @@ async function notifyOrderStatus(
         carrier: order.carrier,
         trackingNumber: order.trackingNumber,
         totalCents: order.totalCents,
+        refundAmountCents: refund?.refundAmountCents ?? null,
+        partialRefund: refund?.partialRefund ?? false,
       },
       status,
     );
@@ -625,10 +636,17 @@ export async function setOrderTracking(_prev: ActionState, fd: FormData): Promis
 }
 
 /**
- * Issue a refund (admin-only — this moves money). When Stripe is live and the
- * order carries a checkout session, the payment is actually refunded via the
- * Stripe API; in simulate mode (no Stripe / no session) we only update state.
- * Either way the order becomes refunded and the customer is emailed.
+ * Issue a refund, in full or in part (admin-only — this moves money).
+ *
+ * `importoEuros` is optional: leave it empty to refund everything still
+ * outstanding. A smaller amount is passed through to Stripe as a partial refund
+ * and accumulated on `orders.refundedCents`; the order only becomes `refunded`
+ * once the whole total has been given back. Goods are returned to stock and the
+ * coupon is freed on that final transition only — a partial refund is a price
+ * adjustment, not a return (see `recordRefund`).
+ *
+ * When Stripe is live the payment is really refunded via the API; in simulate
+ * mode (no Stripe / no session) only local state moves.
  */
 export async function refundOrder(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
@@ -642,18 +660,44 @@ export async function refundOrder(_prev: ActionState, fd: FormData): Promise<Act
       throw new ActionError("Questo ordine è già stato rimborsato.");
     }
 
+    const remainingCents = order.totalCents - order.refundedCents;
+    if (remainingCents <= 0) throw new ActionError("Non c'è più nulla da rimborsare su questo ordine.");
+
+    // Same "euros in, cents stored" convention as the rest of the admin forms.
+    const raw = String(fd.get("importoEuros") ?? "").trim().replace(",", ".");
+    let amountCents = remainingCents;
+    if (raw !== "") {
+      const parsed = Math.round(Number(raw) * 100);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new ActionError("Importo del rimborso non valido.");
+      }
+      if (parsed > remainingCents) {
+        throw new ActionError(
+          `L'importo supera il residuo rimborsabile (${(remainingCents / 100).toFixed(2)} €).`,
+        );
+      }
+      amountCents = parsed;
+    }
+    const isPartial = amountCents < remainingCents;
+
     const stripe = getStripe();
-    if (stripe && order.stripeSessionId) {
+    const useStripe = Boolean(stripe && (order.stripePaymentIntentId || order.stripeSessionId));
+    if (stripe && useStripe) {
       try {
-        const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
-        const paymentIntent =
-          typeof session.payment_intent === "string"
-            ? session.payment_intent
-            : session.payment_intent?.id;
+        // Orders finalized since the PaymentIntent is stored skip the round-trip;
+        // older ones still resolve it from the checkout session.
+        let paymentIntent = order.stripePaymentIntentId ?? null;
+        if (!paymentIntent && order.stripeSessionId) {
+          const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+          paymentIntent =
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : session.payment_intent?.id ?? null;
+        }
         if (!paymentIntent) {
           throw new ActionError("Pagamento Stripe non trovato per questo ordine.");
         }
-        await stripe.refunds.create({ payment_intent: paymentIntent });
+        await stripe.refunds.create({ payment_intent: paymentIntent, amount: amountCents });
       } catch (err) {
         if (err instanceof ActionError) throw err;
         console.error(`[order-actions] Stripe refund failed for ${order.orderNumber}:`, err);
@@ -661,29 +705,47 @@ export async function refundOrder(_prev: ActionState, fd: FormData): Promise<Act
       }
     }
 
-    await db
-      .update(orders)
-      .set({ status: "refunded", paymentStatus: "refunded", updatedAt: new Date() })
-      .where(eq(orders.id, id));
+    // Cumulative by design: if the `charge.refunded` webhook for this same
+    // refund lands first, this converges instead of double-counting.
+    const outcome = await recordRefund(order.id, order.refundedCents + amountCents, {
+      reason: `Rimborso ordine ${order.orderNumber}`,
+      actorId: actor.id,
+    });
+    if (!outcome || outcome.deltaCents === 0) {
+      // Stripe already moved the money; the local state was updated by the
+      // webhook. Report success rather than inviting the operator to retry.
+      revalidatePath(`/admin/orders/${id}`);
+      return ok("Rimborso già registrato su questo ordine.");
+    }
 
-    // Return the refunded goods to stock (the paid order had decremented them)
-    // and free the coupon it consumed so a capped code isn't permanently burned.
-    await restockOrderItems(order.id, `Rimborso ordine ${order.orderNumber}`, actor.id);
-    if (order.discountCode) await releaseDiscountUseByCode(order.discountCode);
-
-    await notifyOrderStatus({ ...order, status: "refunded", paymentStatus: "refunded" }, "refunded");
+    await notifyOrderStatus(
+      outcome.full
+        ? { ...order, status: "refunded", paymentStatus: "refunded" }
+        : order,
+      "refunded",
+      { refundAmountCents: amountCents, partialRefund: isPartial },
+    );
 
     await logAudit({
       actor,
-      action: "order.refund",
+      action: isPartial ? "order.refund_partial" : "order.refund",
       entity: "order",
       entityId: order.id,
-      summary: `Rimborso di ${(order.totalCents / 100).toFixed(2)} € per l'ordine ${order.orderNumber}`,
-      meta: { totalCents: order.totalCents, stripe: Boolean(stripe && order.stripeSessionId) },
+      summary: `Rimborso${isPartial ? " parziale" : ""} di ${(amountCents / 100).toFixed(2)} € per l'ordine ${order.orderNumber}`,
+      meta: {
+        amountCents,
+        refundedTotalCents: outcome.refundedCents,
+        totalCents: order.totalCents,
+        stripe: useStripe,
+      },
     });
 
     revalidatePath(`/admin/orders/${id}`);
     revalidatePath("/admin/orders");
-    return ok("Rimborso emesso.");
+    return ok(
+      isPartial
+        ? `Rimborso parziale di ${(amountCents / 100).toFixed(2)} € emesso. Residuo: ${((order.totalCents - outcome.refundedCents) / 100).toFixed(2)} €.`
+        : "Rimborso emesso.",
+    );
   });
 }

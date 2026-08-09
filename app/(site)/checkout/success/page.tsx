@@ -28,7 +28,10 @@ export default async function CheckoutSuccess({ searchParams }: SP) {
       const s = await stripe.checkout.sessions.retrieve(session);
       if (s.payment_status === "paid" && s.metadata?.orderId) {
         verifiedOrderId = s.metadata.orderId;
-        await finalizeOrder(s.metadata.orderId);
+        await finalizeOrder(s.metadata.orderId, {
+          paymentIntentId:
+            typeof s.payment_intent === "string" ? s.payment_intent : s.payment_intent?.id ?? null,
+        });
       }
     } catch {
       /* ignore — webhook is the backstop */

@@ -10,7 +10,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function CheckoutPage() {
+/** `annullato=1` is where Stripe returns a customer who backed out of payment. */
+type SP = { searchParams: Promise<{ annullato?: string }> };
+
+export default async function CheckoutPage({ searchParams }: SP) {
+  const { annullato } = await searchParams;
   const [shops, user, pointsPerEuro, loyaltyEnabled, shippingCents, freeShippingThresholdCents] =
     await Promise.all([
       getShops(),
@@ -30,6 +34,7 @@ export default async function CheckoutPage() {
       shippingCents={shippingCents}
       freeShippingThresholdCents={freeShippingThresholdCents}
       user={user ? { name: user.name, email: user.email, phone: user.phone } : null}
+      cancelled={annullato === "1"}
     />
   );
 }

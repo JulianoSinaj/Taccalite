@@ -3,6 +3,7 @@ import { reservationSchema } from "@/lib/validation/reservation";
 import { createReservation, ReservationNotAllowedError } from "@/lib/reservations";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { isSameOrigin } from "@/lib/security/origin";
+import { getCurrentUser } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
@@ -46,7 +47,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await createReservation(parsed.data);
+    // Attach the booking to the account when the visitor is signed in, so it
+    // shows up under "Le tue prenotazioni". Guests keep booking anonymously —
+    // the reference code remains the lookup key for them.
+    const viewer = await getCurrentUser();
+    const result = await createReservation(parsed.data, viewer ? { userId: viewer.id } : undefined);
     return NextResponse.json({ ok: true, reference: result.reference });
   } catch (err) {
     if (err instanceof ReservationNotAllowedError) {

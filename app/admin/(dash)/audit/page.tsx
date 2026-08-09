@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { AdminHeader, Panel, Pagination, fmtDateTime, inputCls, labelCls } from "@/components/admin/ui";
-import { FilterChips, FilterSearch, filterHref } from "@/components/admin/FilterBar";
+import { FilterToolbar, ActiveFilters, labelFrom } from "@/components/admin/FilterBar";
 import { getAuditPage } from "@/lib/admin/queries";
 import { auditFilters, filterQuery } from "@/lib/admin/filters";
 import { isAdmin } from "@/lib/auth/session";
@@ -67,6 +67,14 @@ export default async function AuditPage({ searchParams }: SP) {
     page,
   });
   const filtered = Object.values(filters).some((v) => v && v !== "all");
+  const ENTITY_CHIPS = [
+    { value: "all", label: "Tutto" },
+    ...entities.map((e) => ({ value: e, label: ENTITY_LABELS[e] ?? e })),
+  ];
+  const ACTOR_CHIPS = [
+    { value: "all", label: "Chiunque" },
+    ...actors.map((a) => ({ value: a.id, label: a.name || a.id })),
+  ];
 
   return (
     <div>
@@ -84,63 +92,56 @@ export default async function AuditPage({ searchParams }: SP) {
         }
       />
 
-      <FilterChips
+      {/* The audit log has no "primary view" to segment by — every facet here is
+          a refinement of a search, so it is all one toolbar. The date range rides
+          in the same form rather than needing a second one. */}
+      <FilterToolbar
         basePath={BASE}
         params={filters}
-        name="entity"
-        options={[
-          { value: "all", label: "Tutto" },
-          ...entities.map((e) => ({ value: e, label: ENTITY_LABELS[e] ?? e })),
+        searchPlaceholder="Descrizione, azione o id…"
+        formId="audit-filters"
+        facets={[
+          { name: "entity", label: "Ambito", options: ENTITY_CHIPS },
+          { name: "attore", label: "Autore", options: ACTOR_CHIPS },
         ]}
-        tone="dark"
-      />
-      <FilterChips
-        basePath={BASE}
-        params={filters}
-        name="attore"
-        options={[
-          { value: "all", label: "Chiunque" },
-          ...actors.map((a) => ({ value: a.id, label: a.name || a.id })),
-        ]}
-        className="mb-4"
-      />
-
-      {/* Date range — its own GET form so it can carry both bounds at once. */}
-      <form action={BASE} method="get" className="mb-4 flex flex-wrap items-end gap-3">
-        {Object.entries(filters)
-          .filter(([k, v]) => k !== "da" && k !== "a" && v && v !== "all")
-          .map(([k, v]) => (
-            <input key={k} type="hidden" name={k} value={v} />
-          ))}
+      >
         <div>
-          <label className={labelCls} htmlFor="audit-da">
+          <label className={labelCls} htmlFor="audit-filters-da">
             Dal
           </label>
-          <input id="audit-da" type="date" name="da" defaultValue={filters.da ?? ""} className={inputCls} />
+          <input
+            id="audit-filters-da"
+            type="date"
+            name="da"
+            defaultValue={filters.da ?? ""}
+            className={inputCls}
+          />
         </div>
         <div>
-          <label className={labelCls} htmlFor="audit-a">
+          <label className={labelCls} htmlFor="audit-filters-a">
             Al
           </label>
-          <input id="audit-a" type="date" name="a" defaultValue={filters.a ?? ""} className={inputCls} />
+          <input
+            id="audit-filters-a"
+            type="date"
+            name="a"
+            defaultValue={filters.a ?? ""}
+            className={inputCls}
+          />
         </div>
-        <button
-          type="submit"
-          className="rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
-        >
-          Filtra
-        </button>
-        {(filters.da || filters.a) && (
-          <a
-            href={filterHref(BASE, filters, { da: undefined, a: undefined })}
-            className="rounded-full bg-brown-900/10 px-5 py-2.5 text-xs font-bold tracking-widest text-brown-800 uppercase hover:bg-brown-900/15"
-          >
-            Azzera date
-          </a>
-        )}
-      </form>
+      </FilterToolbar>
 
-      <FilterSearch basePath={BASE} params={filters} placeholder="Descrizione, azione o id…" />
+      <ActiveFilters
+        basePath={BASE}
+        params={filters}
+        labels={{
+          entity: { title: "Ambito", format: labelFrom(ENTITY_CHIPS) },
+          attore: { title: "Autore", format: labelFrom(ACTOR_CHIPS) },
+          da: { title: "Dal" },
+          a: { title: "Al" },
+          q: { title: "Ricerca", format: (v) => `“${v}”` },
+        }}
+      />
 
       {rows.length === 0 ? (
         <Panel>

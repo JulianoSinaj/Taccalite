@@ -125,31 +125,62 @@ export async function createReservation(
   // Porchetta capacity: when a weekly cap is configured and this order would push
   // the day over it, the booking goes on the waitlist instead of the normal
   // confirmation flow (unless the caller opted out — see `waitlistOnOverflow`).
-  let waitlisted = false;
-  if (input.type === "porchetta" && waitlistOnOverflow) {
-    const cap = await checkPorchettaCapacity(date, input.quantityKg ?? 0);
-    waitlisted = cap.exceeded;
-  }
+  //
+  // The cap is read first because settings live behind an async accessor; the
+  // *decision* then happens inside the same transaction as the insert. Splitting
+  // "sum the day's kg" from "insert this booking" into two statements let two
+  // concurrent pre-orders both read an under-cap total and both confirm, selling
+  // more porchetta than the Saturday can produce. better-sqlite3 executes the
+  // transaction synchronously, so no other booking can interleave between the
+  // read and the write.
+  const capacityKg =
+    input.type === "porchetta" && waitlistOnOverflow
+      ? await getSetting<number>("porchetta.weeklyCapacityKg", 0)
+      : 0;
+  const requestedKg = input.quantityKg ?? 0;
 
-  const [row] = await db
-    .insert(reservations)
-    .values({
-      reference,
-      type: input.type,
-      name: input.name,
-      phone: input.phone,
-      email: input.email ?? null,
-      date,
-      time: input.time ?? null,
-      guests: input.type === "table" ? (input.guests ?? null) : null,
-      quantityKg: input.type === "porchetta" ? (input.quantityKg ?? null) : null,
-      shopSlug: input.shop,
-      notes: input.notes ?? null,
-      status,
-      waitlisted,
-      userId: meta?.userId ?? null,
-    })
-    .returning({ id: reservations.id });
+  const { id: insertedId, waitlisted } = db.transaction((tx) => {
+    let overflow = false;
+    if (capacityKg > 0) {
+      const [booked] = tx
+        .select({ total: sql<number>`coalesce(sum(${reservations.quantityKg}), 0)` })
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.type, "porchetta"),
+            eq(reservations.date, date),
+            // A cancelled booking frees its kg back up; a no-show does not — the
+            // porchetta was already prepared for it.
+            ne(reservations.status, "cancelled"),
+          ),
+        )
+        .all();
+      overflow = Number(booked?.total ?? 0) + requestedKg > capacityKg;
+    }
+
+    const [inserted] = tx
+      .insert(reservations)
+      .values({
+        reference,
+        type: input.type,
+        name: input.name,
+        phone: input.phone,
+        email: input.email ?? null,
+        date,
+        time: input.time ?? null,
+        guests: input.type === "table" ? (input.guests ?? null) : null,
+        quantityKg: input.type === "porchetta" ? (input.quantityKg ?? null) : null,
+        shopSlug: input.shop,
+        notes: input.notes ?? null,
+        status,
+        waitlisted: overflow,
+        userId: meta?.userId ?? null,
+      })
+      .returning({ id: reservations.id })
+      .all();
+
+    return { id: inserted.id, waitlisted: overflow };
+  });
 
   const emailData: ReservationEmailData = {
     reference,
@@ -184,5 +215,5 @@ export async function createReservation(
   }
   await Promise.allSettled(jobs);
 
-  return { reference, id: row.id };
+  return { reference, id: insertedId };
 }

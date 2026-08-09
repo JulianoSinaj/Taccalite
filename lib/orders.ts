@@ -4,7 +4,7 @@ import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { orders, orderItems, products, stockMovements } from "@/lib/db/schema";
 import { getShopBySlug, getSetting } from "@/lib/db/queries";
-import { validateDiscount, recordDiscountUseByCode } from "@/lib/discounts";
+import { validateDiscount, recordDiscountUseByCode, releaseDiscountUseByCode } from "@/lib/discounts";
 import { sendMail } from "@/lib/mail/mailer";
 import { orderCustomerEmail, orderOwnerEmail, lowStockOwnerEmail, type OrderEmailData } from "@/lib/mail/templates";
 import { addPoints } from "@/lib/loyalty";
@@ -287,18 +287,39 @@ export async function getOrderForViewer(
  * Idempotently finalize a paid order: mark paid, email customer + owner, award
  * loyalty points. Safe to call more than once (webhook + success page).
  */
-export async function finalizeOrder(orderId: string): Promise<void> {
+export async function finalizeOrder(
+  orderId: string,
+  opts: { paymentIntentId?: string | null } = {},
+): Promise<void> {
   // Atomically claim the order: flip unpaid → paid only if it isn't already paid.
   // Only the caller whose UPDATE actually changed a row proceeds to award points
   // and email, so concurrent webhook + success-page calls can't double-accrue.
   const now = new Date();
   const [claimed] = db
     .update(orders)
-    .set({ status: "paid", paymentStatus: "paid", paidAt: now, updatedAt: now })
+    .set({
+      status: "paid",
+      paymentStatus: "paid",
+      paidAt: now,
+      updatedAt: now,
+      // Recorded here because this is the first point at which a PaymentIntent
+      // exists; refund events later arrive keyed on it.
+      ...(opts.paymentIntentId ? { stripePaymentIntentId: opts.paymentIntentId } : {}),
+    })
     .where(and(eq(orders.id, orderId), ne(orders.paymentStatus, "paid")))
     .returning({ id: orders.id })
     .all();
-  if (!claimed) return;
+  if (!claimed) {
+    // Losing the claim race still shouldn't lose the PaymentIntent: backfill it
+    // if the winner didn't have one (e.g. the success page finalized first).
+    if (opts.paymentIntentId) {
+      await db
+        .update(orders)
+        .set({ stripePaymentIntentId: opts.paymentIntentId })
+        .where(and(eq(orders.id, orderId), sql`${orders.stripePaymentIntentId} is null`));
+    }
+    return;
+  }
 
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   if (!order) return;
@@ -402,6 +423,93 @@ export async function finalizeOrder(orderId: string): Promise<void> {
   } catch {
     // Swallowed on purpose — stock/alert bookkeeping is best-effort.
   }
+}
+
+export type RefundOutcome = {
+  /** Amount newly given back on this call, in cents (0 when nothing changed). */
+  deltaCents: number;
+  /** Cumulative refunded amount after this call. */
+  refundedCents: number;
+  /** True when the order is now refunded in full. */
+  full: boolean;
+};
+
+/**
+ * Record a refund against an order, in cents, **cumulatively**.
+ *
+ * `refundedTotalCents` is the total ever refunded for this order, not the
+ * increment — the same shape Stripe's `charge.amount_refunded` uses. That makes
+ * the operation idempotent: replaying a webhook, or an admin refund racing the
+ * webhook that reports it, converges on the same state instead of double-counting.
+ *
+ * Reversal side-effects (restock, freeing the coupon) fire only on the
+ * transition to a *full* refund, and only once: partially refunding an order
+ * doesn't mean the goods came back, and a coupon can't be half-returned.
+ *
+ * Returns `deltaCents: 0` when the call was a no-op, so callers can skip
+ * emailing/audit-logging a refund that had already been recorded.
+ */
+export async function recordRefund(
+  orderId: string,
+  refundedTotalCents: number,
+  opts: { reason: string; actorId?: string | null } = { reason: "Rimborso" },
+): Promise<RefundOutcome | null> {
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) return null;
+
+  const capped = Math.max(0, Math.min(Math.round(refundedTotalCents), order.totalCents));
+  const deltaCents = capped - order.refundedCents;
+  if (deltaCents <= 0) {
+    return { deltaCents: 0, refundedCents: order.refundedCents, full: order.paymentStatus === "refunded" };
+  }
+
+  const full = capped >= order.totalCents;
+  const wasFull = order.paymentStatus === "refunded";
+
+  // Claim the transition atomically on the previous refunded amount, so two
+  // concurrent reversals can't both run the restock.
+  const [claimed] = db
+    .update(orders)
+    .set({
+      refundedCents: capped,
+      updatedAt: new Date(),
+      ...(full ? ({ status: "refunded", paymentStatus: "refunded" } as const) : {}),
+    })
+    .where(and(eq(orders.id, orderId), eq(orders.refundedCents, order.refundedCents)))
+    .returning({ id: orders.id })
+    .all();
+  if (!claimed) return { deltaCents: 0, refundedCents: order.refundedCents, full: wasFull };
+
+  if (full && !wasFull) {
+    await restockOrderItems(orderId, opts.reason, opts.actorId ?? null);
+    if (order.discountCode) await releaseDiscountUseByCode(order.discountCode);
+  }
+
+  return { deltaCents, refundedCents: capped, full };
+}
+
+/**
+ * Abandon an order whose Stripe Checkout Session expired.
+ *
+ * Nothing was charged and nothing was reserved (stock is only decremented at
+ * finalize, and the coupon is only counted there too), so this just clears the
+ * order out of the work queue instead of leaving a "pending" row the operator
+ * has to reason about forever. Never touches an order that did get paid.
+ */
+export async function expireOrder(orderId: string): Promise<boolean> {
+  const [claimed] = db
+    .update(orders)
+    .set({ status: "cancelled", updatedAt: new Date() })
+    .where(
+      and(
+        eq(orders.id, orderId),
+        eq(orders.status, "pending"),
+        eq(orders.paymentStatus, "unpaid"),
+      ),
+    )
+    .returning({ id: orders.id })
+    .all();
+  return !!claimed;
 }
 
 /**

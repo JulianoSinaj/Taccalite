@@ -20,6 +20,7 @@ import { addPoints } from "@/lib/loyalty";
 import { absoluteUrl } from "@/lib/site";
 import { dateInRome } from "@/lib/time";
 import { verifySearchIndexes } from "@/lib/admin/search";
+import { sweepOrphanedMedia } from "@/lib/media";
 
 // ── Job registry ─────────────────────────────────────────────────────────────
 /**
@@ -250,6 +251,8 @@ export async function runMaintenance(
   outboxDrained: number;
   outboxPruned: number;
   searchIndexesRebuilt: string[];
+  mediaDeleted: number;
+  mediaBytesFreed: number;
 }> {
   const { deleted: sessionsDeleted } = await deleteExpiredSessions();
   const drain = await drainOutbox();
@@ -259,11 +262,17 @@ export async function runMaintenance(
     .where(and(eq(emailOutbox.status, "sent"), lt(emailOutbox.createdAt, cutoff)));
   // Cheap self-heal for the FTS indexes — see lib/admin/search.ts.
   const { rebuilt } = await verifySearchIndexes();
+  // Reclaim upload files no record points at any more (replaced product photos,
+  // images of deleted posts…). See `sweepOrphanedMedia` for the age guard that
+  // keeps this safe next to a live upload.
+  const media = await sweepOrphanedMedia(now);
   return {
     sessionsDeleted,
     outboxDrained: drain.sent,
     outboxPruned: pruned.changes ?? 0,
     searchIndexesRebuilt: rebuilt,
+    mediaDeleted: media.deleted,
+    mediaBytesFreed: media.bytesFreed,
   };
 }
 

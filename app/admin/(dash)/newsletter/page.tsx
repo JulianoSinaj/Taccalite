@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { AdminHeader, Panel, StatusBadge, fmtDate, fmtDateTime, Pagination } from "@/components/admin/ui";
-import { FilterChips, FilterSearch, chipsFrom } from "@/components/admin/FilterBar";
+import {
+  SegmentedFilter,
+  FilterToolbar,
+  ActiveFilters,
+  chipsFrom,
+  labelFrom,
+} from "@/components/admin/FilterBar";
 import { DataTable, DensityToggle, densityFrom } from "@/components/admin/DataTable";
 import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
 import { CampaignComposer } from "@/components/admin/CampaignComposer";
@@ -68,6 +74,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
       listCampaigns(),
       sp.campagna ? getCampaign(sp.campagna) : Promise.resolve(null),
     ]);
+  const SOURCE_CHIPS = chipsFrom(sources, "Tutte le origini");
 
   return (
     <div>
@@ -154,19 +161,32 @@ export default async function AdminNewsletter({ searchParams }: SP) {
         </>
       )}
 
-      <FilterChips basePath={BASE} params={linkParams} name="stato" options={STATUS_CHIPS} />
-      <FilterChips
+      <SegmentedFilter
         basePath={BASE}
         params={linkParams}
-        name="origine"
-        options={chipsFrom(sources, "Tutte le origini")}
-        className="mb-4"
+        name="stato"
+        options={STATUS_CHIPS}
+        label="Filtra per stato iscrizione"
+      />
+      <FilterToolbar
+        basePath={BASE}
+        params={linkParams}
+        searchPlaceholder="Indirizzo email…"
+        carry={["stato", "densita"]}
+        formId="newsletter-filters"
+        facets={[{ name: "origine", label: "Origine", options: SOURCE_CHIPS }]}
       />
 
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-[18rem] flex-1">
-          <FilterSearch basePath={BASE} params={linkParams} placeholder="Indirizzo email…" />
-        </div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <ActiveFilters
+          basePath={BASE}
+          params={linkParams}
+          labels={{
+            stato: { title: "Stato", format: labelFrom(STATUS_CHIPS) },
+            origine: { title: "Origine" },
+            q: { title: "Ricerca", format: (v) => `“${v}”` },
+          }}
+        />
         <DensityToggle basePath={BASE} params={linkParams} density={density} />
       </div>
 
