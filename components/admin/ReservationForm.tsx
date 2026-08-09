@@ -24,11 +24,16 @@ export function ReservationForm({
   shops,
   reservation,
   onDone,
+  redirectTo,
 }: {
   shops: ShopRow[];
   reservation?: ReservationRow | null;
   /** Rendered under the buttons — e.g. a "back to list" link on the create page. */
   onDone?: React.ReactNode;
+  /** Set by the dedicated create page so saving returns to the list. The copy of
+   *  this form embedded in each list row leaves it unset — it is already on the
+   *  list, and navigating would collapse the row the operator is working in. */
+  redirectTo?: string;
 }) {
   const editing = !!reservation;
   const [type, setType] = useState<string>(reservation?.type ?? "table");
@@ -36,6 +41,7 @@ export function ReservationForm({
   return (
     <ActionForm
       action={editing ? updateReservationDetails : createAdminReservation}
+      redirectTo={redirectTo}
       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       {editing && <input type="hidden" name="id" value={reservation.id} />}

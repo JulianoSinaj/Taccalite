@@ -100,7 +100,11 @@ export function ProductForm({
   }
 
   return (
-    <ActionForm action={saveProduct} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <ActionForm
+      action={saveProduct}
+      redirectTo="/admin/products"
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+    >
       {product && <input type="hidden" name="id" value={product.id} />}
       <div>
         <label className={labelCls}>Nome</label>
@@ -266,7 +270,11 @@ export function ProductForm({
 
 export function BlogForm({ post }: { post?: BlogPostRow | null }) {
   return (
-    <ActionForm action={saveBlogPost} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <ActionForm
+      action={saveBlogPost}
+      redirectTo="/admin/blog"
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+    >
       {post && <input type="hidden" name="id" value={post.id} />}
       <div className="sm:col-span-2">
         <label className={labelCls}>Titolo</label>
@@ -313,7 +321,11 @@ export function BlogForm({ post }: { post?: BlogPostRow | null }) {
 
 export function ShopForm({ shop }: { shop?: ShopRow | null }) {
   return (
-    <ActionForm action={saveShop} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <ActionForm
+      action={saveShop}
+      redirectTo="/admin/shops"
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+    >
       {shop && <input type="hidden" name="id" value={shop.id} />}
       <div>
         <label className={labelCls}>Nome</label>
@@ -399,7 +411,11 @@ export function DiscountForm({ discount }: { discount?: DiscountCodeRow | null }
       : String(discount.value)
     : "";
   return (
-    <ActionForm action={saveDiscount} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <ActionForm
+      action={saveDiscount}
+      redirectTo="/admin/discounts"
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+    >
       {discount && <input type="hidden" name="id" value={discount.id} />}
       <div>
         <label className={labelCls}>Codice</label>
@@ -462,7 +478,11 @@ export function DiscountForm({ discount }: { discount?: DiscountCodeRow | null }
  *  list (role, password and active state each have their own guarded action). */
 export function UserForm() {
   return (
-    <ActionForm action={createUser} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <ActionForm
+      action={createUser}
+      redirectTo="/admin/users"
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+    >
       <div>
         <label className={labelCls}>Username</label>
         <input
@@ -510,7 +530,11 @@ export function UserForm() {
 
 export function RewardForm({ reward }: { reward?: RewardRow | null }) {
   return (
-    <ActionForm action={saveReward} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <ActionForm
+      action={saveReward}
+      redirectTo="/admin/rewards"
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+    >
       {reward && <input type="hidden" name="id" value={reward.id} />}
       <div>
         <label className={labelCls}>Nome</label>

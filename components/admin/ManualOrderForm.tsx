@@ -213,7 +213,7 @@ export function ManualOrderForm({
   }
 
   return (
-    <ActionForm action={createManualOrder} className="space-y-6">
+    <ActionForm action={createManualOrder} redirectTo="/admin/orders" className="space-y-6">
       {/* Only the chosen lines are submitted, as qty_<slug>. */}
       {lines.map((l) => (
         <input key={l.product.slug} type="hidden" name={`qty_${l.product.slug}`} value={l.quantity} />

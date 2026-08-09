@@ -1,12 +1,21 @@
 "use client";
 
 import { useActionState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { idleState, type ActionState } from "@/lib/admin/action-state";
+import { useToast } from "./Toasts";
 
 type Action = (prev: ActionState, fd: FormData) => Promise<ActionState>;
 
-/** Submit button that reflects the enclosing form's pending state. */
+/**
+ * Submit button that reflects the enclosing form's pending state.
+ *
+ * The label stays rendered (just hidden) while pending, with the spinner overlaid
+ * on top. Swapping the label out for a placeholder re-measured the button on every
+ * click — a ★ toggle became three times wider mid-flight and shunted the rest of
+ * the row sideways. Reserving the label's own width keeps the row still.
+ */
 export function PendingButton({
   children,
   tone = "gold",
@@ -26,39 +35,37 @@ export function PendingButton({
     <button
       type="submit"
       disabled={pending}
+      aria-busy={pending}
       onClick={confirm ? (e) => { if (!window.confirm(confirm)) e.preventDefault(); } : undefined}
-      className={`rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors disabled:opacity-50 ${tones[tone]}`}
+      className={`relative rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors disabled:opacity-60 ${tones[tone]}`}
     >
-      {pending ? "…" : children}
+      <span className={pending ? "invisible" : undefined}>{children}</span>
+      {pending && (
+        <span className="absolute inset-0 grid place-items-center">
+          <span
+            aria-hidden
+            className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-70"
+          />
+          <span className="sr-only">Invio in corso…</span>
+        </span>
+      )}
     </button>
   );
 }
 
-/** Inline success/error banner driven by the action's returned state. */
-function Feedback({ state }: { state: ActionState }) {
-  if (state.status === "idle") return null;
-  return (
-    <p
-      className={`text-sm font-medium ${
-        state.status === "error" ? "text-red-600" : "text-emerald-700"
-      }`}
-      role="status"
-    >
-      {state.message}
-    </p>
-  );
-}
-
 /**
- * Form bound to a server action that returns an ActionState, rendering inline
- * feedback. Children receive nothing special — just include the fields + a
- * PendingButton.
+ * Form bound to a server action that returns an ActionState.
+ *
+ * The result is published as a toast rather than rendered inline — see
+ * `components/admin/Toasts.tsx` for why. Children receive nothing special; just
+ * include the fields plus a `PendingButton`.
  */
 export function ActionForm({
   action,
   children,
   className = "",
   id,
+  redirectTo,
 }: {
   action: Action;
   children: ReactNode;
@@ -66,12 +73,25 @@ export function ActionForm({
   /** Lets inputs elsewhere on the page join this form via `form="<id>"` —
    *  used by the bulk bars, whose checkboxes live inside the rows. */
   id?: string;
+  /** Where to go once the action succeeds. Set on the dedicated create/edit
+   *  pages so saving returns the operator to that entity's list; omitted for the
+   *  inline forms in list rows, which should leave the page where it is. */
+  redirectTo?: string;
 }) {
-  const [state, formAction] = useActionState(action, idleState);
+  const toast = useToast();
+  const router = useRouter();
+  const [, formAction] = useActionState(async (prev: ActionState, fd: FormData) => {
+    const result = await action(prev, fd);
+    // Called from the action callback rather than an effect, so the toast is
+    // published once per submission instead of on every re-render.
+    toast(result);
+    if (result.status === "success" && redirectTo) router.push(redirectTo);
+    return result;
+  }, idleState);
+
   return (
     <form id={id} action={formAction} className={className}>
       {children}
-      <Feedback state={state} />
     </form>
   );
 }
@@ -85,22 +105,20 @@ export function DeleteForm({
   id,
   confirm = "Confermi l'eliminazione? L'operazione non è reversibile.",
   children = "Elimina",
+  redirectTo,
 }: {
   action: Action;
   id: string;
   confirm?: string;
   children?: ReactNode;
+  redirectTo?: string;
 }) {
-  const [state, formAction] = useActionState(action, idleState);
   return (
-    <form action={formAction} className="inline-flex flex-col items-end gap-1">
+    <ActionForm action={action} className="inline-flex" redirectTo={redirectTo}>
       <input type="hidden" name="id" value={id} />
       <PendingButton tone="danger" confirm={confirm}>
         {children}
       </PendingButton>
-      {state.status === "error" && (
-        <span className="max-w-xs text-right text-xs text-red-600">{state.message}</span>
-      )}
-    </form>
+    </ActionForm>
   );
 }

@@ -22,7 +22,7 @@ export default async function NewReservation() {
         subtitle="Registra una prenotazione presa al telefono o al banco"
       />
       <Panel>
-        <ReservationForm shops={shops} />
+        <ReservationForm shops={shops} redirectTo="/admin/reservations" />
       </Panel>
       <p className="mt-4 text-xs text-brown-800/60">
         Le prenotazioni prese qui non avvisano il titolare (sei tu a inserirle) e superano i limiti
