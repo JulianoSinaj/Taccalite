@@ -9,6 +9,7 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:seed": "tsx scripts/seed.ts",
+    "db:seed:demo": "tsx scripts/seed-demo.ts",
     "db:studio": "drizzle-kit studio",
     "db:compile-seed": "esbuild scripts/seed.ts --bundle --platform=node --target=node20 --format=cjs --external:better-sqlite3 --outfile=dist/seed.cjs",
     "db:compile-reset": "esbuild scripts/reset-admin.ts --bundle --platform=node --target=node20 --format=cjs --external:better-sqlite3 --outfile=dist/reset.cjs",
