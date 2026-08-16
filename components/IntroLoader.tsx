@@ -17,7 +17,11 @@ export default function IntroLoader() {
     }
     document.body.style.overflow = "hidden";
     const exitTimer = setTimeout(() => setPhase("exiting"), TOTAL_DURATION * 1000);
-    return () => clearTimeout(exitTimer);
+    return () => {
+      clearTimeout(exitTimer);
+      // Never leave the page scroll-locked if we unmount / re-run mid-intro.
+      document.body.style.overflow = "";
+    };
   }, [reduceMotion]);
 
   useEffect(() => {
