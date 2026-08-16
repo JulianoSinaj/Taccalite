@@ -41,24 +41,24 @@ export default function SplitHero() {
   return (
     <section
       ref={sectionRef}
-      className="relative overflow-hidden bg-[#1c1512] pt-24 lg:min-h-screen"
+      className="relative overflow-hidden bg-[#1c1512] pt-24"
     >
       <div className="bg-noise absolute inset-0 opacity-10" />
       <div className="parallax-orb absolute -top-52 -left-52 h-[52rem] w-[52rem] opacity-10" />
 
-      <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 px-6 py-24 sm:px-12 lg:min-h-[calc(100vh-6rem)] lg:grid-cols-[1.15fr_1fr] lg:gap-20">
+      <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-6 py-14 sm:px-12 sm:py-16 lg:min-h-[min(72vh,44rem)] lg:grid-cols-[1.25fr_1fr] lg:gap-16 lg:pb-24">
         {/* ——— Massive serif typography, camera-left ——— */}
         <motion.div style={parallax ? { y: textY } : undefined} className="relative z-10">
           <motion.span
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: EASE, delay: 0.1 }}
-            className="eyebrow mb-8 block"
+            className="eyebrow mb-6 block"
           >
             Norcineria dal 1946 · Ancona
           </motion.span>
 
-          <h1 className="font-display text-[16vw] leading-[0.9] font-semibold tracking-tighter text-cream sm:text-[11vw] lg:text-[7.5vw]">
+          <h1 className="font-display text-[13vw] leading-[0.9] font-semibold tracking-tighter text-cream sm:text-[8.5vw] lg:text-6xl xl:text-7xl">
             <RevealLine delay={0.25}>Taccalite</RevealLine>
             <RevealLine delay={0.4}>
               <span className="text-cream/45">Norcineria</span>
@@ -72,7 +72,7 @@ export default function SplitHero() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: EASE, delay: 0.8 }}
-            className="mt-10 max-w-md text-lg leading-relaxed font-light text-cream/75"
+            className="mt-7 max-w-md text-base leading-relaxed font-light text-cream/75 sm:text-lg"
           >
             Dal 1946 la nostra famiglia custodisce l&apos;arte norcina nel cuore delle Marche.
             Ogni sabato mattina la porchetta esce calda dal forno di Piazza Kennedy.
@@ -82,7 +82,7 @@ export default function SplitHero() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: EASE, delay: 0.95 }}
-            className="mt-10 flex flex-wrap gap-4"
+            className="mt-8 flex flex-wrap gap-4"
           >
             <PillButton href="/porchetta" tone="cream">
               Scopri la porchetta
@@ -101,14 +101,14 @@ export default function SplitHero() {
           transition={{ duration: 1.4, ease: EASE, delay: 0.5 }}
           className="relative"
         >
-          <div className="cinematic-shadow relative aspect-[4/5] overflow-hidden rounded-lg">
+          <div className="cinematic-shadow relative mx-auto aspect-[4/5] w-full max-w-sm overflow-hidden rounded-lg lg:ml-auto lg:max-w-[26rem]">
             <Image
               src="https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&q=90&w=1600"
               alt="La porchetta artigianale Taccalite appena tagliata"
               fill
               preload
               className="object-cover"
-              sizes="(max-width: 1024px) 100vw, 45vw"
+              sizes="(max-width: 1024px) 384px, 416px"
             />
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-brown-950/40 via-transparent to-white/10" />
           </div>

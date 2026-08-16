@@ -203,7 +203,7 @@ Origin).
 | `/api/newsletter/unsubscribe` | GET | Unsubscribe (token) |
 | `/api/checkout` | POST | Create order (server-priced) → Stripe session **or** simulate → success URL |
 | `/api/checkout/webhook` | POST | Stripe `checkout.session.completed` → finalize (idempotent) |
-| `/api/cron` | GET/POST | Scheduled jobs; `Authorization: Bearer CRON_SECRET` (timing-safe); `job=porchetta-reminders`, `maintenance` (drains + prunes the outbox, GCs sessions), `points-expiry`, `owner-digest` (once-a-day owner summary email), or `all` |
+| `/api/cron` | GET/POST | Scheduled jobs; `Authorization: Bearer CRON_SECRET` (timing-safe); `job=porchetta-reminders`, `maintenance` (drains + prunes the outbox, GCs sessions), `points-expiry`, `owner-digest` (once-a-day owner summary email), `instagram-refresh` (rolls the Instagram long-lived token, self-limited to once a week), or `all` |
 | `/api/admin/export/[entity]` | GET | **Admin-gated** CSV export — `orders` / `customers` / `reservations` / `subscribers` |
 | `/api/analytics` | POST | First-party cookieless page-view beacon (records path + referrer-host; skips `/admin` + `/api` paths) |
 | `/api/media/[file]` | GET | Serves admin-uploaded images from the persisted uploads dir (path-traversal guarded, immutable cache) |
@@ -309,11 +309,45 @@ All optional with safe local defaults — the app runs with an empty env file.
 | Email | `SMTP_HOST/PORT/SECURE/USER/PASS`, `MAIL_FROM`, `OWNER_EMAIL` |
 | Payments | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` |
 | Automation | `CRON_SECRET` |
+| Instagram | `INSTAGRAM_ACCESS_TOKEN` (optional bootstrap; the admin-saved token wins), `INSTAGRAM_API_VERSION` (default `v21.0`) |
 | Scheduler (sidecar) | `CRON_INTERVAL_SEC` (default 900), `BACKUP_HOUR` (default 3), `RETENTION_DAYS` |
 | Bootstrap admin | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_NAME` |
 
-Two feature flags degrade gracefully: **no SMTP → outbox mode** (emails stored, viewable
-in Admin → Email); **no Stripe → simulate mode** (orders recorded + confirmed, no charge).
+Three feature flags degrade gracefully: **no SMTP → outbox mode** (emails stored, viewable
+in Admin → Email); **no Stripe → simulate mode** (orders recorded + confirmed, no charge);
+**no Instagram token → the homepage social section shows a plain "Seguici" band** instead of
+the live post grid.
+
+### Instagram feed (homepage "Dal banco al tuo feed")
+
+`lib/instagram/` pulls the shop's latest posts from the **Instagram Graph API** ("Instagram
+API with Instagram Login" — works for a Business/Creator account, no Facebook Page needed):
+
+- `parse.ts` — pure normalisers (`/me/media` → `InstagramPost[]`, `/me` → `InstagramProfile`),
+  caption/count formatting. Unit-tested in `test/instagram.test.ts`.
+- `index.ts` — server-only: token resolution (**settings `instagram.accessToken` > env**),
+  `getInstagramFeed()` (8 posts + profile, in-process cache with a 30-min TTL, deduped
+  in-flight, last-good copy persisted to the `settings` table so a restart / Instagram outage /
+  expired token still renders the previous posts), `refreshInstagramToken()` and the cron
+  entry `runInstagramTokenRefresh()`, plus `getInstagramStatus()` for the admin panel.
+- `components/InstagramFeed.tsx` — the section (client): profile chip with live post/follower
+  counts, "Seguici" CTA, and a 2/3/4-column grid of tilting 3D tiles (spring-driven
+  rotateX/rotateY, cursor glare, hover caption + like/comment counts, Reel/Album badge). Video
+  posts show their poster frame; every tile deep-links to the post on Instagram.
+- Media hosts `**.cdninstagram.com` / `**.fbcdn.net` are allow-listed in `next.config.ts` for
+  `next/image`.
+
+**Getting a token (owner/dev, ~10 min):** 1) make sure the Instagram account is *Professional*
+(Business or Creator — Settings → Account type); 2) at <https://developers.facebook.com/apps/>
+create an app (type *Business* / "Other"), add the **Instagram** product; 3) under *API setup
+with Instagram login* add the shop account as an *Instagram Tester* (accept the invite from
+the Instagram app → Settings → Apps and websites → Tester invites), then click **Generate
+token** for that account and copy the **long-lived** token (60 days); 4) paste it in
+**Admin → Impostazioni → Instagram → Collega** — it's verified against the API and stored;
+the homepage updates on the next request. Alternatively set `INSTAGRAM_ACCESS_TOKEN` in the
+env. The scheduler (`job=all` every 15 min) refreshes the token once a week, so it never
+expires while the site is running; the panel shows the expiry and the last error, and has
+"Aggiorna feed ora" / "Rinnova token" / "Scollega" buttons.
 
 ---
 
@@ -469,6 +503,12 @@ proper number/checkbox/weekday control with an Italian label and help text:
   stock recovers and drops again).
 - **Scadenza punti** (`loyalty.pointsExpiryDays`) — optional; if set, points expire after
   this many days of inactivity. Leave empty to never expire.
+
+**Instagram in homepage** (`/admin/settings` → *Instagram*): paste the long-lived access
+token once (see §7 for how to generate it) and press **Collega**; the homepage section shows
+the last posts within a minute and refreshes every 30 minutes. The token is renewed
+automatically every week. If the panel shows an error (e.g. token revoked after a password
+change), generate a new token and paste it again.
 
 **Reservations & the porchetta agenda** (`/admin/reservations`, `/admin/reservations/agenda`):
 - The reservations list shows table/porchetta/order requests; confirm or cancel each one —

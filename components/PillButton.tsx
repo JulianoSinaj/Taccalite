@@ -35,18 +35,28 @@ type PillButtonProps = {
   children: ReactNode;
   tone?: Tone;
   className?: string;
+  /** Open in a new tab with `rel="noopener noreferrer"` (external links). */
+  external?: boolean;
 };
 
 /**
  * Pill CTA: on hover the fill layer expands organically from the bottom edge
  * via a clip-path circle while the label flips color; tap compresses to 0.95.
  */
-export default function PillButton({ href, children, tone = "cream", className }: PillButtonProps) {
+export default function PillButton({
+  href,
+  children,
+  tone = "cream",
+  className,
+  external = false,
+}: PillButtonProps) {
   const styles = toneStyles[tone];
 
   return (
     <MotionLink
       href={href}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noopener noreferrer" : undefined}
       data-magnetic
       whileTap={{ scale: 0.95 }}
       className={cn(

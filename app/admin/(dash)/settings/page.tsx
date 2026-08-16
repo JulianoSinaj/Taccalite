@@ -7,7 +7,11 @@ import { runAutomationNow } from "@/lib/admin/automation-actions";
 import { CRON_JOBS, getCronStatus } from "@/lib/automation";
 import { isAdmin } from "@/lib/auth/session";
 import { smtpConfigured, stripeConfigured, env } from "@/lib/env";
+<<<<<<< Updated upstream
 import { VAT_RATES_BPS, vatRateLabel } from "@/lib/fiscal";
+=======
+import { InstagramPanel } from "./InstagramPanel";
+>>>>>>> Stashed changes
 
 export const dynamic = "force-dynamic";
 
@@ -297,7 +301,9 @@ export default async function AdminSettings() {
 
   const stored = new Map(settings.map((s) => [s.key, s.value]));
   const knownKeys = new Set(KNOWN.map((k) => k.key));
-  const extras = settings.filter((s) => !knownKeys.has(s.key));
+  // Keys owned by a dedicated panel (Instagram token/cache) never surface in the
+  // raw JSON editor — the token is a secret and the cache blob is not editable.
+  const extras = settings.filter((s) => !knownKeys.has(s.key) && !s.key.startsWith("instagram."));
 
   return (
     <div>
@@ -342,6 +348,7 @@ export default async function AdminSettings() {
         </Panel>
       </div>
 
+<<<<<<< Updated upstream
       <h2 className="font-display mt-10 mb-1 text-xl text-brown-950">Automazioni</h2>
       <p className="mb-3 text-xs text-brown-800/60">
         Girano da sole se lo scheduler chiama <code>/api/cron?job=all</code>. Qui vedi quando
@@ -375,6 +382,10 @@ export default async function AdminSettings() {
             </Panel>
           );
         })}
+=======
+      <div className="mt-6">
+        <InstagramPanel />
+>>>>>>> Stashed changes
       </div>
 
       <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Parametri operativi</h2>

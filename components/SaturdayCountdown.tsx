@@ -31,7 +31,7 @@ function partsUntil(now: Date): Parts {
 function Unit({ value, label }: { value: number; label: string }) {
   return (
     <div>
-      <p className="font-display text-5xl font-bold text-gold tabular-nums sm:text-7xl">
+      <p className="font-display text-4xl font-bold text-gold tabular-nums sm:text-6xl">
         {String(value).padStart(2, "0")}
       </p>
       <p className="mt-1 text-[10px] font-bold tracking-[0.3em] text-cream/65 uppercase">{label}</p>
@@ -55,7 +55,7 @@ export default function SaturdayCountdown() {
 
   if (!parts) {
     return (
-      <p className="font-display text-5xl font-bold text-gold sm:text-7xl" aria-hidden>
+      <p className="font-display text-4xl font-bold text-gold sm:text-6xl" aria-hidden>
         — : — : —
       </p>
     );
@@ -64,7 +64,7 @@ export default function SaturdayCountdown() {
   if (parts.live) {
     return (
       <div>
-        <p className="font-display text-4xl font-bold text-gold sm:text-6xl">È in forno adesso.</p>
+        <p className="font-display text-3xl font-bold text-gold sm:text-5xl">È in forno adesso.</p>
         <p className="mt-2 text-sm font-light text-cream/80">
           Sabato mattina, Piazza Kennedy: la porchetta è calda fino a esaurimento.
         </p>

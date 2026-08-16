@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { CRON_JOBS, runCronJob } from "@/lib/automation";
 import { env } from "@/lib/env";
+import { runInstagramTokenRefresh } from "@/lib/instagram";
 
 export const runtime = "nodejs";
 
@@ -40,6 +41,11 @@ async function handle(request: Request) {
   const results: Record<string, unknown> = {};
   for (const j of selected) {
     results[j.key] = await runCronJob(j);
+  }
+
+  // Self-limits to one refresh per week (and no-ops when Instagram isn't configured).
+  if (job === "instagram-refresh" || job === "all") {
+    results.instagramRefresh = await runInstagramTokenRefresh();
   }
 
   return NextResponse.json({ ok: true, job, results });

@@ -47,7 +47,7 @@ export const shops: Shop[] = [
     tagline: "Le migliori carni e i salumi della tradizione marchigiana",
     description:
       "Il secondo negozio di famiglia, al Mercato Coperto del Piano. Qui trovate carni selezionate, salumi artigianali come il prosciutto di Norcia e i tagli pronti per la brace, lavorati con la stessa cura di sempre.",
-    address: "Mercato Coperto del Piano — Ancona",
+    address: "Piazza d'Armi, 59 — Ancona",
     addressConfirmed: true,
     hours: [
       { label: "Lun – Sab", value: "Orari da confermare in negozio" },

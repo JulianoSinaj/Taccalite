@@ -18,18 +18,18 @@ export default async function PrenotazioniPage() {
   return (
     <div>
       {/* Hero: big text left, reservation form right */}
-      <section className="relative overflow-hidden bg-[#1c1512] px-5 pt-44 pb-24 sm:px-10 sm:pt-56 sm:pb-32">
+      <section className="relative overflow-hidden bg-[#1c1512] px-5 pt-36 pb-16 sm:px-10 sm:pt-40 sm:pb-20">
         <div className="bg-noise absolute inset-0 opacity-10" />
         <div className="parallax-orb absolute -top-52 -right-52 h-[48rem] w-[48rem] opacity-10" />
         <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-start gap-16 lg:grid-cols-12 lg:gap-20">
           <Reveal className="lg:sticky lg:top-40 lg:col-span-5">
-            <span className="eyebrow mb-8 block">Ospitalità · su prenotazione</span>
-            <h1 className="font-display text-5xl leading-[0.95] tracking-tighter text-cream sm:text-7xl xl:text-8xl">
+            <span className="eyebrow mb-6 block">Ospitalità · su prenotazione</span>
+            <h1 className="font-display text-4xl leading-[0.95] tracking-tighter text-cream sm:text-5xl xl:text-6xl">
               Il tuo posto
               <br />
               <span className="text-gold italic">a tavola</span>
             </h1>
-            <p className="mt-8 max-w-xl text-lg leading-relaxed font-light text-cream/75">
+            <p className="mt-6 max-w-xl text-base leading-relaxed font-light text-cream/75 sm:text-lg">
               Un tavolo per la degustazione o la tua porzione di porchetta del sabato: compila il
               modulo e ti richiamiamo noi per confermare data e disponibilità.
             </p>
@@ -60,12 +60,12 @@ export default async function PrenotazioniPage() {
       </section>
 
       {/* Info cards row */}
-      <section className="bg-cream px-5 py-24 sm:px-10 sm:py-28">
+      <section className="bg-cream px-5 py-16 sm:px-10 sm:py-24">
         <div className="mx-auto max-w-7xl">
-          <Reveal className="mb-14 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <Reveal className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <span className="eyebrow eyebrow-dark mb-4 block">Dove trovarci</span>
-              <h2 className="font-display max-w-md text-4xl leading-tight tracking-tight text-brown-950 sm:text-5xl">
+              <h2 className="font-display max-w-md text-3xl leading-tight tracking-tight text-brown-950 sm:text-4xl">
                 Due negozi, <span className="text-gold-deep italic">una tradizione</span>
               </h2>
             </div>

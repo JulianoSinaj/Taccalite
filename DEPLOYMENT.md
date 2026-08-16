@@ -143,7 +143,9 @@ porchetta reminders (idempotent — each reservation is emailed once, stamped vi
 `reminded_at`, so a frequent sweep is safe), points-expiry (a no-op unless
 `loyalty.pointsExpiryDays` is set), and the **owner daily digest** (today's
 reservations, last-24h orders, low stock) — the digest is idempotent per calendar
-day, so the frequent sweep fires it exactly once/day with no separate schedule.
+day, so the frequent sweep fires it exactly once/day with no separate schedule —
+and the **Instagram token refresh** (no-op unless a token is configured; rolls the
+60-day token once a week so the homepage feed never goes stale).
 Tune with `CRON_INTERVAL_SEC` (default 900) / `BACKUP_HOUR` (default 3) env vars on
 the `scheduler` service; nightly backups honour `RETENTION_DAYS` (default 14, see
 §7). Watch it with `docker compose logs -f scheduler`.
@@ -166,6 +168,7 @@ crontab -e
   */15 * *   *   *   curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" "https://taccalite.it/api/cron?job=maintenance" >/dev/null
   0    9 *   *   5   curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" "https://taccalite.it/api/cron?job=porchetta-reminders" >/dev/null
   0    3 *   *   *   curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" "https://taccalite.it/api/cron?job=points-expiry" >/dev/null
+  0    4 *   *   1   curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" "https://taccalite.it/api/cron?job=instagram-refresh" >/dev/null
 ```
 
 ## 5. Email (make it real)

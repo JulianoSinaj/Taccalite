@@ -191,3 +191,22 @@ export function isOpenNow(hours: HoursRow[] | null | undefined, now: Date = new 
     return null;
   }
 }
+
+/**
+ * Index of the first `hours` row whose label covers `now`'s weekday, or -1 when
+ * no row matches / the data is unparseable. Lets a full weekly table highlight
+ * "today" without duplicating the label-parsing rules above. Never throws.
+ */
+export function todayRowIndex(hours: HoursRow[] | null | undefined, now: Date = new Date()): number {
+  try {
+    if (!Array.isArray(hours) || hours.length === 0) return -1;
+    const today = isoWeekday(now);
+    return hours.findIndex((h) => {
+      if (!h || typeof h.label !== "string") return false;
+      const set = parseDaysFromLabel(h.label);
+      return set != null && set.has(today);
+    });
+  } catch {
+    return -1;
+  }
+}

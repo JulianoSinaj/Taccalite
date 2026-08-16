@@ -2,25 +2,7 @@ import Link from "next/link";
 import { getShops } from "@/lib/db/queries";
 import { siteConfig } from "@/lib/site";
 import NewsletterForm from "@/components/NewsletterForm";
-
-function InstagramIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
-      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
-    </svg>
-  );
-}
+import InstagramIcon from "@/components/InstagramIcon";
 
 function FacebookIcon({ className }: { className?: string }) {
   return (
@@ -154,7 +136,7 @@ export default async function Footer() {
           </div>
           <div className="mt-10 flex justify-center gap-5">
             <a
-              href="https://www.instagram.com/norcineriataccalite.centro"
+              href={siteConfig.social.instagram}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Instagram"
@@ -163,7 +145,7 @@ export default async function Footer() {
               <InstagramIcon className="size-5" />
             </a>
             <a
-              href="https://www.facebook.com/p/Norcineria-Taccalite-100054657690138/"
+              href={siteConfig.social.facebook}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Facebook"

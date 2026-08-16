@@ -235,5 +235,26 @@ body {
   }
   html {
     @apply font-sans;
+    /*
+     * Global type/spacing scale. Tailwind sizes text, padding, gaps and
+     * containers in rem, so the root font-size is the single dial for the
+     * whole UI density. Mobile stays at the browser default (16px) for
+     * legibility, tap targets and to keep iOS from zooming inputs < 16px;
+     * tablet and desktop step down so the interface reads as a tighter,
+     * more editorial layout instead of "zoomed in". Prefer this over CSS
+     * `zoom`, which breaks sticky/fixed math, 100vh sections and the
+     * Framer Motion / Lenis measurements used across the site.
+     */
+    font-size: 100%;
+  }
+  @media (min-width: 640px) {
+    html {
+      font-size: 93.75%; /* 15px */
+    }
+  }
+  @media (min-width: 1024px) {
+    html {
+      font-size: 87.5%; /* 14px */
+    }
   }
 }

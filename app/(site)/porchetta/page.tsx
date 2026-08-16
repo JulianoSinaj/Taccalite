@@ -109,7 +109,7 @@ export default async function PorchettaPage() {
   return (
     <div>
       {/* Hero */}
-      <section className="relative flex min-h-screen items-center justify-center overflow-hidden bg-brown-950">
+      <section className="relative flex min-h-[70vh] items-center justify-center overflow-hidden bg-brown-950 pt-32 pb-24 lg:min-h-[78vh]">
         <div className="absolute inset-0">
           <Image
             src="https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&q=90&w=2000"
@@ -123,12 +123,12 @@ export default async function PorchettaPage() {
         </div>
         <Reveal className="relative z-20 max-w-4xl px-6 text-center">
           <span className="eyebrow mb-6 block">Specialità della casa</span>
-          <h1 className="font-display text-5xl leading-[1.05] tracking-tight text-white sm:text-6xl lg:text-8xl">
+          <h1 className="font-display text-4xl leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
             La porchetta:
             <br />
             <span className="text-gold italic">la ricetta di famiglia</span>
           </h1>
-          <p className="mx-auto mt-8 max-w-2xl text-xl font-light text-cream/70 lg:text-2xl">
+          <p className="mx-auto mt-6 max-w-2xl text-lg font-light text-cream/70 lg:text-xl">
             L&apos;eccellenza dell&apos;arte norcina marchigiana, tramandata dal 1946.
           </p>
         </Reveal>
@@ -172,13 +172,13 @@ export default async function PorchettaPage() {
       </section>
 
       {/* Eredità */}
-      <section className="relative overflow-hidden bg-brown-900 px-5 py-32 sm:px-8 sm:py-48">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 lg:grid-cols-2 lg:gap-24">
-          <Reveal className="space-y-10">
-            <h2 className="font-display text-5xl leading-[0.95] tracking-tighter text-white sm:text-6xl lg:text-8xl">
+      <section className="relative overflow-hidden bg-brown-900 px-5 py-16 sm:px-8 sm:py-24">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-16">
+          <Reveal className="space-y-8">
+            <h2 className="font-display text-3xl leading-[0.95] tracking-tighter text-white sm:text-4xl lg:text-5xl">
               L&apos;eredità di una ricetta segreta
             </h2>
-            <p className="text-xl leading-relaxed font-light text-cream/70">
+            <p className="text-lg leading-relaxed font-light text-cream/70">
               Tramandata di padre in figlio per tre generazioni, questa ricetta è il cuore della
               Norcineria Taccalite. Non è solo carne: è storia, passione e il profumo delle colline
               marchigiane raccolto in ogni boccone.
@@ -207,7 +207,7 @@ export default async function PorchettaPage() {
             </a>
           </Reveal>
           <Reveal delay={0.15} className="relative flex justify-center">
-            <div className="cinematic-shadow relative z-10 h-[480px] w-full overflow-hidden rounded-[32px] sm:h-[600px] lg:w-[480px]">
+            <div className="cinematic-shadow relative z-10 aspect-[4/5] w-full max-w-sm overflow-hidden rounded-[28px] lg:max-w-[26rem]">
               <Image
                 src="https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?auto=format&fit=crop&q=80&w=800"
                 alt="Gli ingredienti della ricetta"
@@ -221,18 +221,18 @@ export default async function PorchettaPage() {
       </section>
 
       {/* Processo */}
-      <section id="processo" className="bg-cream px-5 py-32 sm:px-8 sm:py-48">
+      <section id="processo" className="bg-cream px-5 py-16 sm:px-8 sm:py-24">
         <div className="mx-auto max-w-7xl">
-          <Reveal className="mb-20 text-center sm:mb-32">
+          <Reveal className="mb-10 text-center sm:mb-14">
             <span className="eyebrow eyebrow-dark mb-6 block">Dalla terra alla tavola</span>
-            <h2 className="font-display text-5xl tracking-tighter text-brown-950 sm:text-6xl md:text-7xl">
+            <h2 className="font-display text-3xl tracking-tighter text-brown-950 sm:text-4xl md:text-5xl">
               Come nasce la nostra porchetta
             </h2>
           </Reveal>
-          <RevealStagger className="grid grid-cols-1 gap-12 md:grid-cols-3">
+          <RevealStagger className="grid grid-cols-1 gap-8 md:grid-cols-3">
             {steps.map((step, i) => (
               <RevealStaggerItem key={step.title} className="group">
-                <div className="cinematic-shadow relative mb-10 aspect-[4/5] overflow-hidden rounded-[32px]">
+                <div className="cinematic-shadow relative mb-6 aspect-square overflow-hidden rounded-[28px]">
                   <Image
                     src={step.image}
                     alt={step.alt}
@@ -253,10 +253,10 @@ export default async function PorchettaPage() {
       </section>
 
       {/* Il sapore perfetto */}
-      <section className="relative overflow-hidden bg-brown-950 px-5 py-32 sm:px-8 sm:py-48">
+      <section className="relative overflow-hidden bg-brown-950 px-5 py-16 sm:px-8 sm:py-24">
         <div className="mx-auto max-w-7xl">
           <Reveal>
-            <div className="cinematic-shadow group relative h-[480px] overflow-hidden rounded-[40px] sm:h-[600px]">
+            <div className="cinematic-shadow group relative h-[24rem] overflow-hidden rounded-[32px] sm:h-[30rem]">
               <Image
                 src="https://images.unsplash.com/photo-1541529086526-db283c563270?auto=format&fit=crop&q=90&w=2000"
                 alt="Il tagliere di specialità Taccalite"
@@ -266,10 +266,10 @@ export default async function PorchettaPage() {
               />
               <div className="absolute inset-0 bg-gradient-to-r from-brown-950/80 via-transparent to-transparent" />
               <div className="absolute bottom-10 left-6 max-w-xl sm:bottom-20 sm:left-16">
-                <h2 className="font-display mb-6 text-4xl leading-tight tracking-tighter text-white sm:mb-8 sm:text-5xl lg:text-7xl">
+                <h2 className="font-display mb-5 text-3xl leading-tight tracking-tighter text-white sm:mb-6 sm:text-4xl lg:text-5xl">
                   Il sapore perfetto
                 </h2>
-                <p className="text-lg leading-relaxed font-light text-cream/70 sm:text-xl">
+                <p className="text-base leading-relaxed font-light text-cream/70 sm:text-lg">
                   La croccantezza della pelle che si rompe sotto i denti, la morbidezza della carne,
                   il profumo delle erbe. Ogni morso racconta tre generazioni di maestria.
                 </p>
@@ -280,16 +280,16 @@ export default async function PorchettaPage() {
       </section>
 
       {/* Quando assaporarla */}
-      <section className="bg-cream-dark px-5 py-32 sm:px-8 sm:py-48">
+      <section className="bg-cream-dark px-5 py-16 sm:px-8 sm:py-24">
         <div className="mx-auto max-w-5xl text-center">
-          <Reveal className="mb-20">
+          <Reveal className="mb-10 sm:mb-12">
             <span className="eyebrow eyebrow-dark mb-6 block">Esperienza in negozio</span>
-            <h2 className="font-display text-5xl tracking-tighter text-brown-950 sm:text-6xl lg:text-7xl">
+            <h2 className="font-display text-3xl tracking-tighter text-brown-950 sm:text-4xl lg:text-5xl">
               Quando assaporarla
             </h2>
           </Reveal>
-          <RevealStagger className="grid grid-cols-1 gap-12 text-left md:grid-cols-2">
-            <RevealStaggerItem className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-10 sm:p-12">
+          <RevealStagger className="grid grid-cols-1 gap-6 text-left md:grid-cols-2">
+            <RevealStaggerItem className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-8 sm:p-10">
               <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-full bg-gold/10">
                 <Flame className="size-7 text-gold-dark" />
               </div>
@@ -298,7 +298,7 @@ export default async function PorchettaPage() {
                 Disponibile calda appena sfornata presso le nostre botteghe ad Ancona.
               </p>
             </RevealStaggerItem>
-            <RevealStaggerItem className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-10 sm:p-12">
+            <RevealStaggerItem className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-8 sm:p-10">
               <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-full bg-gold/10">
                 <Bell className="size-7 text-gold-dark" />
               </div>
@@ -322,11 +322,11 @@ export default async function PorchettaPage() {
       </section>
 
       {/* Galleria */}
-      <section className="bg-brown-900 px-5 py-32 sm:px-8 sm:py-48">
+      <section className="bg-brown-900 px-5 py-16 sm:px-8 sm:py-24">
         <div className="mx-auto max-w-7xl">
-          <Reveal className="mb-16 space-y-6 sm:mb-24">
+          <Reveal className="mb-10 space-y-4 sm:mb-14">
             <span className="eyebrow block">Galleria fotografica</span>
-            <h2 className="font-display text-5xl tracking-tighter text-white sm:text-6xl">
+            <h2 className="font-display text-3xl tracking-tighter text-white sm:text-4xl md:text-5xl">
               Scatti d&apos;autore
             </h2>
           </Reveal>
@@ -350,10 +350,10 @@ export default async function PorchettaPage() {
       </section>
 
       {/* CTA finale */}
-      <section className="relative overflow-hidden bg-brown-950 py-40 sm:py-64">
+      <section className="relative overflow-hidden bg-brown-950 py-20 sm:py-28">
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
         <Reveal className="relative z-10 mx-auto max-w-4xl px-8 text-center">
-          <h2 className="font-display mb-12 text-4xl tracking-tighter text-white sm:text-5xl lg:text-7xl">
+          <h2 className="font-display mb-8 text-3xl tracking-tighter text-white sm:text-4xl lg:text-5xl">
             Pronto a scoprire il nostro capolavoro?
           </h2>
           <div className="flex flex-col items-center justify-center gap-6 sm:flex-row">

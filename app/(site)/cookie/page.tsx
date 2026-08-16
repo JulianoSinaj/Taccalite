@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function CookiePage() {
   return (
-    <LegalLayout title="Cookie Policy" updated="16 luglio 2026">
+    <LegalLayout title="Cookie Policy" updated="16 agosto 2026">
       <p>
         Questo sito utilizza esclusivamente <strong>cookie tecnici</strong> necessari al suo
         funzionamento. Non utilizziamo cookie di profilazione né condividiamo dati con terze
@@ -43,6 +43,16 @@ export default function CookiePage() {
         Qualora venga attivato il pagamento online, il fornitore di pagamento potrebbe
         impostare cookie tecnici necessari alla sicurezza della transazione. Nessun cookie di
         marketing è attivo per impostazione predefinita.
+      </p>
+      <p>
+        Nella pagina <Link href="/negozi">Le Botteghe</Link> è disponibile una mappa fornita da
+        Google Maps. La mappa <strong>non viene caricata automaticamente</strong>: si attiva solo
+        se scegli &ldquo;Mostra la mappa&rdquo; (o se hai accettato tutti i cookie dal banner). Al
+        caricamento, Google riceve il tuo indirizzo IP e può impostare propri cookie secondo la{" "}
+        <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">
+          privacy policy di Google
+        </a>
+        .
       </p>
 
       <h2>Gestione dei cookie</h2>

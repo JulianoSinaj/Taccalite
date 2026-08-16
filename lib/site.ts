@@ -22,7 +22,9 @@ export const siteConfig = {
     country: "IT",
   },
   social: {
-    instagram: "https://www.instagram.com/norcineriataccalite.centro",
+    /** Public handle (no @) — used for the homepage feed header and deep links. */
+    instagramHandle: "norcinerataccalite",
+    instagram: "https://www.instagram.com/norcinerataccalite/",
     facebook: "https://www.facebook.com/p/Norcineria-Taccalite-100054657690138/",
   },
 } as const;

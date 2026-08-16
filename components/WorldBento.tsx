@@ -63,14 +63,14 @@ export default function WorldBento({
   latestPost: BentoPost | null;
 }) {
   return (
-    <section className="bg-cream-dark px-5 py-16 sm:px-12 sm:py-24">
+    <section className="bg-cream-dark px-5 py-12 sm:px-12 sm:py-16">
       <div className="mx-auto max-w-7xl">
-        <h2 className="font-display mb-10 max-w-3xl text-4xl leading-[0.95] tracking-tighter text-brown-950 sm:mb-16 sm:text-6xl md:text-7xl">
+        <h2 className="font-display mb-8 max-w-2xl text-3xl leading-[0.95] tracking-tighter text-brown-950 sm:mb-10 sm:text-4xl md:text-5xl">
           Il mondo Taccalite,
           <span className="text-gold-deep italic"> in un colpo d&apos;occhio</span>
         </h2>
 
-        <div className="grid grid-cols-2 gap-3 sm:gap-6 md:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-6">
           {/* Countdown — the hero tile */}
           <Tile index={0} className="col-span-2 md:col-span-4 md:row-span-2">
             <div className="relative h-full overflow-hidden rounded-3xl bg-[#1c1512] sm:rounded-[28px]">
@@ -82,12 +82,12 @@ export default function WorldBento({
                 sizes="(max-width: 768px) 100vw, 66vw"
               />
               <div className="bg-noise absolute inset-0 opacity-15" />
-              <div className="relative flex h-full flex-col justify-between gap-6 p-6 sm:gap-10 sm:p-12">
+              <div className="relative flex h-full flex-col justify-between gap-6 p-6 sm:gap-8 sm:p-8">
                 <div className="space-y-3 sm:space-y-4">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gold/15 text-gold sm:h-12 sm:w-12">
                     <Flame className="size-4 sm:size-6" />
                   </span>
-                  <h3 className="font-display max-w-md text-2xl leading-tight text-cream sm:text-4xl">
+                  <h3 className="font-display max-w-md text-xl leading-tight text-cream sm:text-3xl">
                     La prossima porchetta esce dal forno tra
                   </h3>
                 </div>
@@ -111,8 +111,8 @@ export default function WorldBento({
           {/* Le botteghe — slim horizontal row on mobile */}
           <Tile index={1} className="col-span-2 md:col-span-2">
             <Link
-              href="/negozi"
-              className="group relative flex h-full flex-col justify-between gap-5 overflow-hidden rounded-3xl border border-brown-900/10 bg-white/60 p-5 transition-all duration-500 hover:border-brown-900/25 sm:rounded-[28px] sm:gap-8 sm:p-8"
+              href="/negozi#mappa"
+              className="group relative flex h-full flex-col justify-between gap-5 overflow-hidden rounded-3xl border border-brown-900/10 bg-white/60 p-5 transition-all duration-500 hover:border-brown-900/25 sm:rounded-[28px] sm:gap-6 sm:p-6"
             >
               <div className="space-y-3 sm:space-y-5">
                 <div className="flex items-center justify-between">
@@ -147,7 +147,7 @@ export default function WorldBento({
           <Tile index={2} className="md:col-span-2">
             <Link
               href="/account"
-              className="group relative flex h-full flex-col justify-between gap-5 overflow-hidden rounded-3xl bg-brown-950 p-5 sm:rounded-[28px] sm:gap-8 sm:p-8"
+              className="group relative flex h-full flex-col justify-between gap-5 overflow-hidden rounded-3xl bg-brown-950 p-5 sm:rounded-[28px] sm:gap-6 sm:p-6"
             >
               <div className="bg-noise absolute inset-0 opacity-15" />
               <div className="relative space-y-2 sm:space-y-3">
@@ -171,8 +171,8 @@ export default function WorldBento({
 
           {/* 1946 — half-width square on mobile */}
           <Tile index={3} className="md:col-span-2">
-            <div className="flex h-full flex-col justify-between gap-5 rounded-3xl bg-gold p-5 sm:rounded-[28px] sm:gap-8 sm:p-8">
-              <p className="font-display text-4xl font-bold tracking-tighter text-brown-950 sm:text-7xl">
+            <div className="flex h-full flex-col justify-between gap-5 rounded-3xl bg-gold p-5 sm:rounded-[28px] sm:gap-6 sm:p-6">
+              <p className="font-display text-4xl font-bold tracking-tighter text-brown-950 sm:text-5xl">
                 1946
               </p>
               <p className="text-[11px] leading-snug font-semibold text-brown-950/85 sm:text-sm sm:leading-relaxed">
@@ -186,7 +186,7 @@ export default function WorldBento({
             <Tile index={4} className="col-span-2 md:col-span-4">
               <Link
                 href={`/blog/${latestPost.slug}`}
-                className="group relative flex h-full items-stretch overflow-hidden rounded-3xl border border-brown-900/10 bg-white/60 sm:rounded-[28px] md:min-h-[220px] md:border-0 md:bg-transparent"
+                className="group relative flex h-full items-stretch overflow-hidden rounded-3xl border border-brown-900/10 bg-white/60 sm:rounded-[28px] md:min-h-[200px] md:border-0 md:bg-transparent"
               >
                 {/* Mobile: compact thumbnail row */}
                 <div className="relative w-28 shrink-0 overflow-hidden md:hidden">
@@ -225,11 +225,11 @@ export default function WorldBento({
                     />
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-brown-950/90 via-brown-950/35 to-transparent" />
-                  <div className="relative space-y-2 p-8">
+                  <div className="relative space-y-2 p-6">
                     <p className="text-[10px] font-bold tracking-[0.25em] text-gold uppercase">
                       Dal diario · {formatDate(latestPost.date)}
                     </p>
-                    <h3 className="font-display max-w-xl text-2xl leading-tight text-cream sm:text-3xl">
+                    <h3 className="font-display max-w-xl text-xl leading-tight text-cream sm:text-2xl">
                       {latestPost.title}
                     </h3>
                     <span className="inline-flex items-center gap-2 pt-1 text-sm font-bold text-cream transition-all group-hover:gap-4">

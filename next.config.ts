@@ -26,6 +26,10 @@ const nextConfig: NextConfig = {
         hostname: "images.unsplash.com",
         pathname: "/**",
       },
+      // Instagram media (Graph API media_url / thumbnail_url / profile pictures)
+      // are served from regional CDN hosts under these two domains.
+      { protocol: "https", hostname: "**.cdninstagram.com" },
+      { protocol: "https", hostname: "**.fbcdn.net" },
     ],
   },
 };

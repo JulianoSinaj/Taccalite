@@ -67,7 +67,7 @@ export default async function BlogPostPage({ params }: Params) {
               {formatDate(post.date)}
             </span>
           </div>
-          <h1 className="font-display mt-6 text-4xl leading-[1.02] tracking-tighter text-cream sm:text-5xl lg:text-6xl">
+          <h1 className="font-display mt-6 text-3xl leading-[1.02] tracking-tighter text-cream sm:text-4xl lg:text-5xl">
             {post.title}
           </h1>
         </Reveal>
@@ -112,11 +112,11 @@ export default async function BlogPostPage({ params }: Params) {
 
       {/* Altre storie */}
       {otherPosts.length > 0 && (
-        <section className="bg-cream-dark px-5 py-24 sm:px-10 sm:py-32">
+        <section className="bg-cream-dark px-5 py-16 sm:px-10 sm:py-24">
           <div className="mx-auto max-w-7xl">
-            <Reveal className="mb-14 space-y-5">
+            <Reveal className="mb-10 space-y-4">
               <span className="eyebrow eyebrow-dark block">Continua a leggere</span>
-              <h2 className="font-display text-4xl tracking-tighter text-brown-950 sm:text-5xl">
+              <h2 className="font-display text-3xl tracking-tighter text-brown-950 sm:text-4xl">
                 Altre storie dalla bottega
               </h2>
             </Reveal>

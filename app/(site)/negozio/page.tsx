@@ -69,11 +69,11 @@ export default async function StorePage({ searchParams }: SearchParams) {
 
   return (
     <div>
-      <section className="relative overflow-hidden bg-[#1c1512] px-5 pt-44 pb-20 sm:px-10 sm:pt-56 sm:pb-24">
+      <section className="relative overflow-hidden bg-[#1c1512] px-5 pt-36 pb-16 sm:px-10 sm:pt-40 sm:pb-20">
         <div className="bg-noise absolute inset-0 opacity-10" />
         <div className="relative mx-auto max-w-7xl">
           <span className="eyebrow mb-6 block">La bottega online</span>
-          <h1 className="font-display max-w-3xl text-5xl leading-[0.95] tracking-tighter text-cream sm:text-7xl">
+          <h1 className="font-display max-w-3xl text-4xl leading-[0.95] tracking-tighter text-cream sm:text-5xl">
             Le nostre specialità, <span className="text-gold italic">a casa tua</span>
           </h1>
           <p className="mt-6 max-w-xl text-lg font-light text-cream/75">

@@ -6,7 +6,7 @@ import type { ShopRow as Shop } from "@/lib/db/schema";
 export default function ShopCard({ shop }: { shop: Shop }) {
   return (
     <div className="card-shadow-soft group rounded-[28px] border border-brown-900/10 bg-white/50 p-6 transition-all duration-700 hover:-translate-y-2 hover:border-brown-900/20 sm:p-10">
-      <div className="relative mb-10 h-[300px] overflow-hidden rounded-2xl sm:h-[400px]">
+      <div className="relative mb-8 h-[18rem] overflow-hidden rounded-2xl sm:h-[22rem]">
         <Image
           src={shop.image}
           alt={shop.name}

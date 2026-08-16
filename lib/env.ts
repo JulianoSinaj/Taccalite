@@ -102,6 +102,19 @@ export const env = {
   /** Cron/automation shared secret for the scheduled-jobs endpoint. */
   cronSecret: str("CRON_SECRET", DEV_DEFAULTS.cronSecret),
 
+  /**
+   * Instagram (Graph API, "Instagram API with Instagram Login"). A long-lived
+   * user access token for the shop's professional account. Optional bootstrap:
+   * a token saved from the admin panel (settings table) takes precedence, and
+   * refreshed tokens are persisted there too. Empty → the homepage section
+   * degrades to a plain "follow us" band. See DOCUMENTATION.md § Instagram.
+   */
+  instagram: {
+    accessToken: str("INSTAGRAM_ACCESS_TOKEN"),
+    /** Graph API version segment, e.g. `v21.0`. */
+    apiVersion: str("INSTAGRAM_API_VERSION", "v21.0"),
+  },
+
   /** Bootstrap admin (seeded on first migration if no admin exists). */
   admin: {
     username: str("ADMIN_USERNAME", "admin"),

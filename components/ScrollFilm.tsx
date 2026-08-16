@@ -93,16 +93,16 @@ function Act({
 
       <motion.div
         style={ready ? { y: textY } : undefined}
-        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-7xl px-6 pb-20 sm:px-12 sm:pb-28"
+        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-7xl px-6 pb-16 sm:px-12 sm:pb-20"
       >
-        <p className="font-display text-7xl font-bold text-gold/25 sm:text-8xl">{act.n}</p>
-        <h3 className="font-display mt-2 max-w-2xl text-4xl leading-[0.95] tracking-tighter text-cream sm:text-6xl lg:text-7xl">
+        <p className="font-display text-5xl font-bold text-gold/25 sm:text-6xl">{act.n}</p>
+        <h3 className="font-display mt-1 max-w-xl text-3xl leading-[0.95] tracking-tighter text-cream sm:text-4xl lg:text-5xl">
           {act.title}
         </h3>
-        <p className="mt-6 max-w-lg text-lg leading-relaxed font-light text-cream/80 sm:text-xl">
+        <p className="mt-4 max-w-md text-base leading-relaxed font-light text-cream/80 sm:text-lg">
           {act.text}
         </p>
-        <p className="mt-8 text-[10px] font-bold tracking-[0.3em] text-cream/60 uppercase">
+        <p className="mt-6 text-[10px] font-bold tracking-[0.3em] text-cream/60 uppercase">
           {act.n} / 0{ACTS.length} — Come nasce la porchetta
         </p>
       </motion.div>
@@ -111,7 +111,7 @@ function Act({
 }
 
 /**
- * 350vh pinned scroll-film: the porchetta process in three acts, scrubbed
+ * 240vh pinned scroll-film: the porchetta process in three acts, scrubbed
  * by scroll progress with full-bleed crossfading imagery and a gold
  * progress rail. Falls back to stacked static panels under reduced motion.
  */
@@ -131,15 +131,15 @@ export default function ScrollFilm() {
     return (
       <section className="bg-brown-950">
         {ACTS.map((act) => (
-          <div key={act.n} className="relative flex min-h-[70vh] items-end overflow-hidden">
+          <div key={act.n} className="relative flex min-h-[60vh] items-end overflow-hidden">
             <Image src={act.image} alt={act.alt} fill className="object-cover" sizes="100vw" />
             <div className="absolute inset-0 bg-gradient-to-t from-brown-950 via-brown-950/40 to-transparent" />
             <div className="relative mx-auto w-full max-w-7xl px-6 pb-16 sm:px-12">
-              <p className="font-display text-6xl font-bold text-gold/25">{act.n}</p>
-              <h3 className="font-display mt-2 text-4xl tracking-tighter text-cream sm:text-5xl">
+              <p className="font-display text-5xl font-bold text-gold/25">{act.n}</p>
+              <h3 className="font-display mt-1 text-3xl tracking-tighter text-cream sm:text-4xl">
                 {act.title}
               </h3>
-              <p className="mt-4 max-w-lg text-lg font-light text-cream/80">{act.text}</p>
+              <p className="mt-3 max-w-md text-base font-light text-cream/80">{act.text}</p>
             </div>
           </div>
         ))}
@@ -148,7 +148,7 @@ export default function ScrollFilm() {
   }
 
   return (
-    <section ref={ref} className="relative h-[260vh] bg-brown-950 sm:h-[350vh]">
+    <section ref={ref} className="relative h-[200vh] bg-brown-950 sm:h-[240vh]">
       <div className="sticky top-0 h-screen overflow-hidden">
         {ACTS.map((act, i) => (
           <Act key={act.n} act={act} index={i} progress={scrollYProgress} ready={ready} />

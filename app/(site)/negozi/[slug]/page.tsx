@@ -137,7 +137,7 @@ export default async function ShopDetailPage({ params }: Params) {
         ]}
       />
       {/* Hero */}
-      <section className="relative flex h-[85vh] items-end overflow-hidden bg-brown-950 px-5 pb-16 sm:px-10 sm:pb-24">
+      <section className="relative flex min-h-[60vh] items-end overflow-hidden bg-brown-950 px-5 pt-40 pb-14 sm:px-10 sm:pb-16 lg:min-h-[68vh]">
         <div className="absolute inset-0">
           <Image
             src={shop.image}
@@ -161,12 +161,12 @@ export default async function ShopDetailPage({ params }: Params) {
             / {shop.name}
           </nav>
           <span className="eyebrow mb-6 block">{shop.specialty}</span>
-          <h1 className="font-display mb-4 text-5xl leading-none tracking-tighter text-white sm:text-6xl md:text-8xl">
+          <h1 className="font-display mb-4 text-4xl leading-none tracking-tighter text-white sm:text-5xl md:text-6xl">
             {content.heroLead}
             <br />
             <span className="text-gold italic">{content.heroItalic}</span>
           </h1>
-          <p className="max-w-2xl text-xl font-light text-cream/70">{shop.tagline}</p>
+          <p className="max-w-2xl text-lg font-light text-cream/70">{shop.tagline}</p>
         </Reveal>
       </section>
 
@@ -230,16 +230,16 @@ export default async function ShopDetailPage({ params }: Params) {
       </section>
 
       {/* Chi siamo */}
-      <section className="bg-cream px-5 py-32 text-brown-950 sm:px-10 sm:py-48">
-        <div className="mx-auto flex max-w-7xl flex-col items-center gap-16 lg:flex-row lg:gap-24">
-          <Reveal className="w-full space-y-10 lg:w-1/2">
+      <section className="bg-cream px-5 py-16 text-brown-950 sm:px-10 sm:py-24">
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-12 lg:flex-row lg:gap-16">
+          <Reveal className="w-full space-y-8 lg:w-1/2">
             <div className="space-y-6">
               <span className="eyebrow eyebrow-dark block">Dedizione e qualità</span>
-              <h2 className="font-display text-4xl leading-[0.95] tracking-tighter sm:text-5xl md:text-7xl">
+              <h2 className="font-display text-3xl leading-[0.95] tracking-tighter sm:text-4xl md:text-5xl">
                 Chi siamo
               </h2>
             </div>
-            <p className="max-w-xl text-xl leading-relaxed font-light text-brown-900/75">
+            <p className="max-w-xl text-lg leading-relaxed font-light text-brown-900/75">
               {shop.description}
             </p>
             <ul className="space-y-4">
@@ -265,7 +265,7 @@ export default async function ShopDetailPage({ params }: Params) {
           </Reveal>
           <Reveal delay={0.15} className="w-full lg:w-1/2">
             <div className="relative">
-              <div className="cinematic-shadow relative z-10 aspect-[4/5] overflow-hidden rounded-[32px]">
+              <div className="cinematic-shadow relative z-10 mx-auto aspect-[4/5] max-w-md overflow-hidden rounded-[32px]">
                 <Image
                   src={content.storyImage}
                   alt={content.storyImageAlt}
@@ -281,11 +281,11 @@ export default async function ShopDetailPage({ params }: Params) {
 
       {/* Prodotti */}
       {shopProducts.length > 0 && (
-        <section className="bg-cream-dark px-5 py-32 sm:px-10 sm:py-48">
+        <section className="bg-cream-dark px-5 py-16 sm:px-10 sm:py-24">
           <div className="mx-auto max-w-7xl">
-            <Reveal className="mb-16 text-center sm:mb-24">
+            <Reveal className="mb-10 text-center sm:mb-14">
               <span className="eyebrow eyebrow-dark mb-6 block">Da questo negozio</span>
-              <h2 className="font-display text-5xl tracking-tighter text-brown-950 sm:text-6xl">
+              <h2 className="font-display text-3xl tracking-tighter text-brown-950 sm:text-4xl md:text-5xl">
                 I tesori della dispensa
               </h2>
             </Reveal>
@@ -321,7 +321,7 @@ export default async function ShopDetailPage({ params }: Params) {
       )}
 
       {/* Perché sceglierci */}
-      <section className="bg-brown-950 px-5 py-24 sm:px-10 sm:py-32">
+      <section className="bg-brown-950 px-5 py-16 sm:px-10 sm:py-24">
         <RevealStagger className="mx-auto grid max-w-7xl grid-cols-2 gap-12 text-center lg:grid-cols-4">
           {content.features.map((feature) => {
             const Icon = featureIcons[feature.icon];
@@ -339,10 +339,10 @@ export default async function ShopDetailPage({ params }: Params) {
       </section>
 
       {/* Contatti / prenota */}
-      <section className="bg-cream px-5 py-32 sm:px-10 sm:py-48">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 lg:grid-cols-2 lg:gap-20">
+      <section className="bg-cream px-5 py-16 sm:px-10 sm:py-24">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-16">
           <Reveal>
-            <div className="cinematic-shadow relative h-[420px] overflow-hidden rounded-[40px] sm:h-[520px]">
+            <div className="cinematic-shadow relative h-[20rem] overflow-hidden rounded-[28px] sm:h-[25rem]">
               <Image
                 src={shop.image}
                 alt={shop.imageLabel}
@@ -394,7 +394,7 @@ export default async function ShopDetailPage({ params }: Params) {
 
       {/* Cross-shop CTA */}
       {otherShop && (
-        <section className="bg-brown-900 px-5 py-24 sm:px-10 sm:py-32">
+        <section className="bg-brown-900 px-5 py-16 sm:px-10 sm:py-24">
           <Reveal className="mx-auto max-w-7xl">
             <Link
               href={`/negozi/${otherShop.slug}`}
@@ -408,9 +408,9 @@ export default async function ShopDetailPage({ params }: Params) {
                 sizes="100vw"
               />
               <div className="absolute inset-0 bg-gradient-to-r from-brown-950 via-brown-950/60 to-transparent" />
-              <div className="relative flex h-full max-w-2xl flex-col justify-center space-y-6 p-8 sm:p-16">
+              <div className="relative flex h-full max-w-2xl flex-col justify-center space-y-5 p-8 sm:p-12">
                 <span className="eyebrow">Scopri l&apos;altro negozio</span>
-                <h3 className="font-display text-3xl text-white sm:text-5xl">
+                <h3 className="font-display text-2xl text-white sm:text-4xl">
                   {otherShop.name}:
                   <br />
                   {otherShop.specialty}
