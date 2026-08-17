@@ -1,6 +1,4 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
 /* Lenis base styles: resets html/body height to auto so its ResizeObserver
    sees content growth (otherwise the scroll limit goes stale and scrolling
    gets stuck mid-page), plus data-lenis-prevent / iframe handling. */

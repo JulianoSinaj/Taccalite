@@ -13,16 +13,5 @@ npm-debug.log*
 coverage
 .vercel
 *.tsbuildinfo
-# Design/reference material not needed in the image
-airtable
-clay
-figma
-framer
-lovable
-miro
-runwayml
-vercel
-voltagent
-webflow
-.superdesign
+# Docs are not needed in the image
 *.md

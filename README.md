@@ -65,7 +65,7 @@ app/
   admin/                 Role-gated admin/CMS (login + dashboard)
   api/                   Route handlers (reservations, auth, checkout, cron, …)
   sitemap.ts robots.ts
-components/              Marketing, store/, account/, admin/, ui/ (shadcn)
+components/              Marketing, store/, account/, admin/
 lib/
   db/                    Drizzle schema, client (auto-migrate), queries, admin
   auth/ mail/ payments/  Sessions+password, Nodemailer+templates, Stripe
@@ -74,8 +74,7 @@ lib/
 scripts/seed.ts          Idempotent database seed
 drizzle/                 Generated SQL migrations
 data/                    SQLite database (git-ignored)
-DESIGN.md                Visual-design specification
-<tool>/DESIGN.md         Reference design studies (Vercel, Figma, …) — NOT app code
+DESIGN.md                Brand design system (colours, type, spacing, components)
 ```
 
 ## Documentation
@@ -85,7 +84,7 @@ DESIGN.md                Visual-design specification
 - [`ROADMAP.md`](./ROADMAP.md) — phased plan to reach a production-ready, self-hosted
   (Hetzner) platform: database, auth, reservations, admin/CMS, email automation, SEO,
   GDPR, and deployment.
-- [`DESIGN.md`](./DESIGN.md) — the visual-design specification for the brand.
+- [`DESIGN.md`](./DESIGN.md) — the brand design system (palette, typography, spacing, component patterns).
 
 ## Deployment
 

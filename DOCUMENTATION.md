@@ -65,8 +65,8 @@ business's online operations. Everything is in **Italian**.
 | Framework | Next.js **16.2.10** (App Router, Turbopack, RSC, Server Actions) |
 | Runtime | React **19.2.4** · Node.js 20 |
 | Language | TypeScript 5 (strict), path alias `@/*` → repo root |
-| Styling | Tailwind CSS **v4** (`@theme inline`), `tw-animate-css`, shadcn/ui (Radix) |
-| Motion / 3D | `motion` (Framer Motion v12), `three` + `@react-three/fiber` + `drei`, `lenis` |
+| Styling | Tailwind CSS **v4** (`@theme inline`), `lucide-react` icons |
+| Motion | `motion` (Framer Motion v12), `lenis` smooth scroll |
 | Database | **SQLite / libSQL** via `@libsql/client` + **Drizzle ORM** + `drizzle-kit` — a local file (WAL) in dev/Docker, a remote **Turso** database on Vercel (`DATABASE_URL`) |
 | Auth | Custom — scrypt password hashing + signed HTTP-only cookie sessions |
 | Email | **Nodemailer** (SMTP), provider-agnostic, with DB outbox fallback |
@@ -482,8 +482,6 @@ since; the short list of what remains open is at the end._
    provider (Resend/Postmark) — an env-only swap (`lib/mail/mailer.ts` isolates it).
 8. **Docker image digest pinning not done** — base images use specific version tags, not
    `@sha256` digests.
-9. **Reference material** (`airtable/`, `figma/`, … `DESIGN.md` files, `.superdesign/`,
-   `*-prompt.md`) are design studies, not app code, and are excluded from the Docker image.
 
 ---
 
