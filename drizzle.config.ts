@@ -1,6 +1,6 @@
 import type { Config } from "drizzle-kit";
 
-const url = process.env.DATABASE_URL ?? "./data/taccalite.db";
+const url = process.env.DATABASE_URL ?? process.env.TURSO_DATABASE_URL ?? "./data/taccalite.db";
 const remote = /^(libsql|https?|wss?):\/\//i.test(url);
 
 export default {

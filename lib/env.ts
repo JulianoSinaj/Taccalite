@@ -59,9 +59,10 @@ export const env = {
    * libSQL URL (`libsql://<db>-<org>.turso.io`) — the latter is what a Vercel
    * deployment uses, since serverless functions have no persistent disk.
    */
-  databaseUrl: str("DATABASE_URL", "./data/taccalite.db"),
+  databaseUrl: str("DATABASE_URL", str("TURSO_DATABASE_URL", "./data/taccalite.db")),
 
-  /** Auth token for a remote Turso database (ignored for local files). */
+  /** Auth token for a remote Turso database (ignored for local files).
+   *  `TURSO_*` are the names the Vercel Marketplace Turso integration injects. */
   databaseAuthToken: str("DATABASE_AUTH_TOKEN", str("TURSO_AUTH_TOKEN")),
 
   /**

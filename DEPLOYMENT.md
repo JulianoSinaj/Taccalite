@@ -50,7 +50,7 @@ you use it):
 
 | Variable | Value |
 | --- | --- |
-| `DATABASE_URL` | `libsql://taccalite-<org>.turso.io` |
+| `DATABASE_URL` | `libsql://taccalite-<org>.turso.io` (`TURSO_DATABASE_URL`, as injected by the Vercel Marketplace integration, is accepted too) |
 | `DATABASE_AUTH_TOKEN` | the Turso token (`TURSO_AUTH_TOKEN` is accepted too) |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
 | `CRON_SECRET` | `openssl rand -hex 32` — Vercel Cron sends it as `Authorization: Bearer` automatically |
