@@ -1,18 +1,13 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import Image from "next/image";
 import {
   ArrowRight,
   Bus,
   Car,
-  Check,
   Clock,
-  Flame,
   Footprints,
   MapPin,
   Phone,
-  ShoppingBag,
-  UtensilsCrossed,
 } from "lucide-react";
 import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
 import PillButton from "@/components/PillButton";
@@ -336,93 +331,6 @@ export default async function NegoziPage() {
                 </RevealStaggerItem>
               );
             })}
-          </RevealStagger>
-        </div>
-      </section>
-
-      {/* ── Which shop for what ────────────────────────────────────────── */}
-      <section
-        id="cosa-trovi"
-        className="relative scroll-mt-24 overflow-hidden bg-brown-950 px-5 py-24 sm:px-10 sm:py-32"
-      >
-        <div className="bg-noise absolute inset-0 opacity-10" />
-        <div className="relative mx-auto max-w-7xl">
-          <Reveal className="mb-14 max-w-3xl">
-            <span className="eyebrow mb-6 block">Quale bottega per cosa</span>
-            <h2 className="font-display text-4xl leading-[0.95] tracking-tighter text-cream sm:text-5xl md:text-6xl">
-              Stessa famiglia,
-              <span className="text-gold italic"> due banchi diversi</span>
-            </h2>
-          </Reveal>
-
-          <RevealStagger className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {shops.map((shop) => (
-              <RevealStaggerItem
-                key={shop.slug}
-                className="group relative overflow-hidden rounded-[28px] border border-white/8 bg-brown-900/40 p-7 sm:p-9"
-              >
-                <Link
-                  href={`/negozi/${shop.slug}`}
-                  className="relative mb-7 block aspect-[16/9] overflow-hidden rounded-2xl"
-                >
-                  <Image
-                    src={shop.image}
-                    alt={shop.name}
-                    fill
-                    className="object-cover transition-transform duration-[1.8s] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105"
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-brown-950/60 via-transparent to-transparent" />
-                  <span className="absolute top-4 left-4 rounded-full bg-cream/90 px-3 py-1 text-[10px] font-bold tracking-widest text-brown-950 uppercase backdrop-blur">
-                    {shop.specialty}
-                  </span>
-                </Link>
-                <h3 className="font-display text-3xl leading-tight tracking-tight text-cream">
-                  {shop.name}
-                </h3>
-                <p className="mt-2 text-sm font-light text-cream/65">{shop.tagline}</p>
-
-                {shop.highlights.length > 0 && (
-                  <ul className="mt-6 space-y-2.5">
-                    {shop.highlights.map((h) => (
-                      <li key={h} className="flex items-start gap-3 text-sm leading-relaxed text-cream/80">
-                        <Check className="mt-0.5 size-4 shrink-0 text-gold" />
-                        {h}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                <div className="mt-7 flex flex-wrap gap-2">
-                  {shop.porchettaEnabled && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 px-3 py-1 text-[10px] font-bold tracking-widest text-gold uppercase">
-                      <Flame className="size-3" />
-                      Porchetta del sabato
-                    </span>
-                  )}
-                  {shop.storeEnabled && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1 text-[10px] font-bold tracking-widest text-cream/80 uppercase">
-                      <ShoppingBag className="size-3" />
-                      Ritiro e-shop
-                    </span>
-                  )}
-                  {shop.reservationsEnabled && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1 text-[10px] font-bold tracking-widest text-cream/80 uppercase">
-                      <UtensilsCrossed className="size-3" />
-                      Tavolo e degustazioni
-                    </span>
-                  )}
-                </div>
-
-                <Link
-                  href={`/negozi/${shop.slug}`}
-                  className="mt-8 inline-flex items-center gap-2 text-sm font-bold text-gold transition-all group-hover:gap-4"
-                >
-                  Esplora la bottega
-                  <ArrowRight className="size-4" />
-                </Link>
-              </RevealStaggerItem>
-            ))}
           </RevealStagger>
         </div>
       </section>
