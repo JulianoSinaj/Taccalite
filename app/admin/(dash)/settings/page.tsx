@@ -7,11 +7,8 @@ import { runAutomationNow } from "@/lib/admin/automation-actions";
 import { CRON_JOBS, getCronStatus } from "@/lib/automation";
 import { isAdmin } from "@/lib/auth/session";
 import { smtpConfigured, stripeConfigured, env } from "@/lib/env";
-<<<<<<< Updated upstream
 import { VAT_RATES_BPS, vatRateLabel } from "@/lib/fiscal";
-=======
 import { InstagramPanel } from "./InstagramPanel";
->>>>>>> Stashed changes
 
 export const dynamic = "force-dynamic";
 
@@ -348,7 +345,6 @@ export default async function AdminSettings() {
         </Panel>
       </div>
 
-<<<<<<< Updated upstream
       <h2 className="font-display mt-10 mb-1 text-xl text-brown-950">Automazioni</h2>
       <p className="mb-3 text-xs text-brown-800/60">
         Girano da sole se lo scheduler chiama <code>/api/cron?job=all</code>. Qui vedi quando
@@ -382,10 +378,10 @@ export default async function AdminSettings() {
             </Panel>
           );
         })}
-=======
+      </div>
+
       <div className="mt-6">
         <InstagramPanel />
->>>>>>> Stashed changes
       </div>
 
       <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Parametri operativi</h2>
