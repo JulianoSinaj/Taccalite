@@ -10,13 +10,10 @@ const nextConfig: NextConfig = {
   // toolchain, and tsx (see Dockerfile). The seed/migrate step is precompiled to
   // a plain-node bundle (`npm run db:compile-seed`) for the same reason.
   output: "standalone",
-  // better-sqlite3 is a native module — keep it out of the bundle (kept external,
-  // it is still traced into the standalone node_modules with its prebuilt binary).
-  serverExternalPackages: ["better-sqlite3"],
-  outputFileTracingIncludes: {
-    // Belt-and-suspenders: guarantee the native binary is carried into standalone.
-    "/**": ["./node_modules/better-sqlite3/build/Release/better_sqlite3.node"],
-  },
+  // @libsql/client pulls in the native `libsql` package for `file:` URLs — keep
+  // it out of the bundle (traced into standalone node_modules for Docker; on
+  // Vercel the remote Turso URL uses the pure-JS HTTP transport).
+  serverExternalPackages: ["@libsql/client", "libsql"],
   images: {
     // Next.js 16 defaults qualities to [75]; ScrollFilm requests 82.
     qualities: [75, 82, 90],
@@ -30,6 +27,8 @@ const nextConfig: NextConfig = {
       // are served from regional CDN hosts under these two domains.
       { protocol: "https", hostname: "**.cdninstagram.com" },
       { protocol: "https", hostname: "**.fbcdn.net" },
+      // Admin uploads on Vercel live in Vercel Blob (see lib/media.ts).
+      { protocol: "https", hostname: "**.public.blob.vercel-storage.com" },
     ],
   },
 };

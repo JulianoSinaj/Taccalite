@@ -46,12 +46,11 @@ export async function deliverCampaign(id: string): Promise<{ sent: boolean; queu
   // Claim it: flip to `sent` only if it isn't already. Only the caller whose
   // UPDATE actually changed a row goes on to deliver, so a retried scheduler run
   // or a double-clicked button can't blast subscribers twice.
-  const [claimed] = db
+  const [claimed] = await db
     .update(newsletterCampaigns)
     .set({ status: "sent", sentAt: new Date(), updatedAt: new Date() })
     .where(and(eq(newsletterCampaigns.id, id), ne(newsletterCampaigns.status, "sent")))
-    .returning({ id: newsletterCampaigns.id })
-    .all();
+    .returning({ id: newsletterCampaigns.id });
 
   if (!claimed) return { sent: false, queued: 0 };
 

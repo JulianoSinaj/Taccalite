@@ -67,7 +67,7 @@ business's online operations. Everything is in **Italian**.
 | Language | TypeScript 5 (strict), path alias `@/*` → repo root |
 | Styling | Tailwind CSS **v4** (`@theme inline`), `tw-animate-css`, shadcn/ui (Radix) |
 | Motion / 3D | `motion` (Framer Motion v12), `three` + `@react-three/fiber` + `drei`, `lenis` |
-| Database | **SQLite** (`better-sqlite3`, WAL) via **Drizzle ORM** + `drizzle-kit` |
+| Database | **SQLite / libSQL** via `@libsql/client` + **Drizzle ORM** + `drizzle-kit` — a local file (WAL) in dev/Docker, a remote **Turso** database on Vercel (`DATABASE_URL`) |
 | Auth | Custom — scrypt password hashing + signed HTTP-only cookie sessions |
 | Email | **Nodemailer** (SMTP), provider-agnostic, with DB outbox fallback |
 | Payments | **Stripe** Checkout (test mode), env-gated with simulate fallback |
@@ -75,8 +75,8 @@ business's online operations. Everything is in **Italian**.
 | Icons | `lucide-react` · Fonts: Playfair Display + Open Sans (`next/font`) |
 
 `next.config.ts`: Turbopack root, Unsplash remote images, `images.qualities [75,82,90]`,
-`serverExternalPackages: ["better-sqlite3"]`, `output: "standalone"` +
-`outputFileTracingIncludes` for the native `better-sqlite3` binary (lean runtime image).
+`serverExternalPackages: ["@libsql/client", "libsql"]`, `output: "standalone"` (lean
+Docker runtime image), Vercel Blob hostnames allowed for `next/image`.
 
 Build: **clean** (`output: "standalone"`). `tsc`: clean. Lint: **0 errors** (advisory
 warnings only). Automated suite: **35 Vitest + 8 Playwright** green (see §9).
@@ -374,7 +374,7 @@ Deployment: [`DEPLOYMENT.md`](./DEPLOYMENT.md) (Docker + Caddy on Hetzner).
 - **Vitest** (`npm test`, **35 tests**): units (password KDF + legacy verify + rehash,
   `isSameOrigin`, CSV formula-escape, Zod reservation/auth, `formatEuro`) and DB-integration
   (order pricing, order-number generation, `finalizeOrder` idempotency + single accrual,
-  loyalty add/redeem/insufficient/zero-clamp) against a temp migrated `better-sqlite3`
+  loyalty add/redeem/insufficient/zero-clamp) against a temp migrated libSQL file
   singleton.
 - **Playwright** (`npm run test:e2e`, **8 tests**): boots on a throwaway seeded DB and drives
   the public routes, the admin gate, `/traccia`, and the staff-screen gate.

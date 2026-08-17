@@ -145,8 +145,8 @@ export async function getLoyaltySummary(userId: string) {
  * The balance is clamped to never go negative (satisfies the `>= 0` CHECK and is
  * correct for expiry), but the ledger records the delta **actually applied**
  * (`next − prev`), not the requested one, so summing the ledger always equals the
- * stored balance. Read + write happen inside one synchronous better-sqlite3
- * transaction on the single app connection, so no concurrent write interleaves.
+ * stored balance. Read + write happen inside one write-mode (BEGIN IMMEDIATE)
+ * libSQL transaction, so no concurrent write interleaves.
  *
  * Returns the new balance and the delta actually applied (which differs from the
  * requested delta only when a debit was clamped at zero).
@@ -159,30 +159,27 @@ export async function addPoints(
 ): Promise<{ points: number; applied: number }> {
   await getOrCreateLoyaltyAccount(userId); // ensure the account row exists
 
-  const result = db.transaction((tx) => {
-    const [before] = tx
+  const result = await db.transaction(async (tx) => {
+    const [before] = await tx
       .select({ points: loyaltyAccounts.points })
       .from(loyaltyAccounts)
-      .where(eq(loyaltyAccounts.userId, userId))
-      .all();
+      .where(eq(loyaltyAccounts.userId, userId));
     const prev = before?.points ?? 0;
     const next = Math.max(0, prev + delta);
     const applied = next - prev;
 
-    tx.update(loyaltyAccounts)
+    await tx
+      .update(loyaltyAccounts)
       .set({ points: next })
-      .where(eq(loyaltyAccounts.userId, userId))
-      .run();
+      .where(eq(loyaltyAccounts.userId, userId));
 
-    tx.insert(loyaltyTransactions)
-      .values({
-        userId,
-        delta: applied,
-        balanceAfter: next,
-        reason,
-        createdByUserId: byUserId ?? null,
-      })
-      .run();
+    await tx.insert(loyaltyTransactions).values({
+      userId,
+      delta: applied,
+      balanceAfter: next,
+      reason,
+      createdByUserId: byUserId ?? null,
+    });
 
     return { points: next, applied, prev };
   });
@@ -242,28 +239,25 @@ export async function redeemReward(userId: string, rewardId: string): Promise<Re
   await getOrCreateLoyaltyAccount(userId); // ensure the account row exists
 
   try {
-    const result = db.transaction((tx) => {
-      const [account] = tx
+    const result = await db.transaction(async (tx) => {
+      const [account] = await tx
         .select({ points: loyaltyAccounts.points })
         .from(loyaltyAccounts)
-        .where(eq(loyaltyAccounts.userId, userId))
-        .all();
+        .where(eq(loyaltyAccounts.userId, userId));
       if (!account || account.points < reward.points) throw new InsufficientPointsError();
 
       const newBalance = account.points - reward.points;
-      tx.update(loyaltyAccounts)
+      await tx
+        .update(loyaltyAccounts)
         .set({ points: newBalance })
-        .where(eq(loyaltyAccounts.userId, userId))
-        .run();
-      tx.insert(loyaltyTransactions)
-        .values({
-          userId,
-          delta: -reward.points,
-          balanceAfter: newBalance,
-          reason: `Riscatto: ${reward.name}`,
-        })
-        .run();
-      const [redemption] = tx
+        .where(eq(loyaltyAccounts.userId, userId));
+      await tx.insert(loyaltyTransactions).values({
+        userId,
+        delta: -reward.points,
+        balanceAfter: newBalance,
+        reason: `Riscatto: ${reward.name}`,
+      });
+      const [redemption] = await tx
         .insert(redemptions)
         .values({
           userId,
@@ -272,8 +266,7 @@ export async function redeemReward(userId: string, rewardId: string): Promise<Re
           pointsSpent: reward.points,
           status: "pending",
         })
-        .returning({ id: redemptions.id })
-        .all();
+        .returning({ id: redemptions.id });
 
       return { pointsLeft: newBalance, reference: redemption.id };
     });

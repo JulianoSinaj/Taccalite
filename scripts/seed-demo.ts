@@ -20,11 +20,7 @@
  * produce the same shop: a bug you see is a bug you can reproduce.
  */
 import "./_bootstrap-env"; // MUST be first: defaults NODE_ENV before lib/env loads
-import { existsSync, mkdirSync } from "node:fs";
-import { dirname, resolve, join } from "node:path";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { openDatabase, type Db } from "../lib/db/connection";
 import { eq } from "drizzle-orm";
 import * as schema from "../lib/db/schema";
 import { hashPassword } from "../lib/auth/password";
@@ -33,14 +29,9 @@ import { env } from "../lib/env";
 const RESET = process.argv.includes("--reset");
 const DEMO_DOMAIN = "demo.taccalite.it";
 
-const dbPath = resolve(process.cwd(), env.databaseUrl);
-if (!existsSync(dirname(dbPath))) mkdirSync(dirname(dbPath), { recursive: true });
-const sqlite = new Database(dbPath);
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("foreign_keys = ON");
-sqlite.pragma("busy_timeout = 5000");
-const db = drizzle(sqlite, { schema });
-migrate(db, { migrationsFolder: join(process.cwd(), "drizzle") });
+// Opened (and migrated) at the top of main() — local file or remote Turso, see
+// lib/db/connection.ts. Module-level so the generator helpers below can use it.
+let db!: Db;
 
 // ── Deterministic randomness ─────────────────────────────────────────────────
 /** mulberry32 — small, fast, and seeded, so every run generates the same shop. */
@@ -117,35 +108,40 @@ const CATALOGUE: DemoProduct[] = [
 ];
 
 // ── Reset ────────────────────────────────────────────────────────────────────
-function resetDemo() {
-  const demoUsers = sqlite.prepare(`select id from users where email like '%@${DEMO_DOMAIN}'`).all() as { id: string }[];
-  const ids = demoUsers.map((u) => u.id);
-  const tx = sqlite.transaction(() => {
-    sqlite.prepare("delete from order_items where order_id in (select id from orders where order_number like 'ORD-D%')").run();
-    sqlite.prepare("delete from orders where order_number like 'ORD-D%'").run();
-    sqlite.prepare("delete from reservations where reference like 'DEMO-%'").run();
-    sqlite.prepare("delete from newsletter_subscribers where email like '%@" + DEMO_DOMAIN + "'").run();
-    sqlite.prepare("delete from stock_movements where product_id in (select id from products where slug like 'demo-%')").run();
-    sqlite.prepare("delete from products where slug like 'demo-%'").run();
-    sqlite.prepare("delete from blog_posts where slug like 'demo-%'").run();
-    sqlite.prepare("delete from rewards where slug like 'demo-%'").run();
-    sqlite.prepare("delete from discount_codes where code like 'DEMO%'").run();
-    sqlite.prepare("delete from audit_log where actor_name like '%(demo)%'").run();
-    sqlite.prepare("delete from email_outbox where to_address like '%@" + DEMO_DOMAIN + "'").run();
-    sqlite.prepare("delete from page_views where path like '/negozio%' or path like '/porchetta%'").run();
-    for (const id of ids) {
-      sqlite.prepare("delete from redemptions where user_id = ?").run(id);
-      sqlite.prepare("delete from loyalty_transactions where user_id = ?").run(id);
-      sqlite.prepare("delete from loyalty_accounts where user_id = ?").run(id);
-      sqlite.prepare("delete from users where id = ?").run(id);
-    }
-  });
-  tx();
+async function resetDemo() {
+  const client = db.$client;
+  const demoUsers = await client.execute(`select id from users where email like '%@${DEMO_DOMAIN}'`);
+  const ids = demoUsers.rows.map((u) => String(u.id));
+  // One write-mode batch = one transaction: all-or-nothing, like the old sync tx.
+  await client.batch(
+    [
+      "delete from order_items where order_id in (select id from orders where order_number like 'ORD-D%')",
+      "delete from orders where order_number like 'ORD-D%'",
+      "delete from reservations where reference like 'DEMO-%'",
+      "delete from newsletter_subscribers where email like '%@" + DEMO_DOMAIN + "'",
+      "delete from stock_movements where product_id in (select id from products where slug like 'demo-%')",
+      "delete from products where slug like 'demo-%'",
+      "delete from blog_posts where slug like 'demo-%'",
+      "delete from rewards where slug like 'demo-%'",
+      "delete from discount_codes where code like 'DEMO%'",
+      "delete from audit_log where actor_name like '%(demo)%'",
+      "delete from email_outbox where to_address like '%@" + DEMO_DOMAIN + "'",
+      "delete from page_views where path like '/negozio%' or path like '/porchetta%'",
+      ...ids.flatMap((id) => [
+        { sql: "delete from redemptions where user_id = ?", args: [id] },
+        { sql: "delete from loyalty_transactions where user_id = ?", args: [id] },
+        { sql: "delete from loyalty_accounts where user_id = ?", args: [id] },
+        { sql: "delete from users where id = ?", args: [id] },
+      ]),
+    ],
+    "write",
+  );
   console.log(`  cleared previous demo data (${ids.length} demo customers)`);
 }
 
 async function main() {
-  if (RESET) resetDemo();
+  db = await openDatabase(env.databaseUrl, env.databaseAuthToken, { migrate: true });
+  if (RESET) await resetDemo();
 
   const shops = await db.select().from(schema.shops);
   if (shops.length === 0) throw new Error("No shops found — run `npm run db:seed` first.");
@@ -653,9 +649,9 @@ async function main() {
 }
 
 main()
-  .then(() => sqlite.close())
+  .then(() => db?.$client.close())
   .catch((err) => {
     console.error(err);
-    sqlite.close();
+    db?.$client.close();
     process.exit(1);
   });

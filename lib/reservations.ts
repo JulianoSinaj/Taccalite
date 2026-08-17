@@ -130,19 +130,19 @@ export async function createReservation(
   // *decision* then happens inside the same transaction as the insert. Splitting
   // "sum the day's kg" from "insert this booking" into two statements let two
   // concurrent pre-orders both read an under-cap total and both confirm, selling
-  // more porchetta than the Saturday can produce. better-sqlite3 executes the
-  // transaction synchronously, so no other booking can interleave between the
-  // read and the write.
+  // more porchetta than the Saturday can produce. The libSQL transaction opens
+  // in write mode (BEGIN IMMEDIATE), so it holds the write lock from the read
+  // onwards and no other booking can interleave between the read and the write.
   const capacityKg =
     input.type === "porchetta" && waitlistOnOverflow
       ? await getSetting<number>("porchetta.weeklyCapacityKg", 0)
       : 0;
   const requestedKg = input.quantityKg ?? 0;
 
-  const { id: insertedId, waitlisted } = db.transaction((tx) => {
+  const { id: insertedId, waitlisted } = await db.transaction(async (tx) => {
     let overflow = false;
     if (capacityKg > 0) {
-      const [booked] = tx
+      const [booked] = await tx
         .select({ total: sql<number>`coalesce(sum(${reservations.quantityKg}), 0)` })
         .from(reservations)
         .where(
@@ -153,12 +153,11 @@ export async function createReservation(
             // porchetta was already prepared for it.
             ne(reservations.status, "cancelled"),
           ),
-        )
-        .all();
+        );
       overflow = Number(booked?.total ?? 0) + requestedKg > capacityKg;
     }
 
-    const [inserted] = tx
+    const [inserted] = await tx
       .insert(reservations)
       .values({
         reference,
@@ -176,8 +175,7 @@ export async function createReservation(
         waitlisted: overflow,
         userId: meta?.userId ?? null,
       })
-      .returning({ id: reservations.id })
-      .all();
+      .returning({ id: reservations.id });
 
     return { id: inserted.id, waitlisted: overflow };
   });

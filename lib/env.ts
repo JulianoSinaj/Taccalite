@@ -53,8 +53,16 @@ export const env = {
   /** Public base URL (canonical/OG/JSON-LD, absolute links in emails). */
   siteUrl: str("NEXT_PUBLIC_SITE_URL", isProd ? "https://taccalite.it" : "http://localhost:3000"),
 
-  /** SQLite database file path. */
+  /**
+   * Database location. A local SQLite file path (`./data/taccalite.db`, the
+   * zero-setup default; also `file:` URLs and `:memory:`) or a remote Turso /
+   * libSQL URL (`libsql://<db>-<org>.turso.io`) — the latter is what a Vercel
+   * deployment uses, since serverless functions have no persistent disk.
+   */
   databaseUrl: str("DATABASE_URL", "./data/taccalite.db"),
+
+  /** Auth token for a remote Turso database (ignored for local files). */
+  databaseAuthToken: str("DATABASE_AUTH_TOKEN", str("TURSO_AUTH_TOKEN")),
 
   /**
    * Whether to apply migrations automatically on first DB access. On in
@@ -99,6 +107,14 @@ export const env = {
     webhookSecret: str("STRIPE_WEBHOOK_SECRET"),
   },
 
+  /**
+   * Vercel Blob read/write token. When set, admin image uploads go to Vercel
+   * Blob (serverless has no persistent disk); when empty they are written next
+   * to the local SQLite file as before. Auto-injected when a Blob store is
+   * attached to the Vercel project.
+   */
+  blobToken: str("BLOB_READ_WRITE_TOKEN"),
+
   /** Cron/automation shared secret for the scheduled-jobs endpoint. */
   cronSecret: str("CRON_SECRET", DEV_DEFAULTS.cronSecret),
 
@@ -125,6 +141,7 @@ export const env = {
 
 export const smtpConfigured = env.smtp.host !== "";
 export const stripeConfigured = env.stripe.secretKey !== "";
+export const blobConfigured = env.blobToken !== "";
 
 /**
  * Warn loudly if a server boots with known dev-default secrets. Checked for

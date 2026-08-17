@@ -17,10 +17,11 @@ DEST="${BACKUP_DIR:-./backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
 mkdir -p "$DEST"
 
-# Use better-sqlite3's online backup API inside the running container. Writing to
-# /app/data (the persisted volume) means the file also appears on the host via
-# the ./data bind mount, from where we move + compress it.
-docker compose exec -T app node -e "require('better-sqlite3')('/app/data/taccalite.db').backup('/app/data/backup.tmp.db').then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
+# Use SQLite's online VACUUM INTO snapshot (via the app's libSQL client) inside
+# the running container. Writing to /app/data (the persisted volume) means the
+# file also appears on the host via the ./data bind mount, from where we move +
+# compress it. VACUUM INTO refuses to overwrite, so clear any stale temp first.
+docker compose exec -T app sh -c "rm -f /app/data/backup.tmp.db && node -e \"require('@libsql/client').createClient({url:'file:/app/data/taccalite.db'}).execute(\\\"VACUUM INTO '/app/data/backup.tmp.db'\\\").then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\""
 
 mv ./data/backup.tmp.db "$DEST/taccalite-$STAMP.db"
 gzip -f "$DEST/taccalite-$STAMP.db"

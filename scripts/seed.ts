@@ -6,29 +6,25 @@
  * admin. Run: `npm run db:seed`.
  */
 import "./_bootstrap-env"; // MUST be first: defaults NODE_ENV before lib/env loads
-import { existsSync, mkdirSync } from "node:fs";
-import { dirname, resolve, join } from "node:path";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { openDatabase } from "../lib/db/connection";
 import { eq } from "drizzle-orm";
 import * as schema from "../lib/db/schema";
 import { shops as seedShops, featuredProducts, blogPosts as seedPosts } from "../lib/data";
 import { hashPassword } from "../lib/auth/password";
 import { env } from "../lib/env";
 
-const dbPath = resolve(process.cwd(), env.databaseUrl);
-if (!existsSync(dirname(dbPath))) mkdirSync(dirname(dbPath), { recursive: true });
-
-const sqlite = new Database(dbPath);
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("foreign_keys = ON");
-sqlite.pragma("busy_timeout = 5000");
-const db = drizzle(sqlite, { schema });
-
-migrate(db, { migrationsFolder: join(process.cwd(), "drizzle") });
-
 async function main() {
+  // Local file or remote Turso — see lib/db/connection.ts. Migrations are applied
+  // here (idempotent) so this is also where production migrations run.
+  const db = await openDatabase(env.databaseUrl, env.databaseAuthToken, { migrate: true });
+  try {
+    await run(db);
+  } finally {
+    db.$client.close();
+  }
+}
+
+async function run(db: Awaited<ReturnType<typeof openDatabase>>) {
   // Shops
   for (const [i, s] of seedShops.entries()) {
     await db
@@ -170,10 +166,7 @@ async function main() {
   console.log("✓ Seed complete.");
 }
 
-main()
-  .then(() => sqlite.close())
-  .catch((err) => {
-    console.error(err);
-    sqlite.close();
-    process.exit(1);
-  });
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

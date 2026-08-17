@@ -82,9 +82,9 @@ export async function verifySearchIndexes(): Promise<{ checked: number; rebuilt:
     try {
       // 'integrity-check' raises SQLITE_CORRUPT_VTAB when the index disagrees
       // with its content table.
-      db.$client.prepare(`INSERT INTO ${index}(${index}) VALUES('integrity-check')`).run();
+      await db.$client.execute(`INSERT INTO ${index}(${index}) VALUES('integrity-check')`);
     } catch {
-      db.$client.prepare(`INSERT INTO ${index}(${index}) VALUES('rebuild')`).run();
+      await db.$client.execute(`INSERT INTO ${index}(${index}) VALUES('rebuild')`);
       rebuilt.push(index);
     }
   }

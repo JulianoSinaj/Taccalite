@@ -1,48 +1,70 @@
 import "server-only";
-import { existsSync, mkdirSync } from "node:fs";
-import { dirname, resolve, join } from "node:path";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import type { Client } from "@libsql/client";
 import { env } from "@/lib/env";
 import * as schema from "./schema";
+import {
+  applyLocalPragmas,
+  isRemoteDatabaseUrl,
+  migrateDatabase,
+  openClient,
+  wrapDrizzle,
+  type Db,
+} from "./connection";
 
 /**
- * Singleton SQLite connection + Drizzle wrapper.
+ * Singleton libSQL connection + Drizzle wrapper.
  *
- * Migrations are applied automatically on first init (idempotent — Drizzle tracks
- * applied migrations in its journal table), so a fresh checkout or a fresh server
- * just works. WAL mode is enabled for better read/write concurrency.
+ * Local file databases get WAL + foreign keys + busy timeout; remote Turso
+ * databases (Vercel) need none of that. In development migrations are applied
+ * automatically before the first query so a fresh checkout "just works"; in
+ * production they run explicitly (`npm run db:seed` — the Vercel build step and
+ * docker-entrypoint.sh both do this) unless RUN_MIGRATIONS_ON_BOOT=1.
+ *
+ * All libSQL calls are async. Because module init is synchronous, the
+ * "migrate/pragma before first query" ordering is enforced by wrapping the raw
+ * client in a proxy whose query methods await a one-shot `ready` promise — so
+ * callers can keep using `db` as a plain value.
  */
-type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
 
-const globalForDb = globalThis as unknown as { __taccaliteDb?: DrizzleDb };
+const GATED = new Set<PropertyKey>(["execute", "batch", "migrate", "transaction", "executeMultiple"]);
 
-function createDb(): DrizzleDb {
-  const dbPath = resolve(process.cwd(), env.databaseUrl);
-  const dir = dirname(dbPath);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-
-  const sqlite = new Database(dbPath);
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("foreign_keys = ON");
-  sqlite.pragma("busy_timeout = 5000");
-
-  const db = drizzle(sqlite, { schema });
-
-  // Auto-migrate on boot in development so a fresh checkout "just works". In
-  // production this is opt-in (RUN_MIGRATIONS_ON_BOOT=1) — migrations should run
-  // explicitly before the server starts (see docker-entrypoint.sh) to avoid
-  // racing destructive table-rebuild migrations on the request path.
-  const migrationsFolder = join(process.cwd(), "drizzle");
-  if (env.runMigrationsOnBoot && existsSync(migrationsFolder)) {
-    migrate(db, { migrationsFolder });
-  }
-
-  return db;
+function gatedClient(raw: Client, ready: Promise<void>): Client {
+  return new Proxy(raw, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value === "function" && GATED.has(prop)) {
+        return async (...args: unknown[]) => {
+          await ready;
+          return (value as (...a: unknown[]) => unknown).apply(target, args);
+        };
+      }
+      return value;
+    },
+  });
 }
 
-export const db: DrizzleDb = globalForDb.__taccaliteDb ?? createDb();
+const globalForDb = globalThis as unknown as { __taccaliteDb?: Db };
+
+function createDb(): Db {
+  const raw = openClient(env.databaseUrl, env.databaseAuthToken);
+  const remote = isRemoteDatabaseUrl(env.databaseUrl);
+
+  const ready: Promise<void> = (async () => {
+    if (env.runMigrationsOnBoot) {
+      // migrateDatabase applies the local pragmas itself before migrating.
+      await migrateDatabase(wrapDrizzle(raw), env.databaseUrl);
+    } else if (!remote) {
+      await applyLocalPragmas(raw);
+    }
+  })();
+  // Surface a broken boot loudly instead of as an unhandled rejection; every
+  // gated call re-awaits `ready` and will rethrow the same error.
+  ready.catch((err) => console.error("[db] initialisation failed:", err));
+
+  return wrapDrizzle(gatedClient(raw, ready));
+}
+
+export const db: Db = globalForDb.__taccaliteDb ?? createDb();
 if (process.env.NODE_ENV !== "production") globalForDb.__taccaliteDb = db;
 
 export { schema };

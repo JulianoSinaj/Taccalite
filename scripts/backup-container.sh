@@ -1,6 +1,6 @@
 #!/bin/sh
 # Online SQLite backup, run INSIDE the app/scheduler container (which has node +
-# better-sqlite3 + the persisted /app/data volume). The scheduler sidecar invokes
+# @libsql/client + the persisted /app/data volume). The scheduler sidecar invokes
 # this nightly; it can also be run manually:
 #   docker compose exec scheduler sh /app/scripts/backup-container.sh
 #
@@ -20,9 +20,11 @@ DEST="${BACKUP_DIR:-/app/backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
 mkdir -p "$DEST"
 
-# better-sqlite3's .backup() is an online backup (safe while the app is writing)
-# and returns a Promise.
-node -e "require('better-sqlite3')('${DB}').backup('${DEST}/taccalite-${STAMP}.db').then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
+# SQLite's VACUUM INTO is an online, consistent snapshot (safe while the app is
+# writing) — run through the same libSQL client the app uses. The target must not
+# already exist.
+rm -f "${DEST}/taccalite-${STAMP}.db"
+node -e "require('@libsql/client').createClient({url:'file:${DB}'}).execute(\"VACUUM INTO '${DEST}/taccalite-${STAMP}.db'\").then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
 
 gzip -f "${DEST}/taccalite-${STAMP}.db"
 find "$DEST" -name 'taccalite-*.db.gz' -type f -mtime +"$RETENTION_DAYS" -delete

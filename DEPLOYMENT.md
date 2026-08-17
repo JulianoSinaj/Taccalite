@@ -1,13 +1,103 @@
-# Deploying Taccalite to Hetzner
+# Deploying Taccalite
 
-Two supported paths:
+Three supported paths:
 
-- **A) Coolify** (recommended if you already run Coolify) — see §0 below.
-- **B) Plain Docker Compose + Caddy** — see §1 onward. Uses `docker-compose.yml` +
-  `Caddyfile` in the repo.
+- **V) Vercel + Turso** — serverless; the database lives in Turso (hosted libSQL)
+  and uploads in Vercel Blob. See **§V** just below.
+- **A) Coolify** on a VPS (recommended if you already run Coolify) — see §0 below.
+- **B) Plain Docker Compose + Caddy** on a VPS — see §1 onward. Uses
+  `docker-compose.yml` + `Caddyfile` in the repo.
 
-Either way the app is a single Next.js container with **SQLite persisted on a volume**.
+Paths A and B run a single Next.js container with **SQLite persisted on a volume**.
+Path V has no disk at all, which is why it needs Turso + Blob.
 
+---
+
+## V. Deploying on Vercel (Turso + Vercel Blob)
+
+Vercel functions run on a **read-only, ephemeral filesystem** — a `./data/*.db`
+SQLite file cannot exist there (that is the `ENOENT: mkdir '/var/task/data'` 500
+you get if you deploy the repo untouched). The app therefore talks to the database
+through `@libsql/client`, which speaks to a **local file** in dev/Docker and to a
+**remote Turso** database on Vercel with no code change — only `DATABASE_URL`
+differs.
+
+### V.1 Create the Turso database
+
+```bash
+# https://docs.turso.tech/cli/installation
+turso auth signup            # or: turso auth login
+turso db create taccalite --location fra   # pick a region near your users
+turso db show taccalite --url              # → libsql://taccalite-<org>.turso.io
+turso db tokens create taccalite           # → the auth token
+```
+
+(You can also do this from the Turso dashboard, or via the **Turso** integration
+in the Vercel Marketplace, which injects the two variables for you.)
+
+### V.2 Attach a Vercel Blob store (image uploads)
+
+Vercel project → **Storage** → **Create Database** → **Blob** → connect it to the
+project. Vercel injects `BLOB_READ_WRITE_TOKEN` automatically. Admin uploads
+(product/shop/reward/post photos) are then stored in Blob and the row keeps the
+blob's public URL; without the token, uploads fall back to local disk and would
+fail on Vercel with a read-only-filesystem error.
+
+### V.3 Environment variables
+
+Vercel project → **Settings → Environment Variables** (Production, and Preview if
+you use it):
+
+| Variable | Value |
+| --- | --- |
+| `DATABASE_URL` | `libsql://taccalite-<org>.turso.io` |
+| `DATABASE_AUTH_TOKEN` | the Turso token (`TURSO_AUTH_TOKEN` is accepted too) |
+| `SESSION_SECRET` | `openssl rand -hex 32` |
+| `CRON_SECRET` | `openssl rand -hex 32` — Vercel Cron sends it as `Authorization: Bearer` automatically |
+| `ADMIN_PASSWORD` | your real admin password (used only when the admin user is first created) |
+| `NEXT_PUBLIC_SITE_URL` | `https://<your-domain>` |
+| `OWNER_EMAIL`, `SMTP_*`, `MAIL_FROM` | as in `.env.example` |
+| `STRIPE_*`, `INSTAGRAM_*` | when ready |
+| `TRUST_PROXY` | `1` (Vercel's edge sets `x-forwarded-for`, so rate limiting sees real client IPs) |
+| `BLOB_READ_WRITE_TOKEN` | injected by the Blob store (§V.2) |
+
+Do **not** set `NODE_ENV` yourself. Do **not** set `RUN_MIGRATIONS_ON_BOOT`.
+
+### V.4 Migrations & seed run at build time
+
+`package.json` has a `vercel-build` script — `tsx scripts/seed.ts && next build` —
+which Vercel runs instead of `build`. `scripts/seed.ts` applies the Drizzle
+migrations from `drizzle/` and upserts the base content, default settings and the
+bootstrap admin (all `ON CONFLICT DO NOTHING`, so re-running on every deploy is
+safe and never overwrites your edits). If migrations fail the build fails — you
+never get a server pointed at an un-migrated database. `DATABASE_URL` /
+`DATABASE_AUTH_TOKEN` must therefore also be available to the **build**
+environment (they are, unless you scoped them to runtime only).
+
+### V.5 Scheduled jobs (Vercel Cron)
+
+`vercel.json` declares one cron — `GET /api/cron?job=all` at **06:00 UTC daily**
+— which Vercel calls with `Authorization: Bearer $CRON_SECRET`. That cadence fits
+the **Hobby** plan (max one run per day). On **Pro** you can tighten it to match
+the Docker scheduler (`"*/15 * * * *"`) — porchetta reminders, pickup auto-fulfil
+and the outbox drain benefit from running more often. Edit the `schedule` field
+and redeploy.
+
+### V.6 What is different on Vercel
+
+- **Rate limiting** is per function instance (in-memory), so it's softer than on a
+  single container. Turn on Vercel's WAF / Attack Challenge Mode for the login
+  route if you need hard limits.
+- **Backups**: Turso keeps point-in-time restore for the retention of your plan
+  (`turso db shell taccalite .dump > backup.sql` for a manual copy). The
+  `scripts/backup*.sh` files are for the Docker paths only.
+- **`/api/media/[file]`** only serves disk uploads; Blob images are served by
+  Vercel's CDN directly from their own URL.
+- Everything else (auth, orders, loyalty, FTS search, transactions) is unchanged —
+  libSQL transactions open in write mode (`BEGIN IMMEDIATE`) so the read-then-write
+  atomicity the code relies on holds.
+
+---
 > ✅ **Scheduled jobs & backups run automatically with Docker Compose (path B).**
 > The stack ships a **`scheduler`** sidecar (a second container built from the same
 > image) that triggers `/api/cron?job=all` every 15 minutes and takes a nightly
@@ -275,7 +365,7 @@ Migrations apply automatically on startup; seeding is idempotent.
 - Keep `SESSION_SECRET` and `.env` secret and backed up. Rotating `SESSION_SECRET`
   logs everyone out.
 - **Lean runtime image (~123 MB):** `output: "standalone"` is enabled, so the runner
-  ships only the traced server (with better-sqlite3's prebuilt binary) — **no full
+  ships only the traced server (with `@libsql/client` and its native binding) — **no full
   `node_modules`, no `tsx`, no C build toolchain.** The migrate/seed step runs from
   a precompiled plain-node bundle (`npm run db:compile-seed` → `seed.cjs`) and the
   server from Next's `server.js`, both via the entrypoint. For stricter

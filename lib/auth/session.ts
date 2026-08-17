@@ -96,7 +96,7 @@ export async function destroySession(): Promise<void> {
  *  reset, role change) so an old cookie can't outlive the change. */
 export async function deleteUserSessions(userId: string): Promise<{ deleted: number }> {
   const res = await db.delete(sessions).where(eq(sessions.userId, userId));
-  return { deleted: res.changes ?? 0 };
+  return { deleted: res.rowsAffected };
 }
 
 /**
@@ -133,13 +133,13 @@ export async function deleteOtherUserSessions(userId: string): Promise<{ deleted
     ? and(eq(sessions.userId, userId), ne(sessions.id, current))
     : eq(sessions.userId, userId);
   const res = await db.delete(sessions).where(where);
-  return { deleted: res.changes ?? 0 };
+  return { deleted: res.rowsAffected };
 }
 
 /** Garbage-collect expired session rows. Run periodically from the cron sweep. */
 export async function deleteExpiredSessions(): Promise<{ deleted: number }> {
   const res = await db.delete(sessions).where(lt(sessions.expiresAt, new Date()));
-  return { deleted: res.changes ?? 0 };
+  return { deleted: res.rowsAffected };
 }
 
 /** Throw-if-absent helpers for gated routes. */

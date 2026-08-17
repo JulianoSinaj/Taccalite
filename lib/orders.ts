@@ -106,8 +106,8 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     orderNumber = generateOrderNumber();
     try {
-      order = db.transaction((tx) => {
-        const [created] = tx
+      order = await db.transaction(async (tx) => {
+        const [created] = await tx
           .insert(orders)
           .values({
             orderNumber,
@@ -130,11 +130,9 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
             paymentStatus: "unpaid",
             notes: input.notes ?? null,
           })
-          .returning({ id: orders.id })
-          .all();
+          .returning({ id: orders.id });
 
-        tx.insert(orderItems)
-          .values(
+        await tx.insert(orderItems).values(
             lines.map((l) => ({
               orderId: created.id,
               productId: l.product.id,
@@ -145,8 +143,7 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
               lineTotalCents: l.lineTotalCents,
               vatRateBps: l.product.vatRateBps,
             })),
-          )
-          .run();
+          );
 
         return created;
       });
@@ -295,7 +292,7 @@ export async function finalizeOrder(
   // Only the caller whose UPDATE actually changed a row proceeds to award points
   // and email, so concurrent webhook + success-page calls can't double-accrue.
   const now = new Date();
-  const [claimed] = db
+  const [claimed] = await db
     .update(orders)
     .set({
       status: "paid",
@@ -307,8 +304,7 @@ export async function finalizeOrder(
       ...(opts.paymentIntentId ? { stripePaymentIntentId: opts.paymentIntentId } : {}),
     })
     .where(and(eq(orders.id, orderId), ne(orders.paymentStatus, "paid")))
-    .returning({ id: orders.id })
-    .all();
+    .returning({ id: orders.id });
   if (!claimed) {
     // Losing the claim race still shouldn't lose the PaymentIntent: backfill it
     // if the winner didn't have one (e.g. the success page finalized first).
@@ -375,7 +371,7 @@ export async function finalizeOrder(
         // Atomic, never-below-zero decrement, only for products that track
         // stock (stock not null). max(0, …) respects the products_stock_ck
         // CHECK and keeps this correct even if two orders finalize at once.
-        const [updated] = db
+        const [updated] = await db
           .update(products)
           .set({ stock: sql`max(0, ${products.stock} - ${qty})` })
           .where(and(eq(products.id, productId), isNotNull(products.stock)))
@@ -384,20 +380,17 @@ export async function finalizeOrder(
             stock: products.stock,
             reorderPoint: products.reorderPoint,
             lowStockNotifiedAt: products.lowStockNotifiedAt,
-          })
-          .all();
+          });
         if (!updated || updated.stock == null) continue;
 
         // Ledger the order-driven decrement so on-hand can be reconciled from the
         // movement history (not just manual adjustments).
-        db.insert(stockMovements)
-          .values({
-            productId,
-            delta: -qty,
-            reason: `Ordine ${order.orderNumber}`,
-            stockAfter: updated.stock,
-          })
-          .run();
+        await db.insert(stockMovements).values({
+          productId,
+          delta: -qty,
+          reason: `Ordine ${order.orderNumber}`,
+          stockAfter: updated.stock,
+        });
 
         // Alert once per dip: collect products now at/under the threshold that
         // haven't already been notified. Stamping lowStockNotifiedAt below
@@ -414,10 +407,10 @@ export async function finalizeOrder(
 
       if (notifyIds.length > 0) {
         await sendMail({ to: env.ownerEmail, ...lowStockOwnerEmail(lowStock) });
-        db.update(products)
+        await db
+          .update(products)
           .set({ lowStockNotifiedAt: new Date() })
-          .where(inArray(products.id, notifyIds))
-          .run();
+          .where(inArray(products.id, notifyIds));
       }
     }
   } catch {
@@ -468,7 +461,7 @@ export async function recordRefund(
 
   // Claim the transition atomically on the previous refunded amount, so two
   // concurrent reversals can't both run the restock.
-  const [claimed] = db
+  const [claimed] = await db
     .update(orders)
     .set({
       refundedCents: capped,
@@ -476,8 +469,7 @@ export async function recordRefund(
       ...(full ? ({ status: "refunded", paymentStatus: "refunded" } as const) : {}),
     })
     .where(and(eq(orders.id, orderId), eq(orders.refundedCents, order.refundedCents)))
-    .returning({ id: orders.id })
-    .all();
+    .returning({ id: orders.id });
   if (!claimed) return { deltaCents: 0, refundedCents: order.refundedCents, full: wasFull };
 
   if (full && !wasFull) {
@@ -497,7 +489,7 @@ export async function recordRefund(
  * has to reason about forever. Never touches an order that did get paid.
  */
 export async function expireOrder(orderId: string): Promise<boolean> {
-  const [claimed] = db
+  const [claimed] = await db
     .update(orders)
     .set({ status: "cancelled", updatedAt: new Date() })
     .where(
@@ -507,8 +499,7 @@ export async function expireOrder(orderId: string): Promise<boolean> {
         eq(orders.paymentStatus, "unpaid"),
       ),
     )
-    .returning({ id: orders.id })
-    .all();
+    .returning({ id: orders.id });
   return !!claimed;
 }
 
@@ -532,16 +523,15 @@ export async function restockOrderItems(
       qtyByProduct.set(it.productId, (qtyByProduct.get(it.productId) ?? 0) + it.quantity);
     }
     for (const [productId, qty] of qtyByProduct) {
-      const [updated] = db
+      const [updated] = await db
         .update(products)
         .set({ stock: sql`${products.stock} + ${qty}` })
         .where(and(eq(products.id, productId), isNotNull(products.stock)))
-        .returning({ stock: products.stock })
-        .all();
+        .returning({ stock: products.stock });
       if (!updated || updated.stock == null) continue;
-      db.insert(stockMovements)
-        .values({ productId, delta: qty, reason, stockAfter: updated.stock, createdByUserId: byUserId ?? null })
-        .run();
+      await db
+        .insert(stockMovements)
+        .values({ productId, delta: qty, reason, stockAfter: updated.stock, createdByUserId: byUserId ?? null });
     }
   } catch {
     // Best-effort — a refund must not fail because inventory bookkeeping did.

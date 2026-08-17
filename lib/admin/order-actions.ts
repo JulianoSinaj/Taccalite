@@ -141,8 +141,8 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
       : null;
 
     const orderNumber = generateOrderNumber();
-    const created = db.transaction((tx) => {
-      const [row] = tx
+    const created = await db.transaction(async (tx) => {
+      const [row] = await tx
         .insert(orders)
         .values({
           orderNumber,
@@ -168,10 +168,8 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
           paidAt: paid ? new Date() : null,
           notes: d.notes ?? null,
         })
-        .returning({ id: orders.id })
-        .all();
-      tx.insert(orderItems)
-        .values(
+        .returning({ id: orders.id });
+      await tx.insert(orderItems).values(
           lines.map((l) => ({
             orderId: row.id,
             productId: l.product.id,
@@ -182,8 +180,7 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
             lineTotalCents: l.lineTotalCents,
             vatRateBps: l.product.vatRateBps,
           })),
-        )
-        .run();
+        );
       return row;
     });
 
@@ -196,22 +193,19 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
     // sales are reconcilable alongside online orders and manual adjustments.
     if (paid) {
       for (const l of lines) {
-        const [u] = db
+        const [u] = await db
           .update(products)
           .set({ stock: sql`max(0, ${products.stock} - ${l.quantity})` })
           .where(and(eq(products.id, l.product.id), isNotNull(products.stock)))
-          .returning({ stock: products.stock })
-          .all();
+          .returning({ stock: products.stock });
         if (u?.stock != null) {
-          db.insert(stockMovements)
-            .values({
-              productId: l.product.id,
-              delta: -l.quantity,
-              reason: `Vendita al banco ${orderNumber}`,
-              stockAfter: u.stock,
-              createdByUserId: actor.id,
-            })
-            .run();
+          await db.insert(stockMovements).values({
+            productId: l.product.id,
+            delta: -l.quantity,
+            reason: `Vendita al banco ${orderNumber}`,
+            stockAfter: u.stock,
+            createdByUserId: actor.id,
+          });
         }
       }
     }
@@ -439,10 +433,9 @@ export async function updateOrderItems(_prev: ActionState, fd: FormData): Promis
 
     // Replace the lines wholesale — simpler and safer than diffing, and the
     // order is unpaid so no downstream record depends on the old rows.
-    db.transaction((tx) => {
-      tx.delete(orderItems).where(eq(orderItems.orderId, id)).run();
-      tx.insert(orderItems)
-        .values(
+    await db.transaction(async (tx) => {
+      await tx.delete(orderItems).where(eq(orderItems.orderId, id));
+      await tx.insert(orderItems).values(
           lines.map((l) => ({
             orderId: id,
             productId: l.product.id,
@@ -453,8 +446,7 @@ export async function updateOrderItems(_prev: ActionState, fd: FormData): Promis
             lineTotalCents: l.lineTotalCents,
             vatRateBps: l.product.vatRateBps,
           })),
-        )
-        .run();
+        );
     });
 
     const recalc = await recalcOrderTotals(id);

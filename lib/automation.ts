@@ -269,7 +269,7 @@ export async function runMaintenance(
   return {
     sessionsDeleted,
     outboxDrained: drain.sent,
-    outboxPruned: pruned.changes ?? 0,
+    outboxPruned: pruned.rowsAffected,
     searchIndexesRebuilt: rebuilt,
     mediaDeleted: media.deleted,
     mediaBytesFreed: media.bytesFreed,

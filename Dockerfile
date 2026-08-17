@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ── Multi-stage build — Next.js 16 standalone + SQLite ─────────────────────────
-# The runner ships only the traced standalone server (with better-sqlite3's
+# The runner ships only the traced standalone server (with @libsql/client's
 # prebuilt binary) + a precompiled seed bundle — no full node_modules, no tsx, no
 # C build toolchain. For strict reproducibility, operators can pin the base images
 # by digest (node:20-bookworm-slim@sha256:… / caddy:2@sha256:…).
@@ -39,7 +39,7 @@ ENV HOSTNAME=0.0.0.0
 RUN apt-get update && apt-get install -y --no-install-recommends gosu \
   && rm -rf /var/lib/apt/lists/*
 
-# Standalone server (traced deps incl. the native better-sqlite3 binary), static
+# Standalone server (traced deps incl. the native libsql binding), static
 # assets, public files, the precompiled seed, drizzle migrations, ops scripts.
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
