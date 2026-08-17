@@ -36,7 +36,23 @@ export function isRemoteDatabaseUrl(url: string): boolean {
  */
 export function databaseConfig(rawUrl: string, authToken = ""): Config {
   if (isRemoteDatabaseUrl(rawUrl)) {
-    return { url: rawUrl, authToken: authToken || undefined };
+    if (!authToken) {
+      throw new Error(
+        `DATABASE_URL is a remote libSQL URL (${rawUrl}) but DATABASE_AUTH_TOKEN is empty. ` +
+          "Set DATABASE_AUTH_TOKEN (or TURSO_AUTH_TOKEN) to the Turso database token.",
+      );
+    }
+    return { url: rawUrl, authToken };
+  }
+  // Serverless has no persistent disk: a local file there is always a
+  // misconfiguration, so fail with a clear message instead of ENOENT/EROFS at
+  // runtime — or worse, silently seeding a throwaway file during the build.
+  if (process.env.VERCEL) {
+    throw new Error(
+      `DATABASE_URL="${rawUrl}" is a local SQLite path, but this is running on Vercel where there is no persistent ` +
+        "filesystem. Set DATABASE_URL to your Turso URL (libsql://<db>-<org>.turso.io) and DATABASE_AUTH_TOKEN " +
+        "in the Vercel project's Environment Variables (for Production AND the build), then redeploy. See DEPLOYMENT.md §V.",
+    );
   }
   if (rawUrl === ":memory:" || rawUrl.startsWith("file::memory:")) {
     return { url: rawUrl };
