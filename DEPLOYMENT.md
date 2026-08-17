@@ -16,11 +16,19 @@ Path V has no disk at all, which is why it needs Turso + Blob.
 ## V. Deploying on Vercel (Turso + Vercel Blob)
 
 Vercel functions run on a **read-only, ephemeral filesystem** — a `./data/*.db`
-SQLite file cannot exist there (that is the `ENOENT: mkdir '/var/task/data'` 500
-you get if you deploy the repo untouched). The app therefore talks to the database
-through `@libsql/client`, which speaks to a **local file** in dev/Docker and to a
+SQLite file cannot exist there. The app therefore talks to the database through
+`@libsql/client`, which speaks to a **local file** in dev/Docker and to a
 **remote Turso** database on Vercel with no code change — only `DATABASE_URL`
 differs.
+
+> **Zero-config deploy = demo mode.** Import the repo into Vercel and deploy with
+> no variables at all: the site comes up and works, running on an **in-memory
+> database that is migrated + seeded on every cold start**. Nothing written
+> (orders, bookings, admin edits, logins, uploads) survives — each serverless
+> instance has its own copy and it is wiped on restart. The admin shows a yellow
+> "Modalità demo" banner and the logs a `[db] ⚠ … EPHEMERAL` warning. Good for
+> previewing; **not** for a real shop. To persist data do V.1–V.4 below — it is a
+> one-time, dashboard-only setup.
 
 ### V.1 Create the Turso database
 

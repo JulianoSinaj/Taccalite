@@ -79,6 +79,12 @@ export async function saveUploadedImage(file: File): Promise<string> {
     return blob.url;
   }
 
+  if (process.env.VERCEL) {
+    // Serverless has no writable persistent disk: uploads need the Blob store.
+    throw new Error(
+      "Archiviazione immagini non configurata: su Vercel collega un Blob store al progetto (Storage → Blob) e ridistribuisci.",
+    );
+  }
   const dir = uploadsDir();
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, name), bytes);

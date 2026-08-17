@@ -4,6 +4,7 @@ import AdminNav from "@/components/admin/AdminNav";
 import CommandPalette from "@/components/admin/CommandPalette";
 import { ToastProvider } from "@/components/admin/Toasts";
 import { getCurrentUser } from "@/lib/auth/session";
+import { ephemeralDatabase } from "@/lib/db/client";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav userName={user.name || user.username} isAdmin={user.role === "admin"} />
         <CommandPalette isAdmin={user.role === "admin"} />
         <div className="flex-1 overflow-x-hidden">
+          {ephemeralDatabase && (
+            <div
+              role="alert"
+              className="border-b border-amber-300 bg-amber-100 px-5 py-3 text-sm text-amber-900 sm:px-8"
+            >
+              <strong className="font-semibold">Modalità demo:</strong> nessun database configurato su
+              Vercel — il sito funziona ma ordini, prenotazioni, modifiche e accessi{" "}
+              <strong className="font-semibold">non vengono salvati</strong> e spariscono a ogni riavvio.
+              Per rendere i dati permanenti collega un database Turso (Vercel → Storage → Turso) e
+              ridistribuisci. Vedi <code>DEPLOYMENT.md §V</code>.
+            </div>
+          )}
           <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">{children}</div>
         </div>
       </div>

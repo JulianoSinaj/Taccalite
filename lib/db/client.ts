@@ -4,12 +4,14 @@ import { env } from "@/lib/env";
 import * as schema from "./schema";
 import {
   applyLocalPragmas,
+  isEphemeralFallback,
   isRemoteDatabaseUrl,
   migrateDatabase,
   openClient,
   wrapDrizzle,
   type Db,
 } from "./connection";
+import { seedBaseData } from "./seed-data";
 
 /**
  * Singleton libSQL connection + Drizzle wrapper.
@@ -45,11 +47,31 @@ function gatedClient(raw: Client, ready: Promise<void>): Client {
 
 const globalForDb = globalThis as unknown as { __taccaliteDb?: Db };
 
+/**
+ * True when the app is running on Vercel without a configured database and is
+ * therefore using an ephemeral in-memory DB (demo mode). Exposed so the admin
+ * UI can show a banner.
+ */
+export const ephemeralDatabase = isEphemeralFallback(env.databaseUrl);
+
 function createDb(): Db {
   const raw = openClient(env.databaseUrl, env.databaseAuthToken);
   const remote = isRemoteDatabaseUrl(env.databaseUrl);
 
   const ready: Promise<void> = (async () => {
+    if (ephemeralDatabase) {
+      // Nothing persists here, so build the schema and base content on every
+      // cold start. Loud, because a real shop must not run like this.
+      console.warn(
+        "[db] ⚠ No database configured on Vercel — running on an EPHEMERAL in-memory database. " +
+          "The site works, but orders, bookings, admin edits and logins are NOT persisted and vanish on every " +
+          "cold start. Connect a Turso database (Vercel → Storage → Turso) to persist data. See DEPLOYMENT.md §V.",
+      );
+      const tmp = wrapDrizzle(raw);
+      await migrateDatabase(tmp, env.databaseUrl);
+      await seedBaseData(tmp, () => {});
+      return;
+    }
     if (env.runMigrationsOnBoot) {
       // migrateDatabase applies the local pragmas itself before migrating.
       await migrateDatabase(wrapDrizzle(raw), env.databaseUrl);
@@ -64,7 +86,11 @@ function createDb(): Db {
   return wrapDrizzle(gatedClient(raw, ready));
 }
 
-export const db: Db = globalForDb.__taccaliteDb ?? createDb();
-if (process.env.NODE_ENV !== "production") globalForDb.__taccaliteDb = db;
+// Always keep the singleton on globalThis, not just in dev: Next bundles server
+// code per route, so a plain module-level instance would be duplicated across
+// route bundles (one connection per route — and, in ephemeral demo mode, one
+// *separate empty in-memory database* per route). globalThis is per process,
+// so every route shares the same connection.
+export const db: Db = globalForDb.__taccaliteDb ?? (globalForDb.__taccaliteDb = createDb());
 
 export { schema };

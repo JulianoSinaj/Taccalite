@@ -30,6 +30,15 @@ export function isRemoteDatabaseUrl(url: string): boolean {
 }
 
 /**
+ * True when running on Vercel (serverless, no persistent filesystem) with a
+ * local-file `DATABASE_URL` — i.e. no real database was configured. In that
+ * case the app runs on an ephemeral in-memory database (demo mode).
+ */
+export function isEphemeralFallback(url: string): boolean {
+  return Boolean(process.env.VERCEL) && !isRemoteDatabaseUrl(url) && !url.startsWith(":memory:") && !url.startsWith("file::memory:");
+}
+
+/**
  * Normalise `DATABASE_URL` into a `@libsql/client` config. Local paths are made
  * absolute (relative to `process.cwd()`, as before) and their directory is
  * created so a fresh checkout works with zero setup.
@@ -44,15 +53,12 @@ export function databaseConfig(rawUrl: string, authToken = ""): Config {
     }
     return { url: rawUrl, authToken };
   }
-  // Serverless has no persistent disk: a local file there is always a
-  // misconfiguration, so fail with a clear message instead of ENOENT/EROFS at
-  // runtime — or worse, silently seeding a throwaway file during the build.
-  if (process.env.VERCEL) {
-    throw new Error(
-      `DATABASE_URL="${rawUrl}" is a local SQLite path, but this is running on Vercel where there is no persistent ` +
-        "filesystem. Set DATABASE_URL to your Turso URL (libsql://<db>-<org>.turso.io) and DATABASE_AUTH_TOKEN " +
-        "in the Vercel project's Environment Variables (for Production AND the build), then redeploy. See DEPLOYMENT.md §V.",
-    );
+  // Serverless has no persistent disk, so a local file path there can't work.
+  // Rather than crash, fall back to an in-memory database (ephemeral demo mode:
+  // the site comes up with zero configuration, but nothing written survives a
+  // cold start). `lib/db/client.ts` migrates + seeds it at boot and warns loudly.
+  if (isEphemeralFallback(rawUrl)) {
+    return { url: ":memory:" };
   }
   if (rawUrl === ":memory:" || rawUrl.startsWith("file::memory:")) {
     return { url: rawUrl };
@@ -66,7 +72,7 @@ export function databaseConfig(rawUrl: string, authToken = ""): Config {
 
 /** Absolute directory of a local database file, or null for remote/in-memory. */
 export function localDatabaseDir(rawUrl: string): string | null {
-  if (isRemoteDatabaseUrl(rawUrl) || rawUrl === ":memory:" || rawUrl.startsWith("file::memory:")) {
+  if (isRemoteDatabaseUrl(rawUrl) || isEphemeralFallback(rawUrl) || rawUrl === ":memory:" || rawUrl.startsWith("file::memory:")) {
     return null;
   }
   const path = rawUrl.startsWith("file:") ? rawUrl.slice("file:".length) : rawUrl;
@@ -99,7 +105,7 @@ export function wrapDrizzle(client: Client): Db {
  * pragmas first when the DB is a file.
  */
 export async function migrateDatabase(db: Db, rawUrl: string): Promise<void> {
-  if (!isRemoteDatabaseUrl(rawUrl)) await applyLocalPragmas(db.$client);
+  if (!isRemoteDatabaseUrl(rawUrl) && !isEphemeralFallback(rawUrl)) await applyLocalPragmas(db.$client);
   const migrationsFolder = join(process.cwd(), "drizzle");
   if (!existsSync(migrationsFolder)) return;
   await migrate(db, { migrationsFolder });
@@ -118,7 +124,7 @@ export async function openDatabase(
   const db = wrapDrizzle(client);
   if (opts.migrate) {
     await migrateDatabase(db, rawUrl);
-  } else if (!isRemoteDatabaseUrl(rawUrl)) {
+  } else if (!isRemoteDatabaseUrl(rawUrl) && !isEphemeralFallback(rawUrl)) {
     await applyLocalPragmas(client);
   }
   return db;
