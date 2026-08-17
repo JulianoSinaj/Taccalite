@@ -127,11 +127,13 @@ export const smtpConfigured = env.smtp.host !== "";
 export const stripeConfigured = env.stripe.secretKey !== "";
 
 /**
- * Fail fast if a server would boot with known dev-default secrets. Enforced for
+ * Warn loudly if a server boots with known dev-default secrets. Checked for
  * every non-development environment (production, staging, test, or an unset
- * `NODE_ENV`) — fail closed. Skipped during `next build`
- * (NEXT_PHASE === "phase-production-build") so the build doesn't require real
- * secrets; enforced when the server actually starts.
+ * `NODE_ENV`). This does NOT abort startup — the server keeps running with the
+ * insecure defaults so a half-configured deploy is still reachable — but the
+ * warning is emitted once at module load so it shows up at the top of the
+ * server logs. Skipped during `next build` (NEXT_PHASE ===
+ * "phase-production-build") so the build doesn't require real secrets.
  */
 if (enforceSecurity && process.env.NEXT_PHASE !== "phase-production-build") {
   const insecure: string[] = [];
@@ -139,8 +141,10 @@ if (enforceSecurity && process.env.NEXT_PHASE !== "phase-production-build") {
   if (env.cronSecret === DEV_DEFAULTS.cronSecret) insecure.push("CRON_SECRET");
   if (env.admin.password === DEV_DEFAULTS.adminPassword) insecure.push("ADMIN_PASSWORD");
   if (insecure.length > 0) {
-    throw new Error(
-      `Refusing to start in production with insecure default secrets: ${insecure.join(
+    console.warn(
+      `[env] WARNING: running in a non-development environment (NODE_ENV=${
+        nodeEnv ?? "unset"
+      }) with insecure default secrets: ${insecure.join(
         ", ",
       )}. Set them via environment variables (see .env.example).`,
     );

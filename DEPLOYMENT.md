@@ -84,8 +84,9 @@ nano .env
 > `CRON_SECRET=dev-cron-secret`, and `ADMIN_PASSWORD=taccalite-admin` (and a
 > placeholder `OWNER_EMAIL=owner@example.com`). You **must** set fresh
 > `SESSION_SECRET`, `CRON_SECRET`, and `ADMIN_PASSWORD`, and set a real
-> `OWNER_EMAIL` — the app's production guard **refuses to boot** with the insecure
-> defaults when `NODE_ENV=production`.
+> `OWNER_EMAIL` — the app's production guard **logs a loud warning at startup** if the
+> insecure defaults are still in place when `NODE_ENV=production` (it no longer
+> refuses to boot, so check the logs after the first start).
 
 Set at minimum in `.env`:
 

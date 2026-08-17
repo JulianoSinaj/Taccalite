@@ -10,7 +10,7 @@
  * So: if `NODE_ENV` is genuinely unset, default it to `development` BEFORE any
  * module that reads it (`lib/env.ts`) is imported. In production the container
  * sets `NODE_ENV=production` (see the Dockerfile), so this never downgrades a
- * real deployment — the guard still fires and refuses default secrets.
+ * real deployment — the guard still fires and warns about default secrets.
  *
  * IMPORTANT: import this FIRST, before importing anything from `lib/`.
  */
