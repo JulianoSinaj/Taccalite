@@ -6,29 +6,25 @@ import { CodeRevealForm } from "@/components/admin/RecoveryCodes";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { requireAdmin, listUserSessions } from "@/lib/auth/session";
-import { generateTotpSecret, otpauthUri } from "@/lib/auth/totp";
+import { otpauthUri } from "@/lib/auth/totp";
 import { remainingRecoveryCodes } from "@/lib/auth/recovery-codes";
 import {
   confirmTotp,
   disableTotp,
   regenerateRecoveryCodes,
   signOutOtherSessions,
+  startTotpEnrolment,
 } from "@/lib/admin/security-actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function SecurityPage() {
   const actor = await requireAdmin();
-  let [user] = await db.select().from(users).where(eq(users.id, actor.id)).limit(1);
+  const [user] = await db.select().from(users).where(eq(users.id, actor.id)).limit(1);
 
-  // If not yet enrolled, mint (and persist) a pending secret so the QR is stable
-  // across reloads until the user confirms or disables.
-  if (user && !user.totpEnabled && !user.totpSecret) {
-    const secret = generateTotpSecret();
-    await db.update(users).set({ totpSecret: secret }).where(eq(users.id, actor.id));
-    user = { ...user, totpSecret: secret };
-  }
-
+  // NB: no secret is minted here. Rendering this page used to persist one, so a
+  // link prefetch mutated the user row and concurrent loads raced each other.
+  // Enrolment starts from the button below (`startTotpEnrolment`).
   const enabled = !!user?.totpEnabled;
   const uri = user?.totpSecret ? otpauthUri(user.totpSecret, user.username) : "";
   const qrDataUrl = uri ? await QRCode.toDataURL(uri, { margin: 1, width: 220 }) : "";
@@ -43,7 +39,7 @@ export default async function SecurityPage() {
 
       {enabled ? (
         <Panel className="max-w-2xl">
-          <p className="text-sm font-semibold text-emerald-700">✓ La verifica in due passaggi è attiva.</p>
+          <p className="text-sm font-semibold text-ok">✓ La verifica in due passaggi è attiva.</p>
           <p className="mt-2 text-sm text-brown-800/70">
             Al prossimo accesso ti verrà chiesto il codice a 6 cifre dalla tua app di autenticazione.
           </p>
@@ -54,7 +50,7 @@ export default async function SecurityPage() {
               Servono per entrare se perdi il telefono. Ogni codice vale un solo accesso.
             </p>
             {remaining === 0 && (
-              <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <p className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn-soft-fg">
                 Non hai codici di recupero validi: senza l&apos;app di autenticazione non potresti
                 più accedere. Generane subito.
               </p>
@@ -93,35 +89,53 @@ export default async function SecurityPage() {
             <li>Salva i codici di recupero che ti verranno mostrati.</li>
           </ol>
 
-          {qrDataUrl && (
-            <div className="mt-5 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-              {/* eslint-disable-next-line @next/next/no-img-element -- inline data URI QR */}
-              <img src={qrDataUrl} alt="QR per l'autenticazione a due fattori" className="rounded-lg ring-1 ring-brown-900/10" />
-              <div>
-                <p className={labelCls}>Codice manuale</p>
-                <code className="text-sm break-all text-brown-950">{user?.totpSecret}</code>
+          {qrDataUrl ? (
+            <>
+              <div className="mt-5 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+                {/* eslint-disable-next-line @next/next/no-img-element -- inline data URI QR */}
+                <img src={qrDataUrl} alt="QR per l'autenticazione a due fattori" className="rounded-lg ring-1 ring-brown-900/10" />
+                <div>
+                  <p className={labelCls}>Codice manuale</p>
+                  <code className="text-sm break-all text-brown-950">{user?.totpSecret}</code>
+                  <div className="mt-3">
+                    <ActionForm action={startTotpEnrolment}>
+                      <PendingButton
+                        tone="dark"
+                        confirm="Generare un nuovo codice? Il QR mostrato ora smetterà di funzionare."
+                      >
+                        Rigenera QR
+                      </PendingButton>
+                    </ActionForm>
+                  </div>
+                </div>
               </div>
+
+              <div className="mt-6">
+                <CodeRevealForm action={confirmTotp} buttonLabel="Attiva 2FA" tone="gold">
+                  <div>
+                    <label className={labelCls} htmlFor="code">
+                      Codice di verifica
+                    </label>
+                    <input
+                      id="code"
+                      name="code"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="123456"
+                      required
+                      className={`${inputCls} w-40`}
+                    />
+                  </div>
+                </CodeRevealForm>
+              </div>
+            </>
+          ) : (
+            <div className="mt-5">
+              <ActionForm action={startTotpEnrolment}>
+                <PendingButton tone="gold">Genera il QR</PendingButton>
+              </ActionForm>
             </div>
           )}
-
-          <div className="mt-6">
-            <CodeRevealForm action={confirmTotp} buttonLabel="Attiva 2FA" tone="gold">
-              <div>
-                <label className={labelCls} htmlFor="code">
-                  Codice di verifica
-                </label>
-                <input
-                  id="code"
-                  name="code"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder="123456"
-                  required
-                  className={`${inputCls} w-40`}
-                />
-              </div>
-            </CodeRevealForm>
-          </div>
         </Panel>
       )}
 
@@ -139,7 +153,7 @@ export default async function SecurityPage() {
                 </p>
               </div>
               {s.isCurrent && (
-                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold tracking-widest text-emerald-800 uppercase">
+                <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-ok-soft-fg uppercase">
                   Attuale
                 </span>
               )}

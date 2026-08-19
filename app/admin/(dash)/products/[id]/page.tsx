@@ -7,7 +7,10 @@ import {
   adminGetShops,
   getStockMovements,
   getCategoryVatDefaults,
+  getProductBatches,
 } from "@/lib/admin/queries";
+import { BatchPanel } from "@/components/admin/BatchPanel";
+import { dateInRome } from "@/lib/time";
 import { adjustStock } from "@/lib/admin/actions";
 import { pendingStockNotificationCount } from "@/lib/stock-notify";
 import { margin } from "@/lib/inventory";
@@ -25,10 +28,15 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
 
   const productMargin = margin(product);
 
-  const [movements, waiting] =
+  const [movements, waiting, batches] =
     product.stock != null
-      ? await Promise.all([getStockMovements(product.id), pendingStockNotificationCount(product.id)])
-      : [[], 0];
+      ? await Promise.all([
+          getStockMovements(product.id),
+          pendingStockNotificationCount(product.id),
+          getProductBatches(product.id),
+        ])
+      : [[], 0, []];
+  const today = dateInRome();
 
   return (
     <div>
@@ -59,7 +67,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
               <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Margine</p>
               <p
                 className={`font-display mt-1 text-xl font-bold ${
-                  productMargin.marginCents >= 0 ? "text-emerald-700" : "text-red-600"
+                  productMargin.marginCents >= 0 ? "text-ok" : "text-danger"
                 }`}
               >
                 {euro(productMargin.marginCents)} · {productMargin.marginPct}%
@@ -92,24 +100,90 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
               </span>
             )}
           </p>
-          <ActionForm action={adjustStock} className="flex flex-wrap items-end gap-3">
-            <input type="hidden" name="productId" value={product.id} />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div>
-              <label className={labelCls} htmlFor="delta">Variazione</label>
-              <input id="delta" name="delta" type="number" placeholder="es. +10 o -3" required className={`${inputCls} w-32`} />
+              <h3 className="mb-2 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+                Rettifica
+              </h3>
+              <ActionForm action={adjustStock} className="flex flex-wrap items-end gap-3">
+                <input type="hidden" name="productId" value={product.id} />
+                <input type="hidden" name="mode" value="rettifica" />
+                <div>
+                  <label className={labelCls} htmlFor="delta">
+                    Variazione
+                  </label>
+                  <input
+                    id="delta"
+                    name="delta"
+                    type="number"
+                    placeholder="es. 10 o -3"
+                    required
+                    className={`${inputCls} w-28`}
+                  />
+                </div>
+                <div className="min-w-40 flex-1">
+                  <label className={labelCls} htmlFor="reason">
+                    Motivo
+                  </label>
+                  <input
+                    id="reason"
+                    name="reason"
+                    placeholder="es. Carico fornitore, scarto"
+                    className={inputCls}
+                  />
+                </div>
+                <PendingButton tone="dark">Applica</PendingButton>
+              </ActionForm>
+              <p className="mt-2 text-xs text-brown-800/60">
+                Positivo per caricare (arrivo merce), negativo per scaricare (scarto, rottura).
+              </p>
             </div>
-            <div className="min-w-48 flex-1">
-              <label className={labelCls} htmlFor="reason">Motivo</label>
-              <input id="reason" name="reason" placeholder="es. Carico fornitore, scarto, inventario" className={inputCls} />
+
+            {/* A count is an absolute figure, not a delta. Making the operator
+                subtract by hand — against a number that can move while they
+                count — was an invitation to get it wrong. */}
+            <div className="border-t border-brown-900/10 pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+              <h3 className="mb-2 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+                Conteggio inventario
+              </h3>
+              <ActionForm action={adjustStock} className="flex flex-wrap items-end gap-3">
+                <input type="hidden" name="productId" value={product.id} />
+                <input type="hidden" name="mode" value="conteggio" />
+                <div>
+                  <label className={labelCls} htmlFor="counted">
+                    Giacenza contata
+                  </label>
+                  <input
+                    id="counted"
+                    name="delta"
+                    type="number"
+                    min={0}
+                    placeholder={String(product.stock)}
+                    required
+                    className={`${inputCls} w-28`}
+                  />
+                </div>
+                <div className="min-w-40 flex-1">
+                  <label className={labelCls} htmlFor="count-reason">
+                    Nota
+                  </label>
+                  <input
+                    id="count-reason"
+                    name="reason"
+                    placeholder="es. Inventario mensile"
+                    className={inputCls}
+                  />
+                </div>
+                <PendingButton tone="dark">Allinea</PendingButton>
+              </ActionForm>
+              <p className="mt-2 text-xs text-brown-800/60">
+                Inserisci quanti pezzi ci sono davvero: la differenza viene registrata a ledger.
+              </p>
             </div>
-            <PendingButton tone="dark">Applica</PendingButton>
-          </ActionForm>
-          <p className="mt-3 text-xs text-brown-800/60">
-            Positivo per caricare (arrivo merce), negativo per scaricare (scarto, correzione inventario).
-          </p>
+          </div>
 
           {movements.length > 0 && (
-            <div className="mt-6 overflow-x-auto">
+            <div className="mt-8 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-brown-900/10 text-left text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
@@ -124,7 +198,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                     <tr key={m.id}>
                       <td className="py-2 whitespace-nowrap text-brown-800/70">{fmtDate(m.createdAt)}</td>
                       <td className="py-2 text-brown-950">{m.reason || "—"}</td>
-                      <td className={`py-2 text-right font-bold tabular-nums ${m.delta >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                      <td className={`py-2 text-right font-bold tabular-nums ${m.delta >= 0 ? "text-ok" : "text-danger"}`}>
                         {m.delta >= 0 ? `+${m.delta}` : m.delta}
                       </td>
                       <td className="py-2 text-right tabular-nums text-brown-950">{m.stockAfter}</td>
@@ -135,6 +209,14 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
             </div>
           )}
         </Panel>
+      )}
+
+      {/* Lot + expiry tracking, for anything that carries a scadenza. */}
+      {product.stock != null && (
+        <>
+          <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Tracciabilità</h2>
+          <BatchPanel productId={product.id} batches={batches} today={today} />
+        </>
       )}
     </div>
   );

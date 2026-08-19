@@ -11,7 +11,7 @@ import Diario, { type DiarioPost } from "@/components/site/home/Diario";
 import InstagramFeed from "@/components/InstagramFeed";
 import type { ProductTileData } from "@/components/site/ProductTile";
 import { organizationSchema, shopSchema } from "@/lib/seo";
-import { isOpenNow } from "@/lib/hours";
+import { shopIsOpenNow } from "@/lib/hours";
 import { getInstagramFeed } from "@/lib/instagram";
 import { siteConfig } from "@/lib/site";
 import {
@@ -115,7 +115,7 @@ export default async function Home() {
 
   // The hero's live badge speaks for the shop as a whole: open if either
   // bottega is serving right now.
-  const openStates = shops.map((shop) => (shop.hoursConfirmed ? isOpenNow(shop.hours) : null));
+  const openStates = shops.map((shop) => shopIsOpenNow(shop));
   const known = openStates.filter((s) => s !== null);
   const openNow = known.length > 0 ? known.some((s) => s!.open) : null;
 

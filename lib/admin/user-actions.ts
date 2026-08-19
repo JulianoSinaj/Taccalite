@@ -229,6 +229,87 @@ export async function setUserActive(_prev: ActionState, fd: FormData): Promise<A
 }
 
 /**
+ * Turn off another account's two-factor auth. Admin-only.
+ *
+ * The recovery-code path covers a lost phone, but not a lost phone *and* lost
+ * codes — and every action in `security-actions.ts` targets the caller, so that
+ * combination was only fixable by editing the database. A staff member locked
+ * out of a shop's back office on a Saturday morning is an operational problem,
+ * not a security feature.
+ *
+ * Deliberately narrow: it clears the factor and nothing else, kills the target's
+ * sessions so a half-authenticated one can't survive, and is audited. Re-enrolling
+ * remains the user's own job from /admin/security.
+ */
+export async function resetUserTotp(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const id = String(fd.get("id") ?? "").trim();
+    if (!id) throw new ActionError("Utente non valido.");
+
+    const [target] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (!target) throw new ActionError("Utente non trovato");
+    if (!target.totpEnabled && !target.totpSecret) {
+      return ok("Questo account non ha la verifica in due passaggi attiva.");
+    }
+
+    await db
+      .update(users)
+      .set({ totpEnabled: false, totpSecret: null, totpRecoveryCodes: null })
+      .where(eq(users.id, id));
+    await deleteUserSessions(id);
+
+    await logAudit({
+      actor,
+      action: "security.2fa_reset",
+      entity: "user",
+      entityId: id,
+      summary: `2FA azzerata per ${target.username} da un amministratore (sessioni chiuse)`,
+    });
+    revalidatePath("/admin/users");
+    return ok(
+      `Verifica in due passaggi disattivata per ${target.username}. Chiedigli di riattivarla da «Sicurezza».`,
+    );
+  });
+}
+
+/**
+ * Mark an account's email as verified by hand, or send the verification again.
+ *
+ * The address on a counter-created account is often taken down over the phone
+ * and confirmed out-of-band; without this the account stays permanently
+ * "da verificare" with nothing an operator can do about it.
+ */
+export async function setEmailVerified(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const id = String(fd.get("id") ?? "").trim();
+    const verified = fd.get("verified") !== "false";
+
+    const [target] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (!target) throw new ActionError("Utente non trovato");
+    if (!target.email) throw new ActionError("Questo account non ha un'email.");
+
+    await db
+      .update(users)
+      .set({ emailVerifiedAt: verified ? new Date() : null })
+      .where(eq(users.id, id));
+
+    await logAudit({
+      actor,
+      action: "user.email_verified",
+      entity: "user",
+      entityId: id,
+      summary: `Email di ${target.username} segnata come ${verified ? "verificata" : "da verificare"} (${target.email})`,
+      meta: { verified },
+    });
+    revalidatePath("/admin/users");
+    revalidatePath(`/admin/loyalty/${id}`);
+    return ok(verified ? "Email segnata come verificata." : "Email segnata come da verificare.");
+  });
+}
+
+/**
  * GDPR erasure (art. 17): anonymize a customer's account, reservations and
  * newsletter subscription. Admin-only; refuses to erase an admin account (demote
  * first) and always retains order records under the fiscal-retention obligation.

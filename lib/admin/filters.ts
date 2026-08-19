@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, like, lte, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, like, lte, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { ftsMatch, type FtsTable } from "@/lib/admin/search";
 import {
   orders,
@@ -133,6 +133,9 @@ export type OrderFilters = {
   stato?: string;
   tipo?: string;
   q?: string;
+  /** Inclusive date bounds on when the order was placed (yyyy-mm-dd). */
+  da?: string;
+  a?: string;
 };
 
 export function orderFilters(p: ParamBag): OrderFilters {
@@ -141,6 +144,8 @@ export function orderFilters(p: ParamBag): OrderFilters {
     stato: facet(p, "stato"),
     tipo: facet(p, "tipo"),
     q: read(p, "q"),
+    da: read(p, "da"),
+    a: read(p, "a"),
   };
 }
 
@@ -148,11 +153,22 @@ export function ordersWhere(f: OrderFilters): SQL | undefined {
   const conds: SQL[] = [];
   if (isSet(f.negozio)) conds.push(eq(orders.shopSlug, f.negozio));
   if (isSet(f.stato)) {
-    // "to-fulfil" is a work-queue view, not a stored status: paid but not yet
-    // handed over.
-    conds.push(eq(orders.status, (f.stato === "to-fulfil" ? "paid" : f.stato) as "paid"));
+    if (f.stato === "to-fulfil") {
+      // A work-queue view, not a stored status: settled but not handed over.
+      // It used to resolve to the same predicate as the "Pagati" chip, so two
+      // chips gave one view.
+      conds.push(and(eq(orders.paymentStatus, "paid"), eq(orders.status, "paid"))!);
+    } else if (f.stato === "unpaid") {
+      // Manual drafts and abandoned checkouts. There was no chip for these at
+      // all, on the very page that creates them.
+      conds.push(eq(orders.paymentStatus, "unpaid"));
+    } else {
+      conds.push(eq(orders.status, f.stato as "paid"));
+    }
   }
   if (isSet(f.tipo)) conds.push(eq(orders.fulfilment, f.tipo as "pickup"));
+  if (f.da) conds.push(gte(orders.createdAt, new Date(`${f.da}T00:00:00`)));
+  if (f.a) conds.push(lte(orders.createdAt, new Date(`${f.a}T23:59:59.999`)));
   if (f.q) {
     conds.push(
       searchWhere("orders", f.q, () => [
@@ -188,7 +204,15 @@ export function reservationFilters(p: ParamBag): ReservationFilters {
 
 export function reservationsWhere(f: ReservationFilters): SQL | undefined {
   const conds: SQL[] = [];
-  if (isSet(f.stato)) conds.push(eq(reservations.status, f.stato as "pending"));
+  // "In lista d'attesa" is a flag, not a status, so it needs its own facet —
+  // without one the waitlist existed as a per-row badge and nothing else, and
+  // the dashboard card counting it had nowhere to link to.
+  if (f.stato === "waitlist") {
+    conds.push(eq(reservations.waitlisted, true));
+    conds.push(sql`${reservations.status} != 'cancelled'`);
+  } else if (isSet(f.stato)) {
+    conds.push(eq(reservations.status, f.stato as "pending"));
+  }
   if (isSet(f.negozio)) conds.push(eq(reservations.shopSlug, f.negozio));
   if (isSet(f.tipo)) conds.push(eq(reservations.type, f.tipo as "table"));
   if (f.da) conds.push(gte(reservations.date, f.da));
@@ -207,22 +231,59 @@ export function reservationsWhere(f: ReservationFilters): SQL | undefined {
 }
 
 // ── Customers (users ⟕ loyalty accounts) ─────────────────────────────────────
-export type CustomerFilters = { q?: string };
+/** `ruolo` defaults to real customers — staff are not the shop's clientele. */
+export type CustomerFilters = { q?: string; ruolo?: string };
 
 export function customerFilters(p: ParamBag): CustomerFilters {
-  return { q: read(p, "q") };
+  return { q: read(p, "q"), ruolo: read(p, "ruolo") ?? "customer" };
 }
 
 /** Requires the `loyaltyAccounts` left-join to be present in the query. */
 export function customersWhere(f: CustomerFilters): SQL | undefined {
-  if (!f.q) return undefined;
-  return searchWhere(
-    "users",
-    f.q,
-    () => [like(sql`${users.name}`, term(f.q!)), like(sql`${users.username}`, term(f.q!))],
-    // Not in the users index — it belongs to the joined loyalty account.
-    [like(sql`coalesce(${loyaltyAccounts.cardNumber}, '')`, term(f.q))],
-  );
+  const conds: SQL[] = [];
+  // The "Fedeltà" list counted staff and admins as clienti, so its total
+  // disagreed with the dashboard's (which does filter by role) and a staff
+  // account could have its points adjusted from a customer screen. "tutti"
+  // stays available for the rare case an operator wants every account.
+  if (isSet(f.ruolo)) conds.push(eq(users.role, f.ruolo as "customer"));
+  if (f.q) {
+    conds.push(
+      searchWhere(
+        "users",
+        f.q,
+        () => [like(sql`${users.name}`, term(f.q!)), like(sql`${users.username}`, term(f.q!))],
+        // Not in the users index — it belongs to the joined loyalty account.
+        [like(sql`coalesce(${loyaltyAccounts.cardNumber}, '')`, term(f.q))],
+      ),
+    );
+  }
+  return conds.length ? and(...conds) : undefined;
+}
+
+// ── Accounts (the Utenti page) ───────────────────────────────────────────────
+export type UserFilters = { ruolo?: string; stato?: string; q?: string };
+
+export function userFilters(p: ParamBag): UserFilters {
+  return { ruolo: facet(p, "ruolo"), stato: facet(p, "stato"), q: read(p, "q") };
+}
+
+export function usersWhere(f: UserFilters): SQL | undefined {
+  const conds: SQL[] = [];
+  if (isSet(f.ruolo)) conds.push(eq(users.role, f.ruolo as "customer"));
+  if (f.stato === "attivi") conds.push(eq(users.active, true));
+  if (f.stato === "disattivati") conds.push(eq(users.active, false));
+  if (f.stato === "da-verificare") conds.push(sql`${users.emailVerifiedAt} is null`);
+  if (f.stato === "con-2fa") conds.push(eq(users.totpEnabled, true));
+  if (f.q) {
+    conds.push(
+      searchWhere("users", f.q, () => [
+        like(sql`${users.name}`, term(f.q!)),
+        like(sql`${users.username}`, term(f.q!)),
+        like(sql`coalesce(${users.email}, '')`, term(f.q!)),
+      ]),
+    );
+  }
+  return conds.length ? and(...conds) : undefined;
 }
 
 // ── Newsletter subscribers ───────────────────────────────────────────────────
@@ -277,6 +338,13 @@ export function productFilters(p: ParamBag): ProductFilters {
  */
 export function productsWhere(f: ProductFilters, lowStockThreshold: number): SQL | undefined {
   const conds: SQL[] = [];
+  // Archived products are out of the catalogue by default — they exist to keep
+  // history readable, not to clutter the list an operator works from.
+  if (f.stato === "archiviati") {
+    conds.push(sql`${products.archivedAt} is not null`);
+  } else {
+    conds.push(sql`${products.archivedAt} is null`);
+  }
   if (isSet(f.negozio)) conds.push(eq(products.shopSlug, f.negozio));
   if (isSet(f.categoria)) conds.push(eq(products.category, f.categoria));
   if (f.stato === "attivi") conds.push(eq(products.active, true));
@@ -310,9 +378,18 @@ export function blogFilters(p: ParamBag): BlogFilters {
   return { stato: facet(p, "stato"), categoria: facet(p, "categoria"), q: read(p, "q") };
 }
 
-export function blogWhere(f: BlogFilters): SQL | undefined {
+export function blogWhere(f: BlogFilters, today?: string): SQL | undefined {
   const conds: SQL[] = [];
-  if (f.stato === "pubblicati") conds.push(eq(blogPosts.published, true));
+  // "Online" and "programmato" are both `published = true`; the date decides
+  // which. Mirrors the public gate in lib/db/queries.ts.
+  if (f.stato === "pubblicati") {
+    conds.push(eq(blogPosts.published, true));
+    if (today) conds.push(lte(blogPosts.date, today));
+  }
+  if (f.stato === "programmati") {
+    conds.push(eq(blogPosts.published, true));
+    conds.push(gt(blogPosts.date, today ?? ""));
+  }
   if (f.stato === "bozze") conds.push(eq(blogPosts.published, false));
   if (isSet(f.categoria)) conds.push(eq(blogPosts.category, f.categoria));
   if (f.q) {

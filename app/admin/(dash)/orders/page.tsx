@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { inArray } from "drizzle-orm";
-import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, Pagination } from "@/components/admin/ui";
+import {
+  AdminHeader,
+  StatusBadge,
+  euro,
+  fmtDate,
+  inputCls,
+  labelCls,
+  Pagination,
+} from "@/components/admin/ui";
 import {
   SegmentedFilter,
   FilterToolbar,
@@ -8,11 +16,13 @@ import {
   labelFrom,
 } from "@/components/admin/FilterBar";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
-import { getOrdersPage, adminGetShops } from "@/lib/admin/queries";
-import { orderFilters, filterQuery } from "@/lib/admin/filters";
+import { getOrdersPage, adminGetShops, getSavedViews, ORDER_SORTS } from "@/lib/admin/queries";
+import { orderFilters, sortFilters, filterQuery } from "@/lib/admin/filters";
+import { DataTable, DensityToggle, densityFrom } from "@/components/admin/DataTable";
 import { BulkBar, BulkCheckbox } from "@/components/admin/BulkBar";
+import { SavedViews } from "@/components/admin/SavedViews";
 import { updateOrderStatus, bulkUpdateOrderStatus } from "@/lib/admin/order-actions";
-import { isAdmin } from "@/lib/auth/session";
+import { isAdmin, getCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { orderItems } from "@/lib/db/schema";
 
@@ -27,14 +37,19 @@ type SP = {
     q?: string;
     stato?: string;
     tipo?: string;
+    da?: string;
+    a?: string;
     page?: string;
+    colonna?: string;
+    verso?: string;
+    densita?: string;
   }>;
 };
 
 const STATUS_CHIPS: { value: string; label: string }[] = [
   { value: "all", label: "Tutti" },
   { value: "to-fulfil", label: "Da evadere" },
-  { value: "paid", label: "Pagati" },
+  { value: "unpaid", label: "Da pagare" },
   { value: "fulfilled", label: "Evasi" },
   { value: "cancelled", label: "Annullati" },
   { value: "refunded", label: "Rimborsati" },
@@ -50,15 +65,21 @@ const BASE = "/admin/orders";
 
 export default async function AdminOrders({ searchParams }: SP) {
   const sp = await searchParams;
-  const { negozio = "all", q, stato = "all", tipo = "all", page: pageStr } = sp;
+  const { negozio = "all", q, stato = "all", tipo = "all", da = "", a = "", page: pageStr } = sp;
   const page = Number(pageStr) || 1;
   const filters = orderFilters(sp);
-  const [{ rows: orders, total, pageCount }, shops, admin] = await Promise.all([
-    getOrdersPage({ ...filters, page }),
+  const sort = sortFilters(sp, ORDER_SORTS, { colonna: "data", verso: "desc" });
+  const density = densityFrom(sp.densita);
+  const viewer = await getCurrentUser();
+  const [{ rows: orders, total, pageCount }, shops, admin, views] = await Promise.all([
+    getOrdersPage({ ...filters, page, sort }),
     adminGetShops(),
     isAdmin(),
+    viewer ? getSavedViews(viewer.id, BASE) : Promise.resolve([]),
   ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
+  // Carried on every sort/density/page link so the view survives navigation.
+  const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso, densita: sp.densita };
 
   // Per-order item preview: fetch line items for the current page in one query,
   // then group into a total-quantity count + the first product names.
@@ -85,7 +106,7 @@ export default async function AdminOrders({ searchParams }: SP) {
   };
 
   // The active filter bag the shared chrome reads from.
-  const current = { negozio, stato, tipo, ...(q ? { q } : {}) };
+  const current = { negozio, stato, tipo, da, a, ...(q ? { q } : {}) };
   const SHOP_CHIPS = [
     { value: "all", label: "Tutte le sedi" },
     ...shops.map((s) => ({ value: s.slug, label: s.name })),
@@ -100,7 +121,7 @@ export default async function AdminOrders({ searchParams }: SP) {
           <div className="flex gap-2">
             <Link
               href="/admin/orders/new"
-              className="rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-gold-dark"
+              className="rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
             >
               + Nuovo ordine
             </Link>
@@ -138,7 +159,20 @@ export default async function AdminOrders({ searchParams }: SP) {
           { name: "negozio", label: "Sede", options: SHOP_CHIPS },
           { name: "tipo", label: "Consegna", options: FULFILMENT_CHIPS },
         ]}
-      />
+      >
+        <div>
+          <label className={labelCls} htmlFor="ord-da">
+            Dal
+          </label>
+          <input id="ord-da" type="date" name="da" defaultValue={da} className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor="ord-a">
+            Al
+          </label>
+          <input id="ord-a" type="date" name="a" defaultValue={a} className={inputCls} />
+        </div>
+      </FilterToolbar>
 
       <ActiveFilters
         basePath={BASE}
@@ -147,100 +181,150 @@ export default async function AdminOrders({ searchParams }: SP) {
           stato: { title: "Stato", format: labelFrom(STATUS_CHIPS) },
           negozio: { title: "Sede", format: labelFrom(SHOP_CHIPS) },
           tipo: { title: "Consegna", format: labelFrom(FULFILMENT_CHIPS) },
+          da: { title: "Dal" },
+          a: { title: "Al" },
           q: { title: "Ricerca", format: (v) => `“${v}”` },
         }}
       />
 
-      {orders.length === 0 ? (
-        <Panel>
-          <p className="text-brown-800/70">
-            {q || stato !== "all" || tipo !== "all" || negozio !== "all"
-              ? "Nessun ordine corrisponde ai filtri."
-              : "Nessun ordine ancora. Gli ordini dallo shop online compaiono qui."}
-          </p>
-        </Panel>
-      ) : (
-        <>
-        <BulkBar
-          formId={BULK_FORM}
-          action={bulkUpdateOrderStatus}
-          label="ordini"
-          options={[
-            { value: "fulfilled", label: "Segna evasi" },
-            { value: "pending", label: "Rimetti in attesa" },
-            { value: "cancelled", label: "Annulla" },
-          ]}
-          confirm={(n) => `Applicare l'azione a ${n} ordini? I clienti riceveranno le email previste.`}
-        />
-        <div className="space-y-3">
-          {orders.map((o) => {
-            const prev = previewText(o.id);
-            return (
-              <Panel key={o.id} className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex gap-3">
-                <BulkCheckbox formId={BULK_FORM} id={o.id} label={`Seleziona ordine ${o.orderNumber}`} />
-                <div className="space-y-1">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-xs font-bold text-brown-800/60">{o.orderNumber}</span>
-                    <StatusBadge status={o.status} />
-                    <StatusBadge status={o.paymentStatus} />
-                  </div>
-                  <p className="font-display text-lg text-brown-950">{o.name}</p>
-                  <p className="text-xs text-brown-800/60">
-                    {o.email} ·{" "}
-                    {o.fulfilment === "shipping"
-                      ? "Spedizione"
-                      : `Ritiro${o.shopSlug ? ` · ${shopName.get(o.shopSlug) ?? o.shopSlug}` : ""}`}{" "}
-                    · {fmtDate(o.createdAt)}
-                  </p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        {/* "Cosa devo evadere oggi" was three facets to re-select every morning. */}
+        <SavedViews path={BASE} views={views} currentQuery={filterQuery(filters).replace(/^\?/, "")} />
+        <DensityToggle basePath={BASE} params={linkParams} density={density} />
+      </div>
+
+      <BulkBar
+        formId={BULK_FORM}
+        action={bulkUpdateOrderStatus}
+        label="ordini"
+        options={[
+          { value: "fulfilled", label: "Segna evasi" },
+          { value: "pending", label: "Rimetti in attesa" },
+          { value: "cancelled", label: "Annulla" },
+        ]}
+        confirmTemplate="Applicare l'azione a {n} ordini? I clienti riceveranno le email previste."
+      />
+
+      {/* A sortable table, now that the detail page carries the heavy actions.
+          Card-per-row couldn't be sorted or scanned at volume, which is what a
+          list of orders is for. */}
+      <DataTable
+        rows={orders}
+        rowKey={(o) => o.id}
+        basePath={BASE}
+        params={linkParams}
+        sort={sort}
+        density={density}
+        empty={
+          q || stato !== "all" || tipo !== "all" || negozio !== "all"
+            ? "Nessun ordine corrisponde ai filtri."
+            : "Nessun ordine ancora. Gli ordini dallo shop online compaiono qui."
+        }
+        columns={[
+          {
+            key: "seleziona",
+            header: <span className="sr-only">Seleziona</span>,
+            cell: (o) => (
+              <BulkCheckbox formId={BULK_FORM} id={o.id} label={`Seleziona ordine ${o.orderNumber}`} />
+            ),
+          },
+          {
+            key: "numero",
+            header: "Ordine",
+            sortable: true,
+            cell: (o) => (
+              <div>
+                <Link
+                  href={`/admin/orders/${o.id}`}
+                  className="font-mono text-xs font-bold text-brown-950 hover:underline"
+                >
+                  {o.orderNumber}
+                </Link>
+                <p className="mt-0.5 text-xs text-brown-800/50">{fmtDate(o.createdAt)}</p>
+              </div>
+            ),
+          },
+          {
+            key: "cliente",
+            header: "Cliente",
+            sortable: true,
+            cell: (o) => {
+              const prev = previewText(o.id);
+              return (
+                <div>
+                  <p className="font-semibold text-brown-950">{o.name}</p>
+                  <p className="text-xs text-brown-800/60">{o.email}</p>
                   {prev && <p className="text-xs text-brown-800/50">{prev}</p>}
                 </div>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <div className="flex items-center gap-4">
-                    <p className="font-display text-xl font-bold text-brown-950">{euro(o.totalCents)}</p>
-                    <Link
-                      href={`/admin/orders/${o.id}`}
-                      className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-                    >
-                      Dettaglio
-                    </Link>
-                  </div>
-                  {/* The overwhelmingly common next step for a paid pickup order
-                      is "handed over" — make it one tap instead of two selects. */}
-                  {o.status === "paid" && o.fulfilment === "pickup" && (
-                    <ActionForm action={updateOrderStatus} className="inline-flex">
-                      <input type="hidden" name="id" value={o.id} />
-                      <input type="hidden" name="status" value="fulfilled" />
-                      <input type="hidden" name="paymentStatus" value={o.paymentStatus} />
-                      <PendingButton tone="gold">✓ Consegnato</PendingButton>
-                    </ActionForm>
-                  )}
-                  <ActionForm action={updateOrderStatus} className="flex flex-wrap items-center gap-2">
+              );
+            },
+          },
+          {
+            key: "consegna",
+            header: "Consegna",
+            hideOnMobile: true,
+            cell: (o) => (
+              <span className="text-brown-800/70">
+                {o.fulfilment === "shipping"
+                  ? "Spedizione"
+                  : `Ritiro${o.shopSlug ? ` · ${shopName.get(o.shopSlug) ?? o.shopSlug}` : ""}`}
+              </span>
+            ),
+          },
+          {
+            key: "stato",
+            header: "Stato",
+            sortable: true,
+            cell: (o) => (
+              <div className="flex flex-wrap gap-1">
+                <StatusBadge status={o.status} />
+                <StatusBadge status={o.paymentStatus} />
+              </div>
+            ),
+          },
+          {
+            key: "totale",
+            header: "Totale",
+            sortable: true,
+            align: "right",
+            cell: (o) => (
+              <div className="tabular-nums">
+                <span className="font-semibold text-brown-950">{euro(o.totalCents)}</span>
+                {o.refundedCents > 0 && (
+                  <p className="text-xs text-danger">−{euro(o.refundedCents)}</p>
+                )}
+              </div>
+            ),
+          },
+          {
+            key: "azioni",
+            header: <span className="sr-only">Azioni</span>,
+            align: "right",
+            cell: (o) => (
+              <div className="flex items-center justify-end gap-1.5">
+                {/* The overwhelmingly common next step for a paid pickup order
+                    is "handed over" — one tap, not two selects. */}
+                {o.status === "paid" && o.fulfilment === "pickup" && (
+                  <ActionForm action={updateOrderStatus} className="inline-flex">
                     <input type="hidden" name="id" value={o.id} />
-                    <select name="status" defaultValue={o.status} className={`${inputCls} w-32`} aria-label="Stato ordine">
-                      <option value="pending">In attesa</option>
-                      <option value="paid">Pagato</option>
-                      <option value="fulfilled">Evaso</option>
-                      <option value="cancelled">Annullato</option>
-                      {o.status === "refunded" && <option value="refunded">Rimborsato</option>}
-                    </select>
-                    <select name="paymentStatus" defaultValue={o.paymentStatus} className={`${inputCls} w-32`} aria-label="Stato pagamento">
-                      <option value="unpaid">Da pagare</option>
-                      <option value="paid">Pagato</option>
-                      {o.paymentStatus === "refunded" && <option value="refunded">Rimborsato</option>}
-                    </select>
-                    <PendingButton tone="dark">Aggiorna</PendingButton>
+                    <input type="hidden" name="status" value="fulfilled" />
+                    <input type="hidden" name="paymentStatus" value={o.paymentStatus} />
+                    <PendingButton tone="gold">✓ Consegnato</PendingButton>
                   </ActionForm>
-                </div>
-              </Panel>
-            );
-          })}
-        </div>
-        </>
-      )}
+                )}
+                <Link
+                  href={`/admin/orders/${o.id}`}
+                  className="rounded-full bg-brown-900/10 px-3 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                >
+                  Dettaglio
+                </Link>
+              </div>
+            ),
+          },
+        ]}
+      />
 
-      <Pagination basePath="/admin/orders" page={page} pageCount={pageCount} params={filters} />
+      <Pagination basePath={BASE} page={page} pageCount={pageCount} params={linkParams} />
     </div>
   );
 }

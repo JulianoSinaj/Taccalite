@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { orders, orderItems, products, stockMovements, users } from "@/lib/db/schema";
+import { orders, orderItems, products, users } from "@/lib/db/schema";
 import { requireAdmin, requireRole } from "@/lib/auth/session";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import {
@@ -14,7 +14,7 @@ import {
   orderFiscalInput,
 } from "@/lib/validation/admin";
 import { getShopBySlug, getSetting } from "@/lib/db/queries";
-import { orderStatusEmail } from "@/lib/mail/templates";
+import { orderStatusEmail, orderCustomerEmail } from "@/lib/mail/templates";
 import { sendMail } from "@/lib/mail/mailer";
 import { getStripe } from "@/lib/payments/stripe";
 import {
@@ -24,6 +24,7 @@ import {
   recalcOrderTotals,
   recordRefund,
 } from "@/lib/orders";
+import { applyStockChange, consumeBatchesFefo } from "@/lib/stock";
 import { validateDiscount, recordDiscountUse, releaseDiscountUseByCode } from "@/lib/discounts";
 import { addPoints } from "@/lib/loyalty";
 import { logAudit } from "@/lib/audit";
@@ -67,10 +68,127 @@ async function notifyOrderStatus(
   }
 }
 
+type ProductRow = typeof products.$inferSelect;
+
+export type ManualLine = {
+  product: ProductRow;
+  /** Units. Always 1 for a weight line, so sums over quantity stay meaningful. */
+  quantity: number;
+  /** Kilos, for a product priced per kg. */
+  weightKg: number | null;
+  /** Per unit, or per kg for a weight line. */
+  unitPriceCents: number;
+  lineTotalCents: number;
+  priceOverridden: boolean;
+};
+
+/**
+ * Read the line fields of a counter-sale form into priced lines.
+ *
+ * Three field families, all keyed by product slug:
+ *   `qty_<slug>`   — units, for anything sold by the piece
+ *   `kg_<slug>`    — kilos, for a product priced per kg. The till could only
+ *                    take whole units before, so a norcineria — whose whole
+ *                    catalogue is priced per kg — could not ring up its actual
+ *                    sales.
+ *   `price_<slug>` — a negotiated unit price in euros, overriding the catalogue
+ *
+ * Prices still come from the database unless explicitly overridden, and the
+ * override is flagged on the line so it doesn't later read as a stale snapshot.
+ */
+async function readManualLines(fd: FormData): Promise<ManualLine[]> {
+  const qtyBySlug = new Map<string, number>();
+  const kgBySlug = new Map<string, number>();
+  const priceBySlug = new Map<string, number>();
+
+  for (const [k, raw] of fd.entries()) {
+    const v = String(raw).trim();
+    if (v === "") continue;
+    const num = Number(v.replace(",", "."));
+    if (!Number.isFinite(num)) continue;
+
+    if (k.startsWith("qty_")) {
+      if (Number.isInteger(num) && num > 0) qtyBySlug.set(k.slice(4), num);
+    } else if (k.startsWith("kg_")) {
+      if (num > 0) kgBySlug.set(k.slice(3), num);
+    } else if (k.startsWith("price_")) {
+      if (num >= 0) priceBySlug.set(k.slice(6), Math.round(num * 100));
+    }
+  }
+
+  const slugs = [...new Set([...qtyBySlug.keys(), ...kgBySlug.keys()])];
+  if (slugs.length === 0) return [];
+
+  const rows = await db
+    .select()
+    .from(products)
+    .where(and(eq(products.active, true), inArray(products.slug, slugs)));
+
+  const lines: ManualLine[] = [];
+  for (const p of rows) {
+    const override = priceBySlug.get(p.slug);
+    const unitPriceCents = override ?? p.priceCents;
+    if (unitPriceCents == null) continue; // no catalogue price and none given
+
+    const kg = kgBySlug.get(p.slug);
+    if (kg != null) {
+      // Round to grams before pricing so the total is reproducible from the
+      // stored weight (a till prints 0,347 kg, not 0,3472891).
+      const weightKg = Math.round(kg * 1000) / 1000;
+      lines.push({
+        product: p,
+        quantity: 1,
+        weightKg,
+        unitPriceCents,
+        lineTotalCents: Math.round(unitPriceCents * weightKg),
+        priceOverridden: override != null && override !== p.priceCents,
+      });
+      continue;
+    }
+
+    const quantity = qtyBySlug.get(p.slug);
+    if (!quantity) continue;
+    lines.push({
+      product: p,
+      quantity,
+      weightKg: null,
+      unitPriceCents,
+      lineTotalCents: unitPriceCents * quantity,
+      priceOverridden: override != null && override !== p.priceCents,
+    });
+  }
+  return lines;
+}
+
+/** The order_items rows for a set of manual lines. */
+const lineValues = (orderId: string, lines: ManualLine[]) =>
+  lines.map((l) => ({
+    orderId,
+    productId: l.product.id,
+    productSlug: l.product.slug,
+    name: l.product.name,
+    unitPriceCents: l.unitPriceCents,
+    quantity: l.quantity,
+    weightKg: l.weightKg,
+    priceOverridden: l.priceOverridden,
+    lineTotalCents: l.lineTotalCents,
+    vatRateBps: l.product.vatRateBps,
+  }));
+
+/**
+ * Stock to remove for a line.
+ *
+ * A product priced per kg has no meaningful unit count, and `products.stock` is
+ * an integer, so a 0,35 kg sale can't be represented as a decrement. Rather than
+ * invent a number, weight lines don't move stock automatically — the operator
+ * adjusts the whole form's remaining weight by hand. Returns 0 for those.
+ */
+const stockUnitsFor = (l: ManualLine) => (l.weightKg != null ? 0 : l.quantity);
+
 /**
  * Create an order by hand from the back-office (counter / phone sale). Prices,
- * VAT rates and stock all come from the DB — the form only supplies quantities.
- * Quantities arrive as `qty_<slug>` fields. When "markPaid" is set the order is
+ * VAT rates and stock all come from the DB — the form supplies quantities (or
+ * kilos), and optionally a negotiated price. When "markPaid" is set the order is
  * booked as paid (provider "manual") and stock is decremented; no emails are sent
  * (this is a staff-entered sale, not an online checkout).
  */
@@ -79,31 +197,10 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
     const actor = await requireAdmin();
     const d = parseForm(manualOrderInput, fd);
 
-    // Collect qty_<slug> → quantity for positive quantities.
-    const wanted = new Map<string, number>();
-    for (const [k, v] of fd.entries()) {
-      if (!k.startsWith("qty_")) continue;
-      const qty = Number(v);
-      if (Number.isInteger(qty) && qty > 0) wanted.set(k.slice(4), qty);
+    const lines = await readManualLines(fd);
+    if (lines.length === 0) {
+      throw new ActionError("Aggiungi almeno un prodotto con una quantità o un peso.");
     }
-    if (wanted.size === 0) throw new ActionError("Aggiungi almeno un prodotto con quantità.");
-
-    const rows = await db
-      .select()
-      .from(products)
-      .where(and(eq(products.active, true), inArray(products.slug, [...wanted.keys()])));
-    const lines = rows
-      .filter((p) => p.priceCents != null)
-      .map((p) => {
-        const quantity = wanted.get(p.slug)!;
-        return {
-          product: p,
-          quantity,
-          unitPriceCents: p.priceCents!,
-          lineTotalCents: p.priceCents! * quantity,
-        };
-      });
-    if (lines.length === 0) throw new ActionError("Nessun prodotto valido con prezzo selezionato.");
 
     if (d.fulfilment === "pickup" && d.shopSlug) {
       const shop = await getShopBySlug(d.shopSlug);
@@ -113,23 +210,10 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
       throw new ActionError("Per la spedizione servono indirizzo, città e CAP.");
     }
 
-    const subtotalCents = lines.reduce((s, l) => s + l.lineTotalCents, 0);
-    const discount = await validateDiscount(d.discountCode, subtotalCents);
-    const discountCents = discount?.discountCents ?? 0;
-
-    const flatShippingCents = await getSetting<number>("store.shippingCents", 700);
-    const freeThreshold = await getSetting<number>("store.freeShippingThresholdCents", 0);
-    const shippingCents =
-      d.fulfilment === "shipping" &&
-      !discount?.freeShipping &&
-      (freeThreshold === 0 || subtotalCents < freeThreshold)
-        ? flatShippingCents
-        : 0;
-    const totalCents = Math.max(0, subtotalCents - discountCents + shippingCents);
-    const paid = d.markPaid;
-
     // Link a known customer by email so the sale shows in their history and (when
-    // paid) accrues loyalty, exactly like an online order.
+    // paid) accrues loyalty, exactly like an online order. Resolved before the
+    // coupon check, which needs to know who is using the code (per-customer cap,
+    // first-order-only).
     const linkedUser = d.email
       ? (
           await db
@@ -139,6 +223,32 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
             .limit(1)
         )[0] ?? null
       : null;
+
+    const subtotalCents = lines.reduce((s, l) => s + l.lineTotalCents, 0);
+    const coupon = await validateDiscount(d.discountCode, subtotalCents, {
+      userId: linkedUser?.id,
+      email: d.email,
+      shopSlug: d.fulfilment === "pickup" ? d.shopSlug : null,
+    });
+    // A negotiated counter reduction rides in the same field as a coupon, so it
+    // is apportioned across VAT rates by the existing allocation instead of
+    // needing a parallel path that could get the tax wrong.
+    const manualDiscount = Math.min(d.manualDiscountEuros ?? 0, subtotalCents);
+    const discountCents = Math.min(subtotalCents, (coupon?.discountCents ?? 0) + manualDiscount);
+
+    const flatShippingCents = await getSetting<number>("store.shippingCents", 700);
+    const freeThreshold = await getSetting<number>("store.freeShippingThresholdCents", 0);
+    const computedShipping =
+      d.fulfilment === "shipping" &&
+      !coupon?.freeShipping &&
+      (freeThreshold === 0 || subtotalCents < freeThreshold)
+        ? flatShippingCents
+        : 0;
+    // An explicit figure wins — a phone order to the next street isn't the flat rate.
+    const shippingCents = d.shippingEuros ?? computedShipping;
+    const totalCents = Math.max(0, subtotalCents - discountCents + shippingCents);
+    const paid = d.markPaid;
+    const discount = coupon;
 
     const orderNumber = generateOrderNumber();
     const created = await db.transaction(async (tx) => {
@@ -168,45 +278,37 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
           paidAt: paid ? new Date() : null,
           notes: d.notes ?? null,
         })
-        .returning({ id: orders.id });
-      await tx.insert(orderItems).values(
-          lines.map((l) => ({
-            orderId: row.id,
-            productId: l.product.id,
-            productSlug: l.product.slug,
-            name: l.product.name,
-            unitPriceCents: l.unitPriceCents,
-            quantity: l.quantity,
-            lineTotalCents: l.lineTotalCents,
-            vatRateBps: l.product.vatRateBps,
-          })),
-        );
+        .returning({ id: orders.id })
+;
+      await tx.insert(orderItems).values(lineValues(row.id, lines));
       return row;
     });
 
     // Count the coupon only when the sale is actually paid (an unpaid draft that
     // is later marked paid gets counted then, via finalizeOrder).
-    if (discount && paid) await recordDiscountUse(discount.id);
+    if (discount && paid) {
+      await recordDiscountUse(discount.id, {
+        orderId: created.id,
+        userId: linkedUser?.id,
+        email: d.email,
+        amountCents: discount.discountCents,
+      });
+    }
 
     // A paid counter sale immediately reduces stock (atomic, never below zero) for
     // products that track it, and is written to the movement ledger so counter
     // sales are reconcilable alongside online orders and manual adjustments.
     if (paid) {
       for (const l of lines) {
-        const [u] = await db
-          .update(products)
-          .set({ stock: sql`max(0, ${products.stock} - ${l.quantity})` })
-          .where(and(eq(products.id, l.product.id), isNotNull(products.stock)))
-          .returning({ stock: products.stock });
-        if (u?.stock != null) {
-          await db.insert(stockMovements).values({
-            productId: l.product.id,
-            delta: -l.quantity,
-            reason: `Vendita al banco ${orderNumber}`,
-            stockAfter: u.stock,
-            createdByUserId: actor.id,
-          });
-        }
+        const units = stockUnitsFor(l);
+        if (units === 0) continue;
+        const change = await applyStockChange({
+          productId: l.product.id,
+          delta: -units,
+          reason: `Vendita al banco ${orderNumber}`,
+          byUserId: actor.id,
+        });
+        if (change) await consumeBatchesFefo(l.product.id, -change.applied);
       }
     }
 
@@ -395,34 +497,17 @@ export async function updateOrderItems(_prev: ActionState, fd: FormData): Promis
     if (!order) throw new ActionError("Ordine non trovato.");
     assertEditable(order);
 
-    // Collect qty_<slug> → quantity, keeping zeros so a line can be removed.
-    const wanted = new Map<string, number>();
-    for (const [k, v] of fd.entries()) {
-      if (!k.startsWith("qty_")) continue;
-      const qty = Number(v);
-      if (!Number.isInteger(qty) || qty < 0) throw new ActionError("Quantità non valida.");
-      if (qty > 0) wanted.set(k.slice(4), qty);
-    }
-    if (wanted.size === 0) {
+    const lines = await readManualLines(fd);
+    if (lines.length === 0) {
       throw new ActionError("Un ordine deve contenere almeno un articolo. Per svuotarlo, annullalo.");
     }
 
-    const rows = await db
-      .select()
-      .from(products)
-      .where(and(eq(products.active, true), inArray(products.slug, [...wanted.keys()])));
-
-    const lines = rows
-      .filter((p) => p.priceCents != null)
-      .map((p) => {
-        const quantity = wanted.get(p.slug)!;
-        return { product: p, quantity, lineTotalCents: p.priceCents! * quantity };
-      });
-    if (lines.length === 0) throw new ActionError("Nessun prodotto valido con prezzo selezionato.");
-
     // Same oversell guard as checkout: an unpaid order holds no stock, so this
-    // compares against the full on-hand quantity.
-    const shortages = lines.filter((l) => l.product.stock != null && l.product.stock < l.quantity);
+    // compares against the full on-hand quantity. Weight lines are exempt —
+    // their stock isn't counted in units (see `stockUnitsFor`).
+    const shortages = lines.filter(
+      (l) => stockUnitsFor(l) > 0 && l.product.stock != null && l.product.stock < l.quantity,
+    );
     if (shortages.length > 0) {
       throw new ActionError(
         `Scorte insufficienti per: ${shortages
@@ -435,18 +520,7 @@ export async function updateOrderItems(_prev: ActionState, fd: FormData): Promis
     // order is unpaid so no downstream record depends on the old rows.
     await db.transaction(async (tx) => {
       await tx.delete(orderItems).where(eq(orderItems.orderId, id));
-      await tx.insert(orderItems).values(
-          lines.map((l) => ({
-            orderId: id,
-            productId: l.product.id,
-            productSlug: l.product.slug,
-            name: l.product.name,
-            unitPriceCents: l.product.priceCents!,
-            quantity: l.quantity,
-            lineTotalCents: l.lineTotalCents,
-            vatRateBps: l.product.vatRateBps,
-          })),
-        );
+      await tx.insert(orderItems).values(lineValues(id, lines));
     });
 
     const recalc = await recalcOrderTotals(id);
@@ -505,7 +579,7 @@ export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promi
     // (mirror of finalize).
     if (d.status === "cancelled" && cur.status !== "cancelled" && cur.paymentStatus === "paid") {
       await restockOrderItems(order.id, `Annullo ordine ${order.orderNumber}`, actor.id);
-      if (order.discountCode) await releaseDiscountUseByCode(order.discountCode);
+      if (order.discountCode) await releaseDiscountUseByCode(order.discountCode, order.id);
     }
 
     const statusChanged = d.status !== cur.status;
@@ -624,6 +698,68 @@ export async function setOrderTracking(_prev: ActionState, fd: FormData): Promis
         ? "Tracking salvato ed email inviata."
         : "Tracking salvato.",
     );
+  });
+}
+
+/**
+ * Re-send the customer's copy of an order email.
+ *
+ * Emails go missing — a typo'd address later corrected, a spam folder, a
+ * customer who deleted it. Before this the only way to get one back out was to
+ * bounce the order's status, which sent the *wrong* message and wrote a bogus
+ * audit line. Which email is re-sent follows the order's current state.
+ */
+export async function resendOrderEmail(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const id = String(fd.get("id") ?? "").trim();
+    if (!id) throw new ActionError("Ordine non valido.");
+
+    const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+    if (!order) throw new ActionError("Ordine non trovato.");
+    if (!order.email) throw new ActionError("Questo ordine non ha un indirizzo email.");
+
+    let what: string;
+    if (order.status === "fulfilled" || order.status === "cancelled") {
+      await notifyOrderStatus(order, order.status);
+      what = order.status === "fulfilled" ? "avviso di evasione" : "avviso di annullamento";
+    } else if (order.paymentStatus === "paid") {
+      const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
+      const shop = order.shopSlug ? await getShopBySlug(order.shopSlug) : null;
+      await sendMail({
+        to: order.email,
+        ...orderCustomerEmail({
+          orderNumber: order.orderNumber,
+          name: order.name,
+          email: order.email,
+          items: items.map((i) => ({
+            name: i.name,
+            quantity: i.quantity,
+            lineTotalCents: i.lineTotalCents,
+          })),
+          totalCents: order.totalCents,
+          fulfilment: order.fulfilment,
+          shopName: shop?.name ?? null,
+        }),
+      }).catch(() => {});
+      what = "conferma d'ordine";
+    } else {
+      throw new ActionError(
+        "L'ordine non è ancora pagato: non c'è nessuna conferma da reinviare.",
+      );
+    }
+
+    await logAudit({
+      actor,
+      action: "order.resend_email",
+      entity: "order",
+      entityId: order.id,
+      summary: `Reinviata la ${what} per l'ordine ${order.orderNumber} a ${order.email}`,
+      meta: { to: order.email, kind: what },
+    });
+
+    revalidatePath("/admin/outbox");
+    return ok(`Email reinviata a ${order.email}.`);
   });
 }
 

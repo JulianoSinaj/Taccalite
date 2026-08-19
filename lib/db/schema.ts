@@ -50,8 +50,21 @@ export const shops = sqliteTable("shops", {
   highlights: text("highlights", { mode: "json" }).$type<string[]>().notNull().default([]),
   imageLabel: text("image_label").notNull().default(""),
   image: text("image").notNull().default(""),
+  // Structured opening hours, authoritative when present: one entry per weekday
+  // (1 = Monday … 7 = Sunday) with zero or more "HH:MM"–"HH:MM" ranges. An empty
+  // `ranges` array means explicitly closed that day. The free-text `hours` above
+  // stays as the rendered label (and the fallback for shops not yet migrated),
+  // so "aperto adesso" can be decided from data instead of parsed prose.
+  hoursStructured: text("hours_structured", { mode: "json" }).$type<
+    { day: number; ranges: { open: string; close: string }[] }[]
+  >(),
   // Per-location service availability (refines the global master switches).
   porchettaEnabled: integer("porchetta_enabled", { mode: "boolean" }).notNull().default(true),
+  // Kg of porchetta this location can prepare for one pickup day. Null falls
+  // back to the shop-wide `porchetta.capacityKgPerDay` setting.
+  porchettaCapacityKg: integer("porchetta_capacity_kg"),
+  // Seats bookable in one time slot; null = unlimited (no double-booking guard).
+  seatsCapacity: integer("seats_capacity"),
   storeEnabled: integer("store_enabled", { mode: "boolean" }).notNull().default(true),
   reservationsEnabled: integer("reservations_enabled", { mode: "boolean" }).notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -98,6 +111,11 @@ export const products = sqliteTable(
     // When a low-stock alert was last emailed to the owner; cleared when restocked
     // above the threshold, so a single dip doesn't spam repeat alerts.
     lowStockNotifiedAt: integer("low_stock_notified_at", { mode: "timestamp_ms" }),
+    // Archived products leave the catalogue and every picker but keep their id,
+    // their movement ledger and their order lines. Deleting a product instead
+    // cascades its `stock_movements` away, which loses the quantity history a
+    // stock ledger exists to preserve — so archiving is the default.
+    archivedAt: integer("archived_at", { mode: "timestamp_ms" }),
     featured: integer("featured", { mode: "boolean" }).notNull().default(false),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
@@ -155,6 +173,11 @@ export const blogPosts = sqliteTable("blog_posts", {
   content: text("content", { mode: "json" }).$type<string[]>().notNull().default([]),
   imageLabel: text("image_label").notNull().default(""),
   image: text("image"),
+  // Search-result title and snippet. Both optional: the post's own title and
+  // excerpt are the fallback, but a listing blurb and a search snippet are not
+  // always the same sentence.
+  seoTitle: text("seo_title"),
+  seoDescription: text("seo_description"),
   published: integer("published", { mode: "boolean" }).notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: createdAt(),
@@ -259,6 +282,14 @@ export const rewards = sqliteTable(
     description: text("description").notNull().default(""),
     points: integer("points").notNull(),
     image: text("image"),
+    // Units physically available to hand over; null = unlimited. Decremented on
+    // redemption and restored if a redemption is cancelled.
+    stock: integer("stock"),
+    // How many times one customer may claim this reward; null = no limit.
+    maxPerCustomer: integer("max_per_customer"),
+    // Availability window (null = always, within `active`).
+    availableFrom: integer("available_from", { mode: "timestamp_ms" }),
+    availableUntil: integer("available_until", { mode: "timestamp_ms" }),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: createdAt(),
@@ -334,6 +365,10 @@ export const reservations = sqliteTable(
     // `depositPaidAt` so the money is still traceable as received-then-forfeit
     // rather than silently disappearing from the booking.
     depositForfeitedAt: integer("deposit_forfeited_at", { mode: "timestamp_ms" }),
+    // Which table the party was seated at. Free text on purpose: the shop calls
+    // them "1", "vetrina", "sala grande" — a table registry would be more
+    // structure than two rooms need. Capacity is enforced on seats, not tables.
+    tableNumber: text("table_number"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -395,7 +430,12 @@ export const newsletterCampaigns = sqliteTable(
     // time, so a template change applies to anything not yet sent.
     body: text("body").notNull(),
     // Subscriber `source` to target, or null for every confirmed subscriber.
+    // Superseded by `segmentId` when one is set; kept for campaigns sent before
+    // named segments existed (and for the "target one signup origin" shortcut).
     segment: text("segment"),
+    // A reusable named segment (`customer_segments`), when the campaign targets
+    // one rather than a raw signup source.
+    segmentId: text("segment_id"),
     status: text("status", { enum: ["draft", "scheduled", "sent", "failed"] })
       .notNull()
       .default("draft"),
@@ -458,6 +498,10 @@ export const orders = sqliteTable(
     // date, not the date the order was placed — an order taken on the 31st and
     // paid on the 1st belongs to the following month's VAT return.
     paidAt: integer("paid_at", { mode: "timestamp_ms" }),
+    // When money was last given back. A refund is booked as a credit note in the
+    // period it happened, NOT by removing the sale from the (possibly already
+    // filed) period it was paid in — so the reversal needs its own date.
+    refundedAt: integer("refunded_at", { mode: "timestamp_ms" }),
     // Buyer's fiscal identity, needed for a valid electronic invoice. All
     // optional: a private customer supplies only a codice fiscale (often not even
     // that), a business supplies P.IVA plus an SDI destination code or PEC.
@@ -492,6 +536,8 @@ export const orders = sqliteTable(
     index("orders_paid_created_idx").on(t.paymentStatus, t.createdAt),
     // The IVA report and fiscal exports select paid orders by settlement date.
     index("orders_paid_at_idx").on(t.paymentStatus, t.paidAt),
+    // The IVA report's reversal pass selects refunds by the date they happened.
+    index("orders_refunded_at_idx").on(t.refundedAt),
     // Webhook + refund resolve the order by its Stripe session id.
     index("orders_stripe_session_idx").on(t.stripeSessionId),
     // Refund/dispute webhooks arrive keyed on the PaymentIntent.
@@ -522,6 +568,14 @@ export const orderItems = sqliteTable(
     name: text("name").notNull(),
     unitPriceCents: integer("unit_price_cents").notNull(),
     quantity: integer("quantity").notNull(),
+    // Set for a line sold by weight: `unitPriceCents` is then the price per kg
+    // and `lineTotalCents = round(unitPriceCents * weightKg)`, with `quantity`
+    // staying 1 so every existing sum over quantity keeps working.
+    weightKg: real("weight_kg"),
+    // True when the counter operator overrode the catalogue price for this line
+    // (a negotiated price), so the deviation is visible rather than looking like
+    // a stale snapshot of a since-changed product price.
+    priceOverridden: integer("price_overridden", { mode: "boolean" }).notNull().default(false),
     lineTotalCents: integer("line_total_cents").notNull(),
     // VAT rate snapshot at order time (basis points) — the product's rate may
     // later change, but a placed order's fiscal breakdown must stay fixed.
@@ -553,6 +607,14 @@ export const discountCodes = sqliteTable(
     minSubtotalCents: integer("min_subtotal_cents").notNull().default(0),
     // Total redemption cap across all customers (null = unlimited).
     maxRedemptions: integer("max_redemptions"),
+    // How many times one customer may use this code (null = unlimited). Counted
+    // from `discount_redemptions`, keyed on the account when known and the email
+    // otherwise, so a guest can't recycle a one-per-customer code trivially.
+    maxPerCustomer: integer("max_per_customer"),
+    // Restrict to a customer's very first paid order.
+    firstOrderOnly: integer("first_order_only", { mode: "boolean" }).notNull().default(false),
+    // Restrict to orders for one location (null = any).
+    shopSlug: text("shop_slug"),
     timesUsed: integer("times_used").notNull().default(0),
     startsAt: integer("starts_at", { mode: "timestamp_ms" }),
     endsAt: integer("ends_at", { mode: "timestamp_ms" }),
@@ -580,12 +642,19 @@ export const emailOutbox = sqliteTable(
     // Number of delivery attempts made — lets the outbox drain retry transient
     // failures while capping permanently-failing messages.
     attempts: integer("attempts").notNull().default(0),
+    // Set for a newsletter send, so delivery outcomes roll back up to the
+    // campaign instead of a "sent to 412" figure that hides 80 bounces.
+    campaignId: text("campaign_id"),
+    // Claimed by a drain pass before delivery is attempted, so a cron sweep and
+    // a manual retry can't both send the same message. Cleared on completion.
+    claimedAt: integer("claimed_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     sentAt: integer("sent_at", { mode: "timestamp_ms" }),
   },
   (t) => [
     index("email_outbox_status_idx").on(t.status),
     index("email_outbox_created_idx").on(t.createdAt),
+    index("email_outbox_campaign_idx").on(t.campaignId),
     check("email_outbox_status_ck", sql`${t.status} in ('queued', 'sent', 'failed')`),
   ],
 );
@@ -630,6 +699,130 @@ export const auditLog = sqliteTable(
   ],
 );
 
+// ── Product batches (lot + expiry, FEFO) ─────────────────────────────────────
+/**
+ * A received lot of a stock-tracked product, with its expiry date.
+ *
+ * Fresh salumi and formaggi carry a lotto and a scadenza that have to be
+ * traceable (EU 1169/2011 + HACCP): which batch went out, and what is about to
+ * expire. Quantities live here *alongside* `products.stock` rather than
+ * replacing it — the flat on-hand figure stays the single number the shop and
+ * the storefront read, and batches account for how it is made up.
+ */
+export const productBatches = sqliteTable(
+  "product_batches",
+  {
+    id: id(),
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    /** Supplier lot code as printed on the packaging. */
+    lotCode: text("lot_code").notNull().default(""),
+    /** Expiry / "da consumarsi entro", ISO yyyy-mm-dd. Null = not perishable. */
+    expiryDate: text("expiry_date"),
+    /** Units received in this lot. */
+    quantity: integer("quantity").notNull().default(0),
+    /** Units still on hand from this lot (FEFO consumes the earliest expiry). */
+    remaining: integer("remaining").notNull().default(0),
+    supplier: text("supplier"),
+    /** Purchase cost per unit for this lot (cents), for landed-cost accuracy. */
+    unitCostCents: integer("unit_cost_cents"),
+    receivedAt: integer("received_at", { mode: "timestamp_ms" }),
+    note: text("note"),
+    createdByUserId: text("created_by_user_id"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("batches_product_idx").on(t.productId),
+    // FEFO picking and the "in scadenza" report both scan by expiry.
+    index("batches_expiry_idx").on(t.expiryDate),
+    index("batches_product_expiry_idx").on(t.productId, t.expiryDate),
+  ],
+);
+
+// ── Discount redemptions (who used which code, and on what) ──────────────────
+/**
+ * One row per counted coupon use. `discount_codes.times_used` remains the fast
+ * counter; this is the ledger behind it — it makes a per-customer cap
+ * enforceable and answers "which orders used this code", which a bare counter
+ * never could.
+ */
+export const discountRedemptions = sqliteTable(
+  "discount_redemptions",
+  {
+    id: id(),
+    discountCode: text("discount_code").notNull(), // uppercased, snapshot
+    orderId: text("order_id"),
+    /** Account when known; guests are identified by the order email instead. */
+    userId: text("user_id"),
+    email: text("email"),
+    amountCents: integer("amount_cents").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("discount_redemptions_code_idx").on(t.discountCode),
+    index("discount_redemptions_user_idx").on(t.discountCode, t.userId),
+    index("discount_redemptions_email_idx").on(t.discountCode, t.email),
+    index("discount_redemptions_order_idx").on(t.orderId),
+  ],
+);
+
+// ── Customer segments (reusable marketing audiences) ─────────────────────────
+/**
+ * A named, re-evaluated audience. The rule is stored as data rather than a
+ * frozen list of addresses, so "clienti fedeli" means the same thing in March as
+ * it did in January. Evaluated in `lib/segments.ts`.
+ */
+export const customerSegments = sqliteTable(
+  "customer_segments",
+  {
+    id: id(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    rule: text("rule", { mode: "json" })
+      .$type<{
+        /** Newsletter signup origin. */
+        source?: string | null;
+        /** Loyalty points at or above this. */
+        minPoints?: number | null;
+        /** Paid orders at or above this count. */
+        minOrders?: number | null;
+        /** Lifetime paid spend at or above this, in cents. */
+        minSpendCents?: number | null;
+        /** Has ordered from this shop. */
+        shopSlug?: string | null;
+        /** No paid order in this many days (win-back). */
+        inactiveDays?: number | null;
+        /** Only subscribers linked to an account that consented to marketing. */
+        requireMarketingConsent?: boolean | null;
+      }>()
+      .notNull()
+      .default({}),
+    createdByUserId: text("created_by_user_id"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("segments_name_idx").on(t.name)],
+);
+
+// ── Saved list views (per-user filter presets) ───────────────────────────────
+export const savedViews = sqliteTable(
+  "saved_views",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Admin path the view belongs to, e.g. "/admin/orders". */
+    path: text("path").notNull(),
+    name: text("name").notNull(),
+    /** The query string to restore, without a leading "?". */
+    query: text("query").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (t) => [index("saved_views_user_path_idx").on(t.userId, t.path)],
+);
+
 // ── Inferred row types (canonical runtime shapes) ────────────────────────────
 export type ShopRow = typeof shops.$inferSelect;
 export type ProductRow = typeof products.$inferSelect;
@@ -643,3 +836,8 @@ export type AuditLogRow = typeof auditLog.$inferSelect;
 export type DiscountCodeRow = typeof discountCodes.$inferSelect;
 export type StockMovementRow = typeof stockMovements.$inferSelect;
 export type NewsletterCampaignRow = typeof newsletterCampaigns.$inferSelect;
+export type ProductBatchRow = typeof productBatches.$inferSelect;
+export type CustomerSegmentRow = typeof customerSegments.$inferSelect;
+export type SegmentRule = CustomerSegmentRow["rule"];
+export type SavedViewRow = typeof savedViews.$inferSelect;
+export type ShopHours = NonNullable<ShopRow["hoursStructured"]>;

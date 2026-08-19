@@ -1,7 +1,7 @@
 import "server-only";
-import { and, asc, desc, eq, lte, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { newsletterCampaigns, type NewsletterCampaignRow } from "@/lib/db/schema";
+import { newsletterCampaigns, emailOutbox, type NewsletterCampaignRow } from "@/lib/db/schema";
 import { broadcastToSubscribers } from "@/lib/automation";
 
 /**
@@ -32,6 +32,40 @@ function escapeHtml(s: string): string {
 export const listCampaigns = (limit = 50) =>
   db.select().from(newsletterCampaigns).orderBy(desc(newsletterCampaigns.createdAt)).limit(limit);
 
+export type CampaignDelivery = { sent: number; failed: number; queued: number };
+
+/**
+ * What actually happened to a sent campaign's mail.
+ *
+ * `recipientCount` records how many were enqueued, which is not the same as how
+ * many arrived — a campaign could read "inviata a 412 iscritti" while 80 of them
+ * bounced into the outbox, with nothing tying the two together.
+ */
+export async function campaignDelivery(ids: string[]): Promise<Map<string, CampaignDelivery>> {
+  const out = new Map<string, CampaignDelivery>();
+  if (ids.length === 0) return out;
+
+  const rows = await db
+    .select({
+      campaignId: emailOutbox.campaignId,
+      status: emailOutbox.status,
+      n: sql<number>`count(*)`,
+    })
+    .from(emailOutbox)
+    .where(inArray(emailOutbox.campaignId, ids))
+    .groupBy(emailOutbox.campaignId, emailOutbox.status);
+
+  for (const r of rows) {
+    if (!r.campaignId) continue;
+    const cur = out.get(r.campaignId) ?? { sent: 0, failed: 0, queued: 0 };
+    if (r.status === "sent") cur.sent += r.n;
+    else if (r.status === "failed") cur.failed += r.n;
+    else cur.queued += r.n;
+    out.set(r.campaignId, cur);
+  }
+  return out;
+}
+
 export async function getCampaign(id: string): Promise<NewsletterCampaignRow | null> {
   const [row] = await db.select().from(newsletterCampaigns).where(eq(newsletterCampaigns.id, id)).limit(1);
   return row ?? null;
@@ -50,7 +84,8 @@ export async function deliverCampaign(id: string): Promise<{ sent: boolean; queu
     .update(newsletterCampaigns)
     .set({ status: "sent", sentAt: new Date(), updatedAt: new Date() })
     .where(and(eq(newsletterCampaigns.id, id), ne(newsletterCampaigns.status, "sent")))
-    .returning({ id: newsletterCampaigns.id });
+    .returning({ id: newsletterCampaigns.id })
+;
 
   if (!claimed) return { sent: false, queued: 0 };
 
@@ -58,11 +93,11 @@ export async function deliverCampaign(id: string): Promise<{ sent: boolean; queu
   if (!campaign) return { sent: false, queued: 0 };
 
   try {
-    const { queued } = await broadcastToSubscribers(
-      campaign.subject,
-      campaignBodyHtml(campaign.body),
-      campaign.segment ? { source: campaign.segment } : {},
-    );
+    const { queued } = await broadcastToSubscribers(campaign.subject, campaignBodyHtml(campaign.body), {
+      source: campaign.segment ?? undefined,
+      segmentId: campaign.segmentId,
+      campaignId: campaign.id,
+    });
     await db
       .update(newsletterCampaigns)
       .set({ recipientCount: queued, error: null, updatedAt: new Date() })

@@ -20,6 +20,14 @@ const nextConfig: NextConfig = {
   // it out of the bundle (traced into standalone node_modules for Docker; on
   // Vercel the remote Turso URL uses the pure-JS HTTP transport).
   serverExternalPackages: ["@libsql/client", "libsql"],
+  // Migrations are read from disk at runtime (`migrateDatabase` resolves
+  // `<cwd>/drizzle`), but that path is deliberately opaque to the file tracer,
+  // so name the folder explicitly — otherwise `.next/standalone` would ship a
+  // server that cannot migrate. The Dockerfile also copies it, for the same
+  // reason; this keeps the standalone output correct on its own.
+  outputFileTracingIncludes: {
+    "/*": ["drizzle/**"],
+  },
   // `/negozi` (the two shop locations) sat one letter away from `/negozio` (the
   // online store) and the pair was a standing source of misdirected links. The
   // locations moved to `/sedi`, which is also what the nav calls them; these keep

@@ -1,5 +1,14 @@
 import Link from "next/link";
-import { AdminHeader, StatusBadge, euro, NewButton, Pagination } from "@/components/admin/ui";
+import {
+  AdminHeader,
+  Panel,
+  StatusBadge,
+  euro,
+  inputCls,
+  labelCls,
+  NewButton,
+  Pagination,
+} from "@/components/admin/ui";
 import {
   SegmentedFilter,
   FilterToolbar,
@@ -8,12 +17,26 @@ import {
   labelFrom,
 } from "@/components/admin/FilterBar";
 import { DataTable, DensityToggle, densityFrom, type Column } from "@/components/admin/DataTable";
-import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
-import { getProductsPage, adminGetShops, PRODUCT_SORTS } from "@/lib/admin/queries";
-import { productFilters, sortFilters } from "@/lib/admin/filters";
+import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
+import {
+  getProductsPage,
+  adminGetShops,
+  countExpiringSoon,
+  getSavedViews,
+  PRODUCT_SORTS,
+} from "@/lib/admin/queries";
+import { SavedViews } from "@/components/admin/SavedViews";
+import { getCurrentUser } from "@/lib/auth/session";
+import { productFilters, sortFilters, filterQuery } from "@/lib/admin/filters";
+import { expiryWindow } from "@/lib/time";
 import { getSetting } from "@/lib/db/queries";
 import { isLowStock } from "@/lib/inventory";
-import { deleteProduct, toggleProductActive, toggleProductFeatured } from "@/lib/admin/actions";
+import {
+  archiveProduct,
+  importProducts,
+  toggleProductActive,
+  toggleProductFeatured,
+} from "@/lib/admin/actions";
 import type { ProductRow } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +48,7 @@ const STATUS_CHIPS = [
   { value: "attivi", label: "Attivi" },
   { value: "disattivati", label: "Disattivati" },
   { value: "shop", label: "In vendita online" },
+  { value: "archiviati", label: "Archiviati" },
 ];
 
 const STOCK_CHIPS = [
@@ -55,10 +79,16 @@ export default async function AdminProducts({ searchParams }: SP) {
   const sort = sortFilters(sp, PRODUCT_SORTS, { colonna: "ordine", verso: "asc" });
   const density = densityFrom(sp.densita);
   const lowStockThreshold = await getSetting<number>("store.lowStockThreshold", 5);
-  const [{ rows: products, total, pageCount, categories }, shops] = await Promise.all([
-    getProductsPage({ ...filters, page, sort, lowStockThreshold }),
-    adminGetShops(),
-  ]);
+  // A week ahead is the window a shop can still act on.
+  const expiryHorizon = expiryWindow(7);
+  const viewer = await getCurrentUser();
+  const [{ rows: products, total, pageCount, categories }, shops, expiringSoon, views] =
+    await Promise.all([
+      getProductsPage({ ...filters, page, sort, lowStockThreshold }),
+      adminGetShops(),
+      countExpiringSoon(expiryHorizon),
+      viewer ? getSavedViews(viewer.id, BASE) : Promise.resolve([]),
+    ]);
 
   const filtered = Object.values(filters).some((v) => v && v !== "all");
   // Carried on every sort/density/page link so the view survives navigation.
@@ -83,7 +113,7 @@ export default async function AdminProducts({ searchParams }: SP) {
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
             {!p.active && <StatusBadge status="cancelled" />}
             {p.purchasable && (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold tracking-widest text-emerald-800 uppercase">
+              <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[10px] font-bold tracking-widest text-ok-soft-fg uppercase">
                 Shop
               </span>
             )}
@@ -130,7 +160,7 @@ export default async function AdminProducts({ searchParams }: SP) {
         p.stock == null ? (
           <span className="text-xs text-brown-800/40">illimitata</span>
         ) : isLowStock(p, lowStockThreshold) ? (
-          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold tabular-nums text-red-700">
+          <span className="rounded-full bg-danger-soft px-2 py-0.5 text-xs font-bold tabular-nums text-danger-soft-fg">
             {p.stock}
           </span>
         ) : (
@@ -159,7 +189,22 @@ export default async function AdminProducts({ searchParams }: SP) {
           >
             Modifica
           </Link>
-          <DeleteForm action={deleteProduct} id={p.id} confirm={`Eliminare "${p.name}"?`} />
+          {/* Archiving is the default: deleting cascades the product's stock
+              movements away, and the ledger is the point of having one. */}
+          <ActionForm action={archiveProduct} className="inline-flex">
+            <input type="hidden" name="id" value={p.id} />
+            <input type="hidden" name="restore" value={p.archivedAt ? "true" : "false"} />
+            <PendingButton
+              tone="dark"
+              confirm={
+                p.archivedAt
+                  ? undefined
+                  : `Archiviare "${p.name}"? Sparisce dal catalogo e dal sito, ma storico e movimenti restano.`
+              }
+            >
+              {p.archivedAt ? "Ripristina" : "Archivia"}
+            </PendingButton>
+          </ActionForm>
         </div>
       ),
     },
@@ -170,7 +215,28 @@ export default async function AdminProducts({ searchParams }: SP) {
       <AdminHeader
         title="Prodotti"
         subtitle={`${total} prodotti${filtered ? " nel filtro attuale" : ""}`}
-        action={<NewButton href="/admin/products/new">+ Nuovo prodotto</NewButton>}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/products/scadenze"
+              className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+                expiringSoon > 0
+                  ? "bg-warn-soft text-warn-soft-fg hover:brightness-95"
+                  : "bg-brown-900/10 text-brown-950 hover:bg-brown-900/15"
+              }`}
+            >
+              Scadenze{expiringSoon > 0 ? ` · ${expiringSoon}` : ""}
+            </Link>
+            <a
+              href={`/api/admin/export/products${filterQuery({ ...filters })}`}
+              download
+              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            >
+              Esporta CSV
+            </a>
+            <NewButton href="/admin/products/new">+ Nuovo prodotto</NewButton>
+          </div>
+        }
       />
 
       {/* Stock is the catalogue's work queue — "what do I need to reorder" is
@@ -210,6 +276,56 @@ export default async function AdminProducts({ searchParams }: SP) {
         />
         <DensityToggle basePath={BASE} params={linkParams} density={density} />
       </div>
+
+      <SavedViews path={BASE} views={views} currentQuery={filterQuery(filters).replace(/^\?/, "")} />
+
+      {/* Import sits behind a disclosure: it's a periodic job (a supplier price
+          list), not something to trip over while browsing the catalogue. */}
+      <details className="mb-4">
+        <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+          Importa listino da CSV
+        </summary>
+        <Panel className="mt-3">
+          <ActionForm action={importProducts} className="flex flex-wrap items-end gap-3">
+            <div className="min-w-56 flex-1">
+              <label className={labelCls} htmlFor="import-file">
+                File CSV
+              </label>
+              <input
+                id="import-file"
+                name="file"
+                type="file"
+                accept=".csv,text/csv"
+                required
+                className="block w-full text-sm text-brown-800 file:mr-3 file:rounded-full file:border-0 file:bg-brown-900/10 file:px-4 file:py-2 file:text-xs file:font-bold file:tracking-widest file:uppercase"
+              />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="import-shop">
+                Sede per i nuovi prodotti
+              </label>
+              <select id="import-shop" name="shopSlug" className={inputCls}>
+                {shops.map((s) => (
+                  <option key={s.slug} value={s.slug}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <label className="flex items-center gap-2 pb-2.5 text-sm font-medium text-brown-900">
+              <input type="checkbox" name="crea" value="true" className="h-4 w-4 rounded accent-brown-950" />
+              Crea i prodotti sconosciuti
+            </label>
+            <PendingButton tone="dark">Importa</PendingButton>
+          </ActionForm>
+          <p className="mt-3 text-xs text-brown-800/60">
+            Le colonne sono le stesse dell&apos;esportazione e i prodotti si riconoscono dallo{" "}
+            <code>slug</code>. Una cella vuota lascia il valore invariato, quindi un foglio con solo{" "}
+            <code>slug,prezzoEuros</code> è un aggiornamento prezzi. Se il file contiene errori non
+            viene importato nulla.
+          </p>
+        </Panel>
+      </details>
 
       <DataTable
         rows={products}

@@ -1,7 +1,7 @@
 import "server-only";
-import { and, desc, gte, isNotNull, sql } from "drizzle-orm";
+import { and, desc, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { pageViews } from "@/lib/db/schema";
+import { pageViews, orders } from "@/lib/db/schema";
 
 const MAX_PATH = 512;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -48,19 +48,39 @@ export function normalizeRange(value: unknown): AnalyticsRange {
  */
 export async function getAnalyticsSummary(now = new Date(), rangeDays = 30) {
   const range = normalizeRange(rangeDays);
-  const since7 = new Date(now.getTime() - 7 * DAY_MS);
-  const since30 = new Date(now.getTime() - 30 * DAY_MS);
   const sinceRange = new Date(now.getTime() - range * DAY_MS);
+  const sincePrev = new Date(now.getTime() - 2 * range * DAY_MS);
 
   const [total] = await db.select({ n: sql<number>`count(*)` }).from(pageViews);
-  const [last7] = await db
+  // Headline figures follow the selected range. They were hard-coded to 7/30
+  // and sat directly above the range chips, so picking "90 giorni" changed the
+  // chart and the tables but not the numbers.
+  const [inRange] = await db
     .select({ n: sql<number>`count(*)` })
     .from(pageViews)
-    .where(gte(pageViews.createdAt, since7));
-  const [last30] = await db
+    .where(gte(pageViews.createdAt, sinceRange));
+  const [prevRange] = await db
     .select({ n: sql<number>`count(*)` })
     .from(pageViews)
-    .where(gte(pageViews.createdAt, since30));
+    .where(and(gte(pageViews.createdAt, sincePrev), lt(pageViews.createdAt, sinceRange)));
+
+  // Commerce context over the same window. No per-visitor tracking is involved
+  // — the beacon stays cookieless and identifier-free, so a true funnel isn't
+  // available — but "how many visits, how many orders, how much money" is, and
+  // it is the question the page was missing entirely.
+  const settledAt = sql`coalesce(${orders.paidAt}, ${orders.createdAt})`;
+  const [commerce] = await db
+    .select({
+      orders: sql<number>`count(*)`,
+      revenue: sql<number>`coalesce(sum(${orders.totalCents} - ${orders.refundedCents}), 0)`,
+    })
+    .from(orders)
+    .where(
+      and(
+        inArray(orders.paymentStatus, ["paid", "refunded"]),
+        sql`${settledAt} >= ${sinceRange.getTime()}`,
+      ),
+    );
 
   const topPaths = await db
     .select({ path: pageViews.path, n: sql<number>`count(*)` })
@@ -93,11 +113,18 @@ export async function getAnalyticsSummary(now = new Date(), rangeDays = 30) {
     daily.push({ day, n: counts.get(day) ?? 0 });
   }
 
+  const views = inRange?.n ?? 0;
+  const orderCount = commerce?.orders ?? 0;
   return {
     total: total?.n ?? 0,
-    last7: last7?.n ?? 0,
-    last30: last30?.n ?? 0,
+    /** Views in the selected window, and in the window before it. */
+    views,
+    viewsPrev: prevRange?.n ?? 0,
     rangeDays: range,
+    orders: orderCount,
+    revenueCents: commerce?.revenue ?? 0,
+    /** Orders per 1000 views — a rate, not a per-visitor conversion. */
+    ordersPerThousandViews: views > 0 ? Math.round((orderCount / views) * 1000) : 0,
     topPaths,
     topReferrers,
     daily,

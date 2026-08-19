@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { addPointsForPurchase } from "@/lib/loyalty";
+import { logAudit } from "@/lib/audit";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import { parseForm } from "@/lib/validation/admin";
 
@@ -30,6 +31,18 @@ export async function addPointsByCard(_prev: ActionState, fd: FormData): Promise
 
     const res = await addPointsForPurchase(card, euros, user.id);
     if (!res.ok) throw new ActionError(res.error);
+
+    // Points are money-equivalent and this is the one such action staff perform
+    // unsupervised at the counter, so it goes in the audit trail — the loyalty
+    // ledger alone records the credit but not who stood at the till.
+    await logAudit({
+      actor: user,
+      action: "loyalty.accrue_card",
+      entity: "user",
+      entityId: res.userId,
+      summary: `Punti in negozio: +${res.added} a ${res.name} per un acquisto di ${euros.toFixed(2)} € (tessera ${card.trim()})`,
+      meta: { card: card.trim(), euros, points: res.added, balance: res.balance },
+    });
 
     revalidatePath("/admin/loyalty");
     return ok(`+${res.added} punti a ${res.name} (saldo ${res.balance})`);

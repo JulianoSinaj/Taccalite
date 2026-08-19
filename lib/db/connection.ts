@@ -13,6 +13,11 @@
  *
  * Deliberately NOT marked `server-only` so the CLI scripts can import it.
  */
+// Every `process.cwd()`-rooted path below carries a `turbopackIgnore` comment.
+// Without it Next's file tracer cannot resolve these dynamic paths and assumes the
+// whole project might be read at runtime, which drags the entire source tree
+// (app/, test/, docs/, e2e/, .env…) into `.next/standalone`. The comment only
+// scopes the build-time trace — the paths still resolve normally at runtime.
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve, join } from "node:path";
 import { createClient, type Client, type Config } from "@libsql/client";
@@ -64,9 +69,9 @@ export function databaseConfig(rawUrl: string, authToken = ""): Config {
     return { url: rawUrl };
   }
   const path = rawUrl.startsWith("file:") ? rawUrl.slice("file:".length) : rawUrl;
-  const abs = resolve(process.cwd(), path);
+  const abs = resolve(/* turbopackIgnore: true */ process.cwd(), path);
   const dir = dirname(abs);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (!existsSync(/* turbopackIgnore: true */ dir)) mkdirSync(/* turbopackIgnore: true */ dir, { recursive: true });
   return { url: `file:${abs}` };
 }
 
@@ -76,7 +81,7 @@ export function localDatabaseDir(rawUrl: string): string | null {
     return null;
   }
   const path = rawUrl.startsWith("file:") ? rawUrl.slice("file:".length) : rawUrl;
-  return dirname(resolve(process.cwd(), path));
+  return dirname(resolve(/* turbopackIgnore: true */ process.cwd(), path));
 }
 
 /**
@@ -84,9 +89,15 @@ export function localDatabaseDir(rawUrl: string): string | null {
  * itself and enforces foreign keys by default, so these are file-only.
  */
 export async function applyLocalPragmas(client: Client): Promise<void> {
+  // busy_timeout FIRST. Switching to WAL needs a brief exclusive lock, and with
+  // the default timeout of 0 any contention fails instantly rather than waiting
+  // — which `next build` reproduces reliably, because its worker pool opens the
+  // same file from a dozen processes at once. Worse than the noise: the throw
+  // aborted the rest of this function, so `foreign_keys = ON` never ran and that
+  // connection went on to work with referential integrity silently disabled.
+  await client.execute("PRAGMA busy_timeout = 5000");
   await client.execute("PRAGMA journal_mode = WAL");
   await client.execute("PRAGMA foreign_keys = ON");
-  await client.execute("PRAGMA busy_timeout = 5000");
 }
 
 /** Open a raw libSQL client for `rawUrl` (local pragmas are NOT applied here). */
@@ -106,8 +117,8 @@ export function wrapDrizzle(client: Client): Db {
  */
 export async function migrateDatabase(db: Db, rawUrl: string): Promise<void> {
   if (!isRemoteDatabaseUrl(rawUrl) && !isEphemeralFallback(rawUrl)) await applyLocalPragmas(db.$client);
-  const migrationsFolder = join(process.cwd(), "drizzle");
-  if (!existsSync(migrationsFolder)) return;
+  const migrationsFolder = join(/* turbopackIgnore: true */ process.cwd(), "drizzle");
+  if (!existsSync(/* turbopackIgnore: true */ migrationsFolder)) return;
   await migrate(db, { migrationsFolder });
 }
 

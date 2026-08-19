@@ -29,6 +29,9 @@ export async function saveDiscount(_prev: ActionState, fd: FormData): Promise<Ac
       value: storedValue,
       minSubtotalCents: d.minSubtotalEuros,
       maxRedemptions: d.maxRedemptions,
+      maxPerCustomer: d.maxPerCustomer,
+      firstOrderOnly: d.firstOrderOnly,
+      shopSlug: d.shopSlug ?? null,
       startsAt: d.startsAt ? new Date(`${d.startsAt}T00:00:00`) : null,
       endsAt: d.endsAt ? new Date(`${d.endsAt}T23:59:59`) : null,
       active: d.active,
@@ -62,10 +65,24 @@ export async function saveDiscount(_prev: ActionState, fd: FormData): Promise<Ac
 
 export async function toggleDiscountActive(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireRole("admin");
+    const actor = await requireRole("admin");
     const id = (fd.get("id") ?? "").toString();
     const active = fd.get("active") === "true";
-    await db.update(discountCodes).set({ active }).where(eq(discountCodes.id, id));
+    const [row] = await db
+      .update(discountCodes)
+      .set({ active })
+      .where(eq(discountCodes.id, id))
+      .returning({ code: discountCodes.code });
+    // Re-arming a coupon is as money-affecting as creating one, which is
+    // already logged.
+    await logAudit({
+      actor,
+      action: "discount.active",
+      entity: "discount",
+      entityId: id,
+      summary: `Codice sconto ${row?.code ?? id} ${active ? "attivato" : "disattivato"}`,
+      meta: { active },
+    });
     revalidatePath("/admin/discounts");
     return ok(active ? "Codice attivato." : "Codice disattivato.");
   });

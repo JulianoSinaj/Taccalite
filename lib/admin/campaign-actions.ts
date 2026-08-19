@@ -4,7 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { newsletterCampaigns } from "@/lib/db/schema";
+import { newsletterCampaigns, customerSegments } from "@/lib/db/schema";
+import { countSegment, describeRule } from "@/lib/segments";
 import { requireAdmin } from "@/lib/auth/session";
 import { sendMail } from "@/lib/mail/mailer";
 import { newsletterBroadcast } from "@/lib/mail/templates";
@@ -23,6 +24,13 @@ const campaignInput = z.object({
     .string()
     .trim()
     .max(120)
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  /** A named segment, which wins over `segment` when set. */
+  segmentId: z
+    .string()
+    .trim()
+    .max(40)
     .optional()
     .transform((v) => (v ? v : undefined)),
   /** `datetime-local` value; blank = not scheduled. */
@@ -60,6 +68,7 @@ export async function saveCampaign(_prev: ActionState, fd: FormData): Promise<Ac
       subject: d.subject,
       body: d.body,
       segment: d.segment ?? null,
+      segmentId: d.segmentId ?? null,
       // Having a date is what makes it scheduled; clearing it returns it to draft.
       status: (scheduledFor ? "scheduled" : "draft") as "scheduled" | "draft",
       scheduledFor,
@@ -67,11 +76,30 @@ export async function saveCampaign(_prev: ActionState, fd: FormData): Promise<Ac
       updatedAt: new Date(),
     };
 
+    let campaignId = d.id;
     if (d.id) {
       await db.update(newsletterCampaigns).set(values).where(eq(newsletterCampaigns.id, d.id));
     } else {
-      await db.insert(newsletterCampaigns).values({ ...values, createdByUserId: actor.id });
+      const [created] = await db
+        .insert(newsletterCampaigns)
+        .values({ ...values, createdByUserId: actor.id })
+        .returning({ id: newsletterCampaigns.id });
+      campaignId = created?.id;
     }
+
+    // Scheduling is the interesting half: a campaign set to go out on Friday
+    // will send itself with nobody at the keyboard, so the decision is logged
+    // now rather than only when the cron fires.
+    await logAudit({
+      actor,
+      action: scheduledFor ? "campaign.schedule" : "campaign.draft",
+      entity: "campaign",
+      entityId: campaignId,
+      summary: scheduledFor
+        ? `Newsletter "${d.subject}" programmata per il ${scheduledFor.toLocaleString("it-IT")}`
+        : `Bozza newsletter "${d.subject}" salvata`,
+      meta: { segment: d.segment ?? null, scheduledFor: scheduledFor?.toISOString() ?? null },
+    });
 
     revalidatePath("/admin/newsletter");
     return ok(
@@ -147,13 +175,127 @@ export async function duplicateCampaign(_prev: ActionState, fd: FormData): Promi
   });
 }
 
+// ── Reusable segments ────────────────────────────────────────────────────────
+/** Blank → null; otherwise a non-negative integer. */
+const optionalCount = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((v) => {
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 0 ? n : NaN;
+  })
+  .refine((v) => v == null || Number.isInteger(v), "Valore non valido");
+
+const segmentInput = z.object({
+  id: z.string().trim().max(40).optional(),
+  name: z.string().trim().min(1, "Dai un nome al segmento").max(120),
+  description: z.string().trim().max(300).optional().transform((v) => v ?? ""),
+  source: z.string().trim().max(120).optional().transform((v) => (v ? v : null)),
+  shopSlug: z.string().trim().max(80).optional().transform((v) => (v ? v : null)),
+  minPoints: optionalCount,
+  minOrders: optionalCount,
+  minSpendEuros: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (v != null && v !== "" ? Math.round(Number(String(v).replace(",", ".")) * 100) : null))
+    .refine((v) => v == null || (Number.isFinite(v) && v >= 0), "Spesa minima non valida"),
+  inactiveDays: optionalCount,
+  requireMarketingConsent: z
+    .union([z.string(), z.null(), z.undefined()])
+    .transform((v) => v === "on" || v === "true"),
+});
+
+/** Create or update a named segment. */
+export async function saveSegment(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const d = parseForm(segmentInput, fd);
+
+    const rule = {
+      source: d.source,
+      shopSlug: d.shopSlug,
+      minPoints: d.minPoints,
+      minOrders: d.minOrders,
+      minSpendCents: d.minSpendEuros,
+      inactiveDays: d.inactiveDays,
+      requireMarketingConsent: d.requireMarketingConsent || null,
+    };
+    const values = { name: d.name, description: d.description, rule, updatedAt: new Date() };
+
+    let segmentId = d.id;
+    if (d.id) {
+      await db.update(customerSegments).set(values).where(eq(customerSegments.id, d.id));
+    } else {
+      const [created] = await db
+        .insert(customerSegments)
+        .values({ ...values, createdByUserId: actor.id })
+        .returning({ id: customerSegments.id });
+      segmentId = created?.id;
+    }
+
+    const size = await countSegment(rule);
+    await logAudit({
+      actor,
+      action: d.id ? "segment.update" : "segment.create",
+      entity: "segment",
+      entityId: segmentId,
+      summary: `Segmento «${d.name}»: ${describeRule(rule)} — ${size} iscritti`,
+      meta: { rule, size },
+    });
+
+    revalidatePath("/admin/newsletter");
+    return ok(`Segmento salvato: ${size} iscritti corrispondono in questo momento.`);
+  });
+}
+
+export async function deleteSegment(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const id = String(fd.get("id") ?? "").trim();
+    const [row] = await db
+      .select({ name: customerSegments.name })
+      .from(customerSegments)
+      .where(eq(customerSegments.id, id))
+      .limit(1);
+    if (!row) throw new ActionError("Segmento non trovato.");
+
+    await db.delete(customerSegments).where(eq(customerSegments.id, id));
+    // Campaigns that used it fall back to "tutti gli iscritti" rather than
+    // silently targeting nobody.
+    await db
+      .update(newsletterCampaigns)
+      .set({ segmentId: null })
+      .where(eq(newsletterCampaigns.segmentId, id));
+
+    await logAudit({
+      actor,
+      action: "segment.delete",
+      entity: "segment",
+      entityId: id,
+      summary: `Segmento «${row.name}» eliminato`,
+    });
+    revalidatePath("/admin/newsletter");
+    return ok("Segmento eliminato.");
+  });
+}
+
 /** Delete a draft or scheduled campaign. A sent one is history and stays. */
 export async function deleteCampaign(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireAdmin();
+    const actor = await requireAdmin();
     const id = String(fd.get("id") ?? "").trim();
-    await mustBeEditable(id);
+    const campaign = await mustBeEditable(id);
     await db.delete(newsletterCampaigns).where(eq(newsletterCampaigns.id, id));
+    await logAudit({
+      actor,
+      action: "campaign.delete",
+      entity: "campaign",
+      entityId: id,
+      summary: `Campagna eliminata: "${campaign.subject}"${
+        campaign.status === "scheduled" ? " (era programmata)" : ""
+      }`,
+    });
     revalidatePath("/admin/newsletter");
     return ok("Campagna eliminata.");
   });

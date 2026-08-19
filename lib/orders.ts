@@ -1,8 +1,9 @@
 import "server-only";
 import { customAlphabet } from "nanoid";
-import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { orders, orderItems, products, stockMovements } from "@/lib/db/schema";
+import { orders, orderItems, products } from "@/lib/db/schema";
+import { applyStockChange, consumeBatchesFefo, restoreBatches } from "@/lib/stock";
 import { getShopBySlug, getSetting } from "@/lib/db/queries";
 import { validateDiscount, recordDiscountUseByCode, releaseDiscountUseByCode } from "@/lib/discounts";
 import { sendMail } from "@/lib/mail/mailer";
@@ -81,7 +82,11 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
   // Discount code (optional). Validated server-side against the DB subtotal — a
   // client-supplied code can never fabricate a discount. A free-shipping code
   // waives the fee below; a percent/fixed code reduces the subtotal.
-  const discount = await validateDiscount(input.discountCode, subtotalCents);
+  const discount = await validateDiscount(input.discountCode, subtotalCents, {
+    userId,
+    email: input.email,
+    shopSlug: input.fulfilment === "pickup" ? input.shopSlug : null,
+  });
   const discountCents = discount?.discountCents ?? 0;
 
   // Shipping is configurable from admin settings. It applies only to shipping
@@ -130,9 +135,11 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
             paymentStatus: "unpaid",
             notes: input.notes ?? null,
           })
-          .returning({ id: orders.id });
+          .returning({ id: orders.id })
+;
 
-        await tx.insert(orderItems).values(
+        await tx.insert(orderItems)
+          .values(
             lines.map((l) => ({
               orderId: created.id,
               productId: l.product.id,
@@ -143,7 +150,8 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
               lineTotalCents: l.lineTotalCents,
               vatRateBps: l.product.vatRateBps,
             })),
-          );
+          )
+;
 
         return created;
       });
@@ -304,7 +312,8 @@ export async function finalizeOrder(
       ...(opts.paymentIntentId ? { stripePaymentIntentId: opts.paymentIntentId } : {}),
     })
     .where(and(eq(orders.id, orderId), ne(orders.paymentStatus, "paid")))
-    .returning({ id: orders.id });
+    .returning({ id: orders.id })
+;
   if (!claimed) {
     // Losing the claim race still shouldn't lose the PaymentIntent: backfill it
     // if the winner didn't have one (e.g. the success page finalized first).
@@ -322,7 +331,14 @@ export async function finalizeOrder(
 
   // Count the coupon now that the order is actually paid (idempotent: the claim
   // above lets only the first finalize proceed).
-  if (order.discountCode) await recordDiscountUseByCode(order.discountCode);
+  if (order.discountCode) {
+    await recordDiscountUseByCode(order.discountCode, {
+      orderId: order.id,
+      userId: order.userId,
+      email: order.email,
+      amountCents: order.discountCents,
+    });
+  }
 
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
   const shop = order.shopSlug ? await getShopBySlug(order.shopSlug) : null;
@@ -368,29 +384,30 @@ export async function finalizeOrder(
       const notifyIds: string[] = [];
 
       for (const [productId, qty] of qtyByProduct) {
-        // Atomic, never-below-zero decrement, only for products that track
-        // stock (stock not null). max(0, …) respects the products_stock_ck
-        // CHECK and keeps this correct even if two orders finalize at once.
+        // One atomic read-modify-write that ledgers the delta ACTUALLY applied,
+        // so the movement history always sums to the balance even if the order
+        // oversold (createOrder guards against that, but a concurrent buyer can
+        // still race it).
+        const change = await applyStockChange({
+          productId,
+          delta: -qty,
+          reason: `Ordine ${order.orderNumber}`,
+        });
+        if (!change) continue;
+        // Lot-level bookkeeping, earliest expiry first.
+        await consumeBatchesFefo(productId, -change.applied);
+
         const [updated] = await db
-          .update(products)
-          .set({ stock: sql`max(0, ${products.stock} - ${qty})` })
-          .where(and(eq(products.id, productId), isNotNull(products.stock)))
-          .returning({
+          .select({
             name: products.name,
             stock: products.stock,
             reorderPoint: products.reorderPoint,
             lowStockNotifiedAt: products.lowStockNotifiedAt,
-          });
+          })
+          .from(products)
+          .where(eq(products.id, productId))
+          .limit(1);
         if (!updated || updated.stock == null) continue;
-
-        // Ledger the order-driven decrement so on-hand can be reconciled from the
-        // movement history (not just manual adjustments).
-        await db.insert(stockMovements).values({
-          productId,
-          delta: -qty,
-          reason: `Ordine ${order.orderNumber}`,
-          stockAfter: updated.stock,
-        });
 
         // Alert once per dip: collect products now at/under the threshold that
         // haven't already been notified. Stamping lowStockNotifiedAt below
@@ -407,10 +424,10 @@ export async function finalizeOrder(
 
       if (notifyIds.length > 0) {
         await sendMail({ to: env.ownerEmail, ...lowStockOwnerEmail(lowStock) });
-        await db
-          .update(products)
+        await db.update(products)
           .set({ lowStockNotifiedAt: new Date() })
-          .where(inArray(products.id, notifyIds));
+          .where(inArray(products.id, notifyIds))
+;
       }
     }
   } catch {
@@ -460,21 +477,26 @@ export async function recordRefund(
   const wasFull = order.paymentStatus === "refunded";
 
   // Claim the transition atomically on the previous refunded amount, so two
-  // concurrent reversals can't both run the restock.
+  // concurrent reversals can't both run the restock. `refundedAt` is stamped on
+  // every increment: the VAT report books the reversal as a credit note in the
+  // period the money went back, so the *latest* refund date is the one that
+  // matters for the outstanding balance.
   const [claimed] = await db
     .update(orders)
     .set({
       refundedCents: capped,
+      refundedAt: new Date(),
       updatedAt: new Date(),
       ...(full ? ({ status: "refunded", paymentStatus: "refunded" } as const) : {}),
     })
     .where(and(eq(orders.id, orderId), eq(orders.refundedCents, order.refundedCents)))
-    .returning({ id: orders.id });
+    .returning({ id: orders.id })
+;
   if (!claimed) return { deltaCents: 0, refundedCents: order.refundedCents, full: wasFull };
 
   if (full && !wasFull) {
     await restockOrderItems(orderId, opts.reason, opts.actorId ?? null);
-    if (order.discountCode) await releaseDiscountUseByCode(order.discountCode);
+    if (order.discountCode) await releaseDiscountUseByCode(order.discountCode, order.id);
   }
 
   return { deltaCents, refundedCents: capped, full };
@@ -499,7 +521,8 @@ export async function expireOrder(orderId: string): Promise<boolean> {
         eq(orders.paymentStatus, "unpaid"),
       ),
     )
-    .returning({ id: orders.id });
+    .returning({ id: orders.id })
+;
   return !!claimed;
 }
 
@@ -523,15 +546,8 @@ export async function restockOrderItems(
       qtyByProduct.set(it.productId, (qtyByProduct.get(it.productId) ?? 0) + it.quantity);
     }
     for (const [productId, qty] of qtyByProduct) {
-      const [updated] = await db
-        .update(products)
-        .set({ stock: sql`${products.stock} + ${qty}` })
-        .where(and(eq(products.id, productId), isNotNull(products.stock)))
-        .returning({ stock: products.stock });
-      if (!updated || updated.stock == null) continue;
-      await db
-        .insert(stockMovements)
-        .values({ productId, delta: qty, reason, stockAfter: updated.stock, createdByUserId: byUserId ?? null });
+      const change = await applyStockChange({ productId, delta: qty, reason, byUserId });
+      if (change) await restoreBatches(productId, change.applied);
     }
   } catch {
     // Best-effort — a refund must not fail because inventory bookkeeping did.

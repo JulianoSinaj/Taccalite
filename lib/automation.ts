@@ -10,6 +10,7 @@ import {
   shops,
   loyaltyAccounts,
   loyaltyTransactions,
+  auditLog,
 } from "@/lib/db/schema";
 import { deleteExpiredSessions } from "@/lib/auth/session";
 import { sendMail, enqueueMail, drainOutbox } from "@/lib/mail/mailer";
@@ -146,22 +147,36 @@ export async function runPorchettaReminders(today = new Date()): Promise<{ sent:
 export async function broadcastToSubscribers(
   subject: string,
   bodyHtml: string,
-  opts: { source?: string } = {},
+  opts: { source?: string; segmentId?: string | null; campaignId?: string | null } = {},
 ): Promise<{ queued: number; sent: number }> {
-  const conds = [eq(newsletterSubscribers.status, "confirmed")];
-  if (opts.source) conds.push(eq(newsletterSubscribers.source, opts.source));
-  const subs = await db
-    .select()
-    .from(newsletterSubscribers)
-    .where(and(...conds));
+  // A named segment resolves its rule now, against the current customer base;
+  // otherwise fall back to the legacy "one signup source" targeting.
+  let recipients: { email: string; token: string }[];
+  if (opts.segmentId) {
+    const { getSegment, resolveSegment } = await import("@/lib/segments");
+    const segment = await getSegment(opts.segmentId);
+    recipients = segment ? await resolveSegment(segment.rule) : [];
+  } else {
+    const conds = [eq(newsletterSubscribers.status, "confirmed")];
+    if (opts.source) conds.push(eq(newsletterSubscribers.source, opts.source));
+    recipients = await db
+      .select({ email: newsletterSubscribers.email, token: newsletterSubscribers.token })
+      .from(newsletterSubscribers)
+      .where(and(...conds));
+  }
 
-  for (const s of subs) {
+  for (const s of recipients) {
     const unsubUrl = absoluteUrl(`/api/newsletter/unsubscribe?token=${s.token}`);
-    await enqueueMail({ to: s.email, ...newsletterBroadcast(subject, bodyHtml, unsubUrl) });
+    await enqueueMail(
+      { to: s.email, ...newsletterBroadcast(subject, bodyHtml, unsubUrl) },
+      // Tagging the outbox rows is what lets the campaign report its own
+      // bounces instead of reporting "sent to 412" and hiding 80 failures.
+      { campaignId: opts.campaignId },
+    );
   }
 
   const { sent } = await drainOutbox({ max: 50 });
-  return { queued: subs.length, sent };
+  return { queued: recipients.length, sent };
 }
 
 /**
@@ -250,6 +265,7 @@ export async function runMaintenance(
   sessionsDeleted: number;
   outboxDrained: number;
   outboxPruned: number;
+  auditPruned: number;
   searchIndexesRebuilt: string[];
   mediaDeleted: number;
   mediaBytesFreed: number;
@@ -260,6 +276,18 @@ export async function runMaintenance(
   const pruned = await db
     .delete(emailOutbox)
     .where(and(eq(emailOutbox.status, "sent"), lt(emailOutbox.createdAt, cutoff)));
+
+  // Audit retention. The log grew forever, unlike the outbox — and an audit
+  // trail nobody prunes eventually becomes one nobody reads. Default 730 days
+  // (two years) comfortably outlives the fiscal questions it answers; 0 keeps
+  // everything, for a shop that would rather decide later.
+  const auditDays = await getSetting<number>("audit.retentionDays", 730);
+  let auditPruned = 0;
+  if (auditDays > 0) {
+    const auditCutoff = new Date(now.getTime() - auditDays * 24 * 60 * 60 * 1000);
+    const res = await db.delete(auditLog).where(lt(auditLog.createdAt, auditCutoff));
+    auditPruned = res.rowsAffected;
+  }
   // Cheap self-heal for the FTS indexes — see lib/admin/search.ts.
   const { rebuilt } = await verifySearchIndexes();
   // Reclaim upload files no record points at any more (replaced product photos,
@@ -270,6 +298,7 @@ export async function runMaintenance(
     sessionsDeleted,
     outboxDrained: drain.sent,
     outboxPruned: pruned.rowsAffected,
+    auditPruned,
     searchIndexesRebuilt: rebuilt,
     mediaDeleted: media.deleted,
     mediaBytesFreed: media.bytesFreed,

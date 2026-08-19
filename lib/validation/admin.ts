@@ -15,6 +15,30 @@ const optionalText = (max = 2000) =>
     .optional()
     .transform((v) => (v ? v : undefined));
 
+/** Optional non-negative integer from a form field; blank → null. */
+const optionalCount = (message: string, max = 1_000_000) =>
+  z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (v != null && v !== "" ? Number(v) : null))
+    .refine((v) => v == null || (Number.isInteger(v) && v >= 0 && v <= max), message);
+
+/** Optional euros field stored as integer cents; blank → null. */
+const optionalEuros = (message: string) =>
+  z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (v != null && v !== "" ? Math.round(Number(String(v).replace(",", ".")) * 100) : null))
+    .refine((v) => v == null || (Number.isFinite(v) && v >= 0), message);
+
+/** Optional `yyyy-mm-dd` (or `datetime-local`) parsed to a Date; blank → null. */
+const optionalDate = (message: string) =>
+  z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (v != null && v !== "" ? new Date(v) : null))
+    .refine((v) => v == null || !Number.isNaN(v.getTime()), message);
+
 const slug = z
   .string()
   .trim()
@@ -93,6 +117,8 @@ export const blogInput = z.object({
   content: optionalText(20000),
   imageLabel: optionalText(200),
   image: optionalText(1000),
+  seoTitle: optionalText(70),
+  seoDescription: optionalText(200),
   published: checkbox,
   sortOrder: z.coerce.number().int().default(0),
 });
@@ -116,19 +142,39 @@ export const shopInput = z.object({
   reservationsEnabled: checkbox,
   storeEnabled: checkbox,
   porchettaEnabled: checkbox,
+  // Per-location capacity. Blank falls back to the shop-wide setting (porchetta)
+  // or means "no limit" (seats).
+  porchettaCapacityKg: optionalCount("Capacità porchetta non valida", 10_000),
+  seatsCapacity: optionalCount("Numero di coperti non valido", 1_000),
+  /** Structured weekly hours, posted as JSON by the hours editor. */
+  hoursStructured: optionalText(4000),
   sortOrder: z.coerce.number().int().default(0),
 });
 
-export const rewardInput = z.object({
-  id: optionalText(40),
-  name: z.string().trim().min(1, "Il nome è obbligatorio").max(200),
-  slug: slug.optional(),
-  description: optionalText(2000),
-  points: z.coerce.number().int().min(0, "I punti devono essere ≥ 0"),
-  image: optionalText(1000),
-  active: checkbox,
-  sortOrder: z.coerce.number().int().default(0),
-});
+export const rewardInput = z
+  .object({
+    id: optionalText(40),
+    name: z.string().trim().min(1, "Il nome è obbligatorio").max(200),
+    slug: slug.optional(),
+    description: optionalText(2000),
+    points: z.coerce.number().int().min(0, "I punti devono essere ≥ 0"),
+    image: optionalText(1000),
+    stock: optionalCount("Disponibilità non valida"),
+    maxPerCustomer: optionalCount("Limite per cliente non valido", 1000),
+    availableFrom: optionalDate("Data di inizio non valida"),
+    availableUntil: optionalDate("Data di fine non valida"),
+    active: checkbox,
+    sortOrder: z.coerce.number().int().default(0),
+  })
+  .superRefine((d, ctx) => {
+    if (d.availableFrom && d.availableUntil && d.availableUntil < d.availableFrom) {
+      ctx.addIssue({
+        code: "custom",
+        message: "La data di fine non può precedere quella di inizio",
+        path: ["availableUntil"],
+      });
+    }
+  });
 
 export const discountInput = z.object({
   id: optionalText(40),
@@ -157,6 +203,13 @@ export const discountInput = z.object({
     .optional()
     .transform((v) => (v && v !== "" ? Number(v) : null))
     .refine((v) => v == null || (Number.isInteger(v) && v >= 1), "Limite non valido"),
+  maxPerCustomer: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (v && v !== "" ? Number(v) : null))
+    .refine((v) => v == null || (Number.isInteger(v) && v >= 1), "Limite per cliente non valido"),
+  firstOrderOnly: checkbox,
+  shopSlug: optionalText(80),
   startsAt: optionalText(20),
   endsAt: optionalText(20),
   active: checkbox,
@@ -179,6 +232,11 @@ export const manualOrderInput = z.object({
   city: optionalText(120),
   zip: optionalText(20),
   discountCode: optionalText(40),
+  /** A negotiated reduction the operator applies at the counter, in euros. It
+   *  adds to any coupon and is apportioned across VAT rates exactly like one. */
+  manualDiscountEuros: optionalEuros("Sconto manuale non valido"),
+  /** Overrides the computed shipping fee when set (blank = use the rules). */
+  shippingEuros: optionalEuros("Spese di spedizione non valide"),
   notes: optionalText(1000),
   markPaid: checkbox,
 });
@@ -193,11 +251,27 @@ export const reservationDepositInput = z.object({
   paid: checkbox,
 });
 
-export const stockAdjustInput = z.object({
-  productId: z.string().trim().min(1),
-  delta: z.coerce.number().int().refine((v) => v !== 0, "Inserisci una variazione diversa da zero"),
-  reason: optionalText(200),
-});
+/**
+ * A stock correction. In `rettifica` mode `delta` is a signed change ("+10
+ * arrivo merce"); in `conteggio` mode it is the absolute counted figure, so an
+ * inventory count doesn't require the operator to do the subtraction by hand
+ * against a number that may move while they're counting.
+ */
+export const stockAdjustInput = z
+  .object({
+    productId: z.string().trim().min(1),
+    mode: z.enum(["rettifica", "conteggio"]).default("rettifica"),
+    delta: z.coerce.number().int(),
+    reason: optionalText(200),
+  })
+  .superRefine((d, ctx) => {
+    if (d.mode === "rettifica" && d.delta === 0) {
+      ctx.addIssue({ code: "custom", message: "Inserisci una variazione diversa da zero", path: ["delta"] });
+    }
+    if (d.mode === "conteggio" && d.delta < 0) {
+      ctx.addIssue({ code: "custom", message: "La giacenza contata non può essere negativa", path: ["delta"] });
+    }
+  });
 
 export const reservationStatusInput = z.object({
   id: z.string().trim().min(1),

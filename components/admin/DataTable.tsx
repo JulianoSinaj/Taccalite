@@ -127,7 +127,7 @@ export function DataTable<T>({
 }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-2xl border border-brown-900/10 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl border border-brown-900/10 bg-surface p-6 shadow-sm">
         <p className="text-brown-800/70">{empty ?? "Nessun risultato."}</p>
       </div>
     );
@@ -136,7 +136,7 @@ export function DataTable<T>({
   const pad = density === "compatta" ? "px-4 py-2" : "px-5 py-3.5";
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-brown-900/10 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-2xl border border-brown-900/10 bg-surface shadow-sm">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-brown-900/10 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">

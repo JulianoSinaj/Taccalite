@@ -23,7 +23,7 @@ export function BulkBar({
   action,
   options,
   label,
-  confirm,
+  confirmTemplate,
 }: {
   /** Must match the `form="…"` on the row checkboxes. */
   formId: string;
@@ -32,7 +32,16 @@ export function BulkBar({
   options: { value: string; label: string }[];
   /** Noun for the counter, e.g. "ordini". */
   label: string;
-  confirm?: (count: number) => string;
+  /**
+   * Confirmation text, with `{n}` standing in for the selected count.
+   *
+   * A plain string, not a `(n) => string` callback: this is a client component
+   * rendered from a server one, and React cannot serialise a function across
+   * that boundary — passing one threw "Functions cannot be passed directly to
+   * Client Components" and dropped the whole list into its error boundary
+   * whenever the bar rendered.
+   */
+  confirmTemplate?: string;
 }) {
   const [count, setCount] = useState(0);
 
@@ -66,7 +75,7 @@ export function BulkBar({
   }
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-brown-900/10 bg-white px-4 py-3 shadow-sm">
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-brown-900/10 bg-surface px-4 py-3 shadow-sm">
       <label className="flex items-center gap-2 text-xs font-bold tracking-widest text-brown-800/70 uppercase">
         <input
           type="checkbox"
@@ -92,7 +101,7 @@ export function BulkBar({
         </select>
         <PendingButton
           tone="dark"
-          confirm={count > 0 && confirm ? confirm(count) : undefined}
+          confirm={count > 0 && confirmTemplate ? confirmTemplate.replace("{n}", String(count)) : undefined}
         >
           Applica a {count}
         </PendingButton>

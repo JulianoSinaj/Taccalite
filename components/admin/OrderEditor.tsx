@@ -221,7 +221,7 @@ export function OrderItemsForm({
       <input type="hidden" name="id" value={order.id} />
 
       {orphaned.length > 0 && (
-        <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <p className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-soft-fg">
           {orphaned.length === 1 ? "Una riga fa" : `${orphaned.length} righe fanno`} riferimento a un
           prodotto non più a catalogo e verrà rimossa salvando:{" "}
           {orphaned.map((i) => i.name).join(", ")}.

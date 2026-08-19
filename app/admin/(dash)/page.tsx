@@ -32,7 +32,7 @@ function delta(cur: number, prev: number): { pct: number; up: boolean } | null {
 function DeltaBadge({ d }: { d: { pct: number; up: boolean } | null }) {
   if (!d) return null;
   return (
-    <span className={`text-xs font-bold ${d.up ? "text-emerald-700" : "text-red-600"}`}>
+    <span className={`text-xs font-bold ${d.up ? "text-ok" : "text-danger"}`}>
       {d.up ? "▲" : "▼"} {d.pct}%
     </span>
   );
@@ -48,6 +48,13 @@ export default async function AdminDashboard() {
 
   const series = insights.dailySeries;
   const maxCents = Math.max(1, ...series.map((d) => d.cents));
+  const hasRevenue = series.some((d) => d.cents > 0);
+  // A bar chart of pure CSS divs is invisible to a screen reader; the label
+  // gives the same information as prose.
+  const best = series.reduce((a, b) => (b.cents > a.cents ? b : a), series[0] ?? { day: "", cents: 0 });
+  const chartLabel = `Incassi giornalieri dal ${series[0]?.day ?? ""} al ${
+    series[series.length - 1]?.day ?? ""
+  }. Totale ${euro(insights.revenue30dCents)}. Giornata migliore ${best.day} con ${euro(best.cents)}.`;
   const maxTopCents = Math.max(1, ...insights.topProducts.map((p) => p.cents));
 
   const revDelta = delta(insights.revenue30dCents, insights.revenuePrev30dCents);
@@ -76,7 +83,7 @@ export default async function AdminDashboard() {
     {
       label: "In lista d'attesa",
       value: s.waitlisted,
-      href: "/admin/reservations",
+      href: "/admin/reservations?stato=waitlist",
       icon: ListChecks,
     },
     {
@@ -152,24 +159,37 @@ export default async function AdminDashboard() {
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel className="lg:col-span-2">
           <h3 className="font-display mb-4 text-lg text-brown-950">Andamento incassi · 30 giorni</h3>
-          <div className="flex h-40 items-end gap-1">
-            {series.map((d) => (
-              <div
-                key={d.day}
-                className="flex flex-1 flex-col items-center justify-end"
-                title={`${d.day}: ${euro(d.cents)}`}
-              >
-                <div
-                  className="w-full rounded-t bg-gold transition-colors hover:bg-gold-dark"
-                  style={{ height: `${Math.round((d.cents / maxCents) * 100)}%`, minHeight: d.cents > 0 ? "3px" : "0" }}
-                />
+          {hasRevenue ? (
+            <>
+              <div className="flex h-40 items-end gap-1" role="img" aria-label={chartLabel}>
+                {series.map((d) => (
+                  <div
+                    key={d.day}
+                    className="flex flex-1 flex-col items-center justify-end"
+                    title={`${d.day}: ${euro(d.cents)}`}
+                  >
+                    <div
+                      className="w-full rounded-t bg-gold transition-colors hover:bg-gold-dark"
+                      style={{
+                        height: `${Math.round((d.cents / maxCents) * 100)}%`,
+                        minHeight: d.cents > 0 ? "3px" : "0",
+                      }}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className="mt-2 flex justify-between text-[10px] text-brown-800/50">
-            <span>{series[0]?.day.slice(5)}</span>
-            <span>{series[series.length - 1]?.day.slice(5)}</span>
-          </div>
+              <div className="mt-2 flex justify-between text-[10px] text-brown-800/50">
+                <span>{series[0]?.day.slice(5)}</span>
+                <span>{series[series.length - 1]?.day.slice(5)}</span>
+              </div>
+            </>
+          ) : (
+            // Zero everywhere used to render an invisible row of bars, which
+            // reads as a broken panel rather than as "no sales yet".
+            <p className="grid h-40 place-items-center rounded-lg bg-cream/60 text-sm text-brown-800/60">
+              Nessun incasso registrato negli ultimi 30 giorni.
+            </p>
+          )}
         </Panel>
 
         <Panel>
@@ -206,12 +226,12 @@ export default async function AdminDashboard() {
             const active = c.value > 0;
             const danger = c.warn && active;
             const cardCls = danger
-              ? "border-red-300 bg-red-50 hover:bg-red-100"
+              ? "border-danger/40 bg-danger-soft hover:bg-danger-soft"
               : active
-                ? "border-gold/50 bg-white hover:bg-gold/5 hover:shadow-md"
-                : "border-brown-900/10 bg-brown-900/[0.02] hover:bg-white";
-            const numCls = danger ? "text-red-700" : active ? "text-brown-950" : "text-brown-800/40";
-            const iconCls = danger ? "text-red-600" : "text-gold-deep";
+                ? "border-gold/50 bg-surface hover:bg-gold/5 hover:shadow-md"
+                : "border-brown-900/10 bg-brown-900/[0.02] hover:bg-surface";
+            const numCls = danger ? "text-danger-soft-fg" : active ? "text-brown-950" : "text-brown-800/40";
+            const iconCls = danger ? "text-danger" : "text-gold-deep";
             return (
               <Link
                 key={c.label}
@@ -329,13 +349,13 @@ export default async function AdminDashboard() {
           <ul className="mt-4 space-y-2 text-sm">
             <li className="flex items-center justify-between">
               <span className="text-brown-800/80">Invio email (SMTP)</span>
-              <span className={smtpConfigured ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>
+              <span className={smtpConfigured ? "font-semibold text-ok" : "font-semibold text-warn"}>
                 {smtpConfigured ? "Configurato" : "Modalità outbox (test)"}
               </span>
             </li>
             <li className="flex items-center justify-between">
               <span className="text-brown-800/80">Pagamenti (Stripe)</span>
-              <span className={stripeConfigured ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>
+              <span className={stripeConfigured ? "font-semibold text-ok" : "font-semibold text-warn"}>
                 {stripeConfigured ? "Configurato" : "Modalità simulazione"}
               </span>
             </li>

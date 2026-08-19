@@ -11,7 +11,7 @@ function ServiceTag({ on, label }: { on: boolean; label: string }) {
   return (
     <span
       className={`rounded-full px-2.5 py-1 text-[10px] font-bold tracking-widest uppercase ${
-        on ? "bg-emerald-100 text-emerald-800" : "bg-brown-900/10 text-brown-800/50"
+        on ? "bg-ok-soft text-ok-soft-fg" : "bg-brown-900/10 text-brown-800/50"
       }`}
     >
       {label}

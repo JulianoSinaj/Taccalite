@@ -95,7 +95,7 @@ export default function AdminLoginForm({ wrongRole }: { wrongRole: boolean }) {
       <button
         type="submit"
         disabled={busy}
-        className="w-full rounded-full bg-gold px-8 py-4 text-xs font-bold tracking-widest text-brown-950 uppercase transition-all hover:bg-gold-dark disabled:opacity-60"
+        className="w-full rounded-full bg-gold px-8 py-4 text-xs font-bold tracking-widest text-on-gold uppercase transition-all hover:bg-gold-dark disabled:opacity-60"
       >
         {busy ? "Accesso…" : "Accedi"}
       </button>

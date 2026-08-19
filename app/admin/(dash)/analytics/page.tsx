@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AdminHeader, Panel } from "@/components/admin/ui";
+import { AdminHeader, Panel, euro } from "@/components/admin/ui";
 import { getAnalyticsSummary, normalizeRange, ANALYTICS_RANGES } from "@/lib/analytics";
 import { isAdmin } from "@/lib/auth/session";
 
@@ -26,6 +26,14 @@ export default async function AdminAnalytics({ searchParams }: SP) {
 
   const s = await getAnalyticsSummary(new Date(), range);
   const maxDaily = Math.max(1, ...s.daily.map((d) => d.n));
+  const hasData = s.daily.some((d) => d.n > 0);
+  const delta =
+    s.viewsPrev > 0
+      ? {
+          pct: Math.abs(Math.round(((s.views - s.viewsPrev) / s.viewsPrev) * 100)),
+          up: s.views >= s.viewsPrev,
+        }
+      : null;
   // Above ~30 bars the per-day labels overlap, so we drop them for the 90-day view.
   const showDayLabels = s.daily.length <= 31;
 
@@ -59,29 +67,73 @@ export default async function AdminAnalytics({ searchParams }: SP) {
         ))}
       </div>
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Stat label="Ultimi 7 giorni" value={s.last7} />
-        <Stat label="Ultimi 30 giorni" value={s.last30} />
-        <Stat label="Totali" value={s.total} />
+      {/* These follow the range chips above. They used to be hard-coded to
+          7/30/total, so picking "90 giorni" changed everything on the page
+          except the headline numbers. */}
+      <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Panel>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+            Visite · {range} giorni
+          </p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <p className="font-display text-3xl text-brown-950">{s.views.toLocaleString("it-IT")}</p>
+            {delta && (
+              <span className={`text-xs font-bold ${delta.up ? "text-ok" : "text-danger"}`}>
+                {delta.up ? "▲" : "▼"} {delta.pct}%
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-brown-800/50">
+            vs. {s.viewsPrev.toLocaleString("it-IT")} nel periodo precedente
+          </p>
+        </Panel>
+        {/* Commerce context. Page views were counted and never once related to
+            money, so the page couldn't answer "did any of this sell anything". */}
+        <Panel>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+            Ordini · {range} giorni
+          </p>
+          <p className="font-display mt-1 text-3xl text-brown-950">{s.orders.toLocaleString("it-IT")}</p>
+          <p className="mt-1 text-xs text-brown-800/50">{s.ordersPerThousandViews} ogni 1.000 visite</p>
+        </Panel>
+        <Panel>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+            Incasso · {range} giorni
+          </p>
+          <p className="font-display mt-1 text-3xl text-brown-950">{euro(s.revenueCents)}</p>
+          <p className="mt-1 text-xs text-brown-800/50">al netto dei rimborsi</p>
+        </Panel>
+        <Stat label="Visite totali" value={s.total} />
       </div>
 
       <Panel className="mb-8">
         <h2 className="font-display mb-4 text-xl text-brown-950">Visite giornaliere · {range} giorni</h2>
-        <div className="flex h-40 items-end gap-1">
-          {s.daily.map((d) => (
-            <div
-              key={d.day}
-              className="flex flex-1 flex-col items-center justify-end gap-1"
-              title={`${d.day}: ${d.n} visite`}
-            >
+        {/* An all-zero range used to render an invisible row of bars, which
+            reads as a broken page rather than as "no data". */}
+        {hasData ? (
+          <div className="flex h-40 items-end gap-1">
+            {s.daily.map((d) => (
               <div
-                className="w-full rounded-t bg-gold"
-                style={{ height: `${Math.round((d.n / maxDaily) * 100)}%`, minHeight: d.n > 0 ? "4px" : "0" }}
-              />
-              {showDayLabels && <span className="text-[9px] text-brown-800/50">{d.day.slice(8)}</span>}
-            </div>
-          ))}
-        </div>
+                key={d.day}
+                className="flex flex-1 flex-col items-center justify-end gap-1"
+                title={`${d.day}: ${d.n} visite`}
+              >
+                <div
+                  className="w-full rounded-t bg-gold"
+                  style={{ height: `${Math.round((d.n / maxDaily) * 100)}%`, minHeight: d.n > 0 ? "4px" : "0" }}
+                />
+                {showDayLabels && <span className="text-[9px] text-brown-800/50">{d.day.slice(8)}</span>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="grid h-40 place-items-center rounded-lg bg-cream/60 text-sm text-brown-800/60">
+            Nessuna visita registrata in questo periodo.
+          </p>
+        )}
+        <p className="sr-only">
+          {s.daily.map((d) => `${d.day}: ${d.n} visite`).join(". ")}
+        </p>
       </Panel>
 
       <div className="grid gap-6 lg:grid-cols-2">

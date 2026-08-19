@@ -71,8 +71,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             role={t.status === "error" ? "alert" : "status"}
             className={`pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg ${
               t.status === "error"
-                ? "border-red-200 bg-red-50 text-red-800"
-                : "border-emerald-200 bg-emerald-50 text-emerald-900"
+                ? "border-danger/30 bg-danger-soft text-danger-soft-fg"
+                : "border-ok/40 bg-ok-soft text-ok-soft-fg"
             }`}
           >
             <span aria-hidden className="mt-px font-bold">

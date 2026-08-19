@@ -19,7 +19,7 @@ import ProductTile from "@/components/site/ProductTile";
 import JsonLd from "@/components/JsonLd";
 import { shopSchema, breadcrumbSchema, productSchema } from "@/lib/seo";
 import { getShopBySlug, getShops, getProductsByShop } from "@/lib/db/queries";
-import { isOpenNow, type HoursRow, type OpenState } from "@/lib/hours";
+import { shopIsOpenNow, shopHoursRows, type OpenState } from "@/lib/hours";
 
 export const dynamic = "force-dynamic";
 
@@ -119,7 +119,7 @@ export default async function ShopDetailPage({ params }: Params) {
     ],
   };
   const otherShop = allShops.find((s) => s.slug !== slug);
-  const openState = shop.hoursConfirmed ? isOpenNow(shop.hours) : null;
+  const openState = shopIsOpenNow(shop);
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     `Norcineria Taccalite, ${shop.address}`
   )}`;
@@ -183,7 +183,7 @@ export default async function ShopDetailPage({ params }: Params) {
               <OpenBadge state={openState} />
             </div>
             <ul className="space-y-1 text-sm leading-relaxed text-cream/75">
-              {shop.hours.map((h: HoursRow) => (
+              {shopHoursRows(shop).map((h) => (
                 <li key={h.label}>
                   {h.label}: {h.value}
                 </li>

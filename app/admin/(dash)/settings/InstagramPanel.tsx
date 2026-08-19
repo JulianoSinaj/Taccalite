@@ -31,7 +31,7 @@ export async function InstagramPanel() {
           <h3 className="font-display text-lg text-brown-950">Instagram (feed in homepage)</h3>
           <p className="mt-2 text-sm text-brown-800/70">
             Stato:{" "}
-            <span className={status.configured ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>
+            <span className={status.configured ? "font-semibold text-ok" : "font-semibold text-warn"}>
               {status.configured
                 ? `collegato${status.cache?.username ? ` come @${status.cache.username}` : ""}${
                     status.source === "env" ? " (token da variabile d'ambiente)" : ""

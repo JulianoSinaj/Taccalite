@@ -17,16 +17,17 @@ import {
   ActiveFilters,
   labelFrom,
 } from "@/components/admin/FilterBar";
-import { getReservationsPage, adminGetShops } from "@/lib/admin/queries";
+import { getReservationsPage, adminGetShops, getSavedViews } from "@/lib/admin/queries";
 import { reservationFilters, filterQuery } from "@/lib/admin/filters";
 import { BulkBar, BulkCheckbox } from "@/components/admin/BulkBar";
+import { SavedViews } from "@/components/admin/SavedViews";
 import {
   updateReservationStatus,
   promoteFromWaitlist,
   setReservationDeposit,
   bulkUpdateReservationStatus,
 } from "@/lib/admin/reservation-actions";
-import { isAdmin } from "@/lib/auth/session";
+import { isAdmin, getCurrentUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ const FILTERS: { value: string; label: string }[] = [
   { value: "all", label: "Tutte" },
   { value: "pending", label: "In attesa" },
   { value: "confirmed", label: "Confermate" },
+  { value: "waitlist", label: "Lista d'attesa" },
   { value: "completed", label: "Completate" },
   { value: "cancelled", label: "Annullate" },
   { value: "no_show", label: "Non presentati" },
@@ -67,10 +69,12 @@ export default async function AdminReservations({ searchParams }: SP) {
   const { stato = "all", negozio = "all", tipo = "all", q = "", da = "", a = "" } = sp;
   const page = Number(sp.page) || 1;
   const filters = reservationFilters(sp);
-  const [{ rows, total, pageCount }, shops, admin] = await Promise.all([
+  const viewer = await getCurrentUser();
+  const [{ rows, total, pageCount }, shops, admin, views] = await Promise.all([
     getReservationsPage({ ...filters, page }),
     adminGetShops(),
     isAdmin(),
+    viewer ? getSavedViews(viewer.id, BASE) : Promise.resolve([]),
   ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
 
@@ -90,7 +94,7 @@ export default async function AdminReservations({ searchParams }: SP) {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/admin/reservations/new"
-              className="rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-gold-dark"
+              className="rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
             >
               + Nuova prenotazione
             </Link>
@@ -167,6 +171,8 @@ export default async function AdminReservations({ searchParams }: SP) {
         }}
       />
 
+      <SavedViews path={BASE} views={views} currentQuery={filterQuery(filters).replace(/^\?/, "")} />
+
       {rows.length === 0 ? (
         <Panel>
           <p className="text-brown-800/70">Nessuna prenotazione in questa vista.</p>
@@ -184,7 +190,7 @@ export default async function AdminReservations({ searchParams }: SP) {
             { value: "no_show", label: "Segna non presentati" },
             { value: "pending", label: "Rimetti in attesa" },
           ]}
-          confirm={(n) => `Applicare l'azione a ${n} prenotazioni? I clienti con email riceveranno l'avviso.`}
+          confirmTemplate="Applicare l'azione a {n} prenotazioni? I clienti con email riceveranno l'avviso."
         />
         <div className="space-y-4">
           {rows.map((r) => (
@@ -200,17 +206,17 @@ export default async function AdminReservations({ searchParams }: SP) {
                     </span>
                     <StatusBadge status={r.status} />
                     {r.waitlisted && (
-                      <span className="rounded-full bg-amber-500/20 px-2.5 py-1 text-[10px] font-bold tracking-widest text-amber-700 uppercase">
+                      <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-warn uppercase">
                         Lista d&apos;attesa
                       </span>
                     )}
                     {r.remindedAt && (
-                      <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[10px] font-bold tracking-widest text-sky-700 uppercase">
+                      <span className="rounded-full bg-info-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-info-soft-fg uppercase">
                         Promemoria inviato
                       </span>
                     )}
                     {r.readyAt && (
-                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold tracking-widest text-emerald-700 uppercase">
+                      <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-ok uppercase">
                         Pronta ✓
                       </span>
                     )}
@@ -324,7 +330,7 @@ export default async function AdminReservations({ searchParams }: SP) {
                     </div>
                     {r.depositCents > 0 && (
                       <p
-                        className={`text-xs ${r.depositForfeitedAt ? "font-medium text-orange-700" : "text-brown-800/60"}`}
+                        className={`text-xs ${r.depositForfeitedAt ? "font-medium text-warn" : "text-brown-800/60"}`}
                       >
                         {r.depositForfeitedAt
                           ? "⚠ Acconto trattenuto (non presentato)"

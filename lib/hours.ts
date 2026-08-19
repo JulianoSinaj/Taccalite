@@ -142,6 +142,158 @@ function fmt(minutes: number): string {
   return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
+// ── Structured hours ─────────────────────────────────────────────────────────
+/**
+ * The authoritative shape, when a shop has been migrated off free text: one
+ * entry per weekday (1 = Monday … 7 = Sunday) with zero or more ranges. An entry
+ * with an empty `ranges` array means *explicitly closed*, which is information —
+ * unlike a missing entry, which means "not configured".
+ */
+export type DayHours = { day: number; ranges: { open: string; close: string }[] };
+
+const ITALIAN_DAYS = ["", "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
+
+/** Italian name of an ISO weekday (1 = Monday). */
+export const weekdayName = (day: number) => ITALIAN_DAYS[day] ?? "";
+
+/**
+ * Validate and normalise structured hours coming from the admin editor.
+ *
+ * Returns null for anything unusable, so a malformed payload leaves the shop on
+ * its free-text hours rather than half-applying. Ranges are sorted and each is
+ * checked for a real HH:MM pair; a close time at or before its open time is
+ * dropped (an overnight range is not something a norcineria needs, and silently
+ * accepting one would render as "open all night").
+ */
+export function parseStructuredHours(raw: string | null | undefined): DayHours[] | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+
+  const out: DayHours[] = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as { day?: unknown; ranges?: unknown };
+    const day = Number(e.day);
+    if (!Number.isInteger(day) || day < 1 || day > 7) continue;
+    if (out.some((d) => d.day === day)) continue; // first entry per day wins
+
+    const ranges: { open: string; close: string }[] = [];
+    if (Array.isArray(e.ranges)) {
+      for (const r of e.ranges) {
+        if (!r || typeof r !== "object") continue;
+        const rr = r as { open?: unknown; close?: unknown };
+        const open = parseTimeToMinutes(String(rr.open ?? ""));
+        const close = parseTimeToMinutes(String(rr.close ?? ""));
+        if (open == null || close == null || close <= open) continue;
+        ranges.push({ open: fmt(open), close: fmt(close) });
+      }
+    }
+    ranges.sort((a, b) => a.open.localeCompare(b.open));
+    out.push({ day, ranges });
+  }
+
+  out.sort((a, b) => a.day - b.day);
+  return out.length > 0 ? out : null;
+}
+
+/**
+ * Render structured hours as the `{label, value}` rows the public pages and the
+ * existing free-text field display, collapsing consecutive days that share the
+ * same schedule ("Lun–Ven · 9:00–13:00, 16:00–20:00").
+ *
+ * Keeping the display derived means the admin edits data once and the prose
+ * can't drift away from it — which is exactly how the free-text version went
+ * wrong.
+ */
+export function structuredToRows(hours: DayHours[]): HoursRow[] {
+  const key = (d: DayHours) => d.ranges.map((r) => `${r.open}–${r.close}`).join(", ") || "Chiuso";
+  const byDay = new Map(hours.map((d) => [d.day, d]));
+
+  const rows: HoursRow[] = [];
+  let runStart: number | null = null;
+  let runKey = "";
+
+  const flush = (endDay: number) => {
+    if (runStart == null) return;
+    const label =
+      runStart === endDay ? weekdayName(runStart) : `${weekdayName(runStart).slice(0, 3)}–${weekdayName(endDay).slice(0, 3)}`;
+    rows.push({ label, value: runKey });
+    runStart = null;
+  };
+
+  for (let day = 1; day <= 7; day++) {
+    const entry = byDay.get(day);
+    if (!entry) {
+      flush(day - 1);
+      continue;
+    }
+    const k = key(entry);
+    if (runStart == null) {
+      runStart = day;
+      runKey = k;
+    } else if (k !== runKey) {
+      flush(day - 1);
+      runStart = day;
+      runKey = k;
+    }
+  }
+  flush(7);
+  return rows;
+}
+
+/** Open/closed from structured hours. Never guesses — the data is exact. */
+function isOpenNowStructured(hours: DayHours[], now: Date): OpenState | null {
+  const today = hours.find((d) => d.day === isoWeekday(now));
+  if (!today) return null; // day not configured — say nothing
+  if (today.ranges.length === 0) return { open: false };
+
+  const cur = now.getHours() * 60 + now.getMinutes();
+  const mins = (t: string) => parseTimeToMinutes(t) ?? 0;
+
+  for (const r of today.ranges) {
+    const start = mins(r.open);
+    const end = mins(r.close);
+    if (cur >= start && cur < end) return { open: true, nextChange: r.close };
+  }
+  const next = today.ranges.map((r) => mins(r.open)).filter((s) => s > cur).sort((a, b) => a - b)[0];
+  return next != null ? { open: false, nextChange: fmt(next) } : { open: false };
+}
+
+/**
+ * Open/closed for a shop, preferring structured hours and falling back to the
+ * free-text parser for shops not yet migrated.
+ */
+export function shopIsOpenNow(
+  shop: { hours: HoursRow[] | null; hoursStructured?: DayHours[] | null },
+  now: Date = new Date(),
+): OpenState | null {
+  try {
+    if (shop.hoursStructured && shop.hoursStructured.length > 0) {
+      return isOpenNowStructured(shop.hoursStructured, now);
+    }
+    return isOpenNow(shop.hours, now);
+  } catch {
+    return null;
+  }
+}
+
+/** The rows to display for a shop: derived from structured hours when present. */
+export function shopHoursRows(shop: {
+  hours: HoursRow[] | null;
+  hoursStructured?: DayHours[] | null;
+}): HoursRow[] {
+  if (shop.hoursStructured && shop.hoursStructured.length > 0) {
+    return structuredToRows(shop.hoursStructured);
+  }
+  return shop.hours ?? [];
+}
+
 /**
  * Best-effort open/closed check against the freeform hours.
  *

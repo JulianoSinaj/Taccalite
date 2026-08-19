@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, MapPin, Phone } from "lucide-react";
-import { isOpenNow } from "@/lib/hours";
+import { shopIsOpenNow } from "@/lib/hours";
 import type { getShops } from "@/lib/db/queries";
 
 type Shop = Awaited<ReturnType<typeof getShops>>[number];
@@ -40,7 +40,7 @@ export default function DueBotteghe({ shops }: { shops: Shop[] }) {
           yielding, which is the whole gesture. */}
       <div className="flex flex-col lg:h-[78vh] lg:min-h-[34rem] lg:flex-row">
         {shops.map((shop) => {
-          const open = shop.hoursConfirmed ? isOpenNow(shop.hours) : null;
+          const open = shopIsOpenNow(shop);
           return (
             <Link
               key={shop.slug}

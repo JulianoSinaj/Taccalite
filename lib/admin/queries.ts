@@ -1,10 +1,16 @@
 import "server-only";
-import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
 export const PAGE_SIZE = 25;
 import { db } from "@/lib/db/client";
 import { getSetting } from "@/lib/db/queries";
-import { orderVatBuckets, aggregateVatBuckets, type VatBucket } from "@/lib/fiscal";
+import {
+  orderVatBuckets,
+  refundVatBuckets,
+  negateVatBuckets,
+  aggregateVatBuckets,
+  type VatBucket,
+} from "@/lib/fiscal";
 import { dateInRome, startOfTodayRome } from "@/lib/time";
 import {
   ordersWhere,
@@ -17,7 +23,9 @@ import {
   rewardsWhere,
   discountsWhere,
   auditWhere,
+  usersWhere,
   orderByFor,
+  type UserFilters,
   type SortSpec,
   type OrderFilters,
   type ReservationFilters,
@@ -48,7 +56,23 @@ import {
   auditLog,
   discountCodes,
   stockMovements,
+  productBatches,
+  savedViews,
 } from "@/lib/db/schema";
+
+/**
+ * Revenue is money **settled** in a window, net of refunds.
+ *
+ * Two things used to be wrong here and both flattered the numbers: the window
+ * was keyed on `createdAt` (so an order placed on the 31st and paid on the 1st
+ * counted in the wrong month, and disagreed with the IVA report, which keys on
+ * the payment date), and `refundedCents` was ignored, so a refunded order stayed
+ * on the books as takings forever.
+ */
+const settledAt = sql`coalesce(${orders.paidAt}, ${orders.createdAt})`;
+const netRevenue = sql<number>`coalesce(sum(${orders.totalCents} - ${orders.refundedCents}), 0)`;
+/** Every order that was ever settled — a refunded one still had a sale. */
+const everSettled = inArray(orders.paymentStatus, ["paid", "refunded"]);
 
 export async function getDashboardStats() {
   const [pendingRes] = await db
@@ -56,10 +80,13 @@ export async function getDashboardStats() {
     .from(reservations)
     .where(eq(reservations.status, "pending"));
   const [totalRes] = await db.select({ n: sql<number>`count(*)` }).from(reservations);
+  // "Ordini pagati" is the lifetime count of settled orders. It used to run the
+  // identical query as "da evadere" below, so the dashboard showed the same
+  // number twice under two different labels.
   const [paidOrders] = await db
     .select({ n: sql<number>`count(*)` })
     .from(orders)
-    .where(eq(orders.status, "paid"));
+    .where(eq(orders.paymentStatus, "paid"));
   const [customers] = await db
     .select({ n: sql<number>`count(*)` })
     .from(users)
@@ -73,11 +100,11 @@ export async function getDashboardStats() {
     .from(redemptions)
     .where(eq(redemptions.status, "pending"));
 
-  // Actionable work-queue: paid orders not yet fulfilled.
+  // Actionable work-queue: settled orders still waiting to be handed over.
   const [toFulfil] = await db
     .select({ n: sql<number>`count(*)` })
     .from(orders)
-    .where(eq(orders.status, "paid"));
+    .where(and(eq(orders.paymentStatus, "paid"), eq(orders.status, "paid")));
   // Porchetta waitlist awaiting a decision.
   const [waitlisted] = await db
     .select({ n: sql<number>`count(*)` })
@@ -89,14 +116,14 @@ export async function getDashboardStats() {
     .from(emailOutbox)
     .where(eq(emailOutbox.status, "failed"));
 
-  // Revenue from paid orders over rolling windows (integer cents).
+  // Net revenue over rolling windows, by settlement date (integer cents).
   const now = Date.now();
   const day = 24 * 60 * 60 * 1000;
   const rev = async (sinceMs: number) => {
     const [r] = await db
-      .select({ sum: sql<number>`coalesce(sum(${orders.totalCents}), 0)` })
+      .select({ sum: netRevenue })
       .from(orders)
-      .where(and(eq(orders.paymentStatus, "paid"), gte(orders.createdAt, new Date(sinceMs))));
+      .where(and(everSettled, sql`${settledAt} >= ${sinceMs}`));
     return r?.sum ?? 0;
   };
   const startOfToday = startOfTodayRome();
@@ -133,13 +160,11 @@ export async function getDashboardInsights() {
   const p30 = new Date(now - 30 * day);
   const p60 = new Date(now - 60 * day);
 
-  const paid = eq(orders.paymentStatus, "paid");
-
   const sumRev = async (from: Date, to?: Date) => {
-    const conds = [paid, gte(orders.createdAt, from)];
-    if (to) conds.push(lt(orders.createdAt, to));
+    const conds = [everSettled, sql`${settledAt} >= ${from.getTime()}`];
+    if (to) conds.push(sql`${settledAt} < ${to.getTime()}`);
     const [r] = await db
-      .select({ sum: sql<number>`coalesce(sum(${orders.totalCents}), 0)`, n: sql<number>`count(*)` })
+      .select({ sum: netRevenue, n: sql<number>`count(*)` })
       .from(orders)
       .where(and(...conds));
     return { sum: r?.sum ?? 0, n: r?.n ?? 0 };
@@ -152,19 +177,23 @@ export async function getDashboardInsights() {
     return r?.n ?? 0;
   };
 
-  const dayExpr = sql<string>`date(${orders.createdAt} / 1000, 'unixepoch')`;
-
-  const [last30, prev30, newCust30, newCustPrev, daily, topProducts] = await Promise.all([
+  const [last30, prev30, newCust30, newCustPrev, settledRows, topProducts] = await Promise.all([
     sumRev(p30),
     sumRev(p60, p30),
     countCustomers(p30),
     countCustomers(p60, p30),
+    // Bucketed in JS rather than by SQL `date(...)`, which is UTC: the chart sits
+    // beside an "Incasso oggi" tile computed from Europe/Rome midnight, and the
+    // two used to disagree for late-evening orders. SQLite's 'localtime' would
+    // follow the container's TZ (UTC in the image), not the shop's, so the
+    // business-timezone helper is the only correct source.
     db
-      .select({ day: dayExpr, cents: sql<number>`coalesce(sum(${orders.totalCents}), 0)` })
+      .select({
+        at: sql<number>`${settledAt}`,
+        cents: sql<number>`${orders.totalCents} - ${orders.refundedCents}`,
+      })
       .from(orders)
-      .where(and(paid, gte(orders.createdAt, p30)))
-      .groupBy(dayExpr)
-      .orderBy(dayExpr),
+      .where(and(everSettled, sql`${settledAt} >= ${p30.getTime()}`)),
     // Group on the stable product id, not the line's name snapshot: renaming a
     // product used to split its sales history into two rows. Lines with no
     // productId (a since-deleted product) fall back to grouping by name so their
@@ -177,7 +206,7 @@ export async function getDashboardInsights() {
       })
       .from(orderItems)
       .innerJoin(orders, eq(orderItems.orderId, orders.id))
-      .where(and(paid, gte(orders.createdAt, p30)))
+      .where(and(everSettled, sql`${settledAt} >= ${p30.getTime()}`))
       .groupBy(sql`coalesce(${orderItems.productId}, ${orderItems.name})`)
       .orderBy(desc(sql`sum(${orderItems.lineTotalCents})`))
       .limit(5),
@@ -185,11 +214,15 @@ export async function getDashboardInsights() {
 
   const aovCents = last30.n > 0 ? Math.round(last30.sum / last30.n) : 0;
 
-  // Fill the daily revenue into a continuous 30-day series (UTC, to match the SQL
-  // date() grouping) so the chart has no gaps.
-  const byDay = new Map(daily.map((d) => [d.day, d.cents]));
+  // Fill a continuous 30-day series on the Rome calendar so the chart has no gaps
+  // and shares its day boundary with the money tiles above it.
+  const byDay = new Map<string, number>();
+  for (const r of settledRows) {
+    const key = dateInRome(new Date(r.at));
+    byDay.set(key, (byDay.get(key) ?? 0) + r.cents);
+  }
   const dailySeries = Array.from({ length: 30 }, (_, i) => {
-    const key = new Date(now - (29 - i) * day).toISOString().slice(0, 10);
+    const key = dateInRome(new Date(now - (29 - i) * day));
     return { day: key, cents: byDay.get(key) ?? 0 };
   });
 
@@ -238,16 +271,61 @@ export async function getReservationsPage(opts: ReservationFilters & { page?: nu
   return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
 }
 
-/** Upcoming (today onward) active reservations, ordered by date+time, for the
- *  agenda / porchetta prep views. */
-export async function getUpcomingReservations() {
-  const today = dateInRome();
+/** One reservation, with the account behind it when there is one. */
+export async function adminGetReservation(id: string) {
+  const [row] = await db
+    .select({
+      reservation: reservations,
+      customerName: users.name,
+      customerUsername: users.username,
+    })
+    .from(reservations)
+    .leftJoin(users, eq(reservations.userId, users.id))
+    .where(eq(reservations.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Everything else booked at the same shop on the same day, so the detail page
+ * can show what the kitchen and the room are already committed to.
+ */
+export function getReservationsSameDay(shopSlug: string, date: string, excludeId: string) {
   return db
     .select()
     .from(reservations)
     .where(
-      and(gte(reservations.date, today), inArray(reservations.status, ["pending", "confirmed"])),
+      and(
+        eq(reservations.shopSlug, shopSlug),
+        eq(reservations.date, date),
+        sql`${reservations.id} != ${excludeId}`,
+        sql`${reservations.status} != 'cancelled'`,
+      ),
     )
+    .orderBy(reservations.time);
+}
+
+/**
+ * Active reservations for the agenda / prep sheet.
+ *
+ * Bounded on purpose. It used to return *every* upcoming booking forever, so the
+ * printed sheet grew without limit and couldn't be scoped to "tomorrow" — the
+ * question the page is actually opened to answer.
+ */
+export async function getUpcomingReservations(
+  opts: { from?: string; to?: string; shopSlug?: string } = {},
+) {
+  const from = opts.from ?? dateInRome();
+  const conds = [
+    gte(reservations.date, from),
+    inArray(reservations.status, ["pending", "confirmed"]),
+  ];
+  if (opts.to) conds.push(sql`${reservations.date} <= ${opts.to}`);
+  if (opts.shopSlug && opts.shopSlug !== "all") conds.push(eq(reservations.shopSlug, opts.shopSlug));
+  return db
+    .select()
+    .from(reservations)
+    .where(and(...conds))
     .orderBy(reservations.date, reservations.time);
 }
 
@@ -257,15 +335,30 @@ export const getOrdersList = (shopSlug?: string) => {
 };
 
 /** Paginated orders list for the given filters (see `lib/admin/filters`). */
-export async function getOrdersPage(opts: OrderFilters & { page?: number }) {
+export const ORDER_SORTS = ["data", "numero", "cliente", "totale", "stato"] as const;
+
+export async function getOrdersPage(opts: OrderFilters & { page?: number; sort?: SortSpec }) {
   const page = Math.max(1, opts.page ?? 1);
   const where = ordersWhere(opts);
+  const orderBy = opts.sort
+    ? orderByFor(
+        opts.sort,
+        {
+          data: orders.createdAt,
+          numero: orders.orderNumber,
+          cliente: orders.name,
+          totale: orders.totalCents,
+          stato: orders.status,
+        },
+        orders.createdAt,
+      )
+    : desc(orders.createdAt);
   const [rows, [{ total }]] = await Promise.all([
     db
       .select()
       .from(orders)
       .where(where)
-      .orderBy(desc(orders.createdAt))
+      .orderBy(orderBy)
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
     db.select({ total: sql<number>`count(*)` }).from(orders).where(where),
@@ -306,8 +399,12 @@ export async function getCustomersPage(opts: CustomerFilters & { page?: number }
   return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
 }
 
-/** Every product, unpaginated — for pickers (manual order) and selects, not lists. */
-export const adminGetProducts = () => db.select().from(products).orderBy(products.sortOrder);
+/**
+ * Every live product, unpaginated — for pickers (manual order) and selects.
+ * Archived products are excluded: they must stay out of anything sellable.
+ */
+export const adminGetProducts = () =>
+  db.select().from(products).where(isNull(products.archivedAt)).orderBy(products.sortOrder);
 
 /**
  * The VAT rate each category actually uses, so a new product in a known category
@@ -378,7 +475,9 @@ export async function getProductsPage(
 /** Paginated news list, with the distinct categories for the filter chips. */
 export async function getBlogPage(opts: BlogFilters & { page?: number }) {
   const page = Math.max(1, opts.page ?? 1);
-  const where = blogWhere(opts);
+  // Today in the business timezone, so "online" vs "programmato" here matches
+  // the gate the public listing applies.
+  const where = blogWhere(opts, dateInRome());
   const [rows, [{ total }], categories] = await Promise.all([
     db
       .select()
@@ -454,44 +553,79 @@ export async function adminGetOrder(id: string) {
   return { order, items };
 }
 
-/** Paginated users list, selecting the same columns as the old adminGetUsers. */
-export async function getUsersPage(opts: { page?: number }) {
+/**
+ * The account columns every admin surface needs.
+ *
+ * `active`, `emailVerifiedAt` and `totpEnabled` are part of this on purpose: the
+ * users page used to run a second query just to learn who was deactivated, and
+ * could show neither verification nor 2FA state at all — so an operator could
+ * not tell a locked-out account from a live one.
+ */
+const USER_COLUMNS = {
+  id: users.id,
+  username: users.username,
+  email: users.email,
+  name: users.name,
+  role: users.role,
+  phone: users.phone,
+  active: users.active,
+  emailVerifiedAt: users.emailVerifiedAt,
+  totpEnabled: users.totpEnabled,
+  marketingConsent: users.marketingConsent,
+  createdAt: users.createdAt,
+};
+
+/** Paginated users list with role/status facets and search. */
+export async function getUsersPage(opts: UserFilters & { page?: number }) {
   const page = Math.max(1, opts.page ?? 1);
+  const where = usersWhere(opts);
   const [rows, [{ total }]] = await Promise.all([
     db
-      .select({
-        id: users.id,
-        username: users.username,
-        email: users.email,
-        name: users.name,
-        role: users.role,
-        phone: users.phone,
-        createdAt: users.createdAt,
-      })
+      .select(USER_COLUMNS)
       .from(users)
+      .where(where)
       .orderBy(desc(users.createdAt))
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
-    db.select({ total: sql<number>`count(*)` }).from(users),
+    db.select({ total: sql<number>`count(*)` }).from(users).where(where),
   ]);
   return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
 }
 
 export const adminGetUser = (id: string) =>
   db
-    .select({
-      id: users.id,
-      username: users.username,
-      email: users.email,
-      name: users.name,
-      phone: users.phone,
-      role: users.role,
-      createdAt: users.createdAt,
-    })
+    .select(USER_COLUMNS)
     .from(users)
     .where(eq(users.id, id))
     .limit(1)
     .then((r) => r[0] ?? null);
+
+/**
+ * Lifetime aggregates for one customer: what they've actually been worth.
+ *
+ * The customer page listed orders but never totalled them, so "is this a good
+ * customer?" meant adding up rows by eye. Refunds are netted out — a refunded
+ * order is not revenue.
+ */
+export async function getCustomerStats(userId: string) {
+  const [row] = await db
+    .select({
+      orders: sql<number>`count(*)`,
+      spentCents: sql<number>`coalesce(sum(${orders.totalCents} - ${orders.refundedCents}), 0)`,
+      lastOrderAt: sql<number | null>`max(coalesce(${orders.paidAt}, ${orders.createdAt}))`,
+    })
+    .from(orders)
+    .where(and(eq(orders.userId, userId), inArray(orders.paymentStatus, ["paid", "refunded"])));
+
+  const count = row?.orders ?? 0;
+  const spentCents = row?.spentCents ?? 0;
+  return {
+    orders: count,
+    spentCents,
+    aovCents: count > 0 ? Math.round(spentCents / count) : 0,
+    lastOrderAt: row?.lastOrderAt ? new Date(row.lastOrderAt) : null,
+  };
+}
 
 /** Count of full admins — used to prevent demoting the last one. */
 export const countAdmins = () =>
@@ -529,19 +663,39 @@ export async function getCustomersWithPoints(filters: CustomerFilters = {}) {
   return (where ? base.where(where) : base).orderBy(desc(users.createdAt));
 }
 
-/** Paginated redemptions list. */
-export async function getRedemptionsPage(opts: { page?: number }) {
+/**
+ * Paginated redemptions queue, filterable by status.
+ *
+ * It was the only list in the admin with no filter and no search, which made it
+ * unusable as a work queue the moment fulfilled rows outnumbered pending ones.
+ * Defaults to the ones that still need doing.
+ */
+export async function getRedemptionsPage(opts: { page?: number; stato?: string }) {
   const page = Math.max(1, opts.page ?? 1);
-  const [rows, [{ total }]] = await Promise.all([
+  const where =
+    opts.stato && opts.stato !== "all"
+      ? eq(redemptions.status, opts.stato as "pending")
+      : undefined;
+  const [rows, [{ total }], [{ pending }]] = await Promise.all([
     db
-      .select()
+      .select({
+        redemption: redemptions,
+        customerName: users.name,
+        customerUsername: users.username,
+      })
       .from(redemptions)
+      .leftJoin(users, eq(redemptions.userId, users.id))
+      .where(where)
       .orderBy(desc(redemptions.createdAt))
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
-    db.select({ total: sql<number>`count(*)` }).from(redemptions),
+    db.select({ total: sql<number>`count(*)` }).from(redemptions).where(where),
+    db
+      .select({ pending: sql<number>`count(*)` })
+      .from(redemptions)
+      .where(eq(redemptions.status, "pending")),
   ]);
-  return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+  return { rows, total, pending, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
 }
 
 export const getRecentLoyaltyTx = (userId: string) =>
@@ -630,6 +784,9 @@ export const getReservationsForExport = (f: ReservationFilters) =>
     .where(reservationsWhere(f))
     .orderBy(desc(reservations.createdAt));
 
+export const getProductsForExport = (f: ProductFilters, lowStockThreshold: number) =>
+  db.select().from(products).where(productsWhere(f, lowStockThreshold)).orderBy(products.sortOrder);
+
 export const getSubscribersForExport = (f: SubscriberFilters) =>
   db
     .select()
@@ -638,6 +795,68 @@ export const getSubscribersForExport = (f: SubscriberFilters) =>
     .orderBy(desc(newsletterSubscribers.createdAt));
 
 export const getAllSettings = () => db.select().from(settings).orderBy(settings.key);
+
+/** One user's saved filter presets for one admin list. */
+export const getSavedViews = (userId: string, path: string) =>
+  db
+    .select()
+    .from(savedViews)
+    .where(and(eq(savedViews.userId, userId), eq(savedViews.path, path)))
+    .orderBy(savedViews.createdAt);
+
+// ── Product batches (lot + expiry) ───────────────────────────────────────────
+/** Open and recent lots for a product, earliest expiry first (FEFO order). */
+export const getProductBatches = (productId: string, limit = 50) =>
+  db
+    .select()
+    .from(productBatches)
+    .where(eq(productBatches.productId, productId))
+    .orderBy(asc(productBatches.expiryDate), desc(productBatches.createdAt))
+    .limit(limit);
+
+/**
+ * Lots with stock left that expire on or before `through`, plus anything already
+ * past its date. This is the HACCP-facing question — what has to be sold, moved
+ * or thrown — and nothing in the admin could answer it before.
+ */
+export async function getExpiringBatches(through: string, includeExpired = true) {
+  const rows = await db
+    .select({
+      batch: productBatches,
+      productName: products.name,
+      productSlug: products.slug,
+      shopSlug: products.shopSlug,
+    })
+    .from(productBatches)
+    .innerJoin(products, eq(productBatches.productId, products.id))
+    .where(
+      and(
+        sql`${productBatches.remaining} > 0`,
+        isNotNull(productBatches.expiryDate),
+        sql`${productBatches.expiryDate} <= ${through}`,
+        isNull(products.archivedAt),
+      ),
+    )
+    .orderBy(asc(productBatches.expiryDate));
+  return includeExpired ? rows : rows.filter((r) => r.batch.expiryDate! >= through);
+}
+
+/** How many lots of a product are expiring within `days`, for a badge. */
+export async function countExpiringSoon(through: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(productBatches)
+    .innerJoin(products, eq(productBatches.productId, products.id))
+    .where(
+      and(
+        sql`${productBatches.remaining} > 0`,
+        isNotNull(productBatches.expiryDate),
+        sql`${productBatches.expiryDate} <= ${through}`,
+        isNull(products.archivedAt),
+      ),
+    );
+  return row?.n ?? 0;
+}
 
 /** Recent stock movements for a product, newest first. */
 export const getStockMovements = (productId: string, limit = 20) =>
@@ -704,36 +923,31 @@ export const getAuditForExport = (f: AuditFilters) =>
 const fiscalDate = sql`coalesce(${orders.paidAt}, ${orders.createdAt})`;
 
 /**
- * IVA report for paid orders whose payment date falls in [from, to]. Buckets are
- * computed **per order** — line grosses, minus that order's discount apportioned
- * across its rate buckets, plus shipping at the configured rate — then aggregated
- * by rate. This makes the taxable base + tax reflect what customers actually paid
- * (a raw line-gross group-by ignored coupons and over-declared VAT).
- *
- * Refunded orders are excluded (paymentStatus = 'paid' only), so the report
- * reflects net taxable takings for the period.
+ * The date a refund belongs to. `refundedAt` exists from migration 0027 on;
+ * refunds issued before it fall back to the row's last-touched time, which for a
+ * refunded order is in practice the refund itself.
  */
-export async function getVatReport(from: Date, to: Date) {
-  const shippingVatPct = await getSetting<number>("store.shippingVatRate", 22);
-  const shippingVatBps = Math.round(shippingVatPct * 100);
+const reversalDate = sql`coalesce(${orders.refundedAt}, ${orders.updatedAt})`;
 
-  const paidInRange = and(
-    eq(orders.paymentStatus, "paid"),
-    sql`${fiscalDate} >= ${from.getTime()}`,
-    sql`${fiscalDate} <= ${to.getTime()}`,
-  );
+export type VatReport = {
+  /** Sales settled in the period, gross of any later refund. */
+  sales: VatBucket[];
+  /** Credit notes: money given back **during** the period, as negative buckets. */
+  reversals: VatBucket[];
+  /** sales + reversals — what the period actually owes. */
+  buckets: VatBucket[];
+  /** The same net figure split by location (null = shipping / no shop). */
+  byShop: { shopSlug: string | null; buckets: VatBucket[] }[];
+  shippingVatBps: number;
+  /** Order counts behind each side, for the operator's sanity check. */
+  salesCount: number;
+  reversalCount: number;
+};
 
-  const ords = await db
-    .select({
-      id: orders.id,
-      discountCents: orders.discountCents,
-      shippingCents: orders.shippingCents,
-    })
-    .from(orders)
-    .where(paidInRange);
-
-  if (ords.length === 0) return { buckets: [] as VatBucket[], shippingVatBps };
-
+/** Line grosses per order id, for a set of orders. */
+async function itemsForOrders(ids: string[]) {
+  const map = new Map<string, { grossCents: number; vatRateBps: number }[]>();
+  if (ids.length === 0) return map;
   const items = await db
     .select({
       orderId: orderItems.orderId,
@@ -741,23 +955,110 @@ export async function getVatReport(from: Date, to: Date) {
       vatRateBps: orderItems.vatRateBps,
     })
     .from(orderItems)
-    .where(inArray(orderItems.orderId, ords.map((o) => o.id)));
-
-  const itemsByOrder = new Map<string, { grossCents: number; vatRateBps: number }[]>();
+    .where(inArray(orderItems.orderId, ids));
   for (const it of items) {
-    const arr = itemsByOrder.get(it.orderId) ?? [];
+    const arr = map.get(it.orderId) ?? [];
     arr.push({ grossCents: it.grossCents, vatRateBps: it.vatRateBps });
-    itemsByOrder.set(it.orderId, arr);
+    map.set(it.orderId, arr);
   }
+  return map;
+}
 
-  const perOrder = ords.map((o) =>
-    orderVatBuckets({
-      items: itemsByOrder.get(o.id) ?? [],
-      discountCents: o.discountCents,
-      shippingCents: o.shippingCents,
-      shippingVatBps,
-    }),
+/**
+ * IVA report for a period, on an accrual basis with credit notes.
+ *
+ * Two passes, because a sale and its refund are two fiscal events at two dates:
+ *
+ *  1. **Sales** — every order *settled* in [from, to), gross of any later
+ *     refund. A January sale refunded in March stays in January: the January
+ *     return was filed on it, and a report must not silently rewrite a period
+ *     that has already been declared.
+ *  2. **Reversals** — every order *refunded* in [from, to), as negative buckets
+ *     sized to the refunded amount. This is the credit note (nota di credito),
+ *     booked where it belongs. A partial refund lands here too, which is what
+ *     stops the sale side over-declaring on money that was handed back.
+ *
+ * Buckets are computed per order (line grosses, minus that order's discount
+ * apportioned across its rates, plus shipping at the configured rate), so the
+ * taxable base and tax reflect what the customer actually paid.
+ *
+ * `to` is **exclusive**: callers pass the start of the day after the period, so
+ * an order settled at 23:59:59.4 on the last day isn't dropped.
+ */
+export async function getVatReport(from: Date, to: Date): Promise<VatReport> {
+  const shippingVatPct = await getSetting<number>("store.shippingVatRate", 22);
+  const shippingVatBps = Math.round(shippingVatPct * 100);
+
+  const cols = {
+    id: orders.id,
+    discountCents: orders.discountCents,
+    shippingCents: orders.shippingCents,
+    refundedCents: orders.refundedCents,
+    shopSlug: orders.shopSlug,
+  };
+
+  const [soldRows, refundedRows] = await Promise.all([
+    // Ever-settled orders, so one later refunded still counts as a sale here.
+    db
+      .select(cols)
+      .from(orders)
+      .where(
+        and(
+          inArray(orders.paymentStatus, ["paid", "refunded"]),
+          sql`${fiscalDate} >= ${from.getTime()}`,
+          sql`${fiscalDate} < ${to.getTime()}`,
+        ),
+      ),
+    db
+      .select(cols)
+      .from(orders)
+      .where(
+        and(
+          sql`${orders.refundedCents} > 0`,
+          sql`${reversalDate} >= ${from.getTime()}`,
+          sql`${reversalDate} < ${to.getTime()}`,
+        ),
+      ),
+  ]);
+
+  const ids = [...new Set([...soldRows, ...refundedRows].map((o) => o.id))];
+  const itemsByOrder = await itemsForOrders(ids);
+
+  const base = (o: (typeof soldRows)[number]) => ({
+    items: itemsByOrder.get(o.id) ?? [],
+    discountCents: o.discountCents,
+    shippingCents: o.shippingCents,
+    shippingVatBps,
+  });
+
+  const sales = aggregateVatBuckets(soldRows.map((o) => orderVatBuckets(base(o))));
+  const reversals = aggregateVatBuckets(
+    refundedRows.map((o) => negateVatBuckets(refundVatBuckets({ ...base(o), refundedCents: o.refundedCents }))),
   );
 
-  return { buckets: aggregateVatBuckets(perOrder), shippingVatBps };
+  // Net per location, so the two shops can be reconciled separately — a single
+  // combined figure couldn't answer "how much did the centro take".
+  const perShop = new Map<string, VatBucket[][]>();
+  const push = (slug: string | null, buckets: VatBucket[]) => {
+    const key = slug ?? "";
+    perShop.set(key, [...(perShop.get(key) ?? []), buckets]);
+  };
+  for (const o of soldRows) push(o.shopSlug, orderVatBuckets(base(o)));
+  for (const o of refundedRows) {
+    push(o.shopSlug, negateVatBuckets(refundVatBuckets({ ...base(o), refundedCents: o.refundedCents })));
+  }
+  const byShop = [...perShop.entries()]
+    .map(([shopSlug, all]) => ({ shopSlug: shopSlug || null, buckets: aggregateVatBuckets(all) }))
+    .filter((s) => s.buckets.length > 0)
+    .sort((a, b) => (a.shopSlug ?? "").localeCompare(b.shopSlug ?? ""));
+
+  return {
+    sales,
+    reversals,
+    buckets: aggregateVatBuckets([sales, reversals]),
+    byShop,
+    shippingVatBps,
+    salesCount: soldRows.length,
+    reversalCount: refundedRows.length,
+  };
 }

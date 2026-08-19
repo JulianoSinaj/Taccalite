@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { idleState, type ActionState } from "@/lib/admin/action-state";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { useToast } from "./Toasts";
 
 type Action = (prev: ActionState, fd: FormData) => Promise<ActionState>;
@@ -20,36 +21,71 @@ export function PendingButton({
   children,
   tone = "gold",
   confirm,
+  disabled = false,
 }: {
   children: ReactNode;
   tone?: "gold" | "dark" | "danger";
   confirm?: string;
+  /** Blocks submission before the form is ready (e.g. an unresolved lookup). */
+  disabled?: boolean;
 }) {
   const { pending } = useFormStatus();
+  const [asking, setAsking] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const tones = {
-    gold: "bg-gold text-brown-950 hover:bg-gold-dark",
+    gold: "bg-gold text-on-gold hover:bg-gold-dark",
     dark: "bg-brown-950 text-cream hover:bg-brown-900",
-    danger: "bg-red-600 text-white hover:bg-red-700",
+    danger: "bg-danger-solid text-danger-solid-fg hover:brightness-110",
   };
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      aria-busy={pending}
-      onClick={confirm ? (e) => { if (!window.confirm(confirm)) e.preventDefault(); } : undefined}
-      className={`relative rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors disabled:opacity-60 ${tones[tone]}`}
-    >
-      <span className={pending ? "invisible" : undefined}>{children}</span>
-      {pending && (
-        <span className="absolute inset-0 grid place-items-center">
-          <span
-            aria-hidden
-            className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-70"
-          />
-          <span className="sr-only">Invio in corso…</span>
-        </span>
+    <>
+      <button
+        ref={btnRef}
+        type="submit"
+        disabled={pending || disabled}
+        aria-busy={pending}
+        // Intercept, ask in-page, then submit for real. `window.confirm` blocked
+        // the browser and — worse — is suppressed outright once a user ticks
+        // "prevent additional dialogs", turning a guarded action unguarded.
+        onClick={
+          confirm
+            ? (e) => {
+                if (asking) return; // the programmatic re-click, let it through
+                e.preventDefault();
+                setAsking(true);
+              }
+            : undefined
+        }
+        className={`relative rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors disabled:opacity-60 ${tones[tone]}`}
+      >
+        <span className={pending ? "invisible" : undefined}>{children}</span>
+        {pending && (
+          <span className="absolute inset-0 grid place-items-center">
+            <span
+              aria-hidden
+              className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-70"
+            />
+            <span className="sr-only">Invio in corso…</span>
+          </span>
+        )}
+      </button>
+      {confirm && (
+        <ConfirmDialog
+          open={asking}
+          title="Confermi?"
+          message={confirm}
+          confirmLabel={typeof children === "string" ? children : "Conferma"}
+          tone={tone === "danger" ? "danger" : "dark"}
+          onCancel={() => setAsking(false)}
+          onConfirm={() => {
+            // `asking` is still true on this click, so the handler above lets
+            // the native submit through; it's cleared once the dialog is gone.
+            btnRef.current?.click();
+            setAsking(false);
+          }}
+        />
       )}
-    </button>
+    </>
   );
 }
 
@@ -66,10 +102,14 @@ export function ActionForm({
   className = "",
   id,
   redirectTo,
+  "aria-label": ariaLabel,
 }: {
   action: Action;
   children: ReactNode;
   className?: string;
+  /** Names the form for screen readers when it has no visible heading — a group
+   *  of icon-only buttons (the theme switch) reads as loose controls without it. */
+  "aria-label"?: string;
   /** Lets inputs elsewhere on the page join this form via `form="<id>"` —
    *  used by the bulk bars, whose checkboxes live inside the rows. */
   id?: string;
@@ -90,7 +130,7 @@ export function ActionForm({
   }, idleState);
 
   return (
-    <form id={id} action={formAction} className={className}>
+    <form id={id} action={formAction} className={className} aria-label={ariaLabel}>
       {children}
     </form>
   );

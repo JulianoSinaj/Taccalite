@@ -26,6 +26,18 @@ export function dateInRome(date: Date = new Date()): string {
 }
 
 /**
+ * `yyyy-mm-dd` for `days` from today in the business timezone.
+ *
+ * Lives here rather than in a page because the React Compiler lint forbids
+ * calling `new Date()` in a render body — and every "expiring within N days"
+ * surface has to agree on where the boundary falls.
+ */
+export function expiryWindow(days: number, date: Date = new Date()): string {
+  const [y, m, d] = dateInRome(date).split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/**
  * The UTC instant of 00:00 Europe/Rome on the given moment's local date. Derived
  * by subtracting the time elapsed so far today on the Rome wall clock, so it is
  * correct across DST. Use for "since start of today" range comparisons (e.g.

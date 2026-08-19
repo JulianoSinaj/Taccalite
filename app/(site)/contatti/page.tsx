@@ -3,7 +3,7 @@ import { Clock, ExternalLink, Mail, MapPin, Phone } from "lucide-react";
 import ContactForm from "@/components/site/ContactForm";
 import Reveal from "@/components/Reveal";
 import { getShops } from "@/lib/db/queries";
-import { isOpenNow, type HoursRow } from "@/lib/hours";
+import { shopIsOpenNow, shopHoursRows } from "@/lib/hours";
 import { siteConfig } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -66,8 +66,8 @@ export default async function ContattiPage() {
 
             <div className="mt-10 flex flex-col gap-12">
               {shops.map((shop) => {
-                const open = shop.hoursConfirmed ? isOpenNow(shop.hours) : null;
-                const rows = shop.hours;
+                const open = shopIsOpenNow(shop);
+                const rows = shopHoursRows(shop);
                 return (
                   <Reveal key={shop.slug}>
                     <article className="border-t border-rule pt-7">
@@ -126,7 +126,7 @@ export default async function ContattiPage() {
                           <li className="flex items-start gap-3">
                             <Clock className="mt-1 size-4 shrink-0 text-gold-deep" aria-hidden />
                             <span className="flex flex-col gap-1">
-                              {rows.map((row: HoursRow) => (
+                              {rows.map((row) => (
                                 <span key={row.label}>
                                   <span className="text-brown-950">{row.label}</span> — {row.value}
                                 </span>

@@ -93,8 +93,8 @@ export function SegmentedFilter({
               aria-current={on ? "page" : undefined}
               className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest whitespace-nowrap uppercase transition-colors ${
                 on
-                  ? "bg-gold text-brown-950 shadow-sm"
-                  : "text-brown-800/80 hover:bg-white/60 hover:text-brown-950"
+                  ? "bg-gold text-on-gold shadow-sm"
+                  : "text-brown-800/80 hover:bg-surface/60 hover:text-brown-950"
               }`}
             >
               {o.label}
@@ -155,7 +155,7 @@ export function FilterToolbar({
       id={formId}
       action={basePath}
       method="get"
-      className="mb-3 flex flex-wrap items-end gap-3 rounded-2xl border border-brown-900/10 bg-white p-4 shadow-sm"
+      className="mb-3 flex flex-wrap items-end gap-3 rounded-2xl border border-brown-900/10 bg-surface p-4 shadow-sm"
     >
       <FilterAutoSubmit formId={formId} />
       {hidden.map(([k, v]) => (

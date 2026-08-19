@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { inputCls, labelCls } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
+import { HoursEditor } from "./HoursEditor";
 import { saveProduct, saveBlogPost, saveShop, saveReward } from "@/lib/admin/actions";
 import { saveDiscount } from "@/lib/admin/discount-actions";
 import { createUser } from "@/lib/admin/user-actions";
@@ -301,19 +302,71 @@ export function BlogForm({ post }: { post?: BlogPostRow | null }) {
         <textarea name="excerpt" rows={2} defaultValue={post?.excerpt} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Contenuto (un paragrafo per riga vuota)</label>
-        <textarea name="content" rows={8} defaultValue={post?.content?.join("\n\n")} className={inputCls} />
+        <label className={labelCls} htmlFor="post-content">
+          Contenuto (un paragrafo per riga vuota)
+        </label>
+        <textarea
+          id="post-content"
+          name="content"
+          rows={8}
+          defaultValue={post?.content?.join("\n\n")}
+          className={inputCls}
+        />
       </div>
       <ImageField current={post?.image} />
       <div>
         <label className={labelCls}>Etichetta immagine</label>
         <input name="imageLabel" defaultValue={post?.imageLabel} className={inputCls} />
       </div>
+
+      {/* SEO. The excerpt doubles as the meta description when none is given,
+          but a listing blurb and a search snippet aren't always the same text. */}
+      <div className="sm:col-span-2">
+        <label className={labelCls} htmlFor="post-seo-title">
+          Titolo SEO (opzionale)
+        </label>
+        <input
+          id="post-seo-title"
+          name="seoTitle"
+          maxLength={70}
+          defaultValue={post?.seoTitle ?? ""}
+          placeholder={post?.title ?? "Usa il titolo dell'articolo"}
+          className={inputCls}
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <label className={labelCls} htmlFor="post-seo-desc">
+          Descrizione SEO (opzionale)
+        </label>
+        <textarea
+          id="post-seo-desc"
+          name="seoDescription"
+          rows={2}
+          maxLength={200}
+          defaultValue={post?.seoDescription ?? ""}
+          placeholder="Se vuota viene usato l'estratto."
+          className={inputCls}
+        />
+      </div>
+
       <div className="flex items-center pt-6">
         <Toggle name="published" label="Pubblicato" defaultChecked={post?.published ?? true} />
       </div>
-      <div className="sm:col-span-2">
+      <div className="flex items-center pt-6 text-xs text-brown-800/60">
+        Con una data futura l&apos;articolo resta nascosto fino a quel giorno.
+      </div>
+      <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
         <PendingButton>{post ? "Salva modifiche" : "Crea news"}</PendingButton>
+        {post && (
+          <a
+            href={`/blog/${post.slug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-full bg-brown-900/10 px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+          >
+            Vedi sul sito ↗
+          </a>
+        )}
       </div>
     </ActionForm>
   );
@@ -370,13 +423,7 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
         <input name="address" defaultValue={shop?.address} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Orari (una riga per fascia: Etichetta | Valore)</label>
-        <textarea
-          name="hours"
-          rows={3}
-          defaultValue={shop?.hours.map((h) => `${h.label} | ${h.value}`).join("\n")}
-          className={inputCls}
-        />
+        <HoursEditor shop={shop} />
       </div>
       <div className="sm:col-span-2">
         <label className={labelCls}>Punti di forza (uno per riga)</label>
@@ -396,6 +443,43 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
         <Toggle name="storeEnabled" label="Ritiro in negozio (store)" defaultChecked={shop?.storeEnabled ?? true} />
         <Toggle name="porchettaEnabled" label="Porchetta del sabato" defaultChecked={shop?.porchettaEnabled ?? true} />
       </div>
+
+      {/* Capacity is per location: the two shops prepare separately, and one
+          may seat twice as many people as the other. */}
+      <div>
+        <label className={labelCls} htmlFor="shop-porchetta-kg">
+          Capacità porchetta (kg al giorno)
+        </label>
+        <input
+          id="shop-porchetta-kg"
+          name="porchettaCapacityKg"
+          type="number"
+          min={0}
+          defaultValue={shop?.porchettaCapacityKg ?? ""}
+          placeholder="usa il valore generale"
+          className={inputCls}
+        />
+        <p className="mt-1 text-xs text-brown-800/60">
+          Vuoto: usa la capacità impostata in Impostazioni per tutte le sedi.
+        </p>
+      </div>
+      <div>
+        <label className={labelCls} htmlFor="shop-seats">
+          Coperti per fascia oraria
+        </label>
+        <input
+          id="shop-seats"
+          name="seatsCapacity"
+          type="number"
+          min={0}
+          defaultValue={shop?.seatsCapacity ?? ""}
+          placeholder="nessun limite"
+          className={inputCls}
+        />
+        <p className="mt-1 text-xs text-brown-800/60">
+          Oltre questo numero di ospiti nella stessa fascia la prenotazione viene segnalata.
+        </p>
+      </div>
       <div className="sm:col-span-2">
         <PendingButton>{shop ? "Salva negozio" : "Crea negozio"}</PendingButton>
       </div>
@@ -403,7 +487,13 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
   );
 }
 
-export function DiscountForm({ discount }: { discount?: DiscountCodeRow | null }) {
+export function DiscountForm({
+  discount,
+  shops = [],
+}: {
+  discount?: DiscountCodeRow | null;
+  shops?: ShopRow[];
+}) {
   // `value` is shown in its human form: whole percent, or euros for a fixed code.
   const valueDefault = discount
     ? discount.type === "fixed"
@@ -454,6 +544,30 @@ export function DiscountForm({ discount }: { discount?: DiscountCodeRow | null }
         <label className={labelCls}>Utilizzi massimi (vuoto = illimitati)</label>
         <input name="maxRedemptions" type="number" min={1} defaultValue={discount?.maxRedemptions ?? ""} className={inputCls} />
       </div>
+      {/* Scoping. Without these a code was all-or-nothing: one customer could
+          use a "benvenuto" code every week, and a code meant for one shop
+          worked at both. */}
+      <div>
+        <label className={labelCls}>Utilizzi per cliente (vuoto = illimitati)</label>
+        <input
+          name="maxPerCustomer"
+          type="number"
+          min={1}
+          defaultValue={discount?.maxPerCustomer ?? ""}
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label className={labelCls}>Valido solo per la sede</label>
+        <select name="shopSlug" defaultValue={discount?.shopSlug ?? ""} className={inputCls}>
+          <option value="">Tutte le sedi</option>
+          {shops.map((s) => (
+            <option key={s.slug} value={s.slug}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelCls}>Valido dal</label>
@@ -464,8 +578,13 @@ export function DiscountForm({ discount }: { discount?: DiscountCodeRow | null }
           <input name="endsAt" type="date" defaultValue={dateValue(discount?.endsAt)} className={inputCls} />
         </div>
       </div>
-      <div className="flex items-center pt-6">
+      <div className="flex flex-wrap items-center gap-6 pt-6 sm:col-span-2">
         <Toggle name="active" label="Attivo" defaultChecked={discount?.active ?? true} />
+        <Toggle
+          name="firstOrderOnly"
+          label="Solo al primo ordine"
+          defaultChecked={discount?.firstOrderOnly ?? false}
+        />
       </div>
       <div className="sm:col-span-2">
         <PendingButton>{discount ? "Salva codice" : "Crea codice"}</PendingButton>
@@ -556,6 +675,66 @@ export function RewardForm({ reward }: { reward?: RewardRow | null }) {
         <label className={labelCls}>Descrizione</label>
         <textarea name="description" rows={2} defaultValue={reward?.description} className={inputCls} />
       </div>
+
+      {/* Availability: how many exist, how often one customer may claim it, and
+          when it can be claimed at all. Blank means "no limit" throughout. */}
+      <div>
+        <label className={labelCls} htmlFor="reward-stock">
+          Disponibilità (pezzi)
+        </label>
+        <input
+          id="reward-stock"
+          name="stock"
+          type="number"
+          min={0}
+          defaultValue={reward?.stock ?? ""}
+          placeholder="illimitata"
+          className={inputCls}
+        />
+        <p className="mt-1 text-xs text-brown-800/60">
+          Scalata a ogni riscatto e ripristinata se il riscatto viene annullato.
+        </p>
+      </div>
+      <div>
+        <label className={labelCls} htmlFor="reward-max">
+          Limite per cliente
+        </label>
+        <input
+          id="reward-max"
+          name="maxPerCustomer"
+          type="number"
+          min={0}
+          defaultValue={reward?.maxPerCustomer ?? ""}
+          placeholder="nessun limite"
+          className={inputCls}
+        />
+        <p className="mt-1 text-xs text-brown-800/60">Quante volte lo stesso cliente può riscattarlo.</p>
+      </div>
+      <div>
+        <label className={labelCls} htmlFor="reward-from">
+          Disponibile dal
+        </label>
+        <input
+          id="reward-from"
+          name="availableFrom"
+          type="date"
+          defaultValue={dateValue(reward?.availableFrom)}
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label className={labelCls} htmlFor="reward-until">
+          Disponibile fino al
+        </label>
+        <input
+          id="reward-until"
+          name="availableUntil"
+          type="date"
+          defaultValue={dateValue(reward?.availableUntil)}
+          className={inputCls}
+        />
+      </div>
+
       <ImageField current={reward?.image} />
       <div className="flex items-center pt-6">
         <Toggle name="active" label="Attivo" defaultChecked={reward?.active ?? true} />

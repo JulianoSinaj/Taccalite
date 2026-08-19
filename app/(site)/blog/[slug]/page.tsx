@@ -21,8 +21,8 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   // The editor can set a search-result title and snippet separately from the
   // on-page title and the listing blurb; both fall back to those.
   return {
-    title: post.title,
-    description: post.excerpt,
+    title: post.seoTitle ?? post.title,
+    description: post.seoDescription ?? post.excerpt,
   };
 }
 

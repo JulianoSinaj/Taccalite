@@ -94,7 +94,7 @@ export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {
       aria-label="Comandi rapidi"
     >
       <div
-        className="w-full max-w-lg overflow-hidden rounded-2xl border border-brown-900/10 bg-white shadow-2xl"
+        className="w-full max-w-lg overflow-hidden rounded-2xl border border-brown-900/10 bg-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <input

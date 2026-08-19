@@ -521,6 +521,222 @@ body:has(.site-shell) {
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* ── Dark theme ───────────────────────────────────────────────────────────────
+ *
+ * Scoped to whatever carries `data-theme` — in practice the gestionale shell,
+ * not <html>. The storefront has a deliberate art direction (cream paper, warm
+ * photography); inverting it is a separate design decision, not a side effect
+ * of giving the back office a night mode.
+ *
+ * What makes this ~60 lines instead of a rewrite: the brand ramp is
+ * **inverted**, not replaced. `--color-brown-950` is the darkest ink in light
+ * mode and the lightest in dark; `--color-cream` the reverse. So every
+ * `text-brown-950` stays "primary text", every `bg-brown-900/10` stays "a
+ * barely-there fill", every `border-brown-900/10` stays "a hairline" — with no
+ * markup change. `bg-brown-950 text-cream`, the primary button and the active
+ * nav item, stays "maximum contrast against the page" and lands as a light
+ * button on dark, which is the right treatment there anyway.
+ *
+ * The block below is written twice — once for an explicit choice, once for
+ * "automatico" following the OS. `light-dark()` would state each value once,
+ * but Lightning CSS down-levels it into a toggle it only wires up for
+ * `:root`/`.light`/`.dark`, so on an attribute selector every descendant
+ * silently resolved to the light branch. `test/theme-tokens.test.ts` asserts the
+ * two copies stay identical, which is the drift risk duplication actually
+ * carries.
+ *
+ * Warm greys throughout: a neutral-grey dark mode would throw the brand away.
+ *
+ * Both blocks are `@media screen` so that print gets no dark rule at all and
+ * falls back to the light `:root` ramp. Zeroing the tints in `@media print`
+ * wasn't enough — the *ramp* is what matters, and an inverted `--color-brown-950`
+ * prints near-white ink on white paper. The packing slip lives inside the
+ * dashboard layout, so it inherits `data-theme` and hit exactly that.
+ */
+@media screen {
+  [data-theme="dark"] {
+    color-scheme: dark;
+    /* The brand ramp, inverted. */
+    --color-cream: #17110d;
+    --color-cream-dark: #120d0a;
+    --color-brown-950: #f6efe4;
+    --color-brown-900: #e9dccb;
+    --color-brown-800: #d9c9b3;
+    --color-brown-700: #bda88e;
+    --color-brown-600: #a08b72;
+    --color-tan: #8a7c6b;
+    --color-taupe: #9a9082;
+    --color-ink: #f6efe4;
+
+    /* Gold has to lift off a dark ground, and `gold-deep` exists to make small
+     * text readable — on dark that means lighter, not darker. `--on-gold` is
+     * absent on purpose: gold stays light in both themes, so the ink on top of it
+     * must stay dark. */
+    --color-gold: #e8c473;
+    --color-gold-dark: #d3ab58;
+    --color-gold-deep: #e2bc6d;
+
+    --surface: #211a13;
+    --surface-muted: #17110d;
+    --surface-sunken: #14100c;
+
+    /* A tinted chip becomes a translucent wash of its own hue, so it reads as a
+     * highlight rather than a light rectangle punched into the page. */
+    --ok: #5fd0a3;
+    --ok-soft: rgba(16, 185, 129, 0.18);
+    --ok-soft-fg: #7ee2b8;
+    --warn: #f0be5e;
+    --warn-soft: rgba(245, 158, 11, 0.18);
+    --warn-soft-fg: #fbd07a;
+    --danger: #f28b82;
+    --danger-soft: rgba(239, 68, 68, 0.2);
+    --danger-soft-fg: #f6a9a2;
+    --danger-solid: #c33c2e;
+    --danger-solid-fg: #fff6f4;
+    --info: #79c6f0;
+    --info-soft: rgba(56, 189, 248, 0.18);
+    --info-soft-fg: #9ad6f5;
+
+    /* shadcn's own tokens, kept in step for anything that reaches for them. */
+    --background: #17110d;
+    --foreground: #f6efe4;
+    --card: #211a13;
+    --card-foreground: #f6efe4;
+    --popover: #211a13;
+    --popover-foreground: #f6efe4;
+    --primary: #f6efe4;
+    --primary-foreground: #211a13;
+    --secondary: #2b211a;
+    --secondary-foreground: #f6efe4;
+    --muted: #2b211a;
+    --muted-foreground: #b5a693;
+    --accent: #e8c473;
+    --accent-foreground: #17110d;
+    --destructive: #f28b82;
+    --border: rgba(246, 239, 228, 0.12);
+    --input: rgba(246, 239, 228, 0.16);
+    --ring: #d3ab58;
+  }
+}
+
+@media screen and (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    color-scheme: dark;
+    /* The brand ramp, inverted. */
+    --color-cream: #17110d;
+    --color-cream-dark: #120d0a;
+    --color-brown-950: #f6efe4;
+    --color-brown-900: #e9dccb;
+    --color-brown-800: #d9c9b3;
+    --color-brown-700: #bda88e;
+    --color-brown-600: #a08b72;
+    --color-tan: #8a7c6b;
+    --color-taupe: #9a9082;
+    --color-ink: #f6efe4;
+  
+    /* Gold has to lift off a dark ground, and `gold-deep` exists to make small
+     * text readable — on dark that means lighter, not darker. `--on-gold` is
+     * absent on purpose: gold stays light in both themes, so the ink on top of it
+     * must stay dark. */
+    --color-gold: #e8c473;
+    --color-gold-dark: #d3ab58;
+    --color-gold-deep: #e2bc6d;
+  
+    --surface: #211a13;
+    --surface-muted: #17110d;
+    --surface-sunken: #14100c;
+  
+    /* A tinted chip becomes a translucent wash of its own hue, so it reads as a
+     * highlight rather than a light rectangle punched into the page. */
+    --ok: #5fd0a3;
+    --ok-soft: rgba(16, 185, 129, 0.18);
+    --ok-soft-fg: #7ee2b8;
+    --warn: #f0be5e;
+    --warn-soft: rgba(245, 158, 11, 0.18);
+    --warn-soft-fg: #fbd07a;
+    --danger: #f28b82;
+    --danger-soft: rgba(239, 68, 68, 0.2);
+    --danger-soft-fg: #f6a9a2;
+    --danger-solid: #c33c2e;
+    --danger-solid-fg: #fff6f4;
+    --info: #79c6f0;
+    --info-soft: rgba(56, 189, 248, 0.18);
+    --info-soft-fg: #9ad6f5;
+  
+    /* shadcn's own tokens, kept in step for anything that reaches for them. */
+    --background: #17110d;
+    --foreground: #f6efe4;
+    --card: #211a13;
+    --card-foreground: #f6efe4;
+    --popover: #211a13;
+    --popover-foreground: #f6efe4;
+    --primary: #f6efe4;
+    --primary-foreground: #211a13;
+    --secondary: #2b211a;
+    --secondary-foreground: #f6efe4;
+    --muted: #2b211a;
+    --muted-foreground: #b5a693;
+    --accent: #e8c473;
+    --accent-foreground: #17110d;
+    --destructive: #f28b82;
+    --border: rgba(246, 239, 228, 0.12);
+    --input: rgba(246, 239, 228, 0.16);
+    --ring: #d3ab58;
+  }
+}
+
+/* `color-scheme` also tells the browser which form controls, scrollbars and
+ * `<dialog>` backdrops to draw, so native widgets follow without being styled. */
+[data-theme="light"] {
+  color-scheme: light;
+}
+[data-theme="system"] {
+  color-scheme: light dark;
+}
+
+/* The dark blocks above are `@media screen`, so print already resolves the whole
+ * palette from the light `:root`. This only stops the browser drawing native
+ * widgets in their dark skin on a page that is otherwise light. */
+@media print {
+  [data-theme] {
+    color-scheme: light;
+  }
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

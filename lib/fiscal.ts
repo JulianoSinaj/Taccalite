@@ -99,18 +99,24 @@ export type OrderVatInput = {
   shippingCents: number;
   /** VAT rate (bps) applied to shipping. */
   shippingVatBps: number;
+  /**
+   * Amount given back to the customer (≥ 0), apportioned across the *charged*
+   * buckets so the result is VAT on money actually kept. Omit (or 0) to get the
+   * gross-of-refund picture — which is what the sale side of a period report
+   * wants, since the reversal is booked separately in the period it happened.
+   */
+  refundedCents?: number;
 };
 
 /**
- * Reconciled VAT buckets for a single order. Starts from the line grosses, then:
- *  1. apportions the cart discount across rate buckets pro-rata to each bucket's
- *     share of the pre-discount subtotal (largest-remainder, exact to the cent);
- *  2. adds shipping under its own rate.
- * The sum of bucket grosses therefore equals `subtotal − discount + shipping` =
- * the order total, so `imponibile + imposta` reconciles with what the customer
- * actually paid — unlike a raw line-gross breakdown, which ignores both.
+ * The charged gross per VAT rate for one order: line grosses, minus the cart
+ * discount apportioned pro-rata across rate buckets (largest-remainder, exact to
+ * the cent), plus shipping under its own rate. The sum equals the order total.
+ *
+ * Returned as a parallel rate/gross pair because both `orderVatBuckets` and the
+ * refund apportionment need the same base.
  */
-export function orderVatBuckets(input: OrderVatInput): VatBucket[] {
+function chargedByRate(input: OrderVatInput): Map<number, number> {
   const byRate = new Map<number, number>();
   for (const l of input.items) {
     if (!l.grossCents) continue;
@@ -131,14 +137,77 @@ export function orderVatBuckets(input: OrderVatInput): VatBucket[] {
   if (shipping > 0) {
     netByRate.set(input.shippingVatBps, (netByRate.get(input.shippingVatBps) ?? 0) + shipping);
   }
+  return netByRate;
+}
 
-  return [...netByRate.entries()]
-    .filter(([, g]) => g > 0)
+/** Turn a rate→gross map into sorted, non-empty buckets. */
+function bucketsFrom(byRate: Map<number, number>): VatBucket[] {
+  return [...byRate.entries()]
+    .filter(([, g]) => g !== 0)
     .sort((a, b) => a[0] - b[0])
     .map(([rateBps, grossCents]) => {
       const { imponibileCents, impostaCents } = splitGross(grossCents, rateBps);
       return { rateBps, grossCents, imponibileCents, impostaCents };
     });
+}
+
+/**
+ * Reconciled VAT buckets for a single order. Starts from the line grosses, then:
+ *  1. apportions the cart discount across rate buckets pro-rata to each bucket's
+ *     share of the pre-discount subtotal (largest-remainder, exact to the cent);
+ *  2. adds shipping under its own rate;
+ *  3. subtracts any refund, apportioned across those charged buckets.
+ * The sum of bucket grosses therefore equals `subtotal − discount + shipping −
+ * refund` = what the customer actually paid and kept, so `imponibile + imposta`
+ * reconciles with the money — unlike a raw line-gross breakdown, which ignores
+ * all three.
+ */
+export function orderVatBuckets(input: OrderVatInput): VatBucket[] {
+  const charged = chargedByRate(input);
+  const refund = Math.max(0, Math.round(input.refundedCents ?? 0));
+  if (refund === 0) return bucketsFrom(charged);
+
+  const rates = [...charged.keys()];
+  const grosses = rates.map((r) => charged.get(r)!);
+  const total = grosses.reduce((s, g) => s + g, 0);
+  const refundByRate = apportion(Math.min(refund, total), grosses);
+
+  const net = new Map<number, number>();
+  rates.forEach((r, i) => net.set(r, grosses[i] - refundByRate[i]));
+  return bucketsFrom(net);
+}
+
+/**
+ * The buckets of the *refunded portion alone*, positive.
+ *
+ * A period report books this as a credit note (negated) in the period the refund
+ * happened, instead of retroactively shrinking the period the sale was filed in.
+ * Returns [] when nothing was refunded.
+ */
+export function refundVatBuckets(input: OrderVatInput): VatBucket[] {
+  const refund = Math.max(0, Math.round(input.refundedCents ?? 0));
+  if (refund === 0) return [];
+
+  const charged = chargedByRate(input);
+  const rates = [...charged.keys()];
+  const grosses = rates.map((r) => charged.get(r)!);
+  const total = grosses.reduce((s, g) => s + g, 0);
+  if (total <= 0) return [];
+
+  const refundByRate = apportion(Math.min(refund, total), grosses);
+  const out = new Map<number, number>();
+  rates.forEach((r, i) => out.set(r, refundByRate[i]));
+  return bucketsFrom(out);
+}
+
+/** Flip the sign of every bucket — a reversal line in a period report. */
+export function negateVatBuckets(buckets: VatBucket[]): VatBucket[] {
+  return buckets.map((b) => ({
+    rateBps: b.rateBps,
+    grossCents: -b.grossCents,
+    imponibileCents: -b.imponibileCents,
+    impostaCents: -b.impostaCents,
+  }));
 }
 
 /** Sum several orders' buckets into one bucket per rate (for a period report). */
@@ -156,5 +225,9 @@ export function aggregateVatBuckets(perOrder: VatBucket[][]): VatBucket[] {
       }
     }
   }
-  return [...byRate.values()].sort((a, b) => a.rateBps - b.rateBps);
+  // A rate whose sales and reversals cancel out exactly contributes nothing and
+  // would only be noise on the report.
+  return [...byRate.values()]
+    .filter((b) => b.grossCents !== 0 || b.imponibileCents !== 0 || b.impostaCents !== 0)
+    .sort((a, b) => a.rateBps - b.rateBps);
 }

@@ -1,0 +1,94 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { Bookmark, X } from "lucide-react";
+import { inputCls } from "./ui";
+import { ActionForm, PendingButton } from "./ActionForm";
+import { saveView, deleteView } from "@/lib/admin/view-actions";
+import type { SavedViewRow } from "@/lib/db/schema";
+
+/**
+ * The saved filter presets for one admin list.
+ *
+ * `currentQuery` is the page's active filters, resolved server-side and passed
+ * in — reading `window.location` here would make the component depend on the
+ * client's idea of the URL, which lags a server-rendered navigation.
+ */
+export function SavedViews({
+  path,
+  views,
+  currentQuery,
+}: {
+  path: string;
+  views: SavedViewRow[];
+  currentQuery: string;
+}) {
+  const [naming, setNaming] = useState(false);
+  const active = views.find((v) => v.query === currentQuery);
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
+      {views.map((v) => (
+        <span
+          key={v.id}
+          className={`inline-flex items-center gap-1 rounded-full pr-1 pl-3 text-xs font-bold tracking-widest uppercase ${
+            active?.id === v.id ? "bg-brown-950 text-cream" : "bg-brown-900/10 text-brown-800"
+          }`}
+        >
+          <Link href={`${path}${v.query ? `?${v.query}` : ""}`} className="py-2 hover:underline">
+            {v.name}
+          </Link>
+          <ActionForm action={deleteView} className="inline-flex">
+            <input type="hidden" name="id" value={v.id} />
+            <button
+              type="submit"
+              aria-label={`Elimina la vista ${v.name}`}
+              className="rounded-full p-1 opacity-50 hover:bg-black/10 hover:opacity-100"
+            >
+              <X className="size-3" />
+            </button>
+          </ActionForm>
+        </span>
+      ))}
+
+      {naming ? (
+        <ActionForm action={saveView} className="inline-flex items-center gap-1">
+          <input type="hidden" name="path" value={path} />
+          <input type="hidden" name="query" value={currentQuery} />
+          <label className="sr-only" htmlFor="view-name">
+            Nome della vista
+          </label>
+          <input
+            id="view-name"
+            name="name"
+            autoFocus
+            required
+            maxLength={60}
+            placeholder="es. Da evadere oggi"
+            className={`${inputCls} w-44 py-1.5`}
+          />
+          <PendingButton tone="dark">Salva</PendingButton>
+          <button
+            type="button"
+            onClick={() => setNaming(false)}
+            className="rounded-full px-2 py-1.5 text-xs text-brown-800/60 hover:text-brown-950"
+          >
+            Annulla
+          </button>
+        </ActionForm>
+      ) : (
+        !active && (
+          <button
+            type="button"
+            onClick={() => setNaming(true)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-brown-900/5 px-3 py-2 text-xs font-bold tracking-widest text-brown-800/70 uppercase hover:bg-brown-900/10 hover:text-brown-950"
+          >
+            <Bookmark className="size-3" />
+            Salva questa vista
+          </button>
+        )
+      )}
+    </div>
+  );
+}

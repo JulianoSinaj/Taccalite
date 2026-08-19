@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { idleState, type ActionState } from "@/lib/admin/action-state";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 type Action = (prev: ActionState, fd: FormData) => Promise<ActionState>;
 
@@ -16,19 +17,46 @@ function SubmitButton({
   tone?: "gold" | "dark";
 }) {
   const { pending } = useFormStatus();
+  const [asking, setAsking] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const tones = {
-    gold: "bg-gold text-brown-950 hover:bg-gold-dark",
+    gold: "bg-gold text-on-gold hover:bg-gold-dark",
     dark: "bg-brown-950 text-cream hover:bg-brown-900",
   };
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      onClick={confirm ? (e) => { if (!window.confirm(confirm)) e.preventDefault(); } : undefined}
-      className={`rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors disabled:opacity-50 ${tones[tone]}`}
-    >
-      {pending ? "…" : children}
-    </button>
+    <>
+      <button
+        ref={btnRef}
+        type="submit"
+        disabled={pending}
+        onClick={
+          confirm
+            ? (e) => {
+                if (asking) return;
+                e.preventDefault();
+                setAsking(true);
+              }
+            : undefined
+        }
+        className={`rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors disabled:opacity-50 ${tones[tone]}`}
+      >
+        {pending ? "…" : children}
+      </button>
+      {confirm && (
+        <ConfirmDialog
+          open={asking}
+          title="Confermi?"
+          message={confirm}
+          tone="dark"
+          confirmLabel={typeof children === "string" ? children : "Conferma"}
+          onCancel={() => setAsking(false)}
+          onConfirm={() => {
+            btnRef.current?.click();
+            setAsking(false);
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -73,12 +101,12 @@ export function CodeRevealForm({
       </form>
 
       {state.status === "error" && (
-        <p className="mt-3 text-sm font-medium text-red-600" role="status">
+        <p className="mt-3 text-sm font-medium text-danger" role="status">
           {state.message}
         </p>
       )}
       {state.status === "success" && (
-        <p className="mt-3 text-sm font-medium text-emerald-700" role="status">
+        <p className="mt-3 text-sm font-medium text-ok" role="status">
           {state.message}
         </p>
       )}

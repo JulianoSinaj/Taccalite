@@ -6,10 +6,10 @@ export const dynamic = "force-dynamic";
 
 // Little entry colouring per reservation status.
 const STATUS_ENTRY: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-900 border-amber-300",
-  confirmed: "bg-emerald-100 text-emerald-900 border-emerald-300",
+  pending: "bg-warn-soft text-warn-soft-fg border-warn/40",
+  confirmed: "bg-ok-soft text-ok-soft-fg border-ok/40",
   completed: "bg-brown-900/10 text-brown-800 border-brown-900/20",
-  cancelled: "bg-red-100 text-red-800 border-red-300 line-through opacity-70",
+  cancelled: "bg-danger-soft text-danger-soft-fg border-danger/40 line-through opacity-70",
 };
 
 const WEEKDAYS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
@@ -124,7 +124,7 @@ export default async function ReservationCalendar({ searchParams }: SP) {
       />
 
       {capped && (
-        <p className="mb-4 rounded-lg bg-amber-100 px-4 py-2 text-sm text-amber-800">
+        <p className="mb-4 rounded-lg bg-warn-soft px-4 py-2 text-sm text-warn-soft-fg">
           Settimana molto piena: mostrate le prime {collected.length} prenotazioni.
         </p>
       )}
@@ -135,7 +135,7 @@ export default async function ReservationCalendar({ searchParams }: SP) {
           return (
             <div
               key={dayISO}
-              className={`flex break-inside-avoid flex-col rounded-2xl border bg-white p-3 shadow-sm ${
+              className={`flex break-inside-avoid flex-col rounded-2xl border bg-surface p-3 shadow-sm ${
                 isToday ? "border-gold ring-1 ring-gold" : "border-brown-900/10"
               }`}
             >

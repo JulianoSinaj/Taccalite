@@ -16,6 +16,7 @@ import { logAudit } from "@/lib/audit";
 import {
   createReservation,
   checkPorchettaCapacity,
+  checkSeatsCapacity,
   ReservationNotAllowedError,
 } from "@/lib/reservations";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
@@ -63,20 +64,51 @@ async function mustFindReservation(id: string): Promise<ReservationRow> {
 }
 
 /**
- * Suffix warning when a porchetta booking pushes its day past the weekly cap.
- * The back-office never blocks on this — an operator taking the booking is
- * deciding to accept it — but it must be told what it just did.
+ * Suffix warning when a booking pushes its day past a configured capacity —
+ * kilos of porchetta for the location, or seats in the time slot.
+ *
+ * The back-office never blocks on either: an operator taking a booking on the
+ * phone is deciding to accept it. But it must be told what it just did, and
+ * seats were never checked at all, so double-booking Saturday dinner used to
+ * happen in silence.
  */
 async function capacityWarning(
-  type: string,
-  date: string,
-  quantityKg: number | null,
+  input: {
+    type: string;
+    date: string;
+    shopSlug: string;
+    quantityKg?: number | null;
+    time?: string | null;
+    guests?: number | null;
+  },
   excludeId?: string,
 ): Promise<string> {
-  if (type !== "porchetta" || quantityKg == null) return "";
-  const cap = await checkPorchettaCapacity(date, quantityKg, { excludeId });
-  if (!cap.exceeded) return "";
-  return ` ⚠ Attenzione: il ${date} supera la capacità settimanale (${cap.bookedKg + quantityKg} / ${cap.capacityKg} kg).`;
+  const parts: string[] = [];
+
+  if (input.type === "porchetta" && input.quantityKg != null) {
+    const cap = await checkPorchettaCapacity(input.date, input.quantityKg, {
+      excludeId,
+      shopSlug: input.shopSlug,
+    });
+    if (cap.exceeded) {
+      parts.push(
+        `il ${input.date} supera la capacità della sede (${cap.bookedKg + input.quantityKg} / ${cap.capacityKg} kg)`,
+      );
+    }
+  }
+
+  if (input.type === "table") {
+    const seats = await checkSeatsCapacity(input.shopSlug, input.date, input.time, input.guests, {
+      excludeId,
+    });
+    if (seats.exceeded) {
+      parts.push(
+        `alle ${input.time} ci sono più coperti del previsto (${seats.booked + (input.guests ?? 0)} / ${seats.capacity})`,
+      );
+    }
+  }
+
+  return parts.length > 0 ? ` ⚠ Attenzione: ${parts.join("; ")}.` : "";
 }
 
 // ── Create (counter / phone booking) ─────────────────────────────────────────
@@ -135,7 +167,10 @@ export async function createAdminReservation(_prev: ActionState, fd: FormData): 
       meta: { type: d.type, date: d.date, shopSlug: d.shopSlug, status: d.status },
     });
 
-    const warning = await capacityWarning(d.type, d.date, d.quantityKg, created.id);
+    const warning = await capacityWarning(
+      { type: d.type, date: d.date, shopSlug: d.shopSlug, quantityKg: d.quantityKg, time: d.time, guests: d.guests },
+      created.id,
+    );
     revalidateReservations();
     return ok(`Prenotazione ${created.reference} creata.${warning}`);
   });
@@ -191,7 +226,10 @@ export async function updateReservationDetails(_prev: ActionState, fd: FormData)
       meta: { from: { date: res.date, time: res.time }, to: { date: next.date, time: next.time } },
     });
 
-    const warning = await capacityWarning(d.type, d.date, next.quantityKg, res.id);
+    const warning = await capacityWarning(
+      { type: d.type, date: d.date, shopSlug: d.shopSlug, quantityKg: next.quantityKg, time: next.time, guests: next.guests },
+      res.id,
+    );
     revalidateReservations();
     return ok(`Prenotazione aggiornata.${warning}`);
   });
@@ -322,11 +360,30 @@ export async function setReservationDeposit(_prev: ActionState, fd: FormData): P
   });
 }
 
+/** Note which table a party was seated at. Free text — see the schema comment. */
+export async function setReservationTable(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    await requireAdmin();
+    const id = String(fd.get("id") ?? "").trim();
+    const tableNumber = String(fd.get("tableNumber") ?? "").trim().slice(0, 40) || null;
+    const res = await mustFindReservation(id);
+
+    await db
+      .update(reservations)
+      .set({ tableNumber, updatedAt: new Date() })
+      .where(eq(reservations.id, res.id));
+
+    revalidateReservations();
+    revalidatePath(`/admin/reservations/${res.id}`);
+    return ok(tableNumber ? `Tavolo ${tableNumber} assegnato.` : "Tavolo rimosso.");
+  });
+}
+
 // ── Porchetta workflow ───────────────────────────────────────────────────────
 /** Owner marks a porchetta pre-order ready and emails the customer. Idempotent. */
 export async function markPorchettaReady(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireAdmin();
+    const actor = await requireAdmin();
     const res = await mustFindReservation((fd.get("id") ?? "").toString());
 
     if (res.type !== "porchetta") throw new ActionError("Disponibile solo per la porchetta.");
@@ -344,6 +401,15 @@ export async function markPorchettaReady(_prev: ActionState, fd: FormData): Prom
       .update(reservations)
       .set({ readyAt: new Date(), updatedAt: new Date() })
       .where(eq(reservations.id, res.id));
+
+    await logAudit({
+      actor,
+      action: "reservation.ready",
+      entity: "reservation",
+      entityId: res.id,
+      summary: `Porchetta ${res.reference} segnata pronta — avviso inviato a ${res.email}`,
+      meta: { date: res.date, quantityKg: res.quantityKg },
+    });
 
     revalidateReservations();
     return ok("Avviso di ritiro inviato.");

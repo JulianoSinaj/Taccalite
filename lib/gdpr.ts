@@ -96,6 +96,23 @@ export async function anonymizeUser(userId: string): Promise<boolean> {
     .set({ name: "Cliente rimosso", phone: "—", email: null, notes: null })
     .where(eq(reservations.userId, userId));
 
+  // Retire the loyalty card and zero the balance.
+  //
+  // Without this the erased customer's card number stayed valid: it is unique
+  // and scannable, so the in-shop screen would go on crediting points to an
+  // account nobody can see or spend from. The card number itself is also a
+  // quasi-identifier the customer was given, so it is replaced rather than kept.
+  // The transaction history is reduced to its shape — deltas and balances are
+  // business records, but their free-text reasons can name orders and rewards.
+  await db
+    .update(loyaltyAccounts)
+    .set({ points: 0, cardNumber: `deleted-${nanoid(10)}` })
+    .where(eq(loyaltyAccounts.userId, userId));
+  await db
+    .update(loyaltyTransactions)
+    .set({ reason: "Dati rimossi" })
+    .where(eq(loyaltyTransactions.userId, userId));
+
   await deleteUserSessions(userId);
   return true;
 }

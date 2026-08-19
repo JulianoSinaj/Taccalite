@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, fmtDate, NewButton, Pagination } from "@/components/admin/ui";
+import { AdminHeader, Panel, fmtDate, NewButton, Pagination } from "@/components/admin/ui";
 import {
   SegmentedFilter,
   FilterToolbar,
@@ -11,6 +11,7 @@ import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/Action
 import { getBlogPage } from "@/lib/admin/queries";
 import { blogFilters } from "@/lib/admin/filters";
 import { deleteBlogPost, toggleBlogPublished } from "@/lib/admin/actions";
+import { dateInRome } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,8 @@ const BASE = "/admin/blog";
 
 const STATUS_CHIPS = [
   { value: "all", label: "Tutti" },
-  { value: "pubblicati", label: "Pubblicati" },
+  { value: "pubblicati", label: "Online" },
+  { value: "programmati", label: "Programmati" },
   { value: "bozze", label: "Bozze" },
 ];
 
@@ -28,6 +30,8 @@ export default async function AdminBlog({ searchParams }: SP) {
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
   const filters = blogFilters(sp);
+  // The same day boundary the public gate uses (lib/db/queries.ts).
+  const today = dateInRome();
   const { rows: posts, total, pageCount, categories } = await getBlogPage({ ...filters, page });
   const filtered = Object.values(filters).some((v) => v && v !== "all");
   const CATEGORY_CHIPS = chipsFrom(categories, "Tutte le categorie");
@@ -84,7 +88,23 @@ export default async function AdminBlog({ searchParams }: SP) {
                     {p.category} · {fmtDate(p.date)}
                   </p>
                 </div>
-                {!p.published && <StatusBadge status="pending" />}
+                {/* A published post with a future date is hidden on the site
+                    until that day. This screen showed it as "Pubblicato", so
+                    the one place scheduling is managed was the one place it
+                    was invisible. */}
+                {!p.published ? (
+                  <span className="rounded-full bg-brown-900/10 px-2.5 py-1 text-[10px] font-bold tracking-widest text-brown-800 uppercase">
+                    Bozza
+                  </span>
+                ) : p.date > today ? (
+                  <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-warn-soft-fg uppercase">
+                    Programmato · {fmtDate(p.date)}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-ok-soft-fg uppercase">
+                    Online
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <ActionForm action={toggleBlogPublished} className="inline-flex">

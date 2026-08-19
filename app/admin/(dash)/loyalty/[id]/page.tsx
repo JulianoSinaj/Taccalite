@@ -12,7 +12,12 @@ import {
   reservationTypeLabel,
 } from "@/components/admin/ui";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
-import { adminGetUser, getLoyaltyAccountForUser, getRecentLoyaltyTx } from "@/lib/admin/queries";
+import {
+  adminGetUser,
+  getLoyaltyAccountForUser,
+  getRecentLoyaltyTx,
+  getCustomerStats,
+} from "@/lib/admin/queries";
 import { getReservationsForUser, getRedemptionsForUser } from "@/lib/db/queries";
 import { getOrdersForUser } from "@/lib/orders";
 import { adjustPoints } from "@/lib/admin/actions";
@@ -44,12 +49,13 @@ export default async function CustomerDetail({ params }: Params) {
   const user = await adminGetUser(id);
   if (!user) notFound();
 
-  const [loyalty, tx, orders, reservations, redemptions, admin] = await Promise.all([
+  const [loyalty, tx, orders, reservations, redemptions, stats, admin] = await Promise.all([
     getLoyaltyAccountForUser(id),
     getRecentLoyaltyTx(id),
     getOrdersForUser(id),
     getReservationsForUser(id),
     getRedemptionsForUser(id),
+    getCustomerStats(id),
     isAdmin(),
   ]);
 
@@ -78,7 +84,29 @@ export default async function CustomerDetail({ params }: Params) {
             @{user.username}
             {user.email ? ` · ${user.email}` : ""}
           </p>
-          <p className="mt-0.5 text-xs text-brown-800/60">Iscritto il {fmtDate(user.createdAt)}</p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-brown-800/60">
+            Iscritto il {fmtDate(user.createdAt)}
+            {!user.active && (
+              <span className="rounded-full bg-danger-solid/15 px-2 py-0.5 text-[10px] font-bold text-danger uppercase">
+                Disattivato
+              </span>
+            )}
+            {user.email && !user.emailVerifiedAt && (
+              <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-bold text-warn-soft-fg uppercase">
+                Email da verificare
+              </span>
+            )}
+            {user.totpEnabled && (
+              <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[10px] font-bold text-ok uppercase">
+                2FA
+              </span>
+            )}
+            {user.marketingConsent && (
+              <span className="rounded-full bg-brown-900/10 px-2 py-0.5 text-[10px] font-bold uppercase">
+                Consenso marketing
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-8">
           <div className="text-right">
@@ -91,6 +119,31 @@ export default async function CustomerDetail({ params }: Params) {
           </div>
         </div>
       </Panel>
+
+      {/* What the customer has actually been worth. The page listed orders but
+          never totalled them, so "is this a good customer?" meant adding rows
+          up by eye. Refunds are netted out. */}
+      <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Panel>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Speso finora</p>
+          <p className="font-display mt-1 text-2xl font-bold text-brown-950">{euro(stats.spentCents)}</p>
+          <p className="mt-0.5 text-xs text-brown-800/50">al netto dei rimborsi</p>
+        </Panel>
+        <Panel>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Ordini</p>
+          <p className="font-display mt-1 text-2xl font-bold text-brown-950">{stats.orders}</p>
+        </Panel>
+        <Panel>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Scontrino medio</p>
+          <p className="font-display mt-1 text-2xl font-bold text-brown-950">{euro(stats.aovCents)}</p>
+        </Panel>
+        <Panel>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Ultimo ordine</p>
+          <p className="font-display mt-1 text-xl text-brown-950">
+            {stats.lastOrderAt ? fmtDate(stats.lastOrderAt) : "—"}
+          </p>
+        </Panel>
+      </div>
 
       {/* Contact details — admin only */}
       {admin && (
@@ -213,7 +266,7 @@ export default async function CustomerDetail({ params }: Params) {
                   <td className="px-5 py-3 text-brown-950">{t.reason || "—"}</td>
                   <td
                     className={`px-5 py-3 text-right font-bold tabular-nums ${
-                      t.delta >= 0 ? "text-emerald-700" : "text-red-600"
+                      t.delta >= 0 ? "text-ok" : "text-danger"
                     }`}
                   >
                     {t.delta >= 0 ? `+${t.delta}` : t.delta}
@@ -264,10 +317,13 @@ export default async function CustomerDetail({ params }: Params) {
               <div className="flex items-center gap-3">
                 <StatusBadge status={r.status} />
                 <div>
-                  <p className="font-semibold text-brown-950">
+                  <Link
+                    href={`/admin/reservations/${r.id}`}
+                    className="font-semibold text-brown-950 hover:underline"
+                  >
                     {reservationTypeLabel(r.type)}{" "}
                     <span className="text-xs font-normal text-brown-800/50">#{r.reference}</span>
-                  </p>
+                  </Link>
                   <p className="text-xs text-brown-800/60">{reservationDetail(r)}</p>
                 </div>
               </div>

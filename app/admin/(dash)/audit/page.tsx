@@ -22,6 +22,9 @@ const ENTITY_LABELS: Record<string, string> = {
   redemption: "Riscatti",
   blog_post: "News",
   campaign: "Newsletter",
+  email: "Email",
+  batch: "Lotti",
+  segment: "Segmenti",
 };
 
 /** Render a logged `meta` payload as readable key/value pairs. */

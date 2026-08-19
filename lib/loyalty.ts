@@ -1,6 +1,6 @@
 import "server-only";
 import { customAlphabet } from "nanoid";
-import { and, desc, eq, gt, lte } from "drizzle-orm";
+import { and, desc, eq, gt, lte, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { loyaltyAccounts, loyaltyTransactions, redemptions, rewards, users } from "@/lib/db/schema";
 import { sendMail } from "@/lib/mail/mailer";
@@ -9,6 +9,8 @@ import { getSetting } from "@/lib/db/queries";
 
 /** Thrown inside the redeem transaction to roll it back on insufficient points. */
 class InsufficientPointsError extends Error {}
+/** Thrown inside the redeem transaction when the last unit was already taken. */
+class OutOfStockError extends Error {}
 
 // 6 digits → a 1,000,000 namespace per year; combined with retry-on-collision
 // below, a duplicate card number never surfaces as an error to the customer.
@@ -57,8 +59,11 @@ export async function getOrCreateLoyaltyAccount(userId: string) {
 
 /**
  * Look up a loyalty account by its (unique) card number, joining the owning
- * user's display name. Returns null when no card matches. Used by the in-shop
- * staff screen to resolve a scanned/typed card to an account.
+ * user's display name and whether the account is still live.
+ *
+ * Returns null when no card matches. Used by the in-shop staff screen to resolve
+ * a scanned/typed card, both to preview the holder before crediting and to
+ * perform the accrual.
  */
 export async function getAccountByCard(cardNumber: string) {
   const trimmed = cardNumber.trim();
@@ -70,6 +75,7 @@ export async function getAccountByCard(cardNumber: string) {
       cardNumber: loyaltyAccounts.cardNumber,
       name: users.name,
       username: users.username,
+      active: users.active,
     })
     .from(loyaltyAccounts)
     .innerJoin(users, eq(loyaltyAccounts.userId, users.id))
@@ -79,7 +85,7 @@ export async function getAccountByCard(cardNumber: string) {
 }
 
 export type PurchaseAccrualResult =
-  | { ok: true; name: string; added: number; balance: number }
+  | { ok: true; userId: string; name: string; added: number; balance: number }
   | { ok: false; error: string };
 
 /**
@@ -101,6 +107,12 @@ export async function addPointsForPurchase(
 
   const account = await getAccountByCard(cardNumber);
   if (!account) return { ok: false, error: "Tessera non trovata" };
+  // A deactivated or GDPR-anonymized account keeps its card row, and without
+  // this its card would go on earning points for a customer who no longer
+  // exists — points nobody can ever spend, on a balance nobody can see.
+  if (!account.active) {
+    return { ok: false, error: "Questa tessera appartiene a un account disattivato" };
+  }
 
   const pointsPerEuro = await getSetting<number>("loyalty.pointsPerEuro", 1);
   const points = Math.floor(euros * pointsPerEuro);
@@ -116,7 +128,7 @@ export async function addPointsForPurchase(
   );
 
   const name = account.name || account.username;
-  return { ok: true, name, added: points, balance };
+  return { ok: true, userId: account.userId, name, added: points, balance };
 }
 
 export async function getLoyaltySummary(userId: string) {
@@ -145,8 +157,8 @@ export async function getLoyaltySummary(userId: string) {
  * The balance is clamped to never go negative (satisfies the `>= 0` CHECK and is
  * correct for expiry), but the ledger records the delta **actually applied**
  * (`next − prev`), not the requested one, so summing the ledger always equals the
- * stored balance. Read + write happen inside one write-mode (BEGIN IMMEDIATE)
- * libSQL transaction, so no concurrent write interleaves.
+ * stored balance. Read + write happen inside one synchronous better-sqlite3
+ * transaction on the single app connection, so no concurrent write interleaves.
  *
  * Returns the new balance and the delta actually applied (which differs from the
  * requested delta only when a debit was clamped at zero).
@@ -163,23 +175,26 @@ export async function addPoints(
     const [before] = await tx
       .select({ points: loyaltyAccounts.points })
       .from(loyaltyAccounts)
-      .where(eq(loyaltyAccounts.userId, userId));
+      .where(eq(loyaltyAccounts.userId, userId))
+;
     const prev = before?.points ?? 0;
     const next = Math.max(0, prev + delta);
     const applied = next - prev;
 
-    await tx
-      .update(loyaltyAccounts)
+    await tx.update(loyaltyAccounts)
       .set({ points: next })
-      .where(eq(loyaltyAccounts.userId, userId));
+      .where(eq(loyaltyAccounts.userId, userId))
+;
 
-    await tx.insert(loyaltyTransactions).values({
-      userId,
-      delta: applied,
-      balanceAfter: next,
-      reason,
-      createdByUserId: byUserId ?? null,
-    });
+    await tx.insert(loyaltyTransactions)
+      .values({
+        userId,
+        delta: applied,
+        balanceAfter: next,
+        reason,
+        createdByUserId: byUserId ?? null,
+      })
+;
 
     return { points: next, applied, prev };
   });
@@ -236,6 +251,39 @@ export async function redeemReward(userId: string, rewardId: string): Promise<Re
     .limit(1);
   if (!reward) return { ok: false, error: "Premio non disponibile" };
 
+  // Availability window. `active` is the on/off switch; these bound *when* an
+  // active reward can be claimed (a Christmas hamper, a summer promotion).
+  const now = new Date();
+  if (reward.availableFrom && now < reward.availableFrom) {
+    return { ok: false, error: "Questo premio non è ancora disponibile" };
+  }
+  if (reward.availableUntil && now > reward.availableUntil) {
+    return { ok: false, error: "Questo premio non è più disponibile" };
+  }
+
+  // Per-customer cap, counted from the redemptions that still stand.
+  if (reward.maxPerCustomer != null) {
+    const [{ mine }] = await db
+      .select({ mine: sql<number>`count(*)` })
+      .from(redemptions)
+      .where(
+        and(
+          eq(redemptions.userId, userId),
+          eq(redemptions.rewardId, reward.id),
+          ne(redemptions.status, "cancelled"),
+        ),
+      );
+    if (mine >= reward.maxPerCustomer) {
+      return {
+        ok: false,
+        error:
+          reward.maxPerCustomer === 1
+            ? "Hai già riscattato questo premio"
+            : `Hai già riscattato questo premio ${reward.maxPerCustomer} volte`,
+      };
+    }
+  }
+
   await getOrCreateLoyaltyAccount(userId); // ensure the account row exists
 
   try {
@@ -243,20 +291,36 @@ export async function redeemReward(userId: string, rewardId: string): Promise<Re
       const [account] = await tx
         .select({ points: loyaltyAccounts.points })
         .from(loyaltyAccounts)
-        .where(eq(loyaltyAccounts.userId, userId));
+        .where(eq(loyaltyAccounts.userId, userId))
+;
       if (!account || account.points < reward.points) throw new InsufficientPointsError();
 
+      // Stock is claimed inside the same transaction as the points debit, so
+      // two customers can't both take the last one. A reward with unlimited
+      // stock (null) skips this entirely.
+      if (reward.stock != null) {
+        const [claimed] = await tx
+          .update(rewards)
+          .set({ stock: sql`${rewards.stock} - 1` })
+          .where(and(eq(rewards.id, reward.id), sql`${rewards.stock} > 0`))
+          .returning({ id: rewards.id })
+;
+        if (!claimed) throw new OutOfStockError();
+      }
+
       const newBalance = account.points - reward.points;
-      await tx
-        .update(loyaltyAccounts)
+      await tx.update(loyaltyAccounts)
         .set({ points: newBalance })
-        .where(eq(loyaltyAccounts.userId, userId));
-      await tx.insert(loyaltyTransactions).values({
-        userId,
-        delta: -reward.points,
-        balanceAfter: newBalance,
-        reason: `Riscatto: ${reward.name}`,
-      });
+        .where(eq(loyaltyAccounts.userId, userId))
+;
+      await tx.insert(loyaltyTransactions)
+        .values({
+          userId,
+          delta: -reward.points,
+          balanceAfter: newBalance,
+          reason: `Riscatto: ${reward.name}`,
+        })
+;
       const [redemption] = await tx
         .insert(redemptions)
         .values({
@@ -266,7 +330,8 @@ export async function redeemReward(userId: string, rewardId: string): Promise<Re
           pointsSpent: reward.points,
           status: "pending",
         })
-        .returning({ id: redemptions.id });
+        .returning({ id: redemptions.id })
+;
 
       return { pointsLeft: newBalance, reference: redemption.id };
     });
@@ -275,6 +340,9 @@ export async function redeemReward(userId: string, rewardId: string): Promise<Re
   } catch (err) {
     if (err instanceof InsufficientPointsError) {
       return { ok: false, error: "Punti insufficienti per questo premio" };
+    }
+    if (err instanceof OutOfStockError) {
+      return { ok: false, error: "Questo premio è esaurito" };
     }
     throw err;
   }

@@ -4,6 +4,7 @@ import AdminNav from "@/components/admin/AdminNav";
 import CommandPalette from "@/components/admin/CommandPalette";
 import { ToastProvider } from "@/components/admin/Toasts";
 import { getCurrentUser } from "@/lib/auth/session";
+import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 import { ephemeralDatabase } from "@/lib/db/client";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           {ephemeralDatabase && (
             <div
               role="alert"
-              className="border-b border-amber-300 bg-amber-100 px-5 py-3 text-sm text-amber-900 sm:px-8"
+              className="border-b border-warn/30 bg-warn-soft px-5 py-3 text-sm text-warn-soft-fg sm:px-8"
             >
               <strong className="font-semibold">Modalità demo:</strong> nessun database configurato su
               Vercel — il sito funziona ma ordini, prenotazioni, modifiche e accessi{" "}
@@ -39,7 +40,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               ridistribuisci. Vedi <code>DEPLOYMENT.md §V</code>.
             </div>
           )}
-          <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">{children}</div>
+          <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">
+            {/* Derived from the path, so every route gets one - detail pages
+                used to carry an ad-hoc back link, or nothing at all. */}
+            <Breadcrumbs />
+            {children}
+          </div>
         </div>
       </div>
     </ToastProvider>

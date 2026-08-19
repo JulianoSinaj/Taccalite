@@ -2,7 +2,12 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { shops, reservations, settings } from "@/lib/db/schema";
-import { createReservation, checkPorchettaCapacity } from "@/lib/reservations";
+import {
+  createReservation,
+  checkPorchettaCapacity,
+  checkSeatsCapacity,
+  porchettaCapacityFor,
+} from "@/lib/reservations";
 import { filterQuery } from "@/lib/admin/filters";
 
 const SHOP = "cap-shop";
@@ -146,5 +151,112 @@ describe("filterQuery", () => {
     expect(filterQuery({ negozio: "centro", stato: "to-fulfil", tipo: "all", q: "rossi" })).toBe(
       "?negozio=centro&stato=to-fulfil&q=rossi",
     );
+  });
+});
+
+describe("per-shop porchetta capacity", () => {
+  const SHOP_B = "capacity-shop-b";
+
+  beforeAll(async () => {
+    await db
+      .insert(shops)
+      .values({ slug: SHOP_B, name: "Seconda sede", specialty: "test", porchettaCapacityKg: 3 })
+      .onConflictDoUpdate({ target: shops.slug, set: { porchettaCapacityKg: 3 } });
+  });
+
+  it("uses the shop's own cap in preference to the shop-wide setting", async () => {
+    await setCapacity(50);
+    // The second shop overrides the generous global figure with 3 kg.
+    expect(await porchettaCapacityFor(SHOP_B)).toBe(3);
+    expect(await porchettaCapacityFor(SHOP)).toBe(50);
+  });
+
+  it("does not let one shop's bookings consume another's capacity", async () => {
+    await setCapacity(50);
+    await db.insert(reservations).values({
+      reference: `TAC-CAPB${Date.now()}`,
+      type: "porchetta",
+      name: "Cliente B",
+      phone: "333",
+      date: DATE,
+      quantityKg: 3,
+      shopSlug: SHOP_B,
+      status: "confirmed",
+    });
+
+    // Shop B is now full at its own 3 kg cap…
+    const atB = await checkPorchettaCapacity(DATE, 1, { shopSlug: SHOP_B });
+    expect(atB.capacityKg).toBe(3);
+    expect(atB.bookedKg).toBe(3);
+    expect(atB.exceeded).toBe(true);
+
+    // …while the other shop is unaffected by it.
+    const atA = await checkPorchettaCapacity(DATE, 1, { shopSlug: SHOP });
+    expect(atA.bookedKg).toBe(0);
+    expect(atA.exceeded).toBe(false);
+  });
+});
+
+describe("checkSeatsCapacity", () => {
+  const SEATED = "seats-shop";
+  const DAY = "2031-09-20";
+
+  beforeAll(async () => {
+    await db
+      .insert(shops)
+      .values({ slug: SEATED, name: "Sala", specialty: "test", seatsCapacity: 10 })
+      .onConflictDoUpdate({ target: shops.slug, set: { seatsCapacity: 10 } });
+    await db.insert(reservations).values([
+      {
+        reference: `TAC-S1${Date.now()}`,
+        type: "table",
+        name: "Tavolo 1",
+        phone: "1",
+        date: DAY,
+        time: "20:00",
+        guests: 6,
+        shopSlug: SEATED,
+        status: "confirmed",
+      },
+      {
+        reference: `TAC-S2${Date.now()}`,
+        type: "table",
+        name: "Annullato",
+        phone: "2",
+        date: DAY,
+        time: "20:00",
+        guests: 8,
+        shopSlug: SEATED,
+        status: "cancelled",
+      },
+    ]);
+  });
+
+  it("counts only live bookings in the same slot", async () => {
+    const c = await checkSeatsCapacity(SEATED, DAY, "20:00", 2);
+    expect(c.capacity).toBe(10);
+    expect(c.booked).toBe(6); // the cancelled party of 8 doesn't count
+    expect(c.exceeded).toBe(false);
+  });
+
+  it("flags a party that overbooks the slot", async () => {
+    const c = await checkSeatsCapacity(SEATED, DAY, "20:00", 5);
+    expect(c.exceeded).toBe(true);
+  });
+
+  it("treats a different slot as independent", async () => {
+    const c = await checkSeatsCapacity(SEATED, DAY, "13:00", 9);
+    expect(c.booked).toBe(0);
+    expect(c.exceeded).toBe(false);
+  });
+
+  it("says nothing when the shop has no seat limit configured", async () => {
+    const c = await checkSeatsCapacity(SHOP, DAY, "20:00", 500);
+    expect(c).toEqual({ capacity: 0, booked: 0, exceeded: false });
+  });
+
+  it("ignores a booking with no time or no party size", async () => {
+    expect(await checkSeatsCapacity(SEATED, DAY, null, 4)).toMatchObject({ exceeded: false });
+    expect(await checkSeatsCapacity(SEATED, DAY, "20:00", null)).toMatchObject({ exceeded: false });
   });
 });

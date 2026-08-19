@@ -20,7 +20,7 @@ export function NewButton({ href, children }: { href: string; children: ReactNod
   return (
     <Link
       href={href}
-      className="rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-gold-dark"
+      className="rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
     >
       {children}
     </Link>
@@ -41,27 +41,29 @@ export function AdminHeader({ title, subtitle, action }: { title: string; subtit
 
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl border border-brown-900/10 bg-white p-6 shadow-sm ${className}`}>{children}</div>
+    <div className={`rounded-2xl border border-brown-900/10 bg-surface p-6 shadow-sm ${className}`}>{children}</div>
   );
 }
 
 const badgeStyles: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-800",
-  confirmed: "bg-emerald-100 text-emerald-800",
+  pending: "bg-warn-soft text-warn-soft-fg",
+  confirmed: "bg-ok-soft text-ok-soft-fg",
   completed: "bg-brown-900/10 text-brown-800",
-  cancelled: "bg-red-100 text-red-700",
-  // Distinct from cancelled — an operator scanning the list needs to tell a
-  // courteous cancellation from a customer who simply never showed up.
-  no_show: "bg-orange-100 text-orange-800",
-  paid: "bg-emerald-100 text-emerald-800",
-  fulfilled: "bg-emerald-100 text-emerald-800",
-  refunded: "bg-red-100 text-red-700",
-  unpaid: "bg-amber-100 text-amber-800",
-  queued: "bg-amber-100 text-amber-800",
-  sent: "bg-emerald-100 text-emerald-800",
-  failed: "bg-red-100 text-red-700",
-  confirmedSub: "bg-emerald-100 text-emerald-800",
-  unsubscribed: "bg-red-100 text-red-700",
+  cancelled: "bg-danger-soft text-danger-soft-fg",
+  // Distinct from cancelled *and* from pending — an operator scanning the list
+  // needs to tell a courteous cancellation, a booking still awaiting an answer,
+  // and a customer who simply never showed up apart at a glance. Amber/orange
+  // no longer separate them once both map to `warn`, so this one carries a ring.
+  no_show: "bg-warn-soft text-warn-soft-fg ring-1 ring-warn/50",
+  paid: "bg-ok-soft text-ok-soft-fg",
+  fulfilled: "bg-ok-soft text-ok-soft-fg",
+  refunded: "bg-danger-soft text-danger-soft-fg",
+  unpaid: "bg-warn-soft text-warn-soft-fg",
+  queued: "bg-warn-soft text-warn-soft-fg",
+  sent: "bg-ok-soft text-ok-soft-fg",
+  failed: "bg-danger-soft text-danger-soft-fg",
+  confirmedSub: "bg-ok-soft text-ok-soft-fg",
+  unsubscribed: "bg-danger-soft text-danger-soft-fg",
 };
 
 /** Italian labels for the raw enum values stored in the DB. */
@@ -132,9 +134,9 @@ export const labelCls = "mb-1.5 block text-[11px] font-bold tracking-widest text
 
 export function SubmitButton({ children, tone = "gold" }: { children: ReactNode; tone?: "gold" | "dark" | "danger" }) {
   const tones = {
-    gold: "bg-gold text-brown-950 hover:bg-gold-dark",
+    gold: "bg-gold text-on-gold hover:bg-gold-dark",
     dark: "bg-brown-950 text-cream hover:bg-brown-900",
-    danger: "bg-red-600 text-white hover:bg-red-700",
+    danger: "bg-danger-solid text-danger-solid-fg hover:brightness-110",
   };
   return (
     <button

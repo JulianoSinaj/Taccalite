@@ -14,7 +14,7 @@ export default function AdminError({
   }, [error]);
 
   return (
-    <div className="rounded-2xl border border-brown-950/10 bg-white/60 p-8 text-center">
+    <div className="rounded-2xl border border-brown-950/10 bg-surface/60 p-8 text-center">
       <h1 className="font-display text-2xl text-brown-950">Errore nel gestionale</h1>
       <p className="mt-2 text-sm text-brown-900/70">
         Si è verificato un errore caricando questa sezione. Riprova.

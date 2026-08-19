@@ -1,4 +1,6 @@
 import "server-only";
+// The cwd-rooted paths below carry `turbopackIgnore` comments so the file tracer
+// doesn't fall back to tracing the whole project — see lib/db/connection.ts.
 import { mkdir, writeFile, readFile, readdir, stat, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve, join } from "node:path";
@@ -39,8 +41,8 @@ const BLOB_PREFIX = "uploads/";
 /** Absolute path to the local uploads directory (next to the DB file, or
  *  `./data/uploads` when the DB is remote and Blob is not configured). */
 export function uploadsDir(): string {
-  const dbDir = localDatabaseDir(env.databaseUrl) ?? resolve(process.cwd(), "data");
-  return join(dbDir, "uploads");
+  const dbDir = localDatabaseDir(env.databaseUrl) ?? resolve(/* turbopackIgnore: true */ process.cwd(), "data");
+  return join(/* turbopackIgnore: true */ dbDir, "uploads");
 }
 
 /** Only simple, generated filenames are ever valid — blocks path traversal. */
@@ -86,8 +88,8 @@ export async function saveUploadedImage(file: File): Promise<string> {
     );
   }
   const dir = uploadsDir();
-  await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, name), bytes);
+  await mkdir(/* turbopackIgnore: true */ dir, { recursive: true });
+  await writeFile(join(/* turbopackIgnore: true */ dir, name), bytes);
   return `/api/media/${name}`;
 }
 
@@ -95,9 +97,9 @@ export async function saveUploadedImage(file: File): Promise<string> {
  *  missing/unsafe. Blob-hosted images are served by Vercel directly. */
 export async function readMedia(name: string): Promise<{ body: Buffer; contentType: string } | null> {
   if (!isSafeMediaName(name)) return null;
-  const path = join(uploadsDir(), name);
-  if (!existsSync(path)) return null;
-  return { body: await readFile(path), contentType: contentTypeFor(name) };
+  const path = join(/* turbopackIgnore: true */ uploadsDir(), name);
+  if (!existsSync(/* turbopackIgnore: true */ path)) return null;
+  return { body: await readFile(/* turbopackIgnore: true */ path), contentType: contentTypeFor(name) };
 }
 
 /** The stored filename behind a `/api/media/<file>` path, or null for anything
@@ -162,9 +164,9 @@ export async function sweepOrphanedMedia(
 
 async function sweepLocal(cutoff: number): Promise<{ deleted: number; bytesFreed: number }> {
   const dir = uploadsDir();
-  if (!existsSync(dir)) return { deleted: 0, bytesFreed: 0 };
+  if (!existsSync(/* turbopackIgnore: true */ dir)) return { deleted: 0, bytesFreed: 0 };
 
-  const [entries, images] = await Promise.all([readdir(dir), referencedImages()]);
+  const [entries, images] = await Promise.all([readdir(/* turbopackIgnore: true */ dir), referencedImages()]);
   const referenced = new Set<string>();
   for (const v of images) {
     const name = mediaNameFromPath(v);
@@ -177,9 +179,9 @@ async function sweepLocal(cutoff: number): Promise<{ deleted: number; bytesFreed
     // Never touch anything that doesn't look like one of our generated uploads.
     if (!isSafeMediaName(name) || referenced.has(name)) continue;
     try {
-      const info = await stat(join(dir, name));
+      const info = await stat(join(/* turbopackIgnore: true */ dir, name));
       if (!info.isFile() || info.mtimeMs > cutoff) continue;
-      await unlink(join(dir, name));
+      await unlink(join(/* turbopackIgnore: true */ dir, name));
       deleted += 1;
       bytesFreed += info.size;
     } catch {

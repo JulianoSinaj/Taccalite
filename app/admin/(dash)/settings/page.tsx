@@ -315,7 +315,14 @@ export default async function AdminSettings() {
   const knownKeys = new Set(KNOWN.map((k) => k.key));
   // Keys owned by a dedicated panel (Instagram token/cache) never surface in the
   // raw JSON editor — the token is a secret and the cache blob is not editable.
-  const extras = settings.filter((s) => !knownKeys.has(s.key) && !s.key.startsWith("instagram."));
+  // Two classes of key never belong in the raw JSON editor:
+  //  - Instagram token/cache: the token is a secret, the cache is not editable;
+  //    both are owned by the dedicated panel.
+  //  - Cron bookkeeping: machine state, not configuration. As free text an
+  //    admin could corrupt the digest idempotency marker or fake a run record.
+  const isInternal = (key: string) =>
+    key.startsWith("instagram.") || key.startsWith("cron.") || key === "digest.lastSentDate";
+  const extras = settings.filter((s) => !knownKeys.has(s.key) && !isInternal(s.key));
 
   return (
     <div>
@@ -326,7 +333,7 @@ export default async function AdminSettings() {
           <h3 className="font-display text-lg text-brown-950">Email (SMTP)</h3>
           <p className="mt-2 text-sm text-brown-800/70">
             Stato:{" "}
-            <span className={smtpConfigured ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>
+            <span className={smtpConfigured ? "font-semibold text-ok" : "font-semibold text-warn"}>
               {smtpConfigured ? "configurato" : "modalità outbox (test)"}
             </span>
           </p>
@@ -348,7 +355,7 @@ export default async function AdminSettings() {
           <h3 className="font-display text-lg text-brown-950">Pagamenti (Stripe)</h3>
           <p className="mt-2 text-sm text-brown-800/70">
             Stato:{" "}
-            <span className={stripeConfigured ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>
+            <span className={stripeConfigured ? "font-semibold text-ok" : "font-semibold text-warn"}>
               {stripeConfigured ? "configurato" : "modalità simulazione"}
             </span>
           </p>

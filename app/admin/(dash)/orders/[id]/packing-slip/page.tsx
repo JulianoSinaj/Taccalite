@@ -61,7 +61,7 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
       )}
 
       {/* The printed document. */}
-      <article className="rounded-2xl border border-brown-900/10 bg-white p-8 shadow-sm print:rounded-none print:border-0 print:p-0 print:shadow-none">
+      <article className="rounded-2xl border border-brown-900/10 bg-surface p-8 shadow-sm print:rounded-none print:border-0 print:p-0 print:shadow-none">
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-brown-900/15 pb-5">
           <div>
             <p className="font-display text-2xl font-bold tracking-tight text-brown-950 uppercase">
@@ -137,10 +137,14 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
                 <tr key={i.id}>
                   <td className="py-2.5 text-brown-950">{i.name}</td>
                   <td className="py-2.5 text-center font-semibold tabular-nums text-brown-950">
-                    {i.quantity}
+                    {/* The person picking needs the weight, not "1". */}
+                    {i.weightKg != null
+                      ? `${i.weightKg.toLocaleString("it-IT", { maximumFractionDigits: 3 })} kg`
+                      : i.quantity}
                   </td>
                   <td className="py-2.5 text-right tabular-nums text-brown-800/80">
                     {euro(i.unitPriceCents)}
+                    {i.weightKg != null ? "/kg" : ""}
                   </td>
                   <td className="py-2.5 text-right tabular-nums font-semibold text-brown-950">
                     {euro(i.lineTotalCents)}

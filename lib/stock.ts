@@ -1,0 +1,166 @@
+import "server-only";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { products, productBatches, stockMovements } from "@/lib/db/schema";
+
+/**
+ * The single way inventory moves.
+ *
+ * Every path that changes stock — a paid online order, a counter sale, a refund
+ * restock, a manual adjustment, a stocktake — goes through here, for two
+ * reasons that used to be violated in different places:
+ *
+ *  1. **The ledger records the delta actually applied.** Stock is floored at
+ *     zero (a CHECK constraint, and negative on-hand is meaningless), so asking
+ *     to remove 5 units from a product with 2 removes 2. Writing the *requested*
+ *     −5 against the resulting `stockAfter: 0` made the movement history stop
+ *     summing to the balance — the same defect the loyalty ledger had.
+ *  2. **Read and write happen in one transaction.** `adjustStock` used to
+ *     SELECT, compute in JS, then UPDATE, so running alongside an order's atomic
+ *     decrement lost updates and stamped a wrong `stockAfter`. libSQL opens a
+ *     transaction in write mode (BEGIN IMMEDIATE) by default, so the row is
+ *     locked from the first read and nothing interleaves.
+ */
+
+export type StockChange = {
+  /** The delta actually applied (differs from the request only at the floor). */
+  applied: number;
+  /** On-hand after the change. */
+  stockAfter: number;
+  /** On-hand before the change. */
+  stockBefore: number;
+  /** True when the request was clamped by the zero floor. */
+  clamped: boolean;
+};
+
+/**
+ * Apply a signed delta to one product's stock and ledger it.
+ *
+ * Returns null when the product doesn't exist or doesn't track stock — an
+ * untracked product (`stock IS NULL`) is made-to-order and has no quantity to
+ * move, which is not an error.
+ */
+export async function applyStockChange(opts: {
+  productId: string;
+  delta: number;
+  reason: string;
+  byUserId?: string | null;
+  /** Set to write an absolute figure instead of a delta (a stocktake). */
+  setTo?: number;
+}): Promise<StockChange | null> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ stock: products.stock })
+      .from(products)
+      .where(eq(products.id, opts.productId));
+    if (!row || row.stock == null) return null;
+
+    const stockBefore = row.stock;
+    const target = opts.setTo != null ? Math.max(0, Math.round(opts.setTo)) : stockBefore + opts.delta;
+    const stockAfter = Math.max(0, target);
+    const applied = stockAfter - stockBefore;
+
+    // A no-op still returns cleanly, but writes no ledger row: a movement of
+    // zero is noise, not history.
+    if (applied === 0) {
+      return { applied: 0, stockAfter, stockBefore, clamped: opts.setTo == null && opts.delta !== 0 };
+    }
+
+    await tx.update(products).set({ stock: stockAfter }).where(eq(products.id, opts.productId));
+    await tx.insert(stockMovements).values({
+      productId: opts.productId,
+      delta: applied,
+      reason: opts.reason,
+      stockAfter,
+      createdByUserId: opts.byUserId ?? null,
+    });
+
+    return {
+      applied,
+      stockAfter,
+      stockBefore,
+      clamped: opts.setTo == null && applied !== opts.delta,
+    };
+  });
+}
+
+/**
+ * Consume units from a product's batches, earliest expiry first (FEFO).
+ *
+ * Batches account for how the flat on-hand figure is made up, so this runs
+ * alongside `applyStockChange` rather than replacing it. Best-effort: a shop
+ * that doesn't track batches for a product simply has none to consume, and a
+ * sale must never fail because lot bookkeeping couldn't be completed.
+ *
+ * Returns the lots touched, so a picking list can name them.
+ */
+export async function consumeBatchesFefo(
+  productId: string,
+  quantity: number,
+): Promise<{ lotCode: string; expiryDate: string | null; taken: number }[]> {
+  if (quantity <= 0) return [];
+  try {
+    return await db.transaction(async (tx) => {
+      const rows = await tx
+        .select()
+        .from(productBatches)
+        .where(eq(productBatches.productId, productId));
+      const open = rows
+        .filter((b) => b.remaining > 0)
+        // Earliest expiry first; lots with no expiry go last (they can wait).
+        .sort((a, b) => {
+          if (a.expiryDate && b.expiryDate) return a.expiryDate.localeCompare(b.expiryDate);
+          if (a.expiryDate) return -1;
+          if (b.expiryDate) return 1;
+          return (a.receivedAt?.getTime() ?? 0) - (b.receivedAt?.getTime() ?? 0);
+        });
+
+      let left = quantity;
+      const taken: { lotCode: string; expiryDate: string | null; taken: number }[] = [];
+      for (const batch of open) {
+        if (left <= 0) break;
+        const take = Math.min(batch.remaining, left);
+        await tx
+          .update(productBatches)
+          .set({ remaining: batch.remaining - take })
+          .where(eq(productBatches.id, batch.id));
+        taken.push({ lotCode: batch.lotCode, expiryDate: batch.expiryDate, taken: take });
+        left -= take;
+      }
+      return taken;
+    });
+  } catch {
+    // Lot bookkeeping is advisory — never let it fail a sale.
+    return [];
+  }
+}
+
+/** Put units back into the most recently consumed lots (a refund or a cancel). */
+export async function restoreBatches(productId: string, quantity: number): Promise<void> {
+  if (quantity <= 0) return;
+  try {
+    await db.transaction(async (tx) => {
+      const rows = await tx
+        .select()
+        .from(productBatches)
+        .where(eq(productBatches.productId, productId));
+      // Newest expiry first — the mirror of FEFO consumption.
+      const batches = rows.sort((a, b) => (b.expiryDate ?? "").localeCompare(a.expiryDate ?? ""));
+
+      let left = quantity;
+      for (const batch of batches) {
+        if (left <= 0) break;
+        const room = batch.quantity - batch.remaining;
+        if (room <= 0) continue;
+        const give = Math.min(room, left);
+        await tx
+          .update(productBatches)
+          .set({ remaining: batch.remaining + give })
+          .where(eq(productBatches.id, batch.id));
+        left -= give;
+      }
+    });
+  } catch {
+    /* advisory */
+  }
+}

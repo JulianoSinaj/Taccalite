@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { discountCodes } from "@/lib/db/schema";
+import { discountCodes, discountRedemptions, orders } from "@/lib/db/schema";
 
 export type AppliedDiscount = {
   id: string;
@@ -12,6 +12,13 @@ export type AppliedDiscount = {
   freeShipping: boolean;
 };
 
+/** Who is trying to use a code, for per-customer and first-order rules. */
+export type DiscountCustomer = {
+  userId?: string | null;
+  email?: string | null;
+  shopSlug?: string | null;
+};
+
 /** Normalise a user-entered code to the stored form (uppercase, trimmed). */
 export function normalizeCode(code: string): string {
   return code.trim().toUpperCase();
@@ -20,9 +27,9 @@ export function normalizeCode(code: string): string {
 /**
  * Validate a discount code against an order subtotal and return the concrete
  * amount it takes off (and whether it waives shipping). Returns null when the
- * code is unknown, inactive, out of its validity window, over its redemption
- * cap, or the subtotal is below its minimum. Never throws — the caller treats a
- * null result as "no discount applied".
+ * code is unknown, inactive, out of its validity window, over a cap, scoped to
+ * another shop, restricted to first orders, or the subtotal is below its
+ * minimum. Never throws — the caller treats a null result as "no discount".
  *
  * The subtotal is VAT-inclusive (gross), matching how catalogue prices are
  * stored; the discount therefore reduces the gross the customer pays.
@@ -30,6 +37,7 @@ export function normalizeCode(code: string): string {
 export async function validateDiscount(
   rawCode: string | undefined | null,
   subtotalCents: number,
+  customer: DiscountCustomer = {},
   now: Date = new Date(),
 ): Promise<AppliedDiscount | null> {
   if (!rawCode) return null;
@@ -47,6 +55,22 @@ export async function validateDiscount(
   if (row.endsAt && now > row.endsAt) return null;
   if (row.maxRedemptions != null && row.timesUsed >= row.maxRedemptions) return null;
   if (subtotalCents < row.minSubtotalCents) return null;
+  // Scoped to one location.
+  if (row.shopSlug && customer.shopSlug && row.shopSlug !== customer.shopSlug) return null;
+  if (row.shopSlug && !customer.shopSlug) return null;
+
+  // Per-customer cap, counted from the redemption ledger. Guests are identified
+  // by order email — imperfect, but it stops the obvious recycling of a
+  // one-per-customer code.
+  if (row.maxPerCustomer != null && (customer.userId || customer.email)) {
+    const used = await countCustomerUses(code, customer);
+    if (used >= row.maxPerCustomer) return null;
+  }
+
+  // First-order-only: any previously settled order disqualifies.
+  if (row.firstOrderOnly && (customer.userId || customer.email)) {
+    if (await hasPreviousOrder(customer)) return null;
+  }
 
   let discountCents = 0;
   let freeShipping = false;
@@ -63,30 +87,96 @@ export async function validateDiscount(
   return { id: row.id, code, discountCents, freeShipping };
 }
 
-/** Atomically record a redemption (increment the usage counter). Best-effort. */
-export async function recordDiscountUse(id: string): Promise<void> {
-  try {
-    await db
-      .update(discountCodes)
-      .set({ timesUsed: sql`${discountCodes.timesUsed} + 1` })
-      .where(eq(discountCodes.id, id));
-  } catch {
-    /* usage bookkeeping is non-fatal */
-  }
+/** How many times this customer has already used a code (cancelled uses freed). */
+async function countCustomerUses(code: string, customer: DiscountCustomer): Promise<number> {
+  const who = customer.userId
+    ? eq(discountRedemptions.userId, customer.userId)
+    : eq(discountRedemptions.email, (customer.email ?? "").toLowerCase());
+  const [row] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(discountRedemptions)
+    .where(and(eq(discountRedemptions.discountCode, code), who));
+  return row?.n ?? 0;
+}
+
+/** True when this customer has settled an order before. */
+async function hasPreviousOrder(customer: DiscountCustomer): Promise<boolean> {
+  const who = customer.userId
+    ? eq(orders.userId, customer.userId)
+    : eq(sql`lower(${orders.email})`, (customer.email ?? "").toLowerCase());
+  const [row] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(orders)
+    .where(and(who, or(eq(orders.paymentStatus, "paid"), eq(orders.paymentStatus, "refunded"))));
+  return (row?.n ?? 0) > 0;
 }
 
 /**
- * Record a redemption by code (used when an order is *paid*, since the order
- * stores the code text, not the id). Best-effort, atomic increment.
+ * Count a redemption, **atomically respecting the cap**.
+ *
+ * The increment is conditional on the code still being under its limit, so two
+ * checkouts settling at the same moment can't both take the last use of a
+ * `maxRedemptions = 1` code — the previous unconditional `timesUsed + 1` left
+ * that race open between `validateDiscount` and here.
+ *
+ * Also writes the redemption ledger, which is what makes a per-customer cap
+ * enforceable and answers "which orders used this code" — a bare counter never
+ * could. Best-effort: bookkeeping must not fail a paid order.
+ *
+ * Returns false when the cap was already reached (the order still stands; the
+ * discount was granted at validation time and honouring it is the right call).
  */
-export async function recordDiscountUseByCode(code: string): Promise<void> {
+export async function recordDiscountUseByCode(
+  code: string,
+  ctx: { orderId?: string; userId?: string | null; email?: string | null; amountCents?: number } = {},
+): Promise<boolean> {
+  const normalized = normalizeCode(code);
   try {
-    await db
+    const [claimed] = await db
       .update(discountCodes)
       .set({ timesUsed: sql`${discountCodes.timesUsed} + 1` })
-      .where(eq(discountCodes.code, normalizeCode(code)));
+      .where(
+        and(
+          eq(discountCodes.code, normalized),
+          // Unlimited, or still under the cap — checked in the same statement
+          // that increments, so it can't be raced.
+          or(
+            isNull(discountCodes.maxRedemptions),
+            sql`${discountCodes.timesUsed} < ${discountCodes.maxRedemptions}`,
+          ),
+        ),
+      )
+      .returning({ id: discountCodes.id });
+
+    await db.insert(discountRedemptions).values({
+      discountCode: normalized,
+      orderId: ctx.orderId ?? null,
+      userId: ctx.userId ?? null,
+      email: ctx.email ? ctx.email.toLowerCase() : null,
+      amountCents: ctx.amountCents ?? 0,
+    });
+
+    return !!claimed;
   } catch {
     /* usage bookkeeping is non-fatal */
+    return false;
+  }
+}
+
+/** Count a redemption by id (the manual-order path, which holds the row). */
+export async function recordDiscountUse(
+  id: string,
+  ctx: { orderId?: string; userId?: string | null; email?: string | null; amountCents?: number } = {},
+): Promise<void> {
+  try {
+    const [row] = await db
+      .select({ code: discountCodes.code })
+      .from(discountCodes)
+      .where(eq(discountCodes.id, id))
+      .limit(1);
+    if (row) await recordDiscountUseByCode(row.code, ctx);
+  } catch {
+    /* non-fatal */
   }
 }
 
@@ -94,13 +184,39 @@ export async function recordDiscountUseByCode(code: string): Promise<void> {
  * Release a redemption by code (used when a paid order is refunded/cancelled so a
  * capped code isn't permanently burned). Floored at 0. Best-effort.
  */
-export async function releaseDiscountUseByCode(code: string): Promise<void> {
+export async function releaseDiscountUseByCode(code: string, orderId?: string): Promise<void> {
+  const normalized = normalizeCode(code);
   try {
     await db
       .update(discountCodes)
       .set({ timesUsed: sql`max(0, ${discountCodes.timesUsed} - 1)` })
-      .where(eq(discountCodes.code, normalizeCode(code)));
+      .where(eq(discountCodes.code, normalized));
+    // Drop the ledger row too, so a per-customer cap is genuinely freed rather
+    // than counting a use that was reversed.
+    if (orderId) {
+      await db
+        .delete(discountRedemptions)
+        .where(
+          and(eq(discountRedemptions.discountCode, normalized), eq(discountRedemptions.orderId, orderId)),
+        );
+    }
   } catch {
     /* usage bookkeeping is non-fatal */
   }
+}
+
+/** The orders a code was used on, newest first — the drill-down behind `timesUsed`. */
+export function getDiscountUses(code: string, limit = 100) {
+  return db
+    .select({
+      redemption: discountRedemptions,
+      orderNumber: orders.orderNumber,
+      orderTotalCents: orders.totalCents,
+      orderStatus: orders.status,
+    })
+    .from(discountRedemptions)
+    .leftJoin(orders, eq(discountRedemptions.orderId, orders.id))
+    .where(eq(discountRedemptions.discountCode, normalizeCode(code)))
+    .orderBy(desc(discountRedemptions.createdAt))
+    .limit(limit);
 }

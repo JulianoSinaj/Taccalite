@@ -1,5 +1,11 @@
 # Gestionale — Feature-Coverage Roadmap
 
+> **Superseded for open work (2026-08-11).** The remaining `[ ]`/`[~]` items here were
+> carried into [`admin-pages-roadmap.md`](./admin-pages-roadmap.md) and implemented — lot/
+> batch + expiry, suppliers-adjacent cost tracking, customer segments, dark mode's status,
+> DataTable adoption, saved views and breadcrumbs. See §8 of that file for what shipped and
+> what was deliberately left out. This file remains the historical feature ledger.
+
 _Generated 2026-07-21 from a per-page intent-vs-reality audit + external benchmark
 (Shopify / Square / Toast / Lightspeed / Medusa / Saleor + Italian gestionali Danea,
 TeamSystem, Nubble). Branch: `feat/platform-hardening`._
@@ -97,9 +103,12 @@ Legend: `[✓]` shipped this session · `[~]` partially shipped · `[ ]` planned
   premi, sconti, newsletter, outbox, registro attività.
 - `[~]` shadcn **DataTable** (sort / bulk-select / bulk actions / density) — shipped on
   prodotti + newsletter; `[ ]` ordini / clienti / prenotazioni still card-per-row.
-- `[ ]` **Dark mode** via semantic design tokens — DEFERRED: the admin uses literal
-  `bg-white` + status tints, so a blind CSS-variable flip breaks panels; needs a token
-  refactor + browser verification, unsafe to do unattended.
+- `[✓]` **Dark mode** via semantic design tokens — shipped 2026-08-11. The token pass
+  landed (`--surface*`, `ok`/`warn`/`danger`/`info`), the dark theme inverts the brand ramp
+  so existing `text-brown-*` utilities keep their meaning, and `data-theme` is resolved from
+  a cookie server-side so there is no flash. Scoped to the gestionale; the storefront keeps
+  its own art direction. See `admin-pages-roadmap.md` §9 — including why `light-dark()`
+  can't be used here.
 - `[✓]` **⌘K command palette** (Batch N). `[ ]` saved filter views, breadcrumbs.
 - `[✓]` **Media orphan cleanup** — the daily maintenance job reconciles `<data-dir>/uploads`
   against the four tables that carry an image and deletes what nothing references (24h age

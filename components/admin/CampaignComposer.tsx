@@ -22,19 +22,31 @@ function localDateTimeValue(d: Date | null): string {
  * and the message is saved as a record before it can be sent — so it can be
  * drafted, scheduled, tested and reviewed afterwards.
  */
+/** A segment as the composer needs it: named, described, and sized right now. */
+export type SegmentOption = { id: string; name: string; description: string; rule: string; size: number };
+
 export function CampaignComposer({
   campaign,
   sources,
+  segments = [],
   confirmedCount,
 }: {
   campaign?: NewsletterCampaignRow | null;
-  /** Distinct subscriber sources, for segmenting. */
+  /** Distinct subscriber sources, for the legacy origin targeting. */
   sources: string[];
+  /** Reusable named segments. */
+  segments?: SegmentOption[];
   confirmedCount: number;
 }) {
   const [subject, setSubject] = useState(campaign?.subject ?? "");
   const [body, setBody] = useState(campaign?.body ?? "");
   const [schedule, setSchedule] = useState(localDateTimeValue(campaign?.scheduledFor ?? null));
+  const [target, setTarget] = useState(
+    campaign?.segmentId ? `seg:${campaign.segmentId}` : campaign?.segment ? `src:${campaign.segment}` : "",
+  );
+  const selectedSegment = target.startsWith("seg:")
+    ? segments.find((s) => s.id === target.slice(4))
+    : undefined;
 
   const paragraphs = body.trim() ? body.trim().split(/\n{2,}/) : [];
   const ready = subject.trim().length > 0 && body.trim().length > 0;
@@ -45,23 +57,47 @@ export function CampaignComposer({
       <ActionForm action={saveCampaign} className="space-y-4">
         {campaign && <input type="hidden" name="id" value={campaign.id} />}
 
+        {/* One control for both targeting styles: a named segment (a rule,
+            re-evaluated at send time) or the older "one signup source". */}
         <div>
           <label className={labelCls} htmlFor="campaign-segment">
-            Segmento destinatari
+            Destinatari
           </label>
           <select
             id="campaign-segment"
-            name="segment"
-            defaultValue={campaign?.segment ?? ""}
+            name="target"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
             className={inputCls}
           >
             <option value="">Tutti i confermati ({confirmedCount})</option>
-            {sources.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
+            {segments.length > 0 && (
+              <optgroup label="Segmenti">
+                {segments.map((s) => (
+                  <option key={s.id} value={`seg:${s.id}`}>
+                    {s.name} ({s.size})
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {sources.length > 0 && (
+              <optgroup label="Origine iscrizione">
+                {sources.map((s) => (
+                  <option key={s} value={`src:${s}`}>
+                    {s}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
+          {/* Split into the two fields the action expects. */}
+          <input type="hidden" name="segmentId" value={target.startsWith("seg:") ? target.slice(4) : ""} />
+          <input type="hidden" name="segment" value={target.startsWith("src:") ? target.slice(4) : ""} />
+          <p className="mt-1 text-xs text-brown-800/60">
+            {selectedSegment
+              ? `${selectedSegment.description || selectedSegment.rule} · ${selectedSegment.size} iscritti in questo momento`
+              : "I segmenti si ricalcolano al momento dell'invio."}
+          </p>
         </div>
 
         <div>
@@ -121,7 +157,7 @@ export function CampaignComposer({
           <summary className="cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
             Anteprima messaggio
           </summary>
-          <div className="mt-3 rounded-lg bg-white p-4">
+          <div className="mt-3 rounded-lg bg-surface p-4">
             {paragraphs.length === 0 ? (
               <p className="text-[13px] text-brown-800/60">L&apos;anteprima comparirà qui.</p>
             ) : (

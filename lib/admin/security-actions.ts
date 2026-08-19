@@ -5,10 +5,33 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { requireAdmin, deleteOtherUserSessions } from "@/lib/auth/session";
-import { verifyTotp } from "@/lib/auth/totp";
+import { verifyTotp, generateTotpSecret } from "@/lib/auth/totp";
 import { generateRecoveryCodes, toStored } from "@/lib/auth/recovery-codes";
 import { logAudit } from "@/lib/audit";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
+
+/**
+ * Mint (or re-mint) a pending TOTP secret for the current user.
+ *
+ * This used to happen in the security page's render body, which made a GET
+ * mutate the user row: a link prefetch was enough to rotate the secret, and two
+ * concurrent loads could leave someone scanning a QR for a secret that had just
+ * been overwritten. Enrolment is a deliberate act, so it takes a deliberate
+ * click.
+ */
+export async function startTotpEnrolment(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    void fd;
+
+    const [user] = await db.select().from(users).where(eq(users.id, actor.id)).limit(1);
+    if (user?.totpEnabled) return ok("La verifica in due passaggi è già attiva.");
+
+    await db.update(users).set({ totpSecret: generateTotpSecret() }).where(eq(users.id, actor.id));
+    revalidatePath("/admin/security");
+    return ok("Scansiona il QR con la tua app di autenticazione.");
+  });
+}
 
 /** Confirm TOTP enrolment: verify a code against the pending secret, then enable. */
 export async function confirmTotp(_prev: ActionState, fd: FormData): Promise<ActionState> {

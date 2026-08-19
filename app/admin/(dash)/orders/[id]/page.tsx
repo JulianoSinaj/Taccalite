@@ -4,7 +4,12 @@ import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, labelCls, Bac
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { adminGetOrder, adminGetShops, adminGetProducts } from "@/lib/admin/queries";
 import { OrderDetailsForm, OrderItemsForm, OrderFiscalForm } from "@/components/admin/OrderEditor";
-import { updateOrderStatus, setOrderTracking, refundOrder } from "@/lib/admin/order-actions";
+import {
+  updateOrderStatus,
+  setOrderTracking,
+  refundOrder,
+  resendOrderEmail,
+} from "@/lib/admin/order-actions";
 import { isAdmin } from "@/lib/auth/session";
 import { getSetting } from "@/lib/db/queries";
 import { orderVatBuckets, vatRateLabel } from "@/lib/fiscal";
@@ -30,13 +35,16 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   const refundableCents = order.totalCents - order.refundedCents;
   const canRefund =
     admin && order.paymentStatus === "paid" && order.status !== "refunded" && refundableCents > 0;
-  // IVA breakdown reconciled with the total: line grosses net of the apportioned
-  // discount, plus shipping at its configured rate (prices are VAT-inclusive).
+  // IVA breakdown reconciled with the money actually kept: line grosses net of
+  // the apportioned discount, plus shipping at its configured rate, minus any
+  // refund apportioned across those same buckets (prices are VAT-inclusive). So
+  // the table below re-sums to "Incassato netto", not to the original total.
   const vat = orderVatBuckets({
     items: items.map((i) => ({ grossCents: i.lineTotalCents, vatRateBps: i.vatRateBps })),
     discountCents: order.discountCents,
     shippingCents: order.shippingCents,
     shippingVatBps: Math.round(shippingVatPct * 100),
+    refundedCents: order.refundedCents,
   });
 
   return (
@@ -61,11 +69,24 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             <h3 className="font-display mb-4 text-lg text-brown-950">Articoli</h3>
             <div className="divide-y divide-brown-900/10">
               {items.map((i) => (
-                <div key={i.id} className="flex justify-between py-2 text-sm">
+                <div key={i.id} className="flex justify-between gap-3 py-2 text-sm">
                   <span className="text-brown-900/80">
-                    {i.quantity}× {i.name}
+                    {/* A weight line reads "0,350 kg × …/kg", not "1×". */}
+                    {i.weightKg != null
+                      ? `${i.weightKg.toLocaleString("it-IT", { maximumFractionDigits: 3 })} kg`
+                      : `${i.quantity}×`}{" "}
+                    {i.name}
+                    <span className="ml-1.5 text-xs text-brown-800/50">
+                      {euro(i.unitPriceCents)}
+                      {i.weightKg != null ? "/kg" : ""}
+                    </span>
+                    {i.priceOverridden && (
+                      <span className="ml-1.5 rounded-full bg-warn-soft px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-warn-soft-fg uppercase">
+                        prezzo concordato
+                      </span>
+                    )}
                   </span>
-                  <span className="font-medium text-brown-950">{euro(i.lineTotalCents)}</span>
+                  <span className="shrink-0 font-medium text-brown-950">{euro(i.lineTotalCents)}</span>
                 </div>
               ))}
             </div>
@@ -75,7 +96,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 <span>{euro(order.subtotalCents)}</span>
               </div>
               {order.discountCents > 0 && (
-                <div className="flex justify-between text-emerald-700">
+                <div className="flex justify-between text-ok">
                   <span>Sconto{order.discountCode ? ` (${order.discountCode})` : ""}</span>
                   <span>−{euro(order.discountCents)}</span>
                 </div>
@@ -90,7 +111,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               </div>
               {order.refundedCents > 0 && (
                 <>
-                  <div className="flex justify-between pt-1 text-rose-700">
+                  <div className="flex justify-between pt-1 text-danger">
                     <span>Rimborsato</span>
                     <span>−{euro(order.refundedCents)}</span>
                   </div>
@@ -105,6 +126,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               <div className="mt-4 border-t border-brown-900/10 pt-3">
                 <p className="mb-2 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
                   Riepilogo IVA (prezzi ivati)
+                  {order.refundedCents > 0 ? " · al netto del rimborso" : ""}
                 </p>
                 <table className="w-full text-xs text-brown-800/80">
                   <thead>
@@ -244,6 +266,23 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               </div>
               <PendingButton tone="dark">Aggiorna ordine</PendingButton>
             </ActionForm>
+
+            {order.email && (
+              <div className="mt-4 border-t border-brown-900/10 pt-4">
+                <ActionForm action={resendOrderEmail}>
+                  <input type="hidden" name="id" value={order.id} />
+                  <PendingButton tone="dark">Reinvia email al cliente</PendingButton>
+                </ActionForm>
+                <p className="mt-2 text-xs text-brown-800/60">
+                  Rimanda l&apos;ultima comunicazione utile ({order.status === "fulfilled"
+                    ? "avviso di evasione"
+                    : order.status === "cancelled"
+                      ? "avviso di annullamento"
+                      : "conferma d'ordine"}
+                  ) a {order.email}.
+                </p>
+              </div>
+            )}
           </Panel>
 
           {order.fulfilment === "shipping" && (
@@ -295,15 +334,30 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             </dl>
             {admin && (
               <div className="mt-4 border-t border-brown-900/10 pt-4">
-                <a
-                  href={`/api/admin/invoice/${order.id}/xml`}
-                  download
-                  className="inline-block rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-                >
-                  Fattura XML (SdI)
-                </a>
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={`/api/admin/invoice/${order.id}/xml`}
+                    download
+                    className="inline-block rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                  >
+                    Fattura XML (SdI)
+                  </a>
+                  {order.refundedCents > 0 && (
+                    <a
+                      href={`/api/admin/invoice/${order.id}/xml?doc=nota-credito`}
+                      download
+                      className="inline-block rounded-full bg-danger-soft px-4 py-2 text-xs font-bold tracking-widest text-danger-soft-fg uppercase hover:bg-danger-soft"
+                    >
+                      Nota di credito
+                    </a>
+                  )}
+                </div>
                 <p className="mt-2 text-xs text-brown-800/60">
                   Formato FatturaPA FPR12, da trasmettere tramite un intermediario accreditato.
+                  {order.refundedCents > 0 &&
+                    " La nota di credito (TD04) storna i " +
+                      (order.refundedCents / 100).toFixed(2) +
+                      " € rimborsati."}
                 </p>
 
                 <details className="mt-4" open={!order.customerTaxCode && !order.customerVatNumber}>

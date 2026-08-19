@@ -6,6 +6,8 @@ import {
   vatRateLabel,
   apportion,
   orderVatBuckets,
+  refundVatBuckets,
+  negateVatBuckets,
   aggregateVatBuckets,
 } from "@/lib/fiscal";
 
@@ -130,6 +132,98 @@ describe("orderVatBuckets", () => {
     const buckets = orderVatBuckets({ items, discountCents: 5000, shippingCents: 0, shippingVatBps: 2200 });
     // fully discounted goods → no positive bucket
     expect(buckets.reduce((s, b) => s + b.grossCents, 0)).toBe(0);
+  });
+});
+
+describe("orderVatBuckets — refunds", () => {
+  // €10 @10% + €10 @22% goods, €7 shipping @22%. Charged total = 3020.
+  const base = {
+    items: [
+      { grossCents: 1100, vatRateBps: 1000 },
+      { grossCents: 1220, vatRateBps: 2200 },
+    ],
+    discountCents: 0,
+    shippingCents: 700,
+    shippingVatBps: 2200,
+  };
+
+  it("nets a partial refund out of the charged buckets", () => {
+    const buckets = orderVatBuckets({ ...base, refundedCents: 1000 });
+    expect(buckets.reduce((s, b) => s + b.grossCents, 0)).toBe(3020 - 1000);
+    // still exact: base + tax re-sums to the kept gross
+    expect(buckets.reduce((s, b) => s + b.imponibileCents + b.impostaCents, 0)).toBe(2020);
+  });
+
+  it("leaves nothing behind on a full refund", () => {
+    const buckets = orderVatBuckets({ ...base, refundedCents: 3020 });
+    expect(buckets).toEqual([]);
+  });
+
+  it("treats an absent refund exactly like a zero refund", () => {
+    expect(orderVatBuckets(base)).toEqual(orderVatBuckets({ ...base, refundedCents: 0 }));
+  });
+
+  it("caps a refund larger than the order at the order total", () => {
+    expect(orderVatBuckets({ ...base, refundedCents: 999_999 })).toEqual([]);
+  });
+
+  it("splits the refund pro-rata, not off one rate", () => {
+    const buckets = orderVatBuckets({ ...base, refundedCents: 1510 }); // exactly half
+    const b10 = buckets.find((b) => b.rateBps === 1000)!;
+    const b22 = buckets.find((b) => b.rateBps === 2200)!;
+    // 1100 and 1920 (1220 goods + 700 shipping) halved, to the cent
+    expect(b10.grossCents).toBe(550);
+    expect(b22.grossCents).toBe(1920 - 960);
+  });
+});
+
+describe("refundVatBuckets / negateVatBuckets", () => {
+  const base = {
+    items: [
+      { grossCents: 1100, vatRateBps: 1000 },
+      { grossCents: 1220, vatRateBps: 2200 },
+    ],
+    discountCents: 0,
+    shippingCents: 0,
+    shippingVatBps: 2200,
+  };
+
+  it("is empty when nothing was refunded", () => {
+    expect(refundVatBuckets(base)).toEqual([]);
+    expect(refundVatBuckets({ ...base, refundedCents: 0 })).toEqual([]);
+  });
+
+  it("returns the refunded portion, positive", () => {
+    const r = refundVatBuckets({ ...base, refundedCents: 1160 }); // half of 2320
+    expect(r.reduce((s, b) => s + b.grossCents, 0)).toBe(1160);
+    expect(r.every((b) => b.grossCents > 0)).toBe(true);
+  });
+
+  it("sale + reversal nets to the kept amount, exactly", () => {
+    const refundedCents = 777;
+    const sale = orderVatBuckets(base);
+    const reversal = negateVatBuckets(refundVatBuckets({ ...base, refundedCents }));
+    const net = aggregateVatBuckets([sale, reversal]);
+    const kept = orderVatBuckets({ ...base, refundedCents });
+
+    // Both routes must agree bucket for bucket — the period report nets sales
+    // against credit notes, the order page nets in place.
+    expect(net).toEqual(kept);
+    expect(net.reduce((s, b) => s + b.grossCents, 0)).toBe(2320 - refundedCents);
+  });
+
+  it("a full sale and a full reversal cancel to nothing", () => {
+    const sale = orderVatBuckets(base);
+    const reversal = negateVatBuckets(refundVatBuckets({ ...base, refundedCents: 2320 }));
+    expect(aggregateVatBuckets([sale, reversal])).toEqual([]);
+  });
+
+  it("negation is exact and reversible", () => {
+    const r = refundVatBuckets({ ...base, refundedCents: 500 });
+    expect(negateVatBuckets(negateVatBuckets(r))).toEqual(r);
+    for (const b of negateVatBuckets(r)) {
+      expect(b.imponibileCents + b.impostaCents).toBe(b.grossCents);
+    }
   });
 });
 
