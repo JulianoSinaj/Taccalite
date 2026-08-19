@@ -21,9 +21,14 @@ export default function ChiSiamo() {
           <div className="relative">
             <span aria-hidden className="absolute -top-3 -left-3 right-3 bottom-3 border border-gold/45" />
             <ParallaxMedia className="aspect-[5/6] bg-paper" distance={64}>
+              {/* The counter itself, not another studio still life. It is the
+                  only photograph on file with the shop's real colour in it —
+                  the trays, the price cards, the crowd of things — and it was
+                  going unused while the same prosciutto-by-the-fire shot ran
+                  three times on this page. */}
               <Image
-                src="/images/selezione-prosciutto-camino.jpg"
-                alt="Prosciutto stagionato accanto al camino acceso"
+                src="/images/home-hero-gastronomia.jpg"
+                alt="Il banco della gastronomia: teglie, olive all'ascolana e prosciutto al taglio"
                 fill
                 sizes="(max-width: 1024px) 90vw, 40vw"
                 className="object-cover"

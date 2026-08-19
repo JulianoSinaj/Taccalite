@@ -2,6 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import Reveal from "@/components/Reveal";
+import ProductPlate from "@/components/site/ProductPlate";
+import { categoryAccent } from "@/lib/categories";
 
 export type DiarioPost = {
   slug: string;
@@ -43,7 +45,10 @@ export default function Diario({ posts }: { posts: DiarioPost[] }) {
         <div className="mt-12 grid gap-x-8 gap-y-12 md:grid-cols-3">
           {posts.map((post, i) => (
             <Reveal key={post.slug} delay={i * 0.07}>
-              <article className="group flex h-full flex-col">
+              <article
+                className="group flex h-full flex-col"
+                style={{ "--acc": categoryAccent(post.category) } as React.CSSProperties}
+              >
                 <Link
                   href={`/blog/${post.slug}`}
                   className="relative block aspect-3/2 overflow-hidden bg-paper focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
@@ -57,27 +62,23 @@ export default function Diario({ posts }: { posts: DiarioPost[] }) {
                       className="object-cover transition-transform duration-[1.4s] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.05]"
                     />
                   ) : (
-                    // Most posts carry no photograph. Rather than an empty box,
-                    // the card falls back to the category set as a printed
-                    // section marker — the same move the product tiles make.
-                    <span
-                      aria-hidden
-                      className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8"
-                    >
-                      <span className="h-px w-12 bg-gold" />
-                      <span className="font-display text-center text-[2rem] leading-none font-semibold tracking-[-0.02em] text-gold-deep/60">
-                        {post.category}
-                      </span>
-                      <span className="h-px w-12 bg-gold" />
-                    </span>
+                    // Most posts carry no photograph, so the fallback is the
+                    // same printed plate the shop grid uses — one language for
+                    // "we have no picture of this", not two.
+                    <ProductPlate
+                      name={post.title}
+                      category={post.category}
+                      seed={post.slug}
+                      className="transition-transform duration-[1.4s] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04]"
+                    />
                   )}
                   <span
                     aria-hidden
-                    className="absolute inset-0 border border-brown-950/8 transition-colors duration-500 group-hover:border-gold/60"
+                    className="absolute inset-0 border border-brown-950/8 transition-colors duration-500 group-hover:border-[color-mix(in_oklab,var(--acc)_55%,transparent)]"
                   />
                 </Link>
 
-                <p className="mt-5 flex items-center gap-3 text-[0.625rem] font-semibold tracking-[0.22em] text-gold-deep uppercase">
+                <p className="mt-5 flex items-center gap-3 text-[0.625rem] font-semibold tracking-[0.22em] text-[var(--acc)] uppercase">
                   {post.category}
                   <span aria-hidden className="size-[3px] rounded-full bg-tan" />
                   <span className="text-taupe">{post.dateLabel}</span>

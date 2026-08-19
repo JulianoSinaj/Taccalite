@@ -11,30 +11,35 @@ import Reveal from "@/components/Reveal";
 const servizi = [
   {
     title: "Aperitivi",
+    accent: "var(--acc-formaggi)",
     body: "Taglieri di salumi e formaggi composti al momento su quello che c'è di buono quel giorno. Da portare via o da aprire in compagnia.",
     href: "/negozio",
     cta: "Guarda la selezione",
   },
   {
     title: "Asporto",
+    accent: "var(--acc-gastronomia)",
     body: "Gastronomia pronta, primi e secondi del giorno, olive all'ascolana appena fritte. Ordina la mattina, passi quando ti fa comodo.",
     href: "/negozio",
     cta: "Ordina online",
   },
   {
     title: "Domicilio",
+    accent: "var(--acc-carni)",
     body: "Portiamo la spesa a casa ad Ancona e dintorni. Per la consegna in giornata basta chiamare entro mezzogiorno.",
     href: "/contatti",
     cta: "Chiedi la consegna",
   },
   {
     title: "Catering",
+    accent: "var(--acc-salumi)",
     body: "Compleanni, uffici, feste di famiglia. Prepariamo noi: dal tagliere per otto al buffet completo, concordato voce per voce.",
     href: "/contatti",
     cta: "Richiedi un preventivo",
   },
   {
     title: "Richieste speciali",
+    accent: "var(--acc-regalo)",
     body: "Una forma intera, un taglio che non trovi, una porchetta per cinquanta persone. Se esiste ve la troviamo, se serve tempo ve lo diciamo.",
     href: "/contatti",
     cta: "Scrivici",
@@ -61,29 +66,43 @@ export default function Servizi() {
           </p>
         </div>
 
-        <ol className="mt-14 border-t border-rule">
+        <ol className="mt-14 border-t border-rule md:-mx-6">
           {servizi.map((servizio, i) => (
             <Reveal key={servizio.title} delay={i * 0.05}>
-              <li className="border-b border-rule">
+              <li
+                className="border-b border-rule"
+                style={{ "--acc": servizio.accent } as React.CSSProperties}
+              >
                 <Link
                   href={servizio.href}
-                  className="group relative grid items-baseline gap-x-8 gap-y-3 py-9 transition-colors focus-visible:outline-none md:grid-cols-[4rem_minmax(0,15rem)_1fr_auto] md:py-11"
+                  className="group relative grid items-baseline gap-x-8 gap-y-3 px-4 py-9 transition-colors duration-500 focus-visible:outline-none md:grid-cols-[4rem_minmax(0,15rem)_1fr_auto] md:px-6 md:py-11 hover:bg-[color-mix(in_oklab,var(--acc)_7%,transparent)]"
                 >
-                  <span className="font-display text-[0.9375rem] font-semibold text-gold-deep tabular-nums">
+                  {/* The row number, struck huge and ghosted, arriving from the
+                      right on hover. Five identical rows had no reward for
+                      touching one; this gives each its own colour and a gesture
+                      that belongs to it. */}
+                  <span
+                    aria-hidden
+                    className="font-display pointer-events-none absolute top-1/2 right-6 hidden -translate-y-1/2 translate-x-6 text-[7rem] leading-none font-semibold tracking-[-0.05em] text-[color-mix(in_oklab,var(--acc)_16%,transparent)] opacity-0 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] select-none group-hover:translate-x-0 group-hover:opacity-100 lg:block"
+                  >
                     {String(i + 1).padStart(2, "0")}
                   </span>
 
-                  <h3 className="font-display text-[1.75rem] leading-none font-semibold tracking-[-0.025em] text-brown-950 transition-colors group-hover:text-gold-deep md:text-[2.125rem]">
+                  <span className="relative font-display text-[0.9375rem] font-semibold text-[var(--acc)] tabular-nums">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+
+                  <h3 className="relative font-display text-[1.75rem] leading-none font-semibold tracking-[-0.025em] text-brown-950 transition-colors duration-500 group-hover:text-[var(--acc)] md:text-[2.125rem]">
                     {servizio.title}
                   </h3>
 
-                  <p className="max-w-xl text-base leading-relaxed text-brown-700">
+                  <p className="relative max-w-xl text-base leading-relaxed text-brown-700">
                     {servizio.body}
                   </p>
 
-                  <span className="flex items-center gap-2.5 text-[0.6875rem] font-semibold tracking-[0.18em] text-brown-950 uppercase transition-[gap] duration-500 group-hover:gap-4">
+                  <span className="relative flex items-center gap-2.5 text-[0.6875rem] font-semibold tracking-[0.18em] text-brown-950 uppercase transition-[gap] duration-500 group-hover:gap-4">
                     {servizio.cta}
-                    <ArrowUpRight className="size-4 text-gold-deep" aria-hidden />
+                    <ArrowUpRight className="size-4 text-[var(--acc)]" aria-hidden />
                   </span>
 
                   <span

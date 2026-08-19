@@ -9,6 +9,8 @@ import AddToCartButton from "@/components/store/AddToCartButton";
 import BackInStockForm from "@/components/store/BackInStockForm";
 import { getProductBySlug, getRelatedProducts, getShopBySlug } from "@/lib/db/queries";
 import { formatEuro } from "@/lib/format";
+import ProductPlate from "@/components/site/ProductPlate";
+import { categoryAccent } from "@/lib/categories";
 import ProductTile from "@/components/site/ProductTile";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 import { breadcrumbSchema } from "@/lib/seo";
@@ -77,8 +79,11 @@ export default async function ProductDetailPage({ params }: Params) {
       />
 
       <section className="bg-paper px-5 pt-32 pb-24 sm:px-10 sm:pt-40">
-        <div className="mx-auto max-w-7xl">
-          <nav className="mb-8 text-[10px] font-bold tracking-[0.3em] text-brown-900/50 uppercase">
+        <div
+          className="mx-auto max-w-[88rem]"
+          style={{ "--acc": categoryAccent(product.category) } as React.CSSProperties}
+        >
+          <nav className="mb-8 text-[10px] font-bold tracking-[0.3em] text-taupe uppercase">
             <Link href="/negozio" className="inline-flex items-center gap-1.5 hover:text-gold-deep">
               <ArrowLeft className="size-3" />
               Torna al negozio
@@ -89,7 +94,7 @@ export default async function ProductDetailPage({ params }: Params) {
             {/* Image. The ViewTransition name matches the one on this product's
                 tile in any grid, so arriving here morphs the thumbnail into the
                 hero rather than swapping one page for another. */}
-            <div className="relative aspect-square overflow-hidden border border-brown-950/8 bg-paper-warm">
+            <div className="relative aspect-square overflow-hidden border border-brown-950/8 bg-paper-deep">
               <ViewTransition name={`product-${product.slug}`} share="product-morph">
                 {product.image ? (
                   <Image
@@ -101,21 +106,24 @@ export default async function ProductDetailPage({ params }: Params) {
                     sizes="(max-width: 1024px) 100vw, 50vw"
                   />
                 ) : (
-                  <span
-                    aria-hidden
-                    className="font-display absolute inset-0 flex items-center justify-center text-[12rem] leading-none font-semibold text-gold/35"
-                  >
-                    {product.name.charAt(0)}
-                  </span>
+                  // The same printed plate the grid uses, so the tile the visitor
+                  // clicked and the page they land on are the same object. The
+                  // old fallback here was a pale letter in a beige square — on the
+                  // one page that has to close a sale.
+                  <ProductPlate
+                    name={product.name}
+                    category={product.category}
+                    seed={product.slug}
+                  />
                 )}
               </ViewTransition>
               {soldOut && (
-                <span className="absolute left-5 top-5 rounded-full bg-brown-950 px-4 py-2 text-[11px] font-bold tracking-widest text-cream uppercase">
+                <span className="absolute top-5 left-5 z-10 bg-brown-950 px-4 py-2 text-[0.625rem] font-bold tracking-[0.18em] text-cream uppercase">
                   Esaurito
                 </span>
               )}
               {lowStock && (
-                <span className="absolute left-5 top-5 rounded-full bg-gold px-4 py-2 text-[11px] font-bold tracking-widest text-brown-950 uppercase">
+                <span className="absolute top-5 left-5 z-10 bg-gold px-4 py-2 text-[0.625rem] font-bold tracking-[0.18em] text-on-gold uppercase">
                   Ultimi {product.stock}
                 </span>
               )}
@@ -124,40 +132,41 @@ export default async function ProductDetailPage({ params }: Params) {
             {/* Details */}
             <div className="flex flex-col">
               {product.category && (
-                <p className="text-[11px] font-bold tracking-widest text-gold-deep uppercase">
+                <p className="flex items-center gap-2.5 text-[0.625rem] font-bold tracking-[0.22em] text-[var(--acc)] uppercase">
+                  <span aria-hidden className="size-[5px] rotate-45 bg-[var(--acc)]" />
                   {product.category}
                 </p>
               )}
-              <h1 className="font-display mt-2 text-4xl leading-none tracking-tighter text-brown-950 sm:text-5xl">
+              <h1 className="font-display display-lg mt-4 font-semibold text-brown-950">
                 {product.name}
               </h1>
 
-              <div className="mt-5 flex items-baseline gap-1.5">
-                <span className="font-display text-3xl font-bold text-brown-950">
+              <div className="ticket mt-7 inline-flex w-fit items-baseline gap-1.5 bg-[color-mix(in_oklab,var(--acc)_11%,var(--paper-warm))] px-4 py-2.5">
+                <span className="font-display text-3xl font-semibold text-brown-950 tabular-nums">
                   {formatEuro(product.priceCents ?? 0)}
                 </span>
-                {product.unit && <span className="text-base text-brown-800/60">/ {product.unit}</span>}
+                {product.unit && <span className="text-base text-taupe">/ {product.unit}</span>}
               </div>
 
               {/* Availability */}
               <div className="mt-4">
                 {soldOut ? (
-                  <span className="inline-flex rounded-full bg-red-500/10 px-4 py-1.5 text-xs font-semibold text-red-700">
+                  <span className="inline-flex bg-danger-soft px-4 py-1.5 text-xs font-semibold text-danger-soft-fg">
                     Non disponibile al momento
                   </span>
                 ) : lowStock ? (
-                  <span className="inline-flex rounded-full bg-gold/20 px-4 py-1.5 text-xs font-semibold text-brown-950">
+                  <span className="inline-flex bg-gold/25 px-4 py-1.5 text-xs font-semibold text-brown-950">
                     Ultimi {product.stock} disponibili
                   </span>
                 ) : product.stock != null ? (
-                  <span className="inline-flex rounded-full bg-brown-900/5 px-4 py-1.5 text-xs font-semibold text-brown-900/70">
+                  <span className="inline-flex bg-paper-warm px-4 py-1.5 text-xs font-semibold text-brown-700">
                     Disponibile
                   </span>
                 ) : null}
               </div>
 
               {product.description && (
-                <p className="mt-6 text-lg leading-relaxed font-light text-brown-900/75">
+                <p className="mt-7 text-lg leading-relaxed text-brown-700">
                   {product.description}
                 </p>
               )}
@@ -165,7 +174,7 @@ export default async function ProductDetailPage({ params }: Params) {
               {shop && (
                 <Link
                   href={`/sedi/${shop.slug}`}
-                  className="mt-6 inline-flex w-fit items-center gap-2 rounded-full border border-brown-900/15 px-5 py-2.5 text-sm font-semibold text-brown-950 transition-colors hover:bg-brown-950 hover:text-cream"
+                  className="mt-7 inline-flex w-fit items-center gap-2 border border-rule-strong px-5 py-2.5 text-sm font-semibold text-brown-950 transition-colors hover:bg-brown-950 hover:text-cream"
                 >
                   <Store className="size-4 text-gold-deep" />
                   Da {shop.name}

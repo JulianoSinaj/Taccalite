@@ -6,10 +6,10 @@ import {
   motion,
   useMotionTemplate,
   useMotionValue,
-  useReducedMotion,
   useSpring,
   useTransform,
 } from "motion/react";
+import { useReducedMotionAfterMount } from "@/lib/use-reduced-motion-after-mount";
 import { ArrowUpRight, Heart, Layers, MessageCircle, Play } from "lucide-react";
 import InstagramIcon from "./InstagramIcon";
 import PillButton from "./PillButton";
@@ -37,7 +37,7 @@ function formatDate(iso: string) {
  * the tile reads as a real 3D slab rather than a flat hover.
  */
 function PostTile({ post, index }: { post: InstagramPost; index: number }) {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotionAfterMount();
   const ref = useRef<HTMLAnchorElement>(null);
   const [imgFailed, setImgFailed] = useState(false);
 
@@ -72,10 +72,14 @@ function PostTile({ post, index }: { post: InstagramPost; index: number }) {
 
   return (
     <motion.div
-      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 40, scale: 0.97 }}
-      whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+      initial={{ opacity: 0, y: 40, scale: 0.97 }}
+      whileInView={{ opacity: 1, y: 0, scale: 1 }}
       viewport={{ once: true, margin: "-60px" }}
-      transition={{ type: "spring", stiffness: 120, damping: 20, mass: 0.9, delay: (index % 4) * 0.07 }}
+      transition={
+        reduceMotion
+          ? { duration: 0 }
+          : { type: "spring", stiffness: 120, damping: 20, mass: 0.9, delay: (index % 4) * 0.07 }
+      }
       className={cn("[perspective:1100px]", index >= 6 && "hidden lg:block")}
     >
       <motion.a
@@ -217,7 +221,7 @@ function ProfileChip({ profile, handle, url }: { profile: InstagramProfile | nul
  * degrades to a compact "follow us" band, so the page never looks broken.
  */
 export default function InstagramFeed({ posts, profile, handle, url }: Props) {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotionAfterMount();
   const hasPosts = posts.length > 0;
 
   return (
@@ -231,10 +235,14 @@ export default function InstagramFeed({ posts, profile, handle, url }: Props) {
       <div className="relative mx-auto max-w-7xl">
         {/* Header */}
         <motion.div
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 28 }}
+          initial={{ opacity: 0, y: 28 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
-          transition={{ type: "spring", stiffness: 110, damping: 20, mass: 0.9 }}
+          transition={
+            reduceMotion
+              ? { duration: 0 }
+              : { type: "spring", stiffness: 110, damping: 20, mass: 0.9 }
+          }
           className="mb-8 flex flex-col justify-between gap-6 sm:mb-10 md:flex-row md:items-end"
         >
           <div className="space-y-3">
@@ -271,10 +279,14 @@ export default function InstagramFeed({ posts, profile, handle, url }: Props) {
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 36, scale: 0.985 }}
-            whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+            initial={{ opacity: 0, y: 36, scale: 0.985 }}
+            whileInView={{ opacity: 1, y: 0, scale: 1 }}
             viewport={{ once: true, margin: "-60px" }}
-            transition={{ type: "spring", stiffness: 110, damping: 20, mass: 0.9 }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { type: "spring", stiffness: 110, damping: 20, mass: 0.9 }
+            }
             whileTap={{ scale: 0.985 }}
             className="group relative flex flex-col items-start justify-between gap-8 overflow-hidden rounded-3xl bg-brown-950 p-7 will-change-transform sm:flex-row sm:items-center sm:rounded-[28px] sm:p-10"
           >

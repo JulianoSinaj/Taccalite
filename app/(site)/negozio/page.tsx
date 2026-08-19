@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { getPurchasableProducts, getProductCategories, getSetting } from "@/lib/db/queries";
 import PageHero from "@/components/site/PageHero";
 import ProductTile from "@/components/site/ProductTile";
+import { categoryAccent } from "@/lib/categories";
 
 export const dynamic = "force-dynamic";
 
@@ -77,12 +78,12 @@ export default async function StorePage({ searchParams }: SearchParams) {
         lede="Ordina online e scegli il ritiro in bottega o la spedizione. Stessa qualità del banco."
       />
 
-      <section className="bg-paper px-5 pb-24 sm:px-10 sm:pb-32">
-        <div className="mx-auto max-w-7xl">
+      <section className="bg-paper px-5 pb-24 sm:px-8 sm:pb-32 lg:px-12">
+        <div className="mx-auto max-w-[88rem]">
           {!storeEnabled || products.length === 0 ? (
-            <div className="rounded-[28px] border border-brown-900/10 bg-white/60 p-12 text-center">
-              <h2 className="font-display text-3xl text-brown-950">Negozio in allestimento</h2>
-              <p className="mt-3 text-brown-900/70">
+            <div className="border border-rule bg-paper-warm p-12 text-center">
+              <h2 className="font-display display-md text-brown-950">Negozio in allestimento</h2>
+              <p className="mt-3 text-brown-700">
                 Le vendite online saranno presto disponibili. Nel frattempo passa in bottega o{" "}
                 <Link href="/prenotazioni" className="font-semibold text-gold-deep underline">
                   prenota la tua porchetta
@@ -94,24 +95,28 @@ export default async function StorePage({ searchParams }: SearchParams) {
             <>
               {/* Filter bar */}
               <div className="mb-10 space-y-6">
+                {/* Square, hairlined and set on the storefront's own ground. This bar was
+                    the last of the old pill-and-white-card language still on the
+                    site, and it made the shop — the page that has to sell — look
+                    like a different product from the one around it. */}
                 <form method="get" className="flex flex-col gap-3 sm:flex-row">
                   {cat && <input type="hidden" name="cat" value={cat} />}
                   <div className="relative flex-1">
-                    <Search className="pointer-events-none absolute left-5 top-1/2 size-4 -translate-y-1/2 text-brown-900/40" />
+                    <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-taupe" />
                     <input
                       type="search"
                       name="q"
                       defaultValue={q}
                       placeholder="Cerca un prodotto…"
                       aria-label="Cerca un prodotto"
-                      className="w-full rounded-full border border-brown-900/15 bg-white/70 py-3.5 pl-12 pr-6 text-sm text-brown-950 placeholder:text-brown-900/40 focus:border-gold focus:outline-none"
+                      className="w-full border border-rule-strong bg-paper py-3.5 pr-6 pl-11 text-sm text-brown-950 placeholder:text-taupe focus:border-gold-dark focus:outline-none"
                     />
                   </div>
                   <select
                     name="sort"
                     defaultValue={sort}
                     aria-label="Ordina i prodotti"
-                    className="rounded-full border border-brown-900/15 bg-white/70 px-6 py-3.5 text-sm font-medium text-brown-950 focus:border-gold focus:outline-none"
+                    className="border border-rule-strong bg-paper px-5 py-3.5 text-sm font-medium text-brown-950 focus:border-gold-dark focus:outline-none"
                   >
                     {(Object.keys(SORT_LABELS) as Sort[]).map((s) => (
                       <option key={s} value={s}>
@@ -121,7 +126,7 @@ export default async function StorePage({ searchParams }: SearchParams) {
                   </select>
                   <button
                     type="submit"
-                    className="inline-flex items-center justify-center rounded-full bg-brown-950 px-8 py-3.5 text-sm font-semibold text-cream transition-colors hover:bg-brown-900"
+                    className="inline-flex items-center justify-center bg-brown-950 px-8 py-3.5 text-[0.6875rem] font-bold tracking-[0.18em] text-cream uppercase transition-colors hover:bg-brown-800"
                   >
                     Applica
                   </button>
@@ -131,24 +136,29 @@ export default async function StorePage({ searchParams }: SearchParams) {
                   <nav className="flex flex-wrap gap-2" aria-label="Categorie">
                     <Link
                       href={buildHref({ q, sort: sp.sort }, { cat: "" })}
-                      className={`rounded-full px-5 py-2 text-xs font-bold tracking-widest uppercase transition-colors ${
+                      className={`border px-5 py-2 text-[0.625rem] font-bold tracking-[0.18em] uppercase transition-colors ${
                         !cat
-                          ? "bg-brown-950 text-cream"
-                          : "border border-brown-900/15 text-brown-900/70 hover:border-brown-900/40"
+                          ? "border-brown-950 bg-brown-950 text-cream"
+                          : "border-rule-strong text-brown-700 hover:border-brown-950 hover:text-brown-950"
                       }`}
                     >
                       Tutti
                     </Link>
                     {categories.map((c) => (
+                      // Each filter wears its category's colour, so the row is the
+                      // legend for the grid underneath it rather than eight
+                      // identical brown pills.
                       <Link
                         key={c}
                         href={buildHref({ q, sort: sp.sort }, { cat: c })}
-                        className={`rounded-full px-5 py-2 text-xs font-bold tracking-widest uppercase transition-colors ${
+                        style={{ "--acc": categoryAccent(c) } as React.CSSProperties}
+                        className={`flex items-center gap-2.5 border px-5 py-2 text-[0.625rem] font-bold tracking-[0.18em] uppercase transition-colors ${
                           cat === c
-                            ? "bg-brown-950 text-cream"
-                            : "border border-brown-900/15 text-brown-900/70 hover:border-brown-900/40"
+                            ? "border-[var(--acc)] bg-[color-mix(in_oklab,var(--acc)_14%,var(--paper))] text-[var(--acc)]"
+                            : "border-rule-strong text-brown-700 hover:border-[var(--acc)] hover:text-[var(--acc)]"
                         }`}
                       >
+                        <span aria-hidden className="size-[5px] rotate-45 bg-[var(--acc)]" />
                         {c}
                       </Link>
                     ))}
@@ -157,9 +167,9 @@ export default async function StorePage({ searchParams }: SearchParams) {
               </div>
 
               {filtered.length === 0 ? (
-                <div className="rounded-[28px] border border-brown-900/10 bg-white/60 p-12 text-center">
-                  <h2 className="font-display text-3xl text-brown-950">Nessun risultato</h2>
-                  <p className="mt-3 text-brown-900/70">
+                <div className="border border-rule bg-paper-warm p-12 text-center">
+                  <h2 className="font-display display-md text-brown-950">Nessun risultato</h2>
+                  <p className="mt-3 text-brown-700">
                     Nessun prodotto corrisponde alla tua ricerca.{" "}
                     <Link href="/negozio" className="font-semibold text-gold-deep underline">
                       Rimuovi i filtri
@@ -168,7 +178,7 @@ export default async function StorePage({ searchParams }: SearchParams) {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-x-6 gap-y-12 sm:gap-x-7 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-14 sm:gap-x-7 lg:grid-cols-4">
                   {filtered.map((p) => (
                     <ProductTile
                       key={p.id}
@@ -190,7 +200,7 @@ export default async function StorePage({ searchParams }: SearchParams) {
               )}
 
               {hasFilters && filtered.length > 0 && (
-                <p className="mt-8 text-center text-sm text-brown-900/55">
+                <p className="mt-10 border-t border-rule pt-8 text-center text-sm text-taupe">
                   {filtered.length} {filtered.length === 1 ? "prodotto" : "prodotti"} ·{" "}
                   <Link href="/negozio" className="font-semibold text-gold-deep underline">
                     Rimuovi i filtri

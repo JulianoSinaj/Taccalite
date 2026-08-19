@@ -1,7 +1,8 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import type { ReactNode } from "react";
+import { useReducedMotionAfterMount } from "@/lib/use-reduced-motion-after-mount";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -21,6 +22,10 @@ type RevealLinesProps = {
  * The mask is a real `overflow-hidden` wrapper per line rather than a fade,
  * because the edge is the effect: the letters should look like they are being
  * pulled up from behind the page.
+ *
+ * Like `Reveal`, the reduced-motion path is an instant `animate` rather than a
+ * different tree — a swapped element keeps Motion's `translateY(108%)` on the
+ * style attribute and the headline stays parked below its own mask.
  */
 export default function RevealLines({
   lines,
@@ -28,23 +33,12 @@ export default function RevealLines({
   delay = 0,
   immediate = false,
 }: RevealLinesProps) {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotionAfterMount();
 
-  if (reduceMotion) {
-    return (
-      <span className={className}>
-        {lines.map((line, i) => (
-          <span key={i} className="block">
-            {line}
-          </span>
-        ))}
-      </span>
-    );
-  }
-
-  const motionProps = immediate
-    ? { animate: { y: "0%" } }
-    : { whileInView: { y: "0%" }, viewport: { once: true, margin: "-12%" } };
+  const motionProps =
+    reduceMotion || immediate
+      ? { animate: { y: "0%" } }
+      : { whileInView: { y: "0%" }, viewport: { once: true, margin: "-12%" } };
 
   return (
     <span className={className}>
@@ -56,7 +50,11 @@ export default function RevealLines({
           <motion.span
             className="block"
             initial={{ y: "108%" }}
-            transition={{ duration: 1.05, ease: EASE, delay: delay + i * 0.09 }}
+            transition={{
+              duration: reduceMotion ? 0 : 1.05,
+              ease: EASE,
+              delay: reduceMotion ? 0 : delay + i * 0.09,
+            }}
             {...motionProps}
           >
             {line}

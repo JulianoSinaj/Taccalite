@@ -41,6 +41,84 @@ Brand "marroncino" family echoing the physical shopfronts:
 Surfaces on light: `bg-white/50`–`/60` cards with `border-brown-700/15`; card token `#fffaf3`.
 NO pinks, purples, neons, blues. No gradients other than brown-900→brown-950 (loyalty card) and the cream/tan placeholder gradient.
 
+## Storefront art direction — "Carta e Inchiostro" (supersedes the above for `app/(site)`)
+
+Everything above still describes the **gestionale**. The public storefront was
+rebuilt on white paper with Fraunces/Inter Tight, and this pass gave it the
+material and the colour it was missing. Where the two disagree, this section
+wins for anything under `app/(site)`.
+
+### Ground — three warm steps, not one white
+| Token | Hex | Use |
+| --- | --- | --- |
+| `--paper` | `#fdfaf5` | the page. Warm stock, never `#ffffff` — a screen white read as a document, not a shopfront |
+| `--paper-warm` | `#f5eee0` | alternating bands, the proof bar, filter grounds |
+| `--paper-deep` | `#f0e7d7` | wells and the ground under a plate |
+| `--rule` / `--rule-strong` | `#e7dccb` / `#d4c4a9` | hairlines; the strong one when it must be seen |
+
+`.site-shell::before` lays a fixed fractal-noise plate over the whole viewport at
+`multiply`, `z-index: 85`. Fixed, because paper does not scroll; above the header,
+because the one untextured surface on the page read as a lighter bar pinned to
+the top of it. `--color-taupe` is deepened to `#6f6659` inside the shell so meta
+type clears AA on the warm bands.
+
+### Territory accents — colour as information
+Seven earth hues, one per product category, resolved by `lib/categories.ts`:
+
+| Category | Token | Hex |
+| --- | --- | --- |
+| Salumi | `--acc-salumi` | `#8f2f3b` rosso salame |
+| Carni | `--acc-carni` | `#a4472a` terracotta |
+| Formaggi | `--acc-formaggi` | `#a8791f` zafferano |
+| Gastronomia | `--acc-gastronomia` | `#4e6135` oliva |
+| Cantina | `--acc-cantina` | `#6b2438` vinaccia |
+| Regalo | `--acc-regalo` | `#2f5340` verde bottiglia |
+| fallback / la casa | `--acc-casa` | `#b08428` |
+
+Rules of use — a colour on this site answers *"what kind of thing is this?"*,
+never *"look here"*:
+- The consumer sets `--acc` on its own root (`style={{ "--acc": categoryAccent(c) }}`)
+  and everything inside reads `var(--acc)`. Never hardcode one of the hexes.
+- Grounds are tints at **8–16%** over paper (`color-mix(in oklab, var(--acc) 14%, …)`);
+  full strength is for small type, hairlines and marks only.
+- The page must still read brown-and-gold from across the room. The old "no
+  pinks, purples, neons, blues" rule stands — every accent is a pantry colour.
+
+### Plates — the fallback when there is no photograph
+Twenty of the twenty-four products have no image, so this is the majority of the
+shop, not an edge case. `components/site/ProductPlate.tsx` renders a printed
+etichetta: the category's tint, one of three engravings (`.plate-hatch`,
+`.plate-rings`, `.plate-rules`, chosen from the slug so a grid never repeats),
+a vignette and double rule from `.plate::after`, the initial struck in Fraunces,
+`DAL 1946` at the foot. Used by the product tiles and the diary cards — one
+language for "we have no picture of this", not two.
+
+Note: `app/globals.css` is **unlayered**, so every declaration in it beats
+Tailwind utilities regardless of source order. `.plate` therefore declares no
+`position` — a `position` there silently overrode the `absolute inset-0` its
+callers place it with and collapsed the plate to nothing.
+
+### Section rhythm
+Bands alternate `paper → paper-warm`, broken by **two dark ribbons**: the
+porchetta band (`bg-brown-950`) and the producer marquee (`bg-brown-900`), both
+lit by `.ember`. Nine near-white sections in a row is what made the page read as
+flat; the ribbons give the middle of the page a beat.
+
+Container is `max-w-[88rem]` with `px-5 sm:px-8 lg:px-12`. Inner pages open with
+`PageHero`, which without an `aside` sets the headline and lede as a **masthead**
+— title left, lede in a measure on the right, closed by a rule — because the lede
+under the title left the right-hand third of every inner page empty.
+
+### Motion
+Reduced motion is expressed as a **duration of zero on one element**, never as a
+second tree. See `lib/use-reduced-motion-after-mount.ts`: Motion's own hook reads
+the media query during the first client render while the server never does, so
+branching the markup on it failed hydration for exactly the visitors who asked
+for less motion — and, worse, left Motion's entry `opacity: 0` on the node with
+nothing to animate it away, so whole sections never appeared. A `whileInView`
+rest state must also name **every** property its `initial` set, for the same
+reason.
+
 ## Typography — HARD CONSTRAINT
 - Display/headings: **Playfair Display** (weights 500–700) via `.font-display` — h1 `text-4xl…text-6xl` semibold, h2 `text-3xl/4xl` semibold, card titles `text-lg…2xl`
 - Body/UI: **Open Sans** (400–700) — body `text-base leading-relaxed`, secondary `text-sm`, meta `text-xs`

@@ -21,6 +21,11 @@ type PageHeroProps = {
  * near-black slab, which was the single thing the brief was most explicit about
  * removing — and which also meant the fixed white header sat on a dark ground
  * and read as a grey bar floating over the page.
+ *
+ * Laid out as a masthead when there is no `aside`: headline left, lede set in a
+ * measure on the right, closed by a rule. Previously the lede sat under the
+ * title and the right-hand third of every inner page was empty — a void the
+ * width of a column, on every page but the homepage.
  */
 export default function PageHero({
   eyebrow,
@@ -44,12 +49,26 @@ export default function PageHero({
             {eyebrow}
           </p>
 
-          <h1 className="font-display display-xl mt-8 font-semibold text-brown-950">
-            <RevealLines immediate lines={title} />
-          </h1>
-
-          {lede && (
-            <p className="mt-8 max-w-xl text-lg leading-relaxed text-brown-700">{lede}</p>
+          {aside ? (
+            <>
+              <h1 className="font-display display-xl mt-8 font-semibold text-brown-950">
+                <RevealLines immediate lines={title} />
+              </h1>
+              {lede && (
+                <p className="mt-8 max-w-xl text-lg leading-relaxed text-brown-700">{lede}</p>
+              )}
+            </>
+          ) : (
+            <div className="mt-8 grid gap-8 border-b border-rule pb-10 lg:grid-cols-12 lg:items-end lg:gap-12">
+              <h1 className="font-display display-xl font-semibold text-brown-950 lg:col-span-8">
+                <RevealLines immediate lines={title} />
+              </h1>
+              {lede && (
+                <p className="text-lg leading-relaxed text-brown-700 lg:col-span-4 lg:pb-2 lg:text-base">
+                  {lede}
+                </p>
+              )}
+            </div>
           )}
 
           {children}

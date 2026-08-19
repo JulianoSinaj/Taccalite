@@ -1,6 +1,7 @@
 "use client";
 
-import { motion, useReducedMotion, useScroll, useSpring } from "motion/react";
+import { motion, useScroll, useSpring } from "motion/react";
+import { useReducedMotionAfterMount } from "@/lib/use-reduced-motion-after-mount";
 
 /**
  * A gold hairline across the top of the page that fills as you read.
@@ -10,11 +11,15 @@ import { motion, useReducedMotion, useScroll, useSpring } from "motion/react";
  * sections deep.
  */
 export default function ScrollProgress() {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotionAfterMount();
   const { scrollYProgress } = useScroll();
   // Springing the raw progress keeps the bar from twitching on trackpad scroll.
   const scaleX = useSpring(scrollYProgress, { stiffness: 140, damping: 26, restDelta: 0.001 });
 
+  // Hydration-safe by way of the hook: bailing out on the raw media query during
+  // render one dropped this element on the client while the server had emitted
+  // it, which failed hydration and threw away the whole tree — on every page, for
+  // exactly the people least well served by a re-render.
   if (reduceMotion) return null;
 
   return (

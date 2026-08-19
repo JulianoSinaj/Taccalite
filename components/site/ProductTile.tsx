@@ -2,6 +2,8 @@ import { ViewTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import QuickAdd from "@/components/site/QuickAdd";
+import ProductPlate from "@/components/site/ProductPlate";
+import { categoryAccent } from "@/lib/categories";
 import { formatEuro } from "@/lib/format";
 
 export type ProductTileData = {
@@ -71,8 +73,11 @@ export default function ProductTile({
     product.stock != null && product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD;
 
   return (
-    <article className="group flex h-full flex-col">
-      <div className="relative aspect-4/5 overflow-hidden bg-paper-warm">
+    <article
+      className="group flex h-full flex-col"
+      style={{ "--acc": categoryAccent(product.category) } as React.CSSProperties}
+    >
+      <div className="relative aspect-4/5 overflow-hidden bg-paper-deep transition-shadow duration-700 group-hover:shadow-[0_26px_50px_-24px_color-mix(in_oklab,var(--acc)_55%,transparent)]">
         {/* Named so it morphs into the hero of the product page instead of the
             two pages swapping with nothing to connect them. */}
         <MaybeMorph enabled={morph} slug={product.slug}>
@@ -85,12 +90,12 @@ export default function ProductTile({
               className="object-cover transition-transform duration-[1.4s] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.05]"
             />
           ) : (
-            <span
-              aria-hidden
-              className="font-display absolute inset-0 flex items-center justify-center text-[7rem] leading-none font-semibold text-gold/35 transition-transform duration-[1.4s] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.06]"
-            >
-              {product.name.charAt(0)}
-            </span>
+            <ProductPlate
+              name={product.name}
+              category={product.category}
+              seed={product.slug}
+              className="transition-transform duration-[1.4s] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04]"
+            />
           )}
         </MaybeMorph>
 
@@ -127,12 +132,15 @@ export default function ProductTile({
 
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-0 z-20 border border-brown-950/8 transition-colors duration-500 group-hover:border-gold/60"
+          className="pointer-events-none absolute inset-0 z-20 border border-brown-950/8 transition-colors duration-500 group-hover:border-[color-mix(in_oklab,var(--acc)_55%,transparent)]"
         />
       </div>
 
       <div className="flex flex-1 flex-col pt-5">
-        <p className="text-[0.625rem] font-semibold tracking-[0.22em] text-gold-deep uppercase">
+        {/* The category, in the category's own colour — the one place the grid
+            tells you what kind of thing you are looking at without you reading. */}
+        <p className="flex items-center gap-2 text-[0.625rem] font-semibold tracking-[0.22em] text-[var(--acc)] uppercase">
+          <span aria-hidden className="size-[5px] rotate-45 bg-[var(--acc)]" />
           {product.category}
         </p>
         <h3 className="font-display mt-2 text-xl leading-tight font-semibold tracking-[-0.02em] text-brown-950">
@@ -146,18 +154,19 @@ export default function ProductTile({
 
         {product.origin && <p className="mt-1.5 text-[0.8125rem] text-taupe">{product.origin}</p>}
 
-        <div className="mt-auto flex items-baseline gap-2 pt-4">
+        <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
           {product.priceCents != null ? (
-            <p className="text-[0.9375rem] font-semibold text-brown-950 tabular-nums">
+            // Stamped on a tinted ticket rather than set as running text: on a
+            // grid of two dozen tiles the price is the thing being compared, and
+            // it was previously the quietest mark on the card.
+            <p className="ticket bg-[color-mix(in_oklab,var(--acc)_11%,var(--paper-warm))] px-2.5 py-1 text-[0.9375rem] font-semibold text-brown-950 tabular-nums">
               {formatEuro(product.priceCents)}
               {product.unit && <span className="font-normal text-taupe"> / {product.unit}</span>}
             </p>
           ) : (
             <p className="text-[0.8125rem] text-taupe">Al banco, su richiesta</p>
           )}
-          {soldOut && (
-            <span className="text-[0.8125rem] text-taupe">· esaurito</span>
-          )}
+          {soldOut && <span className="text-[0.8125rem] text-taupe">· esaurito</span>}
         </div>
       </div>
     </article>

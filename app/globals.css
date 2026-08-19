@@ -34,10 +34,33 @@
    *
    * Applied by `.site-shell` (see below), which only wraps `app/(site)`.
    */
-  --paper: #ffffff;        /* the page itself */
-  --paper-warm: #faf7f2;   /* alternating bands — a 2% warm tint, not cream */
-  --rule: #e8dfd2;         /* hairline between sections and around cards */
-  --rule-strong: #d8cab5;  /* the same hairline when it has to be seen */
+  --paper: #fdfaf5;        /* the page itself — stock, not a screen white */
+  --paper-warm: #f5eee0;   /* alternating bands */
+  --paper-deep: #f0e7d7;   /* the third step: wells, plates, sunken panels */
+  --rule: #e7dccb;         /* hairline between sections and around cards */
+  --rule-strong: #d4c4a9;  /* the same hairline when it has to be seen */
+
+  /* ── Territory accents ────────────────────────────────────────────────────
+   *
+   * The storefront used to be one hue — the brown ramp plus gold — which read
+   * as monochrome and made every category, every state and every section look
+   * like the same thing. These six are the *pantry* of the Marche, and they are
+   * information rather than decoration: each maps to one product category (see
+   * `lib/categories.ts`), so a colour on this site always answers "what kind of
+   * thing is this?".
+   *
+   * All six sit in the earth range on purpose — no blues, pinks or neons, the
+   * one hard rule the brand had. They are used as *tints* (8–14% over paper)
+   * for grounds and at full strength only for small type and hairlines, so the
+   * page still reads brown-and-gold from across the room.
+   */
+  --acc-salumi: #8f2f3b;        /* rosso salame */
+  --acc-carni: #a4472a;         /* terracotta */
+  --acc-formaggi: #a8791f;      /* zafferano */
+  --acc-gastronomia: #4e6135;   /* oliva */
+  --acc-cantina: #6b2438;       /* vinaccia */
+  --acc-regalo: #2f5340;        /* verde bottiglia */
+  --acc-casa: #b08428;          /* la casa: gold, struck deeper */
 
   /* ── Semantic surfaces & status ───────────────────────────────────────────
    *
@@ -122,6 +145,7 @@
   --color-ink: var(--color-ink);
   --color-paper: var(--paper);
   --color-paper-warm: var(--paper-warm);
+  --color-paper-deep: var(--paper-deep);
   --color-rule: var(--rule);
   --color-rule-strong: var(--rule-strong);
 
@@ -226,12 +250,51 @@ body {
    * brown bands stays "the light ink", which is what it always meant. Scoped
    * here, so the gestionale — where `--color-cream` is inverted by the dark
    * theme — is untouched. */
-  --color-cream: #ffffff;
+  --color-cream: #fffdf8;
   --color-cream-dark: var(--paper-warm);
+
+  /* Meta text — dates, captions, phone numbers — sits on the warm bands, where
+   * the shared `--color-taupe` measured about 4:1. Deepened here only, so the
+   * storefront's small type clears AA without touching the gestionale's. */
+  --color-taupe: #6f6659;
 }
 
 body:has(.site-shell) {
   background: var(--paper);
+}
+
+/* ── Paper grain ─────────────────────────────────────────────────────────────
+ *
+ * The single change that stops the storefront reading as a screen. A fixed
+ * fractal-noise plate multiplied over the whole viewport gives the ground a
+ * tooth, so photographs sit *on* something instead of floating in a void, and
+ * the large flat areas the layout depends on stop looking empty.
+ *
+ * Fixed rather than per-section, so the grain does not travel with the content
+ * — paper does not scroll. `multiply` is what makes it read as fibre in the
+ * stock rather than dust on the glass.
+ *
+ * `z-index: 85` sits above the fixed header (z-80) deliberately. Below it, the
+ * header's translucent paper was the one surface on the page with no texture,
+ * and the seam where the grain stopped read as a lighter bar pinned to the top
+ * of every page. The overlays that *should* float above the stock — the cart
+ * drawer (90) and the consent bar (95) — still clear it.
+ */
+.site-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  pointer-events: none;
+  opacity: 0.45;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.32'/%3E%3C/svg%3E");
+}
+
+@media print {
+  .site-shell::before {
+    display: none;
+  }
 }
 
 .site-shell .font-display {
@@ -279,6 +342,103 @@ body:has(.site-shell) {
   font-variation-settings: "SOFT" 30, "WONK" 1;
 }
 
+/* ── Plates ──────────────────────────────────────────────────────────────────
+ *
+ * Twenty of the twenty-four products have no photograph, so the shop was a grid
+ * of empty beige squares with a letter in the middle — the single biggest
+ * reason the site read as colourless. A plate turns that hole into a *printed
+ * label*: the category's own colour as a tint, an engraved ground, a double
+ * rule, and the initial struck in the middle.
+ *
+ * Every value derives from `--acc`, which the tile sets per category, so one
+ * rule paints seven different things. Three engravings, picked deterministically
+ * from the slug, keep a grid of them from looking like wallpaper.
+ */
+/* No `position` here on purpose. This file is unlayered, so every declaration in
+ * it beats Tailwind's utilities regardless of source order — a `position` would
+ * silently override the `absolute inset-0` the callers place the plate with, and
+ * collapse it to nothing. The caller owns layout; the plate owns ink. */
+.plate {
+  --plate-ink: var(--acc, var(--color-gold-dark));
+  background-color: color-mix(in oklab, var(--plate-ink) 14%, var(--paper-deep));
+  /* So the struck initial can be sized against the plate rather than the
+   * viewport: the same component fills a 250px tile in a grid and a 600px square
+   * on a product page, and a `vw` clamp gets one of the two wrong. */
+  container-type: inline-size;
+}
+
+.plate-initial {
+  font-size: clamp(2.75rem, 30cqw, 11rem);
+}
+
+/* Engraving 1 — fine diagonal hatch, the way a banknote is shaded. */
+.plate-hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in oklab, var(--plate-ink) 22%, transparent) 0 1px,
+    transparent 1px 7px
+  );
+}
+
+/* Engraving 2 — concentric rings struck from the centre, like a wax seal. */
+.plate-rings {
+  background-image: repeating-radial-gradient(
+    circle at 50% 46%,
+    color-mix(in oklab, var(--plate-ink) 20%, transparent) 0 1px,
+    transparent 1px 12px
+  );
+}
+
+/* Engraving 3 — ledger rules, the ruled paper an order used to be written on. */
+.plate-rules {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--plate-ink) 18%, transparent) 0 1px,
+    transparent 1px 10px
+  );
+}
+
+/* The vignette + double rule that make the engraving read as ink on card rather
+ * than a CSS pattern: printed edges are never perfectly even. */
+.plate::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    115% 90% at 50% 42%,
+    transparent 38%,
+    color-mix(in oklab, var(--plate-ink) 20%, transparent) 100%
+  );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--plate-ink) 26%, transparent),
+    inset 0 0 0 9px transparent,
+    inset 0 0 0 10px color-mix(in oklab, var(--plate-ink) 18%, transparent);
+}
+
+/* ── Ember ───────────────────────────────────────────────────────────────────
+ *
+ * The heat inside the two brown bands. The old bands were flat brown with one
+ * blurred gold orb; this is an oven mouth — three offset warm lights that make
+ * the dark half of the page feel lit rather than switched off. */
+.ember {
+  background:
+    radial-gradient(60% 70% at 78% 22%, rgba(225, 190, 100, 0.22), transparent 68%),
+    radial-gradient(45% 55% at 92% 68%, rgba(196, 92, 42, 0.2), transparent 70%),
+    radial-gradient(70% 60% at 20% 96%, rgba(143, 47, 59, 0.16), transparent 72%);
+}
+
+/* A price stamped on card: the two notches read as a ticket torn off a roll. */
+.ticket {
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - 7px),
+    calc(100% - 7px) 100%,
+    0 100%
+  );
+}
+
 /* A gold hairline that draws left-to-right on hover — the section-list idiom. */
 .rule-draw::after {
   content: "";
@@ -287,7 +447,7 @@ body:has(.site-shell) {
   bottom: 0;
   height: 1px;
   width: 0;
-  background: var(--color-gold);
+  background: var(--acc, var(--color-gold));
   transition: width 0.7s cubic-bezier(0.16, 1, 0.3, 1);
 }
 

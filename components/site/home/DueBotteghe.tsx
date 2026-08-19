@@ -108,22 +108,40 @@ export default function DueBotteghe({ shops }: { shops: Shop[] }) {
         })}
       </div>
 
-      {/* The phone numbers again, tappable, outside the photo. A link inside a
-          link is invalid, so they can't live in the panels above. */}
-      <div className="mx-auto flex max-w-[88rem] flex-wrap gap-x-10 gap-y-2 px-5 py-6 text-[0.8125rem] text-taupe sm:px-8 lg:px-12">
-        {shops.map((shop) =>
-          shop.phone ? (
-            <a
-              key={shop.slug}
-              href={telHref(shop.phone)}
-              className="flex items-center gap-2.5 transition-colors hover:text-brown-950"
-            >
-              <Phone className="size-3.5 text-gold-deep" aria-hidden />
-              <span className="font-medium text-brown-950">{shop.name}</span>
-              {shop.phone}
-            </a>
-          ) : null
-        )}
+      {/* The phone numbers again, tappable, outside the photo — a link inside a
+          link is invalid, so they can't live in the panels above.
+
+          This used to be a thin line of grey text floating in white with a
+          section's worth of empty page under it, which read as a mistake. It is
+          a band now: same information, given the weight a phone number deserves
+          on the page of a shop people actually ring. */}
+      <div className="border-b border-rule bg-paper-warm">
+        <div className="mx-auto flex max-w-[88rem] flex-col gap-4 px-5 py-7 sm:flex-row sm:items-center sm:gap-10 sm:px-8 lg:px-12">
+          <p className="flex shrink-0 items-center gap-3.5 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
+            <span aria-hidden className="h-px w-8 bg-gold" />
+            Chiamaci
+          </p>
+          <div className="flex flex-wrap gap-x-10 gap-y-3">
+            {shops.map((shop) =>
+              shop.phone ? (
+                <a
+                  key={shop.slug}
+                  href={telHref(shop.phone)}
+                  className="group flex items-baseline gap-3 text-[0.8125rem] text-taupe transition-colors hover:text-brown-950"
+                >
+                  <Phone
+                    className="size-3.5 shrink-0 translate-y-0.5 text-gold-deep"
+                    aria-hidden
+                  />
+                  <span className="font-medium text-brown-950">{shop.name}</span>
+                  <span className="font-display text-[1.0625rem] font-semibold tracking-[-0.01em] text-brown-950 tabular-nums transition-colors group-hover:text-gold-deep">
+                    {shop.phone}
+                  </span>
+                </a>
+              ) : null
+            )}
+          </div>
+        </div>
       </div>
     </section>
   );

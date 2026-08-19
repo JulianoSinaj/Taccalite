@@ -3,7 +3,8 @@
 import { useRef, useState, useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { AnimatePresence, motion, useReducedMotion, useSpring } from "motion/react";
+import { AnimatePresence, motion, useSpring } from "motion/react";
+import { useReducedMotionAfterMount } from "@/lib/use-reduced-motion-after-mount";
 import { ArrowRight, ArrowUpRight, Clock, MapPin, Navigation, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OpenState } from "@/lib/hours";
@@ -84,7 +85,7 @@ function MagneticAnchor({
   className?: string;
   external?: boolean;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionAfterMount();
   const ref = useRef<HTMLAnchorElement>(null);
   const x = useSpring(0, { stiffness: 220, damping: 18, mass: 0.4 });
   const y = useSpring(0, { stiffness: 220, damping: 18, mass: 0.4 });
@@ -141,7 +142,7 @@ function readConsent() {
 }
 
 export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionAfterMount();
   const [activeSlug, setActiveSlug] = useState(shops[0]?.slug ?? "");
   const [optedIn, setOptedIn] = useState(false);
   const storedConsent = useSyncExternalStore(subscribeConsent, readConsent, () => false);
