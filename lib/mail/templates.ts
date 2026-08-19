@@ -532,3 +532,42 @@ export function orderStatusEmail(
     text: `Ciao ${d.name}, ${intro.replace(/<[^>]+>/g, "")}${extraText}`,
   };
 }
+
+export type ContactEmailData = {
+  name: string;
+  email: string;
+  phone?: string | null;
+  topic: string;
+  message: string;
+};
+
+/**
+ * Sent to the shop when someone writes from `/contatti`.
+ *
+ * `reply-to` isn't part of `MailInput`, so the sender's address is put in the
+ * body where the owner can copy it — the alternative was widening the mailer for
+ * one caller.
+ */
+export function contactOwnerEmail(d: ContactEmailData): Built {
+  const body = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      ${row("Nome", d.name)}
+      ${row("Email", d.email)}
+      ${row("Telefono", d.phone ?? "")}
+      ${row("Motivo", d.topic)}
+    </table>
+    <p style="margin:22px 0 6px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#807868;">Messaggio</p>
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0;white-space:pre-wrap;">${esc(d.message)}</p>
+    <p style="margin:22px 0 0;">
+      <a href="mailto:${esc(d.email)}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Rispondi a ${esc(d.name)}</a>
+    </p>`;
+  return {
+    subject: `Nuovo messaggio dal sito — ${d.topic}`,
+    html: layout({
+      heading: "Nuovo messaggio dal sito",
+      body,
+      preheader: `${d.name}: ${d.message.slice(0, 90)}`,
+    }),
+    text: `Nuovo messaggio dal sito\n\nNome: ${d.name}\nEmail: ${d.email}\nTelefono: ${d.phone ?? "—"}\nMotivo: ${d.topic}\n\n${d.message}`,
+  };
+}

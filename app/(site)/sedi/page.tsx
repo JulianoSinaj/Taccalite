@@ -10,6 +10,8 @@ import {
   Phone,
 } from "lucide-react";
 import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
+import PageHero from "@/components/site/PageHero";
+import CTA from "@/components/site/CTA";
 import PillButton from "@/components/PillButton";
 import JsonLd from "@/components/JsonLd";
 import ShopLocator, { OpenPill, type LocatorShop } from "@/components/ShopLocator";
@@ -21,7 +23,7 @@ import type { ShopRow } from "@/lib/db/schema";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Le Botteghe — Dove trovarci ad Ancona",
+  title: "Sedi — Dove trovarci ad Ancona",
   description:
     "Indirizzi, orari, mappa e indicazioni delle due botteghe Taccalite ad Ancona: i grandi formaggi in Piazza Kennedy, carni e salumi al Mercato Coperto del Piano.",
 };
@@ -145,42 +147,27 @@ export default async function NegoziPage() {
           ...shops.map(shopSchema),
           breadcrumbSchema([
             { name: "Home", path: "/" },
-            { name: "Le Botteghe", path: "/negozi" },
+            { name: "Sedi", path: "/sedi" },
           ]),
           faqSchema(faqs),
         ]}
       />
 
       {/* ── Hero: headline + live "adesso" card ─────────────────────────── */}
-      <section className="relative overflow-hidden bg-[#1c1512] px-5 pt-44 pb-24 sm:px-10 sm:pt-56 sm:pb-32">
-        <div className="bg-noise absolute inset-0 opacity-10" />
-        <div className="parallax-orb absolute -top-52 -right-52 h-[48rem] w-[48rem] opacity-10" />
-        <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 lg:grid-cols-12 lg:gap-20">
-          <Reveal className="lg:col-span-7">
-            <span className="eyebrow mb-8 block">Dove trovarci · Ancona</span>
-            <h1 className="font-display max-w-4xl text-5xl leading-[0.95] tracking-tighter text-cream sm:text-7xl md:text-8xl">
-              Due botteghe,
-              <br />
-              <span className="text-gold italic">un&apos;anima sola</span>
-            </h1>
-            <p className="mt-8 max-w-xl text-lg leading-relaxed font-light text-cream/75">
-              Il banco dei grandi formaggi in Piazza Kennedy e quello delle carni al Mercato
-              Coperto del Piano. Qui trovi orari, mappa e indicazioni: scegli la bottega più
-              vicina e vieni ad assaggiare.
-            </p>
-            <div className="mt-10 flex flex-wrap gap-4">
-              <PillButton href="#mappa" tone="gold">
-                Apri la mappa
-              </PillButton>
-              <PillButton href="#orari" tone="ghost">
-                Vedi gli orari
-              </PillButton>
-            </div>
-          </Reveal>
-
-          {/* Live status card */}
-          <Reveal delay={0.15} className="lg:col-span-5">
-            <div className="cinematic-shadow relative overflow-hidden rounded-[32px] border border-white/8 bg-brown-900/60 backdrop-blur">
+      <PageHero
+        eyebrow="Dove trovarci · Ancona"
+        title={[
+          "Due botteghe,",
+          <span key="2" className="wonk text-gold-deep">
+            un&apos;anima sola
+          </span>,
+        ]}
+        lede="Il banco dei grandi formaggi in Piazza Kennedy e quello delle carni al Mercato Coperto del Piano. Qui trovi orari, mappa e indicazioni: scegli la bottega più vicina e vieni ad assaggiare."
+        aside={
+          /* Live status card: today's hours and an open/closed pill per shop,
+             computed server-side so it is true at the moment of the request. */
+          <Reveal delay={0.15}>
+            <div className="overflow-hidden border border-rule bg-paper">
               <div className="relative aspect-[16/9]">
                 <Image
                   src="/images/coppa-finocchio-bottega.jpg"
@@ -190,16 +177,20 @@ export default async function NegoziPage() {
                   className="object-cover"
                   sizes="(max-width: 1024px) 100vw, 40vw"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-brown-950 via-brown-950/30 to-transparent" />
-                <span className="eyebrow absolute bottom-5 left-6">Adesso, in bottega</span>
+                <div className="absolute inset-0 bg-gradient-to-t from-brown-950/85 via-brown-950/15 to-transparent" />
+                <span className="absolute bottom-5 left-6 text-[0.625rem] font-semibold tracking-[0.24em] text-gold uppercase">
+                  Adesso, in bottega
+                </span>
               </div>
-              <ul className="divide-y divide-white/8">
+              <ul className="divide-y divide-rule">
                 {locatorShops.map((shop) => (
                   <li key={shop.slug} className="flex items-center gap-4 px-6 py-5">
                     <div className="min-w-0 flex-1">
-                      <p className="font-display text-xl leading-tight text-cream">{shop.name}</p>
-                      <p className="mt-0.5 flex items-center gap-2 text-xs font-medium text-cream/60">
-                        <Clock className="size-3.5 shrink-0 text-gold" />
+                      <p className="font-display text-xl leading-tight font-semibold text-brown-950">
+                        {shop.name}
+                      </p>
+                      <p className="mt-1 flex items-center gap-2 text-[0.8125rem] text-taupe">
+                        <Clock className="size-3.5 shrink-0 text-gold-deep" />
                         {shop.today ? shop.today.value : "Chiamaci per gli orari"}
                       </p>
                     </div>
@@ -208,14 +199,14 @@ export default async function NegoziPage() {
                         state={shop.open}
                         className={
                           shop.open.open
-                            ? "bg-green-500/15 text-green-300"
-                            : "bg-white/8 text-cream/60"
+                            ? "bg-ok-soft text-ok-soft-fg"
+                            : "bg-paper-warm text-taupe"
                         }
                       />
                     ) : (
                       <a
                         href={telHref(shop.phone)}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1 text-[10px] font-bold tracking-widest text-cream/70 uppercase hover:text-cream"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-paper-warm px-3 py-1 text-[0.625rem] font-semibold tracking-[0.16em] text-taupe uppercase transition-colors hover:text-brown-950"
                       >
                         <Phone className="size-3" />
                         Chiama
@@ -226,17 +217,26 @@ export default async function NegoziPage() {
               </ul>
             </div>
           </Reveal>
+        }
+      >
+        <div className="mt-10 flex flex-wrap gap-3">
+          <CTA href="#mappa" tone="primary">
+            Apri la mappa
+          </CTA>
+          <CTA href="#orari" tone="outline">
+            Vedi gli orari
+          </CTA>
         </div>
-      </section>
+      </PageHero>
 
       {/* ── Map + locator ──────────────────────────────────────────────── */}
-      <section id="mappa" className="scroll-mt-24 bg-cream px-5 py-24 sm:px-10 sm:py-32">
+      <section id="mappa" className="scroll-mt-24 bg-paper px-5 py-24 sm:px-10 sm:py-32">
         <div className="mx-auto max-w-7xl">
           <Reveal className="mb-14 max-w-3xl">
             <span className="eyebrow eyebrow-dark mb-6 block">La mappa</span>
             <h2 className="font-display text-4xl leading-[0.95] tracking-tighter text-brown-950 sm:text-5xl md:text-6xl">
               Scegli la bottega,
-              <span className="text-gold-deep italic"> ti portiamo lì.</span>
+              <span className="wonk text-gold-deep"> ti portiamo lì.</span>
             </h2>
             <p className="mt-6 max-w-xl text-lg leading-relaxed font-light text-brown-900/70">
               Tocca una bottega per vederla sulla mappa e avviare le indicazioni dal punto in cui
@@ -250,14 +250,14 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── Weekly hours, side by side ─────────────────────────────────── */}
-      <section id="orari" className="scroll-mt-24 bg-cream-dark px-5 py-24 sm:px-10 sm:py-32">
+      <section id="orari" className="scroll-mt-24 bg-paper-warm px-5 py-24 sm:px-10 sm:py-32">
         <div className="mx-auto max-w-7xl">
           <Reveal className="mb-14 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
               <span className="eyebrow eyebrow-dark mb-6 block">Orari di apertura</span>
               <h2 className="font-display text-4xl leading-[0.95] tracking-tighter text-brown-950 sm:text-5xl md:text-6xl">
                 Quando siamo
-                <span className="text-gold-deep italic"> al banco</span>
+                <span className="wonk text-gold-deep"> al banco</span>
               </h2>
             </div>
             <p className="max-w-sm text-sm leading-relaxed text-brown-900/65">
@@ -336,13 +336,13 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── How to get there ───────────────────────────────────────────── */}
-      <section id="come-arrivare" className="scroll-mt-24 bg-cream px-5 py-24 sm:px-10 sm:py-32">
+      <section id="come-arrivare" className="scroll-mt-24 bg-paper px-5 py-24 sm:px-10 sm:py-32">
         <div className="mx-auto max-w-7xl">
           <Reveal className="mb-14 max-w-3xl">
             <span className="eyebrow eyebrow-dark mb-6 block">Come arrivare</span>
             <h2 className="font-display text-4xl leading-[0.95] tracking-tighter text-brown-950 sm:text-5xl md:text-6xl">
               A piedi, in auto
-              <span className="text-gold-deep italic"> o in autobus</span>
+              <span className="wonk text-gold-deep"> o in autobus</span>
             </h2>
           </Reveal>
 
@@ -405,13 +405,13 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── FAQ ────────────────────────────────────────────────────────── */}
-      <section id="faq" className="scroll-mt-24 bg-cream-dark px-5 py-24 sm:px-10 sm:py-32">
+      <section id="faq" className="scroll-mt-24 bg-paper-warm px-5 py-24 sm:px-10 sm:py-32">
         <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-20">
           <Reveal className="lg:col-span-4">
             <span className="eyebrow eyebrow-dark mb-6 block">Domande frequenti</span>
             <h2 className="font-display text-4xl leading-[0.95] tracking-tighter text-brown-950 sm:text-5xl">
               Prima di
-              <span className="text-gold-deep italic"> passare</span>
+              <span className="wonk text-gold-deep"> passare</span>
             </h2>
             <p className="mt-6 text-sm leading-relaxed text-brown-900/65">
               Non trovi la risposta? Chiamaci: al banco rispondiamo volentieri.
@@ -441,14 +441,14 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── Reservations funnel ────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-[#1c1512] px-5 py-24 sm:px-10 sm:py-32">
+      <section className="relative overflow-hidden bg-brown-950 px-5 py-24 sm:px-10 sm:py-32">
         <div className="bg-noise absolute inset-0 opacity-10" />
         <div className="parallax-orb absolute -bottom-52 -left-40 h-[44rem] w-[44rem] opacity-10" />
         <Reveal className="relative mx-auto flex max-w-7xl flex-col items-center gap-10 text-center">
           <span className="eyebrow block">Ospitalità Taccalite</span>
           <h2 className="font-display max-w-3xl text-4xl leading-[0.95] tracking-tighter text-cream sm:text-6xl">
             Siediti al banco:
-            <span className="text-gold italic"> ti apparecchiamo noi.</span>
+            <span className="wonk text-gold"> ti apparecchiamo noi.</span>
           </h2>
           <p className="max-w-xl text-lg leading-relaxed font-light text-cream/75">
             Taglieri di salumi e formaggi, porchetta calda e i consigli di chi la prepara da tre

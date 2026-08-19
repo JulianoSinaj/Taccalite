@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  experimental: {
+    // Enables React's <ViewTransition> and makes Next trigger it on navigation,
+    // so a product photo morphs from the grid into its detail page instead of
+    // the two pages swapping with no visual link between them.
+    viewTransition: true,
+  },
   turbopack: {
     root: __dirname,
   },
@@ -14,8 +20,17 @@ const nextConfig: NextConfig = {
   // it out of the bundle (traced into standalone node_modules for Docker; on
   // Vercel the remote Turso URL uses the pure-JS HTTP transport).
   serverExternalPackages: ["@libsql/client", "libsql"],
+  // `/negozi` (the two shop locations) sat one letter away from `/negozio` (the
+  // online store) and the pair was a standing source of misdirected links. The
+  // locations moved to `/sedi`, which is also what the nav calls them; these keep
+  // the indexed URLs and any printed material working.
+  async redirects() {
+    return [
+      { source: "/negozi", destination: "/sedi", permanent: true },
+      { source: "/negozi/:slug", destination: "/sedi/:slug", permanent: true },
+    ];
+  },
   images: {
-    // Next.js 16 defaults qualities to [75]; ScrollFilm requests 82.
     qualities: [75, 82, 90],
     remotePatterns: [
       {

@@ -349,7 +349,7 @@ export async function saveShop(_prev: ActionState, fd: FormData): Promise<Action
       await db.insert(shops).values({ ...values, slug: d.slug });
     }
     revalidatePath("/admin/shops");
-    revalidatePath("/negozi");
+    revalidatePath("/sedi");
     return ok(d.id ? "Sede salvata." : "Sede creata.");
   });
 }
@@ -367,7 +367,7 @@ export async function deleteShop(_prev: ActionState, fd: FormData): Promise<Acti
     }
     await logAudit({ actor, action: "shop.delete", entity: "shop", entityId: id, summary: `Sede eliminata (${id})` });
     revalidatePath("/admin/shops");
-    revalidatePath("/negozi");
+    revalidatePath("/sedi");
     return ok("Sede eliminata.");
   });
 }

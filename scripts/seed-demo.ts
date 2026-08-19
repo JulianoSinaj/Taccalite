@@ -570,7 +570,7 @@ async function main() {
   console.log("✓ stock movements: 300");
 
   // ── Analytics ──────────────────────────────────────────────────────────────
-  const PATHS = ["/", "/negozio", "/porchetta", "/prenotazioni", "/negozi", "/blog", "/negozi/centro", "/negozio/demo-salame-di-fabriano", "/traccia", "/newsletter"];
+  const PATHS = ["/", "/negozio", "/porchetta", "/prenotazioni", "/sedi", "/blog", "/sedi/centro", "/negozio/demo-salame-di-fabriano", "/traccia", "/newsletter"];
   const REFS = [null, "https://www.google.com/", "https://www.instagram.com/", "https://www.facebook.com/", "https://www.tripadvisor.it/", null, null];
   const views: (typeof schema.pageViews.$inferInsert)[] = [];
   for (let i = 0; i < 6000; i++) {
@@ -631,12 +631,52 @@ async function main() {
   }
   console.log("✓ email outbox: 200");
 
+  // ── Storefront dressing ────────────────────────────────────────────────────
+  //
+  // Placeholder copy so the public site demos as a finished shop rather than one
+  // with holes in it. Everything here is **invented for the demo** and lives in
+  // this script — never in `lib/data.ts` — precisely so a real seed can't pick it
+  // up. All of it is editable from the gestionale, and all of it must be replaced
+  // with the shop's real values before the site goes live.
+
+  // Second location's hours were never confirmed, so the live site says so out
+  // loud. Plausible market hours for the demo; the market closes Thursday
+  // afternoons, which is the usual Ancona pattern.
+  await db
+    .update(schema.shops)
+    .set({
+      hours: [
+        { label: "Lun – Mer, Ven – Sab", value: "7:00 – 13:30" },
+        { label: "Giovedì", value: "7:00 – 13:00" },
+        { label: "Domenica", value: "Chiuso" },
+      ],
+      hoursConfirmed: true,
+    })
+    .where(eq(schema.shops.slug, "carni"));
+  console.log("✓ demo opening hours for the Mercato del Piano");
+
   // ── Settings that make the demo data meaningful ────────────────────────────
   for (const [key, value] of [
     ["porchetta.weeklyCapacityKg", 40],
     ["store.lowStockThreshold", 5],
     ["store.shippingCents", 700],
     ["store.freeShippingThresholdCents", 6000],
+    // The marquee needs enough names to actually travel. Real houses the shop
+    // could plausibly carry — swap for their real supplier list.
+    // The daily counter line. Invented for the demo — the shop rewrites it each
+    // morning from the gestionale.
+    [
+      "home.today",
+      "Porchetta calda dalle 9, Vincisgrassi in teglia, Ricotta di pecora di giornata, Olive all'ascolana fritte",
+    ],
+    [
+      "home.brands",
+      "Rineri, San Cesario, SIGI, Menchi, Villani, Caseificio Esino, Fattoria Petrini, Antica Norcineria Fabriano, Mielizia, Oleificio Conero",
+    ],
+    // Obvious placeholders: an eleven-digit run of ones could never be mistaken
+    // for a real Partita IVA, so nobody ships it by accident.
+    ["business.legalName", "Norcineria Taccalite S.r.l. — DEMO"],
+    ["business.vatNumber", "11111111111"],
   ] as const) {
     await db
       .insert(schema.settings)

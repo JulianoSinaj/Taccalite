@@ -47,21 +47,24 @@ export default function AuthForms() {
   }
 
   return (
-    <div className="relative overflow-hidden bg-brown-900 px-5 pt-40 pb-32 sm:px-8 sm:pt-48">
-      <div className="parallax-orb absolute -top-40 -left-40 h-[60rem] w-[60rem] opacity-10" />
-      <Reveal className="relative z-10 mx-auto max-w-xl">
-        <div className="mb-12 space-y-4 text-center">
-          <span className="eyebrow block">Il tuo account</span>
-          <h1 className="font-display text-4xl tracking-tighter text-white sm:text-6xl">
-            Il Club Taccalite
+    <div className="px-5 pt-32 pb-28 sm:px-8 sm:pt-40">
+      <Reveal className="mx-auto max-w-xl">
+        <div className="mb-12 space-y-5 text-center">
+          <p className="inline-flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
+            <span aria-hidden className="h-px w-10 bg-gold" />
+            Il tuo account
+            <span aria-hidden className="h-px w-10 bg-gold" />
+          </p>
+          <h1 className="font-display display-lg font-semibold text-brown-950">
+            Il Club <span className="wonk text-gold-deep">Taccalite</span>
           </h1>
-          <p className="text-lg font-light text-cream/75">
+          <p className="mx-auto max-w-lg text-lg leading-relaxed text-brown-700">
             Accedi per consultare la tua scheda fedeltà, i punti raccolti e i premi riservati ai
             clienti della bottega.
           </p>
         </div>
 
-        <div className="card-shadow-soft space-y-6 rounded-[28px] bg-white/95 p-8 backdrop-blur sm:p-12">
+        <div className="card-shadow-soft space-y-6 border border-rule bg-paper p-8 sm:p-12">
           <div className="flex gap-2">
             <button
               type="button"

@@ -1,132 +1,142 @@
-import Link from "next/link";
-import Image from "next/image";
-import { ArrowRight } from "lucide-react";
-import SplitHero from "@/components/SplitHero";
-import StickyBuyBar from "@/components/StickyBuyBar";
-import ScrollFilm from "@/components/ScrollFilm";
-import PillButton from "@/components/PillButton";
-import FloatCard from "@/components/FloatCard";
-import ScrollDrift from "@/components/ScrollDrift";
-import WorldBento from "@/components/WorldBento";
-import InstagramFeed from "@/components/InstagramFeed";
 import JsonLd from "@/components/JsonLd";
+import Hero from "@/components/site/home/Hero";
+import ChiSiamo from "@/components/site/home/ChiSiamo";
+import DueBotteghe from "@/components/site/home/DueBotteghe";
+import ProdottiMigliori from "@/components/site/home/ProdottiMigliori";
+import Porchetta from "@/components/site/home/Porchetta";
+import Servizi from "@/components/site/home/Servizi";
+import Marche, { DEFAULT_BRANDS } from "@/components/site/home/Marche";
+import OggiAlBanco from "@/components/site/home/OggiAlBanco";
+import Diario, { type DiarioPost } from "@/components/site/home/Diario";
+import InstagramFeed from "@/components/InstagramFeed";
+import type { ProductTileData } from "@/components/site/ProductTile";
 import { organizationSchema, shopSchema } from "@/lib/seo";
-import { siteConfig } from "@/lib/site";
-import { getShops, getFeaturedProducts, getBlogPosts } from "@/lib/db/queries";
+import { isOpenNow } from "@/lib/hours";
 import { getInstagramFeed } from "@/lib/instagram";
+import { siteConfig } from "@/lib/site";
+import {
+  getShops,
+  getFeaturedProducts,
+  getPurchasableProducts,
+  getBlogPosts,
+  getSetting,
+} from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
+/** "martedì 19 agosto" — for the daily counter strip. */
+function todayLabel() {
+  return new Date().toLocaleDateString("it-IT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+}
+
+/** Comma-separated setting → trimmed, non-empty entries. */
+function splitList(value: string): string[] {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function dateLabel(iso: string) {
+  return new Date(iso).toLocaleDateString("it-IT", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/**
+ * The four products the homepage leads with.
+ *
+ * Only things a visitor can actually buy: a tile with no price has nothing to
+ * offer on a page whose job is to get an order started. Featured products come
+ * first (the shop chose them), topped up from the rest of the catalogue, and
+ * within that the ones with a photograph lead — half the catalogue has none, and
+ * a row that opens with four fallbacks reads as an empty shop.
+ */
+function pickProducts(
+  featured: Awaited<ReturnType<typeof getFeaturedProducts>>,
+  purchasable: Awaited<ReturnType<typeof getPurchasableProducts>>
+): ProductTileData[] {
+  const seen = new Set<string>();
+  const ordered = [...featured, ...purchasable].filter((p) => {
+    if (seen.has(p.slug)) return false;
+    seen.add(p.slug);
+    return p.purchasable && p.priceCents != null;
+  });
+
+  return ordered
+    .sort((a, b) => Number(Boolean(b.image)) - Number(Boolean(a.image)))
+    .slice(0, 4)
+    .map((p) => ({
+      slug: p.slug,
+      name: p.name,
+      category: p.category,
+      image: p.image,
+      imageLabel: p.imageLabel,
+      priceCents: p.priceCents,
+      unit: p.unit,
+      stock: p.stock,
+      purchasable: p.purchasable,
+      origin: p.origin,
+    }));
+}
+
 export default async function Home() {
-  const [shops, featuredProducts, blogPosts, instagram] = await Promise.all([
-    getShops(),
-    getFeaturedProducts(),
-    getBlogPosts(),
-    getInstagramFeed(),
-  ]);
-  const latest = blogPosts[0] ?? null;
+  const [shops, featured, purchasable, posts, brandsSetting, todaySetting, instagram] =
+    await Promise.all([
+      getShops(),
+      getFeaturedProducts(),
+      getPurchasableProducts(),
+      getBlogPosts(),
+      getSetting<string>("home.brands", DEFAULT_BRANDS),
+      getSetting<string>("home.today", ""),
+      getInstagramFeed(),
+    ]);
+
+  const products = pickProducts(featured, purchasable);
+
+  const diario: DiarioPost[] = posts.slice(0, 3).map((post) => ({
+    slug: post.slug,
+    title: post.title,
+    date: post.date,
+    category: post.category,
+    excerpt: post.excerpt,
+    image: post.image,
+    dateLabel: dateLabel(post.date),
+  }));
+
+  const brands = splitList(brandsSetting);
+  const today = splitList(todaySetting);
+
+  // The hero's live badge speaks for the shop as a whole: open if either
+  // bottega is serving right now.
+  const openStates = shops.map((shop) => (shop.hoursConfirmed ? isOpenNow(shop.hours) : null));
+  const known = openStates.filter((s) => s !== null);
+  const openNow = known.length > 0 ? known.some((s) => s!.open) : null;
 
   return (
     <>
       <JsonLd schema={[organizationSchema(), ...shops.map(shopSchema)]} />
-      <SplitHero />
-      <StickyBuyBar />
-
-      {/* Atto II — il processo, scrubbed dallo scroll */}
-      <ScrollFilm />
-
-      {/* La dispensa — 4-column product grid */}
-      <section className="bg-cream px-5 py-12 sm:px-12 sm:py-16">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-8 flex flex-col justify-between gap-6 sm:mb-10 md:flex-row md:items-end">
-            <div className="space-y-3">
-              <span className="eyebrow eyebrow-dark block">Selezione premium</span>
-              <h2 className="font-display text-3xl tracking-tighter text-brown-950 sm:text-4xl md:text-5xl">
-                I tesori della dispensa
-              </h2>
-            </div>
-            <Link
-              href="/negozi"
-              className="group flex items-center gap-4 text-[11px] font-bold tracking-[0.3em] text-brown-950 uppercase transition-colors hover:text-gold-deep"
-            >
-              Vieni a scoprirli in negozio
-              <ArrowRight className="size-4 transition-transform group-hover:translate-x-2" />
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4">
-            {featuredProducts.map((product, i) => (
-              <ScrollDrift key={product.slug} index={i}>
-                <FloatCard className="rounded-lg">
-                  <Link
-                    href={`/negozi/${product.shopSlug}`}
-                    className="group block h-full overflow-hidden rounded-lg border border-brown-900/10 bg-white/60"
-                  >
-                    <div className="relative aspect-square overflow-hidden">
-                      <Image
-                        src={product.image}
-                        alt={product.name}
-                        fill
-                        className="object-cover transition-transform duration-[1.5s] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105"
-                        sizes="(max-width: 1024px) 50vw, 25vw"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-brown-950/30 to-transparent" />
-                    </div>
-                    <div className="space-y-1.5 p-4 sm:p-5">
-                      <p className="text-[10px] font-bold tracking-widest text-gold-deep uppercase">
-                        {product.category}
-                      </p>
-                      <h3 className="font-display text-base text-brown-950 sm:text-xl">{product.name}</h3>
-                      <span className="inline-flex items-center gap-2 pt-1 text-xs font-bold text-gold-deep transition-all group-hover:gap-4 sm:pt-2 sm:text-sm">
-                        Dettagli
-                        <ArrowRight className="size-4" />
-                      </span>
-                    </div>
-                  </Link>
-                </FloatCard>
-              </ScrollDrift>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Atto III — il mondo Taccalite, bento */}
-      <WorldBento
-        shops={shops.map((s) => ({ slug: s.slug, name: s.name, address: s.address }))}
-        latestPost={
-          latest
-            ? { slug: latest.slug, title: latest.title, date: latest.date, image: latest.image }
-            : null
-        }
-      />
-
-      {/* Social — gli ultimi post Instagram della bottega */}
+      <Hero openNow={openNow} />
+      <OggiAlBanco items={today} dateLabel={todayLabel()} />
+      <ChiSiamo />
+      <DueBotteghe shops={shops} />
+      <ProdottiMigliori products={products} />
+      <Porchetta />
+      <Servizi />
+      <Marche brands={brands} />
+      <Diario posts={diario} />
       <InstagramFeed
         posts={instagram.posts}
         profile={instagram.profile}
         handle={siteConfig.social.instagramHandle}
         url={siteConfig.social.instagram}
       />
-
-      {/* Atto IV — chiusura */}
-      <section className="relative overflow-hidden bg-[#1c1512] px-5 py-12 sm:px-12 sm:py-16">
-        <div className="bg-noise absolute inset-0 opacity-10" />
-        <div className="parallax-orb absolute -right-40 -bottom-52 h-[44rem] w-[44rem] opacity-10" />
-        <div className="relative mx-auto flex max-w-7xl flex-col items-center gap-8 text-center">
-          <h2 className="font-display max-w-2xl text-3xl leading-[0.95] tracking-tighter text-cream sm:text-5xl">
-            Il sabato la porchetta esce calda dal forno.
-            <span className="text-gold italic"> Non fartela scappare.</span>
-          </h2>
-          <div className="flex flex-wrap justify-center gap-4">
-            <PillButton href="/prenotazioni" tone="gold">
-              Riserva la tua porzione
-            </PillButton>
-            <PillButton href="/account" tone="ghost">
-              Entra nel Club Taccalite
-            </PillButton>
-          </div>
-        </div>
-      </section>
     </>
   );
 }

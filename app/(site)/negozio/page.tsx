@@ -1,20 +1,17 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { getPurchasableProducts, getProductCategories, getSetting } from "@/lib/db/queries";
-import AddToCartButton from "@/components/store/AddToCartButton";
-import { formatEuro } from "@/lib/format";
+import PageHero from "@/components/site/PageHero";
+import ProductTile from "@/components/site/ProductTile";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "E-Shop",
+  title: "Shop",
   description:
     "Ordina online le specialità della Norcineria Taccalite: porchetta, salumi e formaggi, con ritiro in bottega o spedizione.",
 };
-
-const LOW_STOCK_THRESHOLD = 5;
 
 type Sort = "name" | "price-asc" | "price-desc";
 const SORT_LABELS: Record<Sort, string> = {
@@ -69,20 +66,18 @@ export default async function StorePage({ searchParams }: SearchParams) {
 
   return (
     <div>
-      <section className="relative overflow-hidden bg-[#1c1512] px-5 pt-36 pb-16 sm:px-10 sm:pt-40 sm:pb-20">
-        <div className="bg-noise absolute inset-0 opacity-10" />
-        <div className="relative mx-auto max-w-7xl">
-          <span className="eyebrow mb-6 block">La bottega online</span>
-          <h1 className="font-display max-w-3xl text-4xl leading-[0.95] tracking-tighter text-cream sm:text-5xl">
-            Le nostre specialità, <span className="text-gold italic">a casa tua</span>
-          </h1>
-          <p className="mt-6 max-w-xl text-lg font-light text-cream/75">
-            Ordina online e scegli il ritiro in bottega o la spedizione. Stessa qualità del banco.
-          </p>
-        </div>
-      </section>
+      <PageHero
+        eyebrow="La bottega online"
+        title={[
+          "Le nostre specialità,",
+          <span key="2" className="wonk text-gold-deep">
+            a casa tua
+          </span>,
+        ]}
+        lede="Ordina online e scegli il ritiro in bottega o la spedizione. Stessa qualità del banco."
+      />
 
-      <section className="bg-cream px-5 py-20 sm:px-10 sm:py-28">
+      <section className="bg-paper px-5 pb-24 sm:px-10 sm:pb-32">
         <div className="mx-auto max-w-7xl">
           {!storeEnabled || products.length === 0 ? (
             <div className="rounded-[28px] border border-brown-900/10 bg-white/60 p-12 text-center">
@@ -173,65 +168,24 @@ export default async function StorePage({ searchParams }: SearchParams) {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-                  {filtered.map((p) => {
-                    const soldOut = p.stock === 0;
-                    const lowStock = p.stock != null && p.stock > 0 && p.stock <= LOW_STOCK_THRESHOLD;
-                    return (
-                      <div
-                        key={p.id}
-                        className="flex flex-col overflow-hidden rounded-[24px] border border-brown-900/10 bg-white/60"
-                      >
-                        <Link
-                          href={`/negozio/${p.slug}`}
-                          className="relative block aspect-[4/3] overflow-hidden bg-cream-dark"
-                        >
-                          {p.image ? (
-                            <Image src={p.image} alt={p.name} fill className="object-cover" sizes="(max-width:1024px) 100vw, 33vw" />
-                          ) : (
-                            <div className="flex h-full items-center justify-center text-xs font-bold tracking-widest text-brown-800/40 uppercase">
-                              {p.imageLabel || p.name}
-                            </div>
-                          )}
-                          {soldOut && (
-                            <span className="absolute left-4 top-4 rounded-full bg-brown-950 px-3 py-1.5 text-[10px] font-bold tracking-widest text-cream uppercase">
-                              Esaurito
-                            </span>
-                          )}
-                          {lowStock && (
-                            <span className="absolute left-4 top-4 rounded-full bg-gold px-3 py-1.5 text-[10px] font-bold tracking-widest text-brown-950 uppercase">
-                              Ultimi {p.stock}
-                            </span>
-                          )}
-                        </Link>
-                        <div className="flex flex-1 flex-col p-6">
-                          <p className="text-[10px] font-bold tracking-widest text-gold-deep uppercase">{p.category}</p>
-                          <Link href={`/negozio/${p.slug}`}>
-                            <h3 className="font-display mt-1 text-2xl text-brown-950 transition-colors hover:text-gold-deep">
-                              {p.name}
-                            </h3>
-                          </Link>
-                          <p className="mt-2 flex-1 text-sm leading-relaxed text-brown-900/70">{p.description}</p>
-                          <div className="mt-4 flex items-baseline gap-1">
-                            <span className="font-display text-2xl font-bold text-brown-950">
-                              {formatEuro(p.priceCents ?? 0)}
-                            </span>
-                            {p.unit && <span className="text-sm text-brown-800/60">/ {p.unit}</span>}
-                          </div>
-                          <AddToCartButton
-                            product={{
-                              slug: p.slug,
-                              name: p.name,
-                              priceCents: p.priceCents ?? 0,
-                              unit: p.unit,
-                              image: p.image,
-                            }}
-                            stock={p.stock}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="grid grid-cols-2 gap-x-6 gap-y-12 sm:gap-x-7 lg:grid-cols-4">
+                  {filtered.map((p) => (
+                    <ProductTile
+                      key={p.id}
+                      product={{
+                        slug: p.slug,
+                        name: p.name,
+                        category: p.category,
+                        image: p.image,
+                        imageLabel: p.imageLabel,
+                        priceCents: p.priceCents,
+                        unit: p.unit,
+                        stock: p.stock,
+                        purchasable: p.purchasable,
+                        origin: p.origin,
+                      }}
+                    />
+                  ))}
                 </div>
               )}
 

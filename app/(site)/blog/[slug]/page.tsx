@@ -18,7 +18,12 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
   const post = await getBlogPostBySlug(slug);
   if (!post) return {};
-  return { title: post.title, description: post.excerpt };
+  // The editor can set a search-result title and snippet separately from the
+  // on-page title and the listing blurb; both fall back to those.
+  return {
+    title: post.title,
+    description: post.excerpt,
+  };
 }
 
 function formatDate(iso: string) {
@@ -49,25 +54,24 @@ export default async function BlogPostPage({ params }: Params) {
         ]}
       />
       {/* Editorial header band */}
-      <section className="relative overflow-hidden bg-[#1c1512] px-5 pt-44 pb-20 sm:px-10 sm:pt-56 sm:pb-28">
-        <div className="bg-noise absolute inset-0 opacity-10" />
-        <Reveal className="relative mx-auto max-w-4xl">
+      <section className="px-5 pt-32 pb-12 sm:px-8 sm:pt-40 lg:px-12">
+        <Reveal className="mx-auto max-w-4xl">
           <Link
             href="/blog"
-            className="group inline-flex items-center gap-2 text-[11px] font-bold tracking-[0.25em] text-cream/60 uppercase transition-colors hover:text-gold"
+            className="group inline-flex items-center gap-2 text-[0.6875rem] font-semibold tracking-[0.22em] text-taupe uppercase transition-colors hover:text-brown-950"
           >
             <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-1" />
             Tutte le news
           </Link>
-          <div className="mt-10 flex items-center gap-4">
-            <span className="rounded-full bg-gold px-4 py-1.5 text-[9px] font-bold tracking-widest text-brown-950 uppercase">
+          <div className="mt-10 flex flex-wrap items-center gap-4">
+            <span className="bg-gold px-4 py-1.5 text-[0.5625rem] font-semibold tracking-[0.2em] text-on-gold uppercase">
               {post.category}
             </span>
-            <span className="text-[11px] font-semibold tracking-wider text-cream/65 uppercase">
+            <span className="text-[0.6875rem] font-semibold tracking-[0.16em] text-taupe uppercase">
               {formatDate(post.date)}
             </span>
           </div>
-          <h1 className="font-display mt-6 text-3xl leading-[1.02] tracking-tighter text-cream sm:text-4xl lg:text-5xl">
+          <h1 className="font-display display-lg mt-7 font-semibold text-brown-950">
             {post.title}
           </h1>
         </Reveal>
@@ -75,7 +79,7 @@ export default async function BlogPostPage({ params }: Params) {
 
       {/* Body */}
       <article className="mx-auto max-w-4xl px-5 pb-24 sm:px-8 sm:pb-32">
-        <Reveal className="-mt-10 sm:-mt-14">
+        <Reveal>
           {post.image ? (
             <div className="cinematic-shadow relative aspect-[16/9] overflow-hidden rounded-[32px]">
               <Image
@@ -112,11 +116,11 @@ export default async function BlogPostPage({ params }: Params) {
 
       {/* Altre storie */}
       {otherPosts.length > 0 && (
-        <section className="bg-cream-dark px-5 py-16 sm:px-10 sm:py-24">
+        <section className="bg-cream-dark px-5 py-24 sm:px-10 sm:py-32">
           <div className="mx-auto max-w-7xl">
-            <Reveal className="mb-10 space-y-4">
+            <Reveal className="mb-14 space-y-5">
               <span className="eyebrow eyebrow-dark block">Continua a leggere</span>
-              <h2 className="font-display text-3xl tracking-tighter text-brown-950 sm:text-4xl">
+              <h2 className="font-display text-4xl tracking-tighter text-brown-950 sm:text-5xl">
                 Altre storie dalla bottega
               </h2>
             </Reveal>

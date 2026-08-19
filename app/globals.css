@@ -22,6 +22,56 @@
   /* Readable gold for small text on cream surfaces (≥5:1 on --color-cream). */
   --color-gold-deep: #7d5c25;
   --color-ink: #221913;
+
+  /* ── Storefront ground ("Carta e Inchiostro") ─────────────────────────────
+   *
+   * The public site moved from a cream page to a white one. These are *new*
+   * tokens rather than a redefinition of `--color-cream`, on purpose: the
+   * gestionale paints with `bg-cream` throughout and its dark theme *inverts*
+   * that token, so flipping cream to white would repaint the admin and break
+   * its night mode in one edit. Nothing here appears under `[data-theme]`,
+   * because the storefront has no dark mode — it is printed paper.
+   *
+   * Applied by `.site-shell` (see below), which only wraps `app/(site)`.
+   */
+  --paper: #ffffff;        /* the page itself */
+  --paper-warm: #faf7f2;   /* alternating bands — a 2% warm tint, not cream */
+  --rule: #e8dfd2;         /* hairline between sections and around cards */
+  --rule-strong: #d8cab5;  /* the same hairline when it has to be seen */
+
+  /* ── Semantic surfaces & status ───────────────────────────────────────────
+   *
+   * The admin painted with literal `bg-white` and Tailwind status tints
+   * (`bg-emerald-100 text-emerald-800`), which is exactly why a dark theme was
+   * blocked: neither responds to a variable. These name the *role* instead, so
+   * a theme becomes a set of values rather than a rewrite.
+   *
+   * Light values only here — the dark half lives in `[data-theme]` below.
+   */
+  --surface: #ffffff;              /* panels, cards, the sidebar */
+  --surface-muted: #f8f2e8;        /* the page behind them */
+  --surface-sunken: #f1e8da;       /* wells inside a panel (code, previews) */
+
+  --ok: #047857;                   /* status text on a plain surface */
+  --ok-soft: #d1fae5;              /* the chip behind it */
+  --ok-soft-fg: #065f46;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --warn-soft-fg: #92400e;
+  --danger: #dc2626;
+  --danger-soft: #fee2e2;
+  --danger-soft-fg: #b91c1c;
+  --danger-solid: #dc2626;         /* destructive buttons */
+  --danger-solid-fg: #ffffff;
+  --info: #0369a1;
+  --info-soft: #e0f2fe;
+  --info-soft-fg: #075985;
+
+  /* Ink for text sitting ON gold. Gold is light in both themes, so this must
+   * NOT follow the inverted brown ramp — `text-brown-950` on a gold button
+   * would go light-on-light the moment the theme flipped. */
+  --on-gold: #2a1a10;
+
   --background: #f8f2e8;
   --foreground: #221913;
   --card: #fffaf3;
@@ -70,6 +120,36 @@
   --color-gold-dark: var(--color-gold-dark);
   --color-gold-deep: var(--color-gold-deep);
   --color-ink: var(--color-ink);
+  --color-paper: var(--paper);
+  --color-paper-warm: var(--paper-warm);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+
+  /* Semantic roles → utilities: bg-ok-soft, text-danger, text-on-gold, …
+   *
+   * The values are declared in `:root` above; without these mappings the
+   * utilities compile to nothing at all and the elements using them render
+   * unstyled with no error anywhere — the open/closed badges and the ink on
+   * every gold button. */
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-soft-fg: var(--ok-soft-fg);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-soft-fg: var(--warn-soft-fg);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-soft-fg: var(--danger-soft-fg);
+  --color-danger-solid: var(--danger-solid);
+  --color-danger-solid-fg: var(--danger-solid-fg);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-soft-fg: var(--info-soft-fg);
+  --color-on-gold: var(--on-gold);
+  /* Defaults are the gestionale's faces; `.site-shell` re-points them. */
   --font-display: var(--font-playfair);
   --font-sans: var(--font-open-sans);
   --font-heading: var(--font-playfair);
@@ -121,6 +201,219 @@ body {
 
 .font-display {
   font-family: var(--font-playfair), Georgia, serif;
+}
+
+/* ── Storefront shell ────────────────────────────────────────────────────────
+ *
+ * `.site-shell` wraps everything under `app/(site)` and nothing else, so the
+ * white ground and the Fraunces/Inter Tight pairing stop at the gestionale's
+ * door. The font vars can't be re-pointed the obvious way: `@theme inline`
+ * resolves `--font-sans` at build time, so `font-sans` compiles to a literal
+ * `var(--font-open-sans)` and overriding the theme variable here would do
+ * nothing. Setting `font-family` outright is the override that actually lands.
+ *
+ * `body:has(…)` carries the ground up to the body so overscroll at the top of
+ * the page shows white rather than the admin's cream.
+ */
+.site-shell {
+  background: var(--paper);
+  color: var(--color-brown-700);
+  font-family: var(--font-inter-tight), "Helvetica Neue", Arial, sans-serif;
+
+  /* The storefront's cream *is* the paper now. Repointing the token rather than
+   * rewriting every `bg-cream` / `text-cream` on the older pages converts them
+   * all at once: a cream panel becomes a white one, and `text-cream` on the two
+   * brown bands stays "the light ink", which is what it always meant. Scoped
+   * here, so the gestionale — where `--color-cream` is inverted by the dark
+   * theme — is untouched. */
+  --color-cream: #ffffff;
+  --color-cream-dark: var(--paper-warm);
+}
+
+body:has(.site-shell) {
+  background: var(--paper);
+}
+
+.site-shell .font-display {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 20, "WONK" 0;
+}
+
+/* The display scale and `.wonk` are scoped to `.site-shell` too, and not by
+ * habit: `.site-shell .font-display` above is specificity (0,2,0), so an
+ * unscoped `.display-xl` at (0,1,0) loses the cascade and its `opsz` never
+ * lands — the headline renders at the wrong optical size with no visible error.
+ * Matching the specificity and coming later in the file is what makes these win.
+ *
+ * The scale lives here rather than as a clamp() repeated at each call site,
+ * because the point of a scale is that it is the same everywhere. */
+.site-shell .display-xl {
+  font-size: clamp(3.1rem, 8.5vw, 8rem);
+  line-height: 0.9;
+  letter-spacing: -0.035em;
+  font-variation-settings: "SOFT" 20, "WONK" 0, "opsz" 144;
+  text-wrap: balance;
+}
+
+.site-shell .display-lg {
+  font-size: clamp(2.4rem, 5.5vw, 4.6rem);
+  line-height: 0.96;
+  letter-spacing: -0.028em;
+  font-variation-settings: "SOFT" 20, "WONK" 0, "opsz" 96;
+  text-wrap: balance;
+}
+
+.site-shell .display-md {
+  font-size: clamp(1.75rem, 3.2vw, 2.6rem);
+  line-height: 1.06;
+  letter-spacing: -0.022em;
+  font-variation-settings: "SOFT" 20, "WONK" 0, "opsz" 48;
+  text-wrap: balance;
+}
+
+/* Fraunces' signature: `WONK` swaps in the quirky alternates. It replaces italic
+ * as the emphasis treatment — more characteristic of the face, and one fewer
+ * font file to ship. Always on an inner span, so it beats the scale on its own
+ * element rather than fighting it. */
+.site-shell .wonk {
+  font-variation-settings: "SOFT" 30, "WONK" 1;
+}
+
+/* A gold hairline that draws left-to-right on hover — the section-list idiom. */
+.rule-draw::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 1px;
+  width: 0;
+  background: var(--color-gold);
+  transition: width 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.group:hover .rule-draw::after,
+.rule-draw:hover::after {
+  width: 100%;
+}
+
+/* Brand marquee. The track is duplicated in markup and shifted by exactly half,
+ * so the seam lands off-screen and the loop reads as continuous. */
+@keyframes marquee-track {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.marquee-track {
+  animation: marquee-track var(--marquee-duration, 42s) linear infinite;
+  will-change: transform;
+}
+
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+  .medallion-rotation {
+    animation: none;
+  }
+}
+
+/* ── View transitions ────────────────────────────────────────────────────────
+ *
+ * Navigations crossfade, and a product photo *morphs* from its tile in the grid
+ * into the hero of its own page — the one gesture that says "this is the same
+ * thing you clicked", instead of two pages swapping with nothing linking them.
+ *
+ * The fixed chrome is anchored below. Without a name of its own, the header
+ * would be part of the root snapshot and crossfade along with the page, which
+ * reads as the whole window blinking rather than the content changing.
+ */
+.vt-header {
+  view-transition-name: site-header;
+}
+.vt-progress {
+  view-transition-name: site-progress;
+}
+.vt-consent {
+  view-transition-name: site-consent;
+}
+
+::view-transition-group(site-header),
+::view-transition-group(site-progress),
+::view-transition-group(site-consent) {
+  animation: none;
+}
+
+/* The page body: a short, soft crossfade. Old content leaves faster than new
+ * content arrives, so the two never compete for attention — and the new page
+ * rises a few pixels, which reads as arriving rather than merely appearing. */
+::view-transition-old(.page-fade) {
+  animation: 140ms cubic-bezier(0.4, 0, 1, 1) both vt-fade-out;
+}
+::view-transition-new(.page-fade) {
+  animation: 240ms cubic-bezier(0, 0, 0.2, 1) 100ms both vt-rise-in;
+}
+
+/* Anything left in the root snapshot (the footer, mostly) just crossfades —
+ * no travel, or the page would appear to shift under the content. */
+::view-transition-old(root) {
+  animation: 140ms linear both vt-fade-out;
+}
+::view-transition-new(root) {
+  animation: 200ms linear 100ms both vt-fade-in;
+}
+
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* The shared product photo. Slightly longer than the crossfade so the eye can
+ * follow it, with a touch of blur mid-flight to hide the pixel interpolation of
+ * a small thumbnail scaling up to a large hero. */
+::view-transition-group(.product-morph) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+::view-transition-image-pair(.product-morph) {
+  animation: 420ms cubic-bezier(0.16, 1, 0.3, 1) both vt-morph-blur;
+}
+
+@keyframes vt-morph-blur {
+  35% {
+    filter: blur(2.5px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-image-pair(*) {
+    animation: none !important;
+  }
 }
 
 .text-shadow-sm {

@@ -37,8 +37,8 @@ export const shops: Shop[] = [
       "Formaggio di fossa e stagionature lunghe",
       "Gastronomia pronta e degustazioni in negozio",
     ],
-    imageLabel: "Foto banco formaggi — negozio Centro",
-    image: "/images/negozio-centro-formaggi.jpg",
+    imageLabel: "Gli scaffali della bottega di Piazza Kennedy",
+    image: "/images/shop-shelves-prodotti.jpg",
   },
   {
     slug: "carni",
@@ -61,8 +61,8 @@ export const shops: Shop[] = [
       "Salumi artigianali di produzione propria",
       "Preparazioni pronte per grigliata e brace",
     ],
-    imageLabel: "Foto banco carni — secondo negozio",
-    image: "/images/negozio-carni-prosciutto.jpg",
+    imageLabel: "Prosciutto stagionato accanto al camino",
+    image: "/images/selezione-prosciutto-camino.jpg",
   },
 ];
 

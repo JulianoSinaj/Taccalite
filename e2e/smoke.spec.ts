@@ -13,7 +13,7 @@ test("homepage renders with the brand", async ({ page }) => {
 });
 
 test("key public routes respond OK", async ({ page }) => {
-  for (const path of ["/negozi", "/porchetta", "/blog", "/negozio", "/prenotazioni", "/account", "/privacy", "/cookie", "/traccia"]) {
+  for (const path of ["/sedi", "/porchetta", "/blog", "/negozio", "/prenotazioni", "/account", "/privacy", "/cookie", "/traccia"]) {
     const res = await page.goto(path);
     expect(res, `no response for ${path}`).not.toBeNull();
     expect(res!.status(), `status for ${path}`).toBeLessThan(400);

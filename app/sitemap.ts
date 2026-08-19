@@ -15,7 +15,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: absoluteUrl("/"), lastModified: now, changeFrequency: "weekly", priority: 1 },
-    { url: absoluteUrl("/negozi"), lastModified: now, changeFrequency: "monthly", priority: 0.9 },
+    { url: absoluteUrl("/sedi"), lastModified: now, changeFrequency: "monthly", priority: 0.9 },
+    { url: absoluteUrl("/la-nostra-storia"), lastModified: now, changeFrequency: "yearly", priority: 0.7 },
+    { url: absoluteUrl("/contatti"), lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: absoluteUrl("/porchetta"), lastModified: now, changeFrequency: "monthly", priority: 0.9 },
     { url: absoluteUrl("/negozio"), lastModified: now, changeFrequency: "weekly", priority: 0.8 },
     { url: absoluteUrl("/blog"), lastModified: now, changeFrequency: "weekly", priority: 0.7 },
@@ -26,7 +28,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   const shopRoutes: MetadataRoute.Sitemap = shops.map((shop) => ({
-    url: absoluteUrl(`/negozi/${shop.slug}`),
+    url: absoluteUrl(`/sedi/${shop.slug}`),
     lastModified: now,
     changeFrequency: "monthly",
     priority: 0.8,

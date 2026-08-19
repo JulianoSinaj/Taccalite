@@ -150,6 +150,21 @@ const KNOWN: {
     control: "boolean",
     default: true,
   },
+  // ── Sito pubblico ──
+  {
+    key: "home.today",
+    label: "Oggi al banco",
+    help: "La riga che scorre sotto l'apertura della homepage: cosa c'è di fresco oggi, separato da virgola (es. «Porchetta calda, Vincisgrassi, Ricotta di giornata»). Svuota il campo per nascondere la fascia.",
+    control: "text",
+    default: "",
+  },
+  {
+    key: "home.brands",
+    label: "Marche in homepage",
+    help: "I nomi che scorrono nella fascia «Le marche che scegliamo», separati da virgola. Svuota il campo per nascondere la fascia.",
+    control: "text",
+    default: "Rineri, San Cesario, SIGI, Menchi, Villani",
+  },
   // ── Dati fiscali (intestazione documenti / riepilogo IVA) ──
   {
     key: "business.legalName",

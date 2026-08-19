@@ -16,16 +16,15 @@ export default async function NewsletterStatusPage({ searchParams }: SearchParam
 
   if (unsubscribed) {
     return (
-      <section className="relative flex min-h-[70vh] items-center justify-center overflow-hidden bg-[#1c1512] px-5 py-40 text-center">
-        <div className="bg-noise absolute inset-0 opacity-10" />
-        <div className="relative mx-auto max-w-lg">
-          <div className="mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-full bg-cream/10">
-            <Check className="size-8 text-cream" />
+      <section className="flex min-h-[70vh] items-center justify-center px-5 py-40 text-center">
+        <div className="mx-auto max-w-lg">
+          <div className="mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-full bg-gold">
+            <Check className="size-8 text-on-gold" />
           </div>
-          <h1 className="font-display text-4xl tracking-tighter text-cream sm:text-5xl">
+          <h1 className="font-display display-md font-semibold text-brown-950">
             Iscrizione annullata
           </h1>
-          <p className="mt-6 text-lg font-light text-cream/75">
+          <p className="mt-6 text-lg font-light text-brown-700">
             Non riceverai più le nostre email. Ci dispiace vederti andare — puoi iscriverti di
             nuovo quando vuoi.
           </p>
@@ -41,24 +40,23 @@ export default async function NewsletterStatusPage({ searchParams }: SearchParam
   }
 
   return (
-    <section className="relative flex min-h-[70vh] items-center justify-center overflow-hidden bg-[#1c1512] px-5 py-40 text-center">
-      <div className="bg-noise absolute inset-0 opacity-10" />
-      <div className="relative mx-auto max-w-lg">
+    <section className="flex min-h-[70vh] items-center justify-center px-5 py-40 text-center">
+      <div className="mx-auto max-w-lg">
         <div
           className={`mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-full ${
-            confirmed ? "bg-gold" : "bg-red-500/20"
+            confirmed ? "bg-gold" : "bg-danger-soft"
           }`}
         >
           {confirmed ? (
-            <Check className="size-8 text-brown-950" />
+            <Check className="size-8 text-on-gold" />
           ) : (
-            <X className="size-8 text-red-300" />
+            <X className="size-8 text-danger" />
           )}
         </div>
-        <h1 className="font-display text-4xl tracking-tighter text-cream sm:text-5xl">
+        <h1 className="font-display display-md font-semibold text-brown-950">
           {confirmed ? "Iscrizione confermata" : "Link non valido"}
         </h1>
-        <p className="mt-6 text-lg font-light text-cream/75">
+        <p className="mt-6 text-lg font-light text-brown-700">
           {confirmed
             ? "Grazie! Riceverai le nostre novità e l'avviso quando la porchetta del sabato esce dal forno."
             : "Il link di conferma non è valido o è scaduto. Prova a iscriverti di nuovo dal fondo pagina."}

@@ -1,3 +1,4 @@
+import { ViewTransition } from "react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,6 +9,7 @@ import AddToCartButton from "@/components/store/AddToCartButton";
 import BackInStockForm from "@/components/store/BackInStockForm";
 import { getProductBySlug, getRelatedProducts, getShopBySlug } from "@/lib/db/queries";
 import { formatEuro } from "@/lib/format";
+import ProductTile from "@/components/site/ProductTile";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 import { breadcrumbSchema } from "@/lib/seo";
 
@@ -74,7 +76,7 @@ export default async function ProductDetailPage({ params }: Params) {
         ]}
       />
 
-      <section className="bg-cream px-5 pt-32 pb-24 sm:px-10 sm:pt-40">
+      <section className="bg-paper px-5 pt-32 pb-24 sm:px-10 sm:pt-40">
         <div className="mx-auto max-w-7xl">
           <nav className="mb-8 text-[10px] font-bold tracking-[0.3em] text-brown-900/50 uppercase">
             <Link href="/negozio" className="inline-flex items-center gap-1.5 hover:text-gold-deep">
@@ -84,22 +86,29 @@ export default async function ProductDetailPage({ params }: Params) {
           </nav>
 
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
-            {/* Image */}
-            <div className="relative aspect-square overflow-hidden rounded-[32px] border border-brown-900/10 bg-cream-dark">
-              {product.image ? (
-                <Image
-                  src={product.image}
-                  alt={product.name}
-                  fill
-                  preload
-                  className="object-cover"
-                  sizes="(max-width: 1024px) 100vw, 50vw"
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm font-bold tracking-widest text-brown-800/40 uppercase">
-                  {product.imageLabel || product.name}
-                </div>
-              )}
+            {/* Image. The ViewTransition name matches the one on this product's
+                tile in any grid, so arriving here morphs the thumbnail into the
+                hero rather than swapping one page for another. */}
+            <div className="relative aspect-square overflow-hidden border border-brown-950/8 bg-paper-warm">
+              <ViewTransition name={`product-${product.slug}`} share="product-morph">
+                {product.image ? (
+                  <Image
+                    src={product.image}
+                    alt={product.name}
+                    fill
+                    preload
+                    className="object-cover"
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                  />
+                ) : (
+                  <span
+                    aria-hidden
+                    className="font-display absolute inset-0 flex items-center justify-center text-[12rem] leading-none font-semibold text-gold/35"
+                  >
+                    {product.name.charAt(0)}
+                  </span>
+                )}
+              </ViewTransition>
               {soldOut && (
                 <span className="absolute left-5 top-5 rounded-full bg-brown-950 px-4 py-2 text-[11px] font-bold tracking-widest text-cream uppercase">
                   Esaurito
@@ -155,7 +164,7 @@ export default async function ProductDetailPage({ params }: Params) {
 
               {shop && (
                 <Link
-                  href={`/negozi/${shop.slug}`}
+                  href={`/sedi/${shop.slug}`}
                   className="mt-6 inline-flex w-fit items-center gap-2 rounded-full border border-brown-900/15 px-5 py-2.5 text-sm font-semibold text-brown-950 transition-colors hover:bg-brown-950 hover:text-cream"
                 >
                   <Store className="size-4 text-gold-deep" />
@@ -187,38 +196,24 @@ export default async function ProductDetailPage({ params }: Params) {
               <h2 className="font-display mb-10 text-3xl tracking-tighter text-brown-950 sm:text-4xl">
                 Potrebbe interessarti
               </h2>
-              <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-12 sm:gap-x-7 lg:grid-cols-4">
                 {related.map((r) => (
-                  <Link
+                  <ProductTile
                     key={r.id}
-                    href={`/negozio/${r.slug}`}
-                    className="group flex flex-col overflow-hidden rounded-[20px] border border-brown-900/10 bg-white/60"
-                  >
-                    <div className="relative aspect-square overflow-hidden bg-cream-dark">
-                      {r.image ? (
-                        <Image
-                          src={r.image}
-                          alt={r.name}
-                          fill
-                          className="object-cover transition-transform duration-500 group-hover:scale-105"
-                          sizes="(max-width: 1024px) 50vw, 25vw"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center px-2 text-center text-[10px] font-bold tracking-widest text-brown-800/40 uppercase">
-                          {r.imageLabel || r.name}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-1 flex-col p-4">
-                      <p className="text-[9px] font-bold tracking-widest text-gold-deep uppercase">{r.category}</p>
-                      <h3 className="font-display mt-1 text-lg leading-tight text-brown-950 group-hover:text-gold-deep">
-                        {r.name}
-                      </h3>
-                      <p className="mt-2 font-display font-bold text-brown-950">
-                        {formatEuro(r.priceCents ?? 0)}
-                      </p>
-                    </div>
-                  </Link>
+                    morph={false}
+                    product={{
+                      slug: r.slug,
+                      name: r.name,
+                      category: r.category,
+                      image: r.image,
+                      imageLabel: r.imageLabel,
+                      priceCents: r.priceCents,
+                      unit: r.unit,
+                      stock: r.stock,
+                      purchasable: r.purchasable,
+                      origin: r.origin,
+                    }}
+                  />
                 ))}
               </div>
             </div>

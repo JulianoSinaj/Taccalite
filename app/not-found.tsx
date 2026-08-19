@@ -18,7 +18,7 @@ export default function NotFound() {
             Torna alla home
           </Link>
           <Link
-            href="/negozi"
+            href="/sedi"
             className="inline-flex items-center gap-2 rounded-full border border-brown-950/15 px-6 py-3 text-[11px] font-bold tracking-widest text-brown-900 uppercase transition-colors hover:bg-brown-950/5"
           >
             Le botteghe

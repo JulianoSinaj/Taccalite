@@ -31,7 +31,7 @@ export function shopSchema(shop: ShopRow): Json {
     "@type": ["Store", "FoodEstablishment"],
     name: shop.name,
     description: shop.description,
-    url: absoluteUrl(`/negozi/${shop.slug}`),
+    url: absoluteUrl(`/sedi/${shop.slug}`),
     telephone: telHref(shop.phone),
     email: shop.email,
     image: absoluteUrl(shop.image),
