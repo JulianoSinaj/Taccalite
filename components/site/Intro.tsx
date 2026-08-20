@@ -11,9 +11,16 @@ import SealSvg from "@/components/site/SealSvg";
  * in the body — is the only thing that drives it.
  *
  * What it waits on is the page actually looking finished: the webfonts swapping
- * in (the loudest reflow of the visit) and the eager images decoding. Lazy ones
- * are excluded by their own attribute — they never load above the fold, so
- * waiting on them would mean waiting for the cap, every time.
+ * in (the loudest reflow of the visit), the eager images decoding, and the
+ * hero's WebGL seal having a frame on the glass. Lazy images are excluded by
+ * their own attribute — they never load above the fold, so waiting on them
+ * would mean waiting for the cap, every time.
+ *
+ * The seal is the reason this veil earns its keep. Without it the hero's mark
+ * has to arrive in front of the visitor: flat foil first, three.js downloading
+ * and compiling behind it, then a cross-fade to gold at whatever moment the
+ * canvas happens to be ready. Held here instead, all of that happens under the
+ * paper and the visitor is only ever shown the finished corner.
  *
  * `CAP` is a promise, not a target: whatever is still in flight at that point,
  * the visitor gets their page. `MIN` is the other half of the same promise — a
@@ -39,9 +46,17 @@ const INTRO_SCRIPT = `(function () {
 
   var root = document.documentElement;
   var MIN = 700;
-  var CAP = 1200;
+  var CAP = 1800;
   var start = Date.now();
   var lifted = false;
+
+  // The seal gate. components/site/SealMark.tsx resolves this the moment its
+  // canvas has drawn something worth revealing — and, on its own short timer,
+  // also when it hasn't, so a machine that cannot draw the coin at all never
+  // pays the cap for it.
+  var releaseSeal;
+  var seal = new Promise(function (resolve) { releaseSeal = resolve; });
+  window.__taccaliteSealReady = function () { releaseSeal(); };
 
   function lift(immediate) {
     if (lifted) return;
@@ -58,7 +73,7 @@ const INTRO_SCRIPT = `(function () {
   addEventListener("keydown", skip, { once: true });
 
   function whenSettled() {
-    var waits = [];
+    var waits = [seal];
     if (document.fonts && document.fonts.ready) waits.push(document.fonts.ready);
 
     var eager = document.querySelectorAll('main img:not([loading="lazy"])');

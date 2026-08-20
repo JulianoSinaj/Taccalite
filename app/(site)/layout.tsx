@@ -27,8 +27,13 @@ export const dynamic = "force-dynamic";
  * purpose — the old one ran 2.6s and blocked the first word of every visit, the
  * most expensive thing a shop's homepage can do. The one here is a different
  * animal and the differences are the whole point: it plays once per session, on
- * a hard load of the homepage only, and it lifts on a hard cap of 1.2s whatever
- * is still in flight. Keep those three properties or take it out again.
+ * a hard load of the homepage only, and it lifts on a hard cap whatever is still
+ * in flight. Keep those three properties or take it out again.
+ *
+ * The cap is 1.8s rather than the 1.2s it started at, because the veil now also
+ * waits on the hero's WebGL seal so the mark is already gold when the paper
+ * lifts. That is the whole of what the extra 600ms buys; if the seal ever stops
+ * being worth it, the cap goes back down with it.
  */
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   // Only for the phone menu's "chiama la bottega" rows — the numbers belong to

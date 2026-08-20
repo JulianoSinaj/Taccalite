@@ -100,6 +100,21 @@ export const viewport: Viewport = {
   themeColor: "#fdfaf5",
 };
 
+/**
+ * `suppressHydrationWarning` is here for the storefront's intro veil.
+ *
+ * Its inline script (components/site/Intro.tsx) runs while the browser is still
+ * parsing the body and stamps `data-intro` onto this element — that is the whole
+ * point of it, since the veil has to be up before React exists. React then
+ * hydrates, finds an attribute on <html> the server never sent, and reports a
+ * mismatch it says it cannot patch up. Suppression covers this element's own
+ * attributes and text and not one of its descendants, so what it silences is
+ * exactly the intended write and nothing else.
+ *
+ * The server sends no `data-intro` at all on purpose: `.intro-veil` is
+ * `display: none` until the attribute says otherwise, so a visitor whose script
+ * never runs gets the page rather than a veil nothing will lift.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -108,6 +123,7 @@ export default function RootLayout({
   return (
     <html
       lang="it"
+      suppressHydrationWarning
       className={cn(
         playfair.variable,
         openSans.variable,
