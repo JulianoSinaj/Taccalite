@@ -5,7 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, Store } from "lucide-react";
 import JsonLd from "@/components/JsonLd";
-import AddToCartButton from "@/components/store/AddToCartButton";
+import ProductBuy from "@/components/store/ProductBuy";
 import BackInStockForm from "@/components/store/BackInStockForm";
 import { getProductBySlug, getRelatedProducts, getShopBySlug } from "@/lib/db/queries";
 import { formatEuro } from "@/lib/format";
@@ -78,23 +78,34 @@ export default async function ProductDetailPage({ params }: Params) {
         ]}
       />
 
-      <section className="bg-paper px-5 pt-32 pb-24 sm:px-10 sm:pt-40">
+      {/* `pb-28` on a phone clears the sticky buy bar, which would otherwise sit
+          over the last row of the related-products grid. */}
+      <section className="bg-paper px-5 pt-28 pb-28 sm:px-8 sm:pt-40 lg:px-12 lg:pb-24">
         <div
           className="mx-auto max-w-[88rem]"
           style={{ "--acc": categoryAccent(product.category) } as React.CSSProperties}
         >
-          <nav className="mb-8 text-[10px] font-bold tracking-[0.3em] text-taupe uppercase">
-            <Link href="/negozio" className="inline-flex items-center gap-1.5 hover:text-gold-deep">
+          <nav className="mb-5 text-[10px] font-bold tracking-[0.3em] text-taupe uppercase sm:mb-8">
+            <Link
+              href="/negozio"
+              className="inline-flex items-center gap-1.5 py-2 transition-colors hover:text-gold-deep"
+            >
               <ArrowLeft className="size-3" />
               Torna al negozio
             </Link>
           </nav>
 
-          <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
+          <div className="grid grid-cols-1 gap-9 lg:grid-cols-2 lg:gap-16">
             {/* Image. The ViewTransition name matches the one on this product's
                 tile in any grid, so arriving here morphs the thumbnail into the
-                hero rather than swapping one page for another. */}
-            <div className="relative aspect-square overflow-hidden border border-brown-950/8 bg-paper-deep">
+                hero rather than swapping one page for another.
+                Landscape on a phone, square above it, and bled to both edges:
+                a full-width square is 375px of an 812px screen, and it was
+                pushing the name, the price and the buy button past the fold
+                between them. The 4:3 crop gives back a hundred pixels and the
+                bleed gives back the gutters — the picture ends up *larger* than
+                the inset square it replaces while taking less of the screen. */}
+            <div className="relative -mx-5 aspect-4/3 overflow-hidden border-y border-brown-950/8 bg-paper-deep sm:mx-0 sm:aspect-square sm:border">
               <ViewTransition name={`product-${product.slug}`} share="product-morph">
                 {product.image ? (
                   <Image
@@ -182,30 +193,30 @@ export default async function ProductDetailPage({ params }: Params) {
                 </Link>
               )}
 
-              <div className="mt-8 max-w-xs">
-                <AddToCartButton
-                  product={{
-                    slug: product.slug,
-                    name: product.name,
-                    priceCents: product.priceCents ?? 0,
-                    unit: product.unit,
-                    image: product.image,
-                  }}
-                  stock={product.stock}
-                  withQuantity
-                />
+              {/* Renders the buy block *and* the bar that replaces it once it
+                  scrolls off a phone screen — one control, one component. */}
+              <ProductBuy
+                product={{
+                  slug: product.slug,
+                  name: product.name,
+                  priceCents: product.priceCents ?? 0,
+                  unit: product.unit,
+                  image: product.image,
+                }}
+                stock={product.stock}
+              >
                 {soldOut && <BackInStockForm slug={product.slug} />}
-              </div>
+              </ProductBuy>
             </div>
           </div>
 
           {/* Related products */}
           {related.length > 0 && (
-            <div className="mt-24">
-              <h2 className="font-display mb-10 text-3xl tracking-tighter text-brown-950 sm:text-4xl">
+            <div className="mt-16 sm:mt-24">
+              <h2 className="font-display display-md mb-7 font-semibold text-brown-950 sm:mb-10">
                 Potrebbe interessarti
               </h2>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-12 sm:gap-x-7 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-x-3.5 gap-y-10 sm:gap-x-7 sm:gap-y-12 lg:grid-cols-4">
                 {related.map((r) => (
                   <ProductTile
                     key={r.id}

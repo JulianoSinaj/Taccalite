@@ -78,10 +78,10 @@ export default async function StorePage({ searchParams }: SearchParams) {
         lede="Ordina online e scegli il ritiro in bottega o la spedizione. Stessa qualità del banco."
       />
 
-      <section className="bg-paper px-5 pb-24 sm:px-8 sm:pb-32 lg:px-12">
+      <section className="bg-paper px-5 pb-20 sm:px-8 sm:pb-32 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           {!storeEnabled || products.length === 0 ? (
-            <div className="border border-rule bg-paper-warm p-12 text-center">
+            <div className="border border-rule bg-paper-warm p-8 text-center sm:p-12">
               <h2 className="font-display display-md text-brown-950">Negozio in allestimento</h2>
               <p className="mt-3 text-brown-700">
                 Le vendite online saranno presto disponibili. Nel frattempo passa in bottega o{" "}
@@ -94,12 +94,12 @@ export default async function StorePage({ searchParams }: SearchParams) {
           ) : (
             <>
               {/* Filter bar */}
-              <div className="mb-10 space-y-6">
+              <div className="mb-8 space-y-5 sm:mb-10 sm:space-y-6">
                 {/* Square, hairlined and set on the storefront's own ground. This bar was
                     the last of the old pill-and-white-card language still on the
                     site, and it made the shop — the page that has to sell — look
                     like a different product from the one around it. */}
-                <form method="get" className="flex flex-col gap-3 sm:flex-row">
+                <form method="get" className="flex flex-col gap-2.5 sm:flex-row sm:gap-3">
                   {cat && <input type="hidden" name="cat" value={cat} />}
                   <div className="relative flex-1">
                     <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-taupe" />
@@ -112,35 +112,49 @@ export default async function StorePage({ searchParams }: SearchParams) {
                       className="w-full border border-rule-strong bg-paper py-3.5 pr-6 pl-11 text-sm text-brown-950 placeholder:text-taupe focus:border-gold-dark focus:outline-none"
                     />
                   </div>
-                  <select
-                    name="sort"
-                    defaultValue={sort}
-                    aria-label="Ordina i prodotti"
-                    className="border border-rule-strong bg-paper px-5 py-3.5 text-sm font-medium text-brown-950 focus:border-gold-dark focus:outline-none"
-                  >
-                    {(Object.keys(SORT_LABELS) as Sort[]).map((s) => (
-                      <option key={s} value={s}>
-                        {SORT_LABELS[s]}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="submit"
-                    className="inline-flex items-center justify-center bg-brown-950 px-8 py-3.5 text-[0.6875rem] font-bold tracking-[0.18em] text-cream uppercase transition-colors hover:bg-brown-800"
-                  >
-                    Applica
-                  </button>
+                  {/* Sort and submit share a row on a phone rather than stacking:
+                      three full-width bars pushed the first product below the
+                      fold on the page whose whole job is showing products. */}
+                  <div className="flex gap-2.5 sm:contents">
+                    <select
+                      name="sort"
+                      defaultValue={sort}
+                      aria-label="Ordina i prodotti"
+                      className="min-w-0 flex-1 border border-rule-strong bg-paper px-4 py-3.5 text-sm font-medium text-brown-950 focus:border-gold-dark focus:outline-none sm:flex-none sm:px-5"
+                    >
+                      {(Object.keys(SORT_LABELS) as Sort[]).map((s) => (
+                        <option key={s} value={s}>
+                          {SORT_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="submit"
+                      className="inline-flex shrink-0 items-center justify-center bg-brown-950 px-6 py-3.5 text-[0.6875rem] font-bold tracking-[0.18em] text-cream uppercase transition-colors hover:bg-brown-800 sm:px-8"
+                    >
+                      Applica
+                    </button>
+                  </div>
                 </form>
 
                 {categories.length > 0 && (
-                  <nav className="flex flex-wrap gap-2" aria-label="Categorie">
+                  // A rail on a phone, a wrapped row above it. Eight categories
+                  // at 375px wrapped to four lines — a 150px-tall block of
+                  // chrome above the grid, which is more of the screen than the
+                  // first product got. Bled to both edges so the row is visibly
+                  // cut off rather than appearing to end at the gutter, which is
+                  // the only thing that says "there is more this way".
+                  <nav
+                    className="no-scrollbar -mx-5 flex snap-x gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
+                    aria-label="Categorie"
+                  >
                     <Link
                       href={buildHref({ q, sort: sp.sort }, { cat: "" })}
-                      className={`border px-5 py-2 text-[0.625rem] font-bold tracking-[0.18em] uppercase transition-colors ${
-                        !cat
-                          ? "border-brown-950 bg-brown-950 text-cream"
-                          : "border-rule-strong text-brown-700 hover:border-brown-950 hover:text-brown-950"
-                      }`}
+                      className={`shrink-0 snap-start border px-5 py-3.5 text-[0.625rem] font-bold tracking-[0.18em] uppercase transition-colors sm:py-2 ${
+ !cat
+ ? "border-brown-950 bg-brown-950 text-cream"
+ : "border-rule-strong text-brown-700 hover:border-brown-950 hover:text-brown-950"
+ }`}
                     >
                       Tutti
                     </Link>
@@ -152,11 +166,11 @@ export default async function StorePage({ searchParams }: SearchParams) {
                         key={c}
                         href={buildHref({ q, sort: sp.sort }, { cat: c })}
                         style={{ "--acc": categoryAccent(c) } as React.CSSProperties}
-                        className={`flex items-center gap-2.5 border px-5 py-2 text-[0.625rem] font-bold tracking-[0.18em] uppercase transition-colors ${
-                          cat === c
-                            ? "border-[var(--acc)] bg-[color-mix(in_oklab,var(--acc)_14%,var(--paper))] text-[var(--acc)]"
-                            : "border-rule-strong text-brown-700 hover:border-[var(--acc)] hover:text-[var(--acc)]"
-                        }`}
+                        className={`flex shrink-0 snap-start items-center gap-2.5 border px-5 py-3.5 text-[0.625rem] font-bold tracking-[0.18em] whitespace-nowrap uppercase transition-colors sm:py-2 ${
+ cat === c
+ ? "border-[var(--acc)] bg-[color-mix(in_oklab,var(--acc)_14%,var(--paper))] text-[var(--acc)]"
+ : "border-rule-strong text-brown-700 hover:border-[var(--acc)] hover:text-[var(--acc)]"
+ }`}
                       >
                         <span aria-hidden className="size-[5px] rotate-45 bg-[var(--acc)]" />
                         {c}
@@ -167,7 +181,7 @@ export default async function StorePage({ searchParams }: SearchParams) {
               </div>
 
               {filtered.length === 0 ? (
-                <div className="border border-rule bg-paper-warm p-12 text-center">
+                <div className="border border-rule bg-paper-warm p-8 text-center sm:p-12">
                   <h2 className="font-display display-md text-brown-950">Nessun risultato</h2>
                   <p className="mt-3 text-brown-700">
                     Nessun prodotto corrisponde alla tua ricerca.{" "}
@@ -178,7 +192,11 @@ export default async function StorePage({ searchParams }: SearchParams) {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-x-6 gap-y-14 sm:gap-x-7 lg:grid-cols-4">
+                // Tighter gutters on a phone. At 375px a 24px gutter left each
+                // tile 155px wide; at 14px they get 165px each, which is the
+                // difference between a product name wrapping to two lines and
+                // to three.
+                <div className="grid grid-cols-2 gap-x-3.5 gap-y-10 sm:gap-x-7 sm:gap-y-14 lg:grid-cols-4">
                   {filtered.map((p) => (
                     <ProductTile
                       key={p.id}

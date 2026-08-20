@@ -34,7 +34,7 @@ function nextSaturdayIso(): string {
 }
 
 const inputClasses =
-  "w-full rounded-xl border border-brown-900/15 bg-cream-dark/40 px-4 py-3.5 text-sm text-brown-950 transition-colors placeholder:text-taupe focus:border-gold-dark focus:outline-none";
+  "w-full  border border-rule-strong bg-paper-warm/40 px-4 py-3.5 text-sm text-brown-950 transition-colors placeholder:text-taupe focus:border-gold-dark focus:outline-none";
 
 const TYPES: { key: ResType; label: string; icon: typeof UtensilsCrossed; hint: string }[] = [
   { key: "table", label: "Tavolo", icon: UtensilsCrossed, hint: "Degustazione al banco" },
@@ -123,12 +123,12 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
 
   if (status === "success") {
     return (
-      <div className="cinematic-shadow rounded-[28px] border border-brown-900/10 bg-gradient-to-b from-white/70 to-white/40 p-10 text-center backdrop-blur-md sm:p-12">
+      <div className="cinematic-shadow border border-rule bg-gradient-to-b from-white/70 to-white/40 p-6 text-center backdrop-blur-md sm:p-10 lg:p-12">
         <div className="mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-full bg-gold">
           <Check className="size-8 text-brown-950" />
         </div>
         <h3 className="font-display text-3xl font-semibold text-brown-950">Prenotazione inviata!</h3>
-        <p className="mt-3 text-lg text-brown-900/75">
+        <p className="mt-3 text-lg text-brown-700">
           Grazie per la tua richiesta. Ti contatteremo al più presto per confermare la disponibilità.
         </p>
         {reference && (
@@ -142,7 +142,7 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
             setStatus("idle");
             setReference(null);
           }}
-          className="mt-8 block w-full rounded-full border border-brown-900/20 px-8 py-3 text-sm font-semibold text-brown-950 transition-colors hover:bg-brown-950 hover:text-cream sm:w-auto sm:mx-auto"
+          className="mt-8 block w-full rounded-full border border-rule-strong px-8 py-3 text-sm font-semibold text-brown-950 transition-colors hover:bg-brown-950 hover:text-cream sm:w-auto sm:mx-auto"
         >
           Invia un&apos;altra richiesta
         </button>
@@ -153,7 +153,7 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="cinematic-shadow space-y-10 rounded-[28px] border border-brown-900/10 bg-gradient-to-b from-white/70 to-white/40 p-8 backdrop-blur-md sm:p-12"
+      className="cinematic-shadow space-y-8 border border-rule bg-gradient-to-b from-white/70 to-white/40 p-5 backdrop-blur-md sm:space-y-10 sm:p-8 lg:p-12"
     >
       {/* Type selector */}
       <div className="space-y-4">
@@ -168,15 +168,17 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
                 type="button"
                 onClick={() => setType(t.key)}
                 aria-pressed={active}
-                className={`flex flex-col items-start gap-2 rounded-2xl border p-4 text-left transition-all ${
-                  active
-                    ? "border-gold-dark bg-gold/15 shadow-sm"
-                    : "border-brown-900/12 bg-cream-dark/30 hover:border-brown-900/25"
-                }`}
+                className={`flex flex-row items-center gap-3 border p-4 text-left transition-all sm:flex-col sm:items-start sm:gap-2 ${
+ active
+ ? "border-gold-dark bg-gold/15 shadow-sm"
+ : "border-rule bg-paper-warm/30 hover:border-rule-strong"
+ }`}
               >
-                <Icon className={`size-5 ${active ? "text-gold-deep" : "text-brown-800/70"}`} />
-                <span className="text-sm font-bold text-brown-950">{t.label}</span>
-                <span className="text-xs text-brown-800/70">{t.hint}</span>
+                <Icon className={`size-5 shrink-0 ${active ? "text-gold-deep" : "text-taupe"}`} />
+                <span className="flex min-w-0 flex-col sm:contents">
+                  <span className="text-sm font-bold text-brown-950">{t.label}</span>
+                  <span className="text-xs text-taupe">{t.hint}</span>
+                </span>
               </button>
             );
           })}
@@ -225,12 +227,12 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
           </div>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <Field label="Numero di ospiti">
-              <div className="flex w-full items-center gap-4 rounded-full border border-brown-900/10 bg-cream-dark/50 p-2 md:w-48">
+              <div className="flex w-full items-center gap-4 rounded-full border border-rule bg-paper-warm/50 p-2 md:w-48">
                 <button
                   type="button"
                   aria-label="Riduci il numero di ospiti"
                   onClick={() => setGuests((g) => Math.max(1, g - 1))}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brown-950 text-cream transition-transform hover:scale-105"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brown-950 text-cream transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
                 >
                   <Minus className="size-4" />
                 </button>
@@ -241,7 +243,7 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
                   type="button"
                   aria-label="Aumenta il numero di ospiti"
                   onClick={() => setGuests((g) => Math.min(30, g + 1))}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brown-950 text-cream transition-transform hover:scale-105"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brown-950 text-cream transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
                 >
                   <Plus className="size-4" />
                 </button>
@@ -261,7 +263,7 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
             <span className="eyebrow eyebrow-dark block">Preferenze speciali</span>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {PREFERENCES.map((pref) => (
-                <label key={pref} className="group flex cursor-pointer items-center gap-3">
+                <label key={pref} className="group flex cursor-pointer items-center gap-3 py-1.5">
                   <input type="checkbox" name="preferences" value={pref} className="h-5 w-5 rounded accent-brown-950" />
                   <span className="text-sm text-brown-900 transition-colors group-hover:text-gold-dark">{pref}</span>
                 </label>
@@ -273,7 +275,7 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
 
       {type === "porchetta" && (
         <>
-          <div className="rounded-xl border border-gold-dark/30 bg-gold/10 px-5 py-4 text-sm text-brown-900">
+          <div className="border border-gold-dark/30 bg-gold/10 px-5 py-4 text-sm text-brown-900">
             La porchetta esce calda dal forno il <strong>sabato mattina</strong>
             {porchettaPickup?.address ? (
               <>
@@ -316,12 +318,12 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
               </div>
             </Field>
             <Field label="Quantità (kg)">
-              <div className="flex w-full items-center gap-4 rounded-full border border-brown-900/10 bg-cream-dark/50 p-2 md:w-56">
+              <div className="flex w-full items-center gap-4 rounded-full border border-rule bg-paper-warm/50 p-2 md:w-56">
                 <button
                   type="button"
                   aria-label="Riduci la quantità"
                   onClick={() => setQuantity((q) => Math.max(0.5, Math.round((q - 0.5) * 2) / 2))}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brown-950 text-cream transition-transform hover:scale-105"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brown-950 text-cream transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
                 >
                   <Minus className="size-4" />
                 </button>
@@ -332,7 +334,7 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
                   type="button"
                   aria-label="Aumenta la quantità"
                   onClick={() => setQuantity((q) => Math.min(50, Math.round((q + 0.5) * 2) / 2))}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brown-950 text-cream transition-transform hover:scale-105"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brown-950 text-cream transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
                 >
                   <Plus className="size-4" />
                 </button>

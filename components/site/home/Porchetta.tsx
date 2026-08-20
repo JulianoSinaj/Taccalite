@@ -24,7 +24,7 @@ const ricetta = [
 
 export default function Porchetta() {
   return (
-    <section className="relative overflow-hidden bg-brown-950 px-5 py-24 sm:px-8 sm:py-32 lg:px-12">
+    <section className="relative overflow-hidden bg-brown-950 px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
       <div aria-hidden className="ember absolute inset-0" />
       <div aria-hidden className="bg-noise absolute inset-0 opacity-[0.07]" />
 
@@ -92,7 +92,9 @@ export default function Porchetta() {
               La prossima infornata tra
             </p>
 
-            <div className="mt-7 pb-9">
+            {/* The numbers own the middle of the card: the block takes the slack
+                between the kicker and the ledger and centres itself in it. */}
+            <div className="flex flex-1 items-center justify-center py-9">
               <SaturdayCountdown />
             </div>
 

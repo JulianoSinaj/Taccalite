@@ -334,6 +334,25 @@ body:has(.site-shell) {
   text-wrap: balance;
 }
 
+/* A modifier for a display headline that also has to fit the fold.
+ *
+ * The scale above is width-driven only. That is right for a headline sitting in
+ * the body of a page, and wrong for one that has to share a screen with the
+ * content beneath it: on a wide-but-short laptop window — 1366x768 and 1536x864
+ * both land here once browser chrome is taken off — `8.5vw` renders at the full
+ * 8rem cap and a three-line headline eats 329px, which is what pushes the hero's
+ * proof row and photo caption off the bottom of the screen. Adding a `vh` term
+ * makes the headline yield to whichever dimension is actually scarce.
+ *
+ * It stays a separate class rather than an edit to `.display-xl` because only
+ * above-the-fold headlines want this; the mid-page `display-xl` headings on
+ * /porchetta have no fold to fit and should keep sizing on width alone. Same
+ * (0,2,0) specificity as the scale and later in the file, so the `font-size`
+ * wins while `line-height`, tracking and `opsz` still come from the scale. */
+.site-shell .display-fit {
+  font-size: clamp(3.1rem, min(8.5vw, 13vh), 8rem);
+}
+
 /* Fraunces' signature: `WONK` swaps in the quirky alternates. It replaces italic
  * as the emphasis treatment — more characteristic of the face, and one fewer
  * font file to ship. Always on an inner span, so it beats the scale on its own
@@ -456,6 +475,16 @@ body:has(.site-shell) {
   width: 100%;
 }
 
+/* The loading state: a gold rule sweeping the measure, not a spinner. */
+@keyframes loading-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
 /* Brand marquee. The track is duplicated in markup and shifted by exactly half,
  * so the seam lands off-screen and the loop reads as continuous. */
 @keyframes marquee-track {
@@ -470,16 +499,19 @@ body:has(.site-shell) {
 .marquee-track {
   animation: marquee-track var(--marquee-duration, 42s) linear infinite;
   will-change: transform;
-}
-
-.marquee:hover .marquee-track {
-  animation-play-state: paused;
+  /* The ribbon is decoration, not a control: it never pauses, and the pointer
+   * passes straight through so a hover or a stray click can't grab, select, or
+   * highlight the names mid-travel. */
+  animation-play-state: running;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track {
-    animation: none;
-  }
+  /* The brand ribbon is deliberately exempt: it travels for everyone. Everything
+   * else that moves on its own still stops here. */
   .medallion-rotation {
     animation: none;
   }
@@ -596,6 +628,40 @@ body:has(.site-shell) {
 
 .eyebrow-dark {
   color: var(--color-gold-deep);
+}
+
+/* ── Eyebrow, storefront ─────────────────────────────────────────────────────
+ *
+ * Every section the homepage rebuild touched sets its eyebrow by hand as a flex
+ * row with a 40px gold rule in front of it; the thirty-odd older ones on the
+ * inner pages still used this class and came out as bare gold capitals, so the
+ * same label looked like two different things depending on which page you were
+ * on. Rather than rewrite thirty call sites into that markup, the class grows
+ * the rule — one definition, and the inner pages join the system as they are.
+ *
+ * Scoped to `.site-shell`, so the gestionale's eyebrows are untouched.
+ */
+.site-shell .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.28em;
+}
+
+/* Not on a <label>: the rule marks the top of a *section*, and a form with ten
+ * fields would otherwise grow ten little gold dashes down its left edge. */
+.site-shell .eyebrow:not(label)::before {
+  content: "";
+  flex: none;
+  height: 1px;
+  width: 2.5rem;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+.site-shell label.eyebrow {
+  gap: 0;
 }
 
 /* Link hover: 1px underline draws from left to right. */
@@ -927,5 +993,218 @@ body:has(.site-shell) {
     html {
       font-size: 87.5%; /* 14px */
     }
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Phone
+ *
+ * The storefront was designed at desktop width and then allowed to reflow. That
+ * gets the *layout* right on a phone — nothing overflows — but it leaves the
+ * things that are only wrong on a touch screen untouched: 14px form fields that
+ * make iOS zoom the page, 19px-tall links, hover states that never fire, and
+ * fixed bars that sit under the home indicator.
+ *
+ * These rules are the systemic half of that fix — the half that would otherwise
+ * have to be repeated at fifty call sites. Everything here is either scoped to a
+ * touch/narrow media query or opt-in via a class, so the desktop art direction
+ * is byte-for-byte what it was.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Form controls: the iOS zoom ─────────────────────────────────────────────
+ *
+ * Mobile Safari zooms the viewport in when a focused control's text measures
+ * under 16px, and *does not zoom back out* — the visitor is left on a page 1.3×
+ * too wide, scrolling sideways to read the next field. Every input on this site
+ * is `text-sm` (14px), so this fired on the reservation form, the checkout, the
+ * newsletter, the login and the order tracker: every form that matters.
+ *
+ * A literal 16px rather than `1rem`, because the root font-size steps down from
+ * 640px up and 15px would still trigger it on a small tablet in portrait.
+ * `-webkit-text-size-adjust` stops the same engine inflating body copy when a
+ * block happens to be wider than the viewport.
+ */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Anchor links and `scrollIntoView` land under the fixed header otherwise. */
+  scroll-padding-top: 6rem;
+}
+
+/* ── Touch feedback ──────────────────────────────────────────────────────────
+ *
+ * Every control on the site says what it does through `:hover`, and a finger
+ * never hovers: on a phone the entire interface was inert until the navigation
+ * completed. The default iOS/Android answer — a translucent grey rectangle
+ * flashed over the tapped box, corners and all — is worse than nothing on
+ * circular buttons and hairlined cards, so it goes and a press state that
+ * matches the house style comes in.
+ *
+ * `pointer: coarse` rather than `max-width`, so a touchscreen laptop gets the
+ * press state and a narrow desktop window does not lose its hovers.
+ */
+@media (hover: none) and (pointer: coarse) {
+  .site-shell {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .site-shell a:active,
+  .site-shell button:not(:disabled):active,
+  .site-shell [role="button"]:not([aria-disabled="true"]):active,
+  .site-shell label:active {
+    opacity: 0.68;
+    /* Instant on the way down, so the press reads as contact rather than as a
+     * fade; the element's own transition carries it back on release. */
+    transition-duration: 0s;
+  }
+
+  /* Reveal-on-hover has nothing to reveal it. */
+  .site-shell .underline-draw {
+    background-size: 100% 1px;
+  }
+}
+
+/* ── Hit areas ───────────────────────────────────────────────────────────────
+ *
+ * A 24px icon button is 24px of glass; the finger that aims at it is nearer 45.
+ * `.tap` grows the *hit* area to the 44px minimum without growing the mark —
+ * the pseudo-element is invisible and outside flow, so a row of icons keeps its
+ * spacing and a hairline keeps its length. Use it wherever the drawn control is
+ * deliberately small; use padding wherever the control can simply be bigger.
+ */
+.tap {
+  position: relative;
+}
+
+.tap::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  /* Behind the label, so it extends the target without eating its own clicks. */
+  z-index: 0;
+}
+
+/* ── Fixed chrome and the phone's own furniture ──────────────────────────────
+ *
+ * On a notched phone the bottom ~34px of the viewport belongs to the home
+ * indicator, and anything pinned to `bottom: 0` sits under it. `env()` resolves
+ * to 0 everywhere else, so these are inert on a desktop and on Android.
+ */
+/* Both of these SET padding rather than adding to it, and this file is unlayered
+ * — so they beat any `px-*` / `pb-*` utility on the same element regardless of
+ * source order. Put them on a wrapper that has no horizontal (resp. bottom)
+ * padding of its own and let the inner element keep the design's gutter; where
+ * one element must carry both, write the max() inline instead:
+ * `px-[max(1rem,env(safe-area-inset-left))]`. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.px-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Floating bars measure their offset from the *usable* bottom edge. */
+.bottom-safe {
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* The cookie bar and the cart bar are both pinned to the bottom edge and were
+ * both drawn there at once, the consent bar covering the cart. `--consent-h` is
+ * published by `CookieConsent` while it is on screen; the cart bar reads it and
+ * stands on top of it, then drops back the moment a choice is made. */
+.bottom-safe-stack {
+  bottom: calc(1rem + var(--consent-h, 0px) + env(safe-area-inset-bottom, 0px));
+  transition: bottom 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Horizontal rails ────────────────────────────────────────────────────────
+ *
+ * A snap carousel is the right shape for a phone and the wrong shape for a
+ * scrollbar: the bar sits under the last row of type and reads as a rule that
+ * does not belong to anything. The content stays scrollable — this hides the
+ * indicator, not the overflow.
+ */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Type on a narrow measure ────────────────────────────────────────────────
+ *
+ * The house eyebrow is 11px set at 0.28em. At arm's length on a desk that is a
+ * small, confident label; at phone distance the tracking pulls the letters far
+ * enough apart that it stops reading as a word. Slightly larger and slightly
+ * tighter on a phone is the same mark at the same *apparent* size.
+ */
+@media (max-width: 639px) {
+  .site-shell .eyebrow {
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    gap: 0.75rem;
+  }
+
+  .site-shell .eyebrow:not(label)::before {
+    width: 1.75rem;
+  }
+
+  /* Long unbroken strings — an email address, a street name, an order reference
+   * — are the one thing that still forces a 320px page sideways. */
+  .site-shell p,
+  .site-shell li,
+  .site-shell dd,
+  .site-shell h1,
+  .site-shell h2,
+  .site-shell h3 {
+    overflow-wrap: break-word;
+  }
+}
+
+/* Body copy on a narrow column breaks badly by default — a two-word last line
+ * under a full one. `pretty` costs nothing and is ignored where unsupported. */
+.site-shell p {
+  text-wrap: pretty;
+}
+
+/* A product page pins its own buy bar to the bottom edge on a phone, and that
+ * bar already carries the cart with its count. The floating cart pill an inch
+ * above it would be a second control saying the same thing — so it stands down
+ * for as long as the buy bar is up. `:has()` keeps this a fact about the page
+ * rather than a piece of state two unrelated components have to agree on. */
+.site-shell:has([data-buybar]) [data-cartbar] {
+  display: none;
+}
+
+/* Landscape on a notched phone.
+ *
+ * `viewport-fit=cover` (see `app/layout.tsx`) lets the page reach both physical
+ * edges, which is what stops the notch and the home-indicator strip being
+ * painted as flat bands that belong to no one. The cost is that in landscape the
+ * notch now sits *over* the left or right gutter, and a 20px gutter is narrower
+ * than the notch. Insetting the shell — not the fixed chrome, which pads itself
+ * — gives the running text its margin back while full-bleed grounds still reach
+ * the edge above and below it.
+ */
+@media (orientation: landscape) {
+  .site-shell {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 }

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight } from "lucide-react";
 import BlogCard from "@/components/BlogCard";
-import ImagePlaceholder from "@/components/ImagePlaceholder";
+import ProductPlate from "@/components/site/ProductPlate";
 import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
 import PageHero from "@/components/site/PageHero";
+import { categoryAccent } from "@/lib/categories";
 import { getBlogPosts } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +40,10 @@ export default async function BlogPage() {
         ]}
         lede="Nuovi arrivi al banco, appuntamenti in bottega e l'immancabile porchetta del sabato: tutto quello che succede in casa Taccalite."
         aside={
-          /* The featured story as a postcard on the desk, two blanks behind it. */
+          /* The featured story as a postcard on the desk, two blanks behind it.
+             This *is* the featured treatment — the page used to run it here and
+             then again as a full-width panel two hundred pixels below, so the
+             first thing the diary said was the same thing twice. */
           featured ? (
             <div className="relative mx-auto hidden w-full max-w-md lg:block">
               <div className="absolute inset-0 rotate-6 border border-rule bg-paper-warm" />
@@ -48,9 +51,10 @@ export default async function BlogPage() {
 
               <Link
                 href={`/blog/${featured.slug}`}
+                style={{ "--acc": categoryAccent(featured.category) } as React.CSSProperties}
                 className="group card-shadow-soft relative block -rotate-2 overflow-hidden border border-rule bg-paper p-4 pb-14 transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform hover:rotate-0 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
               >
-                <div className="relative aspect-[5/4] overflow-hidden rounded-[18px]">
+                <div className="relative aspect-[5/4] overflow-hidden bg-paper-deep">
                   {featured.image ? (
                     <Image
                       src={featured.image}
@@ -61,23 +65,24 @@ export default async function BlogPage() {
                       sizes="(max-width: 1024px) 0px, 40vw"
                     />
                   ) : (
-                    <ImagePlaceholder
-                      label={featured.imageLabel}
-                      ratio="wide"
-                      className="h-full rounded-none border-0"
+                    <ProductPlate
+                      name={featured.title}
+                      category={featured.category}
+                      seed={featured.slug}
                     />
                   )}
                 </div>
                 <div className="mt-5 flex items-end justify-between gap-4 px-2">
-                  <div className="space-y-1.5">
-                    <span className="rounded-full bg-gold/15 px-3 py-1 text-[9px] font-bold tracking-widest text-gold-deep uppercase">
+                  <div className="space-y-2">
+                    <span className="inline-flex items-center gap-2 text-[0.625rem] sm:text-[0.5625rem] font-bold tracking-[0.22em] text-[var(--acc)] uppercase">
+                      <span aria-hidden className="size-[5px] rotate-45 bg-[var(--acc)]" />
                       {featured.category}
                     </span>
-                    <p className="font-display max-w-[16rem] text-xl leading-tight text-brown-950">
+                    <p className="font-display max-w-[16rem] text-xl leading-tight font-semibold text-brown-950">
                       {featured.title}
                     </p>
                   </div>
-                  <span className="rotate-3 rounded border border-brown-950/25 px-2.5 py-1.5 text-[9px] font-bold tracking-[0.2em] whitespace-nowrap text-brown-950/50 uppercase">
+                  <span className="rotate-3 border border-rule-strong px-2.5 py-1.5 text-[0.625rem] sm:text-[0.5625rem] font-bold tracking-[0.2em] whitespace-nowrap text-taupe uppercase">
                     {formatDate(featured.date)}
                   </span>
                 </div>
@@ -93,69 +98,45 @@ export default async function BlogPage() {
         }
       />
 
-      {/* Featured post */}
-      {featured && (
-        <section className="bg-cream px-5 pt-24 sm:px-10 sm:pt-32">
-          <Reveal className="mx-auto max-w-7xl">
-            <Link
-              href={`/blog/${featured.slug}`}
-              className="group card-shadow-soft grid grid-cols-1 overflow-hidden rounded-[32px] border border-brown-900/10 bg-white/60 transition-all duration-700 hover:-translate-y-2 lg:grid-cols-2"
-            >
-              <div className="relative aspect-[16/10] overflow-hidden lg:aspect-auto lg:min-h-[420px]">
-                {featured.image ? (
-                  <Image
-                    src={featured.image}
-                    alt={featured.title}
-                    fill
-                    preload
-                    className="object-cover transition-transform duration-[1.8s] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105"
-                    sizes="(max-width: 1024px) 100vw, 50vw"
-                  />
-                ) : (
-                  <ImagePlaceholder
-                    label={featured.imageLabel}
-                    ratio="wide"
-                    className="h-full rounded-none border-0"
-                  />
-                )}
-                <span className="absolute top-6 left-6 rounded-full bg-gold px-4 py-1.5 text-[10px] font-bold tracking-widest text-brown-950 uppercase">
-                  In evidenza
-                </span>
-              </div>
-              <div className="flex flex-col justify-center space-y-6 p-8 sm:p-14">
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-semibold tracking-wider text-brown-800/70 uppercase">
-                    {formatDate(featured.date)}
-                  </span>
-                  <span className="rounded-full bg-gold/15 px-3 py-1 text-[9px] font-bold tracking-widest text-gold-deep uppercase">
-                    {featured.category}
-                  </span>
-                </div>
-                <h2 className="font-display text-3xl leading-tight tracking-tight text-brown-950 transition-colors group-hover:text-gold-deep sm:text-4xl lg:text-5xl">
-                  {featured.title}
-                </h2>
-                <p className="max-w-md text-lg leading-relaxed font-light text-brown-900/70">
-                  {featured.excerpt}
-                </p>
-                <span className="inline-flex items-center gap-2 text-sm font-bold text-gold-deep transition-all group-hover:gap-4">
-                  Leggi la storia
-                  <ArrowRight className="size-4" />
-                </span>
-              </div>
-            </Link>
-          </Reveal>
-        </section>
-      )}
+      <section className="mx-auto max-w-[88rem] px-5 pb-24 sm:px-8 sm:pb-32 lg:px-12">
+        <div className="flex items-end justify-between gap-6 border-b border-rule pb-8">
+          <h2 className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
+            <span aria-hidden className="h-px w-10 bg-gold" />
+            Tutte le storie
+          </h2>
+          <p className="text-[0.8125rem] text-taupe tabular-nums">
+            {blogPosts.length} {blogPosts.length === 1 ? "articolo" : "articoli"}
+          </p>
+        </div>
 
-      {/* Remaining posts */}
-      <section className="mx-auto max-w-7xl px-5 py-24 sm:px-10 sm:py-32">
-        <RevealStagger className="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-3">
+        {/* The featured story reappears here only below `lg`, where the postcard
+            in the masthead is hidden — otherwise the phone would never see it. */}
+        {featured && (
+          <Reveal className="mt-12 lg:hidden">
+            <BlogCard post={featured} />
+          </Reveal>
+        )}
+
+        <RevealStagger className="mt-12 grid grid-cols-1 gap-x-8 gap-y-14 md:grid-cols-2 lg:grid-cols-3">
           {rest.map((post) => (
             <RevealStaggerItem key={post.slug}>
               <BlogCard post={post} />
             </RevealStaggerItem>
           ))}
         </RevealStagger>
+
+        {blogPosts.length === 0 && (
+          <div className="mt-12 border border-rule bg-paper-warm p-12 text-center">
+            <h3 className="font-display display-md text-brown-950">Ancora nulla da raccontare</h3>
+            <p className="mt-3 text-brown-700">
+              Le prime storie della bottega arrivano presto. Nel frattempo,{" "}
+              <Link href="/negozio" className="font-semibold text-gold-deep underline">
+                dai un&apos;occhiata al banco
+              </Link>
+              .
+            </p>
+          </div>
+        )}
       </section>
     </div>
   );

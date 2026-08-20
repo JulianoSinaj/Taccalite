@@ -82,13 +82,13 @@ export default async function SiteFooter() {
         Taccalite
       </p>
 
-      <div className="relative mx-auto max-w-[88rem] px-5 pt-20 pb-10 sm:px-8 sm:pt-24 lg:px-12">
-        <div className="grid gap-14 md:grid-cols-2 lg:grid-cols-[1.3fr_0.7fr_1.1fr_1.1fr] lg:gap-12">
+      <div className="relative mx-auto max-w-[88rem] px-5 pt-16 pb-10 sm:px-8 sm:pt-24 lg:px-12">
+        <div className="grid gap-11 sm:gap-14 md:grid-cols-2 lg:grid-cols-[1.3fr_0.7fr_1.1fr_1.1fr] lg:gap-12">
           <div className="max-w-sm">
             <span className="font-display block text-[2.25rem] leading-none font-semibold tracking-[-0.045em] text-cream uppercase">
               Taccalite
             </span>
-            <span className="mt-2.5 block text-[0.5625rem] font-semibold tracking-[0.4em] text-gold uppercase">
+            <span className="mt-2.5 block text-[0.625rem] sm:text-[0.5625rem] font-semibold tracking-[0.4em] text-gold uppercase">
               Norcineria · Ancona · dal 1946
             </span>
             <p className="mt-7 text-[0.9375rem] leading-relaxed text-cream/65">
@@ -117,40 +117,54 @@ export default async function SiteFooter() {
             </div>
           </div>
 
+          {/* Two columns on a phone, one above `sm`. Fourteen links stacked
+              single-file made a 700px tail hanging off the end of every page,
+              and each of them was a 19px-tall line of text — the most-repeated
+              tap target on the site and the smallest. `py-1.5` on a 15px line
+              brings each row to 44px without opening visible gaps between
+              them. */}
           <nav aria-label="Navigazione principale">
             <h2 className="text-[0.625rem] font-bold tracking-[0.24em] text-cream uppercase">
               Naviga
             </h2>
-            <ul className="mt-7 space-y-3.5 text-[0.9375rem]">
-              {navLinks.map((link) => (
-                <li key={link.href}>
-                  <Link href={link.href} className="transition-colors hover:text-gold">
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <ul className="mt-7 space-y-3.5 border-t border-cream/10 pt-7 text-[0.9375rem]">
-              {moreLinks.map((link) => (
-                <li key={link.href}>
-                  <Link href={link.href} className="transition-colors hover:text-gold">
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <div className="grid grid-cols-2 gap-x-6 sm:grid-cols-1">
+              <ul className="mt-5 text-[0.9375rem] sm:mt-7">
+                {navLinks.map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className="block py-2.5 transition-colors hover:text-gold"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <ul className="mt-5 text-[0.9375rem] sm:mt-7 sm:border-t sm:border-cream/10 sm:pt-6">
+                {moreLinks.map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className="block py-2.5 transition-colors hover:text-gold"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </nav>
 
           <div>
             <h2 className="text-[0.625rem] font-bold tracking-[0.24em] text-cream uppercase">
               Le due botteghe
             </h2>
-            <ul className="mt-7 space-y-7 text-[0.9375rem]">
+            <ul className="mt-5 space-y-6 text-[0.9375rem] sm:mt-7 sm:space-y-7">
               {shops.map((shop) => (
                 <li key={shop.slug}>
                   <Link
                     href={`/sedi/${shop.slug}`}
-                    className="font-medium text-cream transition-colors hover:text-gold"
+                    className="inline-block py-0.5 font-medium text-cream transition-colors hover:text-gold"
                   >
                     {shop.name}
                   </Link>
@@ -164,7 +178,7 @@ export default async function SiteFooter() {
                   {shop.phone && (
                     <a
                       href={telHref(shop.phone)}
-                      className="mt-1.5 flex items-center gap-2.5 text-cream/65 transition-colors hover:text-gold"
+                      className="mt-1 flex items-center gap-2.5 py-2 text-cream/65 transition-colors hover:text-gold"
                     >
                       <Phone className="size-3.5 shrink-0 text-cream/40" aria-hidden />
                       {shop.phone}
@@ -175,7 +189,7 @@ export default async function SiteFooter() {
               <li>
                 <a
                   href={`mailto:${siteConfig.email}`}
-                  className="flex items-center gap-2.5 break-all text-cream/65 transition-colors hover:text-gold"
+                  className="flex items-center gap-2.5 py-2 break-all text-cream/65 transition-colors hover:text-gold"
                 >
                   <Mail className="size-3.5 shrink-0 text-cream/40" aria-hidden />
                   {siteConfig.email}
@@ -188,30 +202,30 @@ export default async function SiteFooter() {
             <h2 className="text-[0.625rem] font-bold tracking-[0.24em] text-cream uppercase">
               Resta aggiornato
             </h2>
-            <p className="mt-7 text-[0.9375rem] leading-relaxed text-cream/65">
+            <p className="mt-5 text-[0.9375rem] leading-relaxed text-cream/65 sm:mt-7">
               Un messaggio quando la porchetta esce dal forno, quando arriva una forma nuova
               al banco e quando siamo in fiera. Niente altro.
             </p>
-            <div className="mt-7">
+            <div className="mt-5 sm:mt-7">
               <NewsletterForm />
             </div>
           </div>
         </div>
 
-        <div className="mt-16 border-t border-cream/10 pt-8">
+        <div className="mt-12 border-t border-cream/10 pt-7 sm:mt-16 sm:pt-8">
           <div className="flex flex-col gap-5 text-[0.8125rem] text-cream/50 lg:flex-row lg:items-center lg:justify-between">
             <p>
               © {siteConfig.founded}–{new Date().getFullYear()} {legalName}
               {vatNumber && <> · P.IVA {vatNumber}</>}
             </p>
-            <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
-              <Link href="/privacy" className="transition-colors hover:text-gold">
+            <div className="-my-2 flex flex-wrap items-center gap-x-7 gap-y-0">
+              <Link href="/privacy" className="py-2 transition-colors hover:text-gold">
                 Privacy
               </Link>
-              <Link href="/cookie" className="transition-colors hover:text-gold">
+              <Link href="/cookie" className="py-2 transition-colors hover:text-gold">
                 Cookie
               </Link>
-              <span>Ancona · Marche · Italia</span>
+              <span className="py-2">Ancona · Marche · Italia</span>
             </div>
           </div>
         </div>

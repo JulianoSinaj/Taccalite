@@ -66,8 +66,8 @@ const FULFILMENT_LABEL: Record<"pickup" | "shipping", string> = {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-brown-900/10 py-2.5 last:border-0">
-      <dt className="text-sm text-brown-900/60">{label}</dt>
+    <div className="flex items-center justify-between gap-4 border-b border-rule py-2.5 last:border-0">
+      <dt className="text-sm text-brown-700">{label}</dt>
       <dd className="text-right text-sm font-medium text-brown-950">{value}</dd>
     </div>
   );
@@ -87,7 +87,7 @@ function BackHome() {
 }
 
 const tabBase =
-  "flex-1 rounded-full px-5 py-2.5 text-center text-xs font-bold tracking-widest uppercase transition-colors";
+  "flex-1 rounded-full px-3 py-3.5 text-center text-[0.6875rem] font-bold tracking-[0.14em] uppercase transition-colors sm:px-5 sm:py-2.5 sm:text-xs sm:tracking-widest";
 
 function LookupForms({
   tab,
@@ -105,33 +105,33 @@ function LookupForms({
   email?: string;
 }) {
   return (
-    <section className="flex min-h-[80vh] items-center justify-center bg-cream px-5 pt-32 pb-20">
+    <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-28 pb-20 sm:pt-32">
       <div className="w-full max-w-xl text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brown-900/50">
+        <p className="text-xs font-semibold tracking-[0.16em] text-taupe uppercase sm:tracking-[0.2em]">
           Norcineria Taccalite
         </p>
-        <h1 className="mt-4 font-display text-4xl tracking-tighter text-brown-950 sm:text-5xl">
+        <h1 className="mt-4 font-display display-lg font-semibold text-brown-950">
           Traccia il tuo ordine
         </h1>
-        <p className="mt-4 text-lg text-brown-900/75">
+        <p className="mt-4 text-lg text-brown-700">
           Controlla lo stato di una prenotazione o di un ordine dell&apos;e-shop.
         </p>
 
         {/* Tabs */}
-        <div className="mx-auto mt-8 flex max-w-md gap-2 rounded-full border border-brown-900/10 bg-white/60 p-1">
+        <div className="mx-auto mt-8 flex max-w-md gap-2 rounded-full border border-rule bg-paper-warm p-1">
           <Link
             href="/traccia?t=reservation"
             className={`${tabBase} ${
-              tab === "reservation" ? "bg-brown-950 text-cream" : "text-brown-900/60 hover:text-brown-950"
-            }`}
+ tab === "reservation" ? "bg-brown-950 text-cream" : "text-brown-700 hover:text-brown-950"
+ }`}
           >
             Prenotazione
           </Link>
           <Link
             href="/traccia?t=order"
             className={`${tabBase} ${
-              tab === "order" ? "bg-brown-950 text-cream" : "text-brown-900/60 hover:text-brown-950"
-            }`}
+ tab === "order" ? "bg-brown-950 text-cream" : "text-brown-700 hover:text-brown-950"
+ }`}
           >
             Ordine e-shop
           </Link>
@@ -140,7 +140,7 @@ function LookupForms({
         {tab === "reservation" ? (
           <form method="get" className="mx-auto mt-8 w-full max-w-md text-left">
             {reservationNotFound && (
-              <p className="mb-5 rounded-2xl bg-red-500/10 px-5 py-3.5 text-sm text-red-700">
+              <p className="mb-5 bg-red-500/10 px-5 py-3.5 text-sm text-red-700">
                 Nessuna prenotazione trovata con questo riferimento. Controlla il codice
                 nella tua email di conferma e riprova.
               </p>
@@ -157,11 +157,14 @@ function LookupForms({
                 defaultValue={refCode ?? ""}
                 placeholder="Es. TAC-3F9K2"
                 aria-label="Riferimento prenotazione"
-                className="flex-1 rounded-full border border-brown-900/15 bg-white/70 px-6 py-3.5 text-sm text-brown-950 placeholder:text-brown-900/40 focus:border-gold focus:outline-none"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                className="flex-1 rounded-full border border-rule-strong bg-paper px-6 py-3.5 text-sm text-brown-950 placeholder:text-taupe focus:border-gold focus:outline-none"
               />
               <button
                 type="submit"
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-brown-950 px-8 py-3.5 text-sm font-semibold text-cream transition-colors hover:bg-brown-900"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-brown-950 px-8 py-4 text-sm font-semibold text-cream transition-colors hover:bg-brown-900 sm:py-3.5"
               >
                 <Search className="size-4" />
                 Cerca
@@ -172,7 +175,7 @@ function LookupForms({
           <form method="get" className="mx-auto mt-8 w-full max-w-md space-y-4 text-left">
             <input type="hidden" name="t" value="order" />
             {orderNotFound && (
-              <p className="rounded-2xl bg-red-500/10 px-5 py-3.5 text-sm text-red-700">
+              <p className="bg-red-500/10 px-5 py-3.5 text-sm text-red-700">
                 Nessun ordine trovato con questo numero ed email. Controlla i dati
                 nella tua email di conferma e riprova.
               </p>
@@ -189,7 +192,10 @@ function LookupForms({
                 defaultValue={order ?? ""}
                 placeholder="Es. ORD-2026-0042"
                 aria-label="Numero ordine"
-                className="w-full rounded-full border border-brown-900/15 bg-white/70 px-6 py-3.5 text-sm text-brown-950 placeholder:text-brown-900/40 focus:border-gold focus:outline-none"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                className="w-full rounded-full border border-rule-strong bg-paper px-6 py-3.5 text-sm text-brown-950 placeholder:text-taupe focus:border-gold focus:outline-none"
               />
             </div>
             <div>
@@ -204,12 +210,14 @@ function LookupForms({
                 defaultValue={email ?? ""}
                 placeholder="La tua email"
                 aria-label="Email dell'ordine"
-                className="w-full rounded-full border border-brown-900/15 bg-white/70 px-6 py-3.5 text-sm text-brown-950 placeholder:text-brown-900/40 focus:border-gold focus:outline-none"
+                autoCapitalize="none"
+                autoComplete="email"
+                className="w-full rounded-full border border-rule-strong bg-paper px-6 py-3.5 text-sm text-brown-950 placeholder:text-taupe focus:border-gold focus:outline-none"
               />
             </div>
             <button
               type="submit"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-brown-950 px-8 py-3.5 text-sm font-semibold text-cream transition-colors hover:bg-brown-900"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-brown-950 px-8 py-4 text-sm font-semibold text-cream transition-colors hover:bg-brown-900 sm:py-3.5"
             >
               <Search className="size-4" />
               Cerca l&apos;ordine
@@ -252,13 +260,13 @@ export default async function TracciaPage({ searchParams }: SearchParams) {
     const statusStyle = ORDER_STATUS_STYLE[order.status as OrderStatus];
 
     return (
-      <section className="flex min-h-[80vh] items-center justify-center bg-cream px-5 pt-32 pb-20">
+      <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-28 pb-20 sm:pt-32">
         <div className="w-full max-w-lg">
           <div className="text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brown-900/50">
+            <p className="text-xs font-semibold tracking-[0.16em] text-taupe uppercase sm:tracking-[0.2em]">
               Il tuo ordine
             </p>
-            <h1 className="mt-4 font-display text-4xl tracking-tighter text-brown-950 sm:text-5xl">
+            <h1 className="mt-4 font-display display-lg font-semibold text-brown-950">
               {order.orderNumber}
             </h1>
             <div className="mt-6">
@@ -268,15 +276,15 @@ export default async function TracciaPage({ searchParams }: SearchParams) {
             </div>
           </div>
 
-          <div className="mt-10 space-y-2 rounded-[24px] border border-brown-900/10 bg-white/70 p-6">
+          <div className="mt-10 space-y-2 border border-rule bg-paper-warm p-6">
             {items.map((it) => (
               <div
                 key={it.id}
-                className="flex items-center justify-between gap-4 border-b border-brown-900/10 py-2.5 last:border-0"
+                className="flex items-center justify-between gap-4 border-b border-rule py-2.5 last:border-0"
               >
                 <div className="text-left">
                   <p className="text-sm font-medium text-brown-950">{it.name}</p>
-                  <p className="text-xs text-brown-900/55">
+                  <p className="text-xs text-taupe">
                     {it.quantity} × {formatEuro(it.unitPriceCents)}
                   </p>
                 </div>
@@ -287,7 +295,7 @@ export default async function TracciaPage({ searchParams }: SearchParams) {
             ))}
           </div>
 
-          <dl className="mt-4 space-y-1 rounded-[24px] border border-brown-900/10 bg-white/70 p-6">
+          <dl className="mt-4 space-y-1 border border-rule bg-paper-warm p-6">
             <Row label="Consegna" value={FULFILMENT_LABEL[order.fulfilment]} />
             <Row label="Subtotale" value={formatEuro(order.subtotalCents)} />
             {order.shippingCents > 0 && (
@@ -301,7 +309,7 @@ export default async function TracciaPage({ searchParams }: SearchParams) {
             </div>
           </dl>
 
-          <p className="mt-6 text-center text-sm text-brown-900/60">
+          <p className="mt-6 text-center text-sm text-brown-700">
             Conserva il numero d&apos;ordine e l&apos;email di conferma. Per assistenza rispondi
             a quella email o contatta il negozio.
           </p>
@@ -324,13 +332,13 @@ export default async function TracciaPage({ searchParams }: SearchParams) {
   const statusStyle = STATUS_STYLE[reservation.status];
 
   return (
-    <section className="flex min-h-[80vh] items-center justify-center bg-cream px-5 pt-32 pb-20">
+    <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-28 pb-20 sm:pt-32">
       <div className="w-full max-w-lg">
         <div className="text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brown-900/50">
+          <p className="text-xs font-semibold tracking-[0.16em] text-taupe uppercase sm:tracking-[0.2em]">
             La tua prenotazione
           </p>
-          <h1 className="mt-4 font-display text-4xl tracking-tighter text-brown-950 sm:text-5xl">
+          <h1 className="mt-4 font-display display-lg font-semibold text-brown-950">
             {TYPE_LABEL[reservation.type]}
           </h1>
           <div className="mt-6 flex flex-col items-center gap-2">
@@ -338,12 +346,12 @@ export default async function TracciaPage({ searchParams }: SearchParams) {
               {statusLabel}
             </span>
             {reservation.waitlisted && reservation.status !== "cancelled" && (
-              <span className="text-sm font-medium text-brown-900/70">In lista d&apos;attesa</span>
+              <span className="text-sm font-medium text-brown-700">In lista d&apos;attesa</span>
             )}
           </div>
         </div>
 
-        <dl className="mt-10 space-y-1 rounded-[24px] border border-brown-900/10 bg-white/70 p-6">
+        <dl className="mt-10 space-y-1 border border-rule bg-paper-warm p-6">
           <Row label="Riferimento" value={reservation.reference} />
           {shop && <Row label="Negozio" value={shop.name} />}
           {reservation.date && (
@@ -360,7 +368,7 @@ export default async function TracciaPage({ searchParams }: SearchParams) {
           <Row label="Nome" value={reservation.name} />
         </dl>
 
-        <p className="mt-6 text-center text-sm text-brown-900/60">
+        <p className="mt-6 text-center text-sm text-brown-700">
           Per qualsiasi modifica, rispondi alla email di conferma o contatta il negozio.
         </p>
 

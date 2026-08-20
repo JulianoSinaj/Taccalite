@@ -17,8 +17,8 @@ export default function LoyaltyCard({
   const pct = target > 0 ? Math.min(100, Math.round((points / target) * 100)) : 100;
 
   return (
-    <div className="cinematic-shadow relative mx-auto flex aspect-[1.6] w-full max-w-[520px] flex-col justify-between overflow-hidden rounded-[24px] border border-white/20 bg-gradient-to-br from-gold via-[#e8cc84] to-gold-dark p-6 sm:p-10">
-      <div className="absolute inset-0 bg-white/5 opacity-10 mix-blend-overlay" />
+    <div className="cinematic-shadow relative mx-auto flex aspect-[1.6] w-full max-w-[520px] flex-col justify-between overflow-hidden border border-white/20 bg-gradient-to-br from-gold via-[#e8cc84] to-gold-dark p-6 sm:p-10">
+      <div className="absolute inset-0 bg-paper-warm opacity-10 mix-blend-overlay" />
       <div className="bg-noise absolute inset-0 opacity-30" />
 
       <div className="relative z-10 flex items-start justify-between">
@@ -31,7 +31,7 @@ export default function LoyaltyCard({
       </div>
 
       <div className="relative z-10">
-        <h3 className="font-display text-2xl font-bold tracking-tighter text-brown-950 uppercase sm:text-3xl">
+        <h3 className="font-display text-2xl font-bold tracking-[-0.028em] text-brown-950 uppercase sm:text-3xl">
           Taccalite
         </h3>
         <p className="text-[10px] font-bold tracking-[0.2em] text-brown-950/70 uppercase">
@@ -46,7 +46,7 @@ export default function LoyaltyCard({
         <p className="font-display text-4xl font-bold tracking-tight text-brown-950 sm:text-6xl">
           {points}{" "}
           {nextRewardPoints ? (
-            <span className="text-xl font-light opacity-60 sm:text-2xl">/ {nextRewardPoints}</span>
+            <span className="text-xl opacity-60 sm:text-2xl">/ {nextRewardPoints}</span>
           ) : null}
         </p>
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-brown-950/10">
@@ -66,7 +66,7 @@ export default function LoyaltyCard({
               // Server-generated inline SVG (see app/(site)/account/page.tsx); no user HTML.
               dangerouslySetInnerHTML={{ __html: qrSvg }}
             />
-            <p className="font-mono text-[9px] tracking-tight text-brown-950/65">{cardNumber}</p>
+            <p className="font-mono text-[10px] sm:text-[9px] tracking-tight text-brown-950/65">{cardNumber}</p>
           </div>
         ) : (
           <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brown-950/20">

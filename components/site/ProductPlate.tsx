@@ -43,7 +43,7 @@ export default function ProductPlate({
     >
       <span className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-5 text-center">
         {size === "md" && (
-          <span className="text-[0.5625rem] font-semibold tracking-[0.3em] text-[color-mix(in_oklab,var(--acc)_78%,transparent)] uppercase">
+          <span className="text-[0.625rem] sm:text-[0.5625rem] font-semibold tracking-[0.3em] text-[color-mix(in_oklab,var(--acc)_78%,transparent)] uppercase">
             {category}
           </span>
         )}
@@ -58,7 +58,7 @@ export default function ProductPlate({
         {size === "md" && (
           <span className="flex items-center gap-2.5">
             <span className="h-px w-5 bg-[color-mix(in_oklab,var(--acc)_45%,transparent)]" />
-            <span className="text-[0.5rem] font-semibold tracking-[0.26em] text-[color-mix(in_oklab,var(--acc)_60%,transparent)] uppercase">
+            <span className="text-[0.625rem] font-semibold tracking-[0.26em] sm:text-[0.5rem] text-[color-mix(in_oklab,var(--acc)_60%,transparent)] uppercase">
               Dal 1946
             </span>
             <span className="h-px w-5 bg-[color-mix(in_oklab,var(--acc)_45%,transparent)]" />

@@ -32,7 +32,7 @@ function OpenBadge({ state }: { state: OpenState | null }) {
       Aperto ora
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1 text-[10px] font-bold tracking-widest text-cream/60 uppercase">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-paper-warm px-3 py-1 text-[10px] font-bold tracking-widest text-cream/60 uppercase">
       <span className="h-1.5 w-1.5 rounded-full bg-cream/40" />
       Chiuso
     </span>
@@ -138,7 +138,7 @@ export default async function ShopDetailPage({ params }: Params) {
         ]}
       />
       {/* Hero */}
-      <section className="relative flex h-[85vh] items-end overflow-hidden bg-brown-950 px-5 pb-16 sm:px-10 sm:pb-24">
+      <section className="relative flex h-[78svh] min-h-[26rem] items-end overflow-hidden bg-brown-950 px-5 pb-16 sm:px-8 lg:px-12 sm:pb-24">
         <div className="absolute inset-0">
           <Image
             src={shop.image}
@@ -150,7 +150,7 @@ export default async function ShopDetailPage({ params }: Params) {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-brown-950 via-brown-950/30 to-transparent" />
         </div>
-        <Reveal className="relative z-10 mx-auto w-full max-w-7xl">
+        <Reveal className="relative z-10 mx-auto w-full max-w-[88rem]">
           <nav className="mb-6 text-[10px] font-bold tracking-[0.4em] text-gold/70 uppercase">
             <Link href="/" className="hover:text-gold">
               Home
@@ -162,19 +162,19 @@ export default async function ShopDetailPage({ params }: Params) {
             / {shop.name}
           </nav>
           <span className="eyebrow mb-6 block">{shop.specialty}</span>
-          <h1 className="font-display mb-4 text-5xl leading-none tracking-tighter text-white sm:text-6xl md:text-8xl">
+          <h1 className="font-display mb-4 text-5xl leading-none tracking-[-0.028em] text-cream sm:text-6xl md:text-8xl">
             {content.heroLead}
             <br />
             <span className="wonk text-gold">{content.heroItalic}</span>
           </h1>
-          <p className="max-w-2xl text-xl font-light text-cream/70">{shop.tagline}</p>
+          <p className="max-w-2xl text-xl text-cream/70">{shop.tagline}</p>
         </Reveal>
       </section>
 
       {/* Info band */}
-      <section className="relative z-10 bg-brown-900 px-5 py-16 sm:px-10">
-        <RevealStagger className="mx-auto grid max-w-7xl grid-cols-1 gap-8 md:grid-cols-3">
-          <RevealStaggerItem className="rounded-[28px] border border-white/5 bg-brown-800/40 p-8">
+      <section className="relative z-10 bg-brown-900 px-5 py-16 sm:px-8 lg:px-12">
+        <RevealStagger className="mx-auto grid max-w-[88rem] grid-cols-1 gap-8 md:grid-cols-3">
+          <RevealStaggerItem className="border border-white/5 bg-brown-800/40 p-8">
             <Clock className="mb-6 size-8 text-gold" />
             <div className="mb-4 flex flex-wrap items-center gap-3">
               <h3 className="text-sm font-bold tracking-widest text-cream uppercase">
@@ -193,7 +193,7 @@ export default async function ShopDetailPage({ params }: Params) {
               <p className="mt-3 text-xs text-cream/55">Orari da confermare in negozio.</p>
             )}
           </RevealStaggerItem>
-          <RevealStaggerItem className="rounded-[28px] border border-white/5 bg-brown-800/40 p-8">
+          <RevealStaggerItem className="border border-white/5 bg-brown-800/40 p-8">
             <Phone className="mb-6 size-8 text-gold" />
             <h3 className="mb-4 text-sm font-bold tracking-widest text-cream uppercase">
               Contatti diretti
@@ -207,7 +207,7 @@ export default async function ShopDetailPage({ params }: Params) {
               </a>
             </div>
           </RevealStaggerItem>
-          <RevealStaggerItem className="rounded-[28px] border border-white/5 bg-brown-800/40 p-8">
+          <RevealStaggerItem className="border border-white/5 bg-brown-800/40 p-8">
             <MapPin className="mb-6 size-8 text-gold" />
             <h3 className="mb-4 text-sm font-bold tracking-widest text-cream uppercase">
               Indirizzo
@@ -231,21 +231,21 @@ export default async function ShopDetailPage({ params }: Params) {
       </section>
 
       {/* Chi siamo */}
-      <section className="bg-cream px-5 py-32 text-brown-950 sm:px-10 sm:py-48">
-        <div className="mx-auto flex max-w-7xl flex-col items-center gap-16 lg:flex-row lg:gap-24">
+      <section className="bg-cream px-5 py-32 text-brown-950 sm:px-8 lg:px-12 sm:py-48">
+        <div className="mx-auto flex max-w-[88rem] flex-col items-center gap-16 lg:flex-row lg:gap-24">
           <Reveal className="w-full space-y-10 lg:w-1/2">
             <div className="space-y-6">
               <span className="eyebrow eyebrow-dark block">Dedizione e qualità</span>
-              <h2 className="font-display text-4xl leading-[0.95] tracking-tighter sm:text-5xl md:text-7xl">
+              <h2 className="font-display display-lg font-semibold">
                 Chi siamo
               </h2>
             </div>
-            <p className="max-w-xl text-xl leading-relaxed font-light text-brown-900/75">
+            <p className="max-w-xl text-xl leading-relaxed text-brown-700">
               {shop.description}
             </p>
             <ul className="space-y-4">
               {shop.highlights.map((h) => (
-                <li key={h} className="flex items-start gap-4 text-brown-900/80">
+                <li key={h} className="flex items-start gap-4 text-brown-700">
                   <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-gold-dark" />
                   {h}
                 </li>
@@ -266,7 +266,7 @@ export default async function ShopDetailPage({ params }: Params) {
           </Reveal>
           <Reveal delay={0.15} className="w-full lg:w-1/2">
             <div className="relative">
-              <div className="cinematic-shadow relative z-10 aspect-[4/5] overflow-hidden rounded-[32px]">
+              <div className="cinematic-shadow relative z-10 aspect-[4/5] overflow-hidden">
                 <Image
                   src={content.storyImage}
                   alt={content.storyImageAlt}
@@ -282,11 +282,11 @@ export default async function ShopDetailPage({ params }: Params) {
 
       {/* Prodotti */}
       {shopProducts.length > 0 && (
-        <section className="bg-cream-dark px-5 py-32 sm:px-10 sm:py-48">
-          <div className="mx-auto max-w-7xl">
+        <section className="bg-paper-warm px-5 py-16 sm:px-8 lg:px-12 sm:py-48">
+          <div className="mx-auto max-w-[88rem]">
             <Reveal className="mb-16 text-center sm:mb-24">
               <span className="eyebrow eyebrow-dark mb-6 block">Da questo negozio</span>
-              <h2 className="font-display text-5xl tracking-tighter text-brown-950 sm:text-6xl">
+              <h2 className="font-display text-5xl tracking-[-0.028em] text-brown-950 sm:text-6xl">
                 I tesori della dispensa
               </h2>
             </Reveal>
@@ -296,8 +296,8 @@ export default async function ShopDetailPage({ params }: Params) {
                 the price and the buy control already. */}
             <RevealStagger
               className={`grid grid-cols-2 gap-x-6 gap-y-12 sm:gap-x-7 ${
-                shopProducts.length > 2 ? "lg:grid-cols-4" : "lg:mx-auto lg:max-w-3xl"
-              }`}
+ shopProducts.length > 2 ? "lg:grid-cols-4" : "lg:mx-auto lg:max-w-3xl"
+ }`}
             >
               {shopProducts.map((product) => (
                 <RevealStaggerItem key={product.slug}>
@@ -323,8 +323,8 @@ export default async function ShopDetailPage({ params }: Params) {
       )}
 
       {/* Perché sceglierci */}
-      <section className="bg-paper-warm px-5 py-24 sm:px-10 sm:py-32">
-        <RevealStagger className="mx-auto grid max-w-7xl grid-cols-2 gap-12 text-center lg:grid-cols-4">
+      <section className="bg-paper-warm px-5 py-16 sm:px-8 lg:px-12 sm:py-32">
+        <RevealStagger className="mx-auto grid max-w-[88rem] grid-cols-2 gap-12 text-center lg:grid-cols-4">
           {content.features.map((feature) => {
             const Icon = featureIcons[feature.icon];
             return (
@@ -341,10 +341,10 @@ export default async function ShopDetailPage({ params }: Params) {
       </section>
 
       {/* Contatti / prenota */}
-      <section className="bg-cream px-5 py-32 sm:px-10 sm:py-48">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 lg:grid-cols-2 lg:gap-20">
+      <section className="bg-cream px-5 py-16 sm:px-8 lg:px-12 sm:py-48">
+        <div className="mx-auto grid max-w-[88rem] grid-cols-1 items-center gap-16 lg:grid-cols-2 lg:gap-20">
           <Reveal>
-            <div className="cinematic-shadow relative h-[420px] overflow-hidden rounded-[40px] sm:h-[520px]">
+            <div className="cinematic-shadow relative h-[420px] overflow-hidden sm:h-[520px]">
               <Image
                 src={shop.image}
                 alt={shop.imageLabel}
@@ -354,16 +354,16 @@ export default async function ShopDetailPage({ params }: Params) {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-brown-950/50 to-transparent" />
               <div className="absolute bottom-8 left-8">
-                <p className="font-display text-3xl text-white">{shop.name}</p>
+                <p className="font-display text-3xl text-cream">{shop.name}</p>
                 <p className="text-sm text-cream/70">{shop.address}</p>
               </div>
             </div>
           </Reveal>
-          <Reveal delay={0.15} className="card-shadow-soft rounded-[40px] bg-white p-10 sm:p-16">
+          <Reveal delay={0.15} className="card-shadow-soft bg-white p-10 sm:p-16">
             <h3 className="font-display mb-6 text-3xl text-brown-950 sm:text-4xl">
               Vieni a trovarci per una degustazione
             </h3>
-            <p className="mb-10 text-lg leading-relaxed text-brown-900/75">
+            <p className="mb-10 text-lg leading-relaxed text-brown-700">
               Il nostro banco è a tua disposizione per consigli, assaggi e ordini speciali.
               Chiamaci o prenota un tavolo per un&apos;esperienza guidata.
             </p>
@@ -377,14 +377,14 @@ export default async function ShopDetailPage({ params }: Params) {
               </Link>
               <a
                 href={`tel:${shop.phone.replace(/\s/g, "")}`}
-                className="inline-flex w-full items-center justify-center gap-3 rounded-full border border-brown-900/20 px-8 py-4 text-sm font-semibold text-brown-950 transition-colors hover:bg-brown-950 hover:text-cream"
+                className="inline-flex w-full items-center justify-center gap-3 rounded-full border border-rule-strong px-8 py-4 text-sm font-semibold text-brown-950 transition-colors hover:bg-brown-950 hover:text-cream"
               >
                 <Phone className="size-4" />
                 {shop.phone}
               </a>
               <a
                 href={`mailto:${shop.email}`}
-                className="inline-flex w-full items-center justify-center gap-3 rounded-full border border-brown-900/20 px-8 py-4 text-sm font-semibold break-all text-brown-950 transition-colors hover:bg-brown-950 hover:text-cream"
+                className="inline-flex w-full items-center justify-center gap-3 rounded-full border border-rule-strong px-8 py-4 text-sm font-semibold break-all text-brown-950 transition-colors hover:bg-brown-950 hover:text-cream"
               >
                 <Mail className="size-4" />
                 Scrivici
@@ -396,11 +396,11 @@ export default async function ShopDetailPage({ params }: Params) {
 
       {/* Cross-shop CTA */}
       {otherShop && (
-        <section className="bg-brown-900 px-5 py-24 sm:px-10 sm:py-32">
-          <Reveal className="mx-auto max-w-7xl">
+        <section className="bg-brown-900 px-5 py-16 sm:px-8 lg:px-12 sm:py-32">
+          <Reveal className="mx-auto max-w-[88rem]">
             <Link
               href={`/sedi/${otherShop.slug}`}
-              className="group cinematic-shadow relative block h-96 overflow-hidden rounded-[40px]"
+              className="group cinematic-shadow relative block h-96 overflow-hidden"
             >
               <Image
                 src={otherShop.image}
@@ -412,7 +412,7 @@ export default async function ShopDetailPage({ params }: Params) {
               <div className="absolute inset-0 bg-gradient-to-r from-brown-950 via-brown-950/60 to-transparent" />
               <div className="relative flex h-full max-w-2xl flex-col justify-center space-y-6 p-8 sm:p-16">
                 <span className="eyebrow">Scopri l&apos;altro negozio</span>
-                <h3 className="font-display text-3xl text-white sm:text-5xl">
+                <h3 className="font-display text-3xl text-cream sm:text-5xl">
                   {otherShop.name}:
                   <br />
                   {otherShop.specialty}

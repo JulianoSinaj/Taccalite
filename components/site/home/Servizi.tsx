@@ -48,7 +48,7 @@ const servizi = [
 
 export default function Servizi() {
   return (
-    <section className="bg-paper-warm px-5 py-24 sm:px-8 sm:py-32 lg:px-12">
+    <section className="bg-paper-warm px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
       <div className="mx-auto max-w-[88rem]">
         <div className="flex flex-col justify-between gap-7 md:flex-row md:items-end">
           <div>

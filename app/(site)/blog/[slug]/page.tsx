@@ -4,7 +4,8 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import BlogCard from "@/components/BlogCard";
-import ImagePlaceholder from "@/components/ImagePlaceholder";
+import ProductPlate from "@/components/site/ProductPlate";
+import { categoryAccent } from "@/lib/categories";
 import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
 import JsonLd from "@/components/JsonLd";
 import { articleSchema, breadcrumbSchema } from "@/lib/seo";
@@ -55,7 +56,7 @@ export default async function BlogPostPage({ params }: Params) {
       />
       {/* Editorial header band */}
       <section className="px-5 pt-32 pb-12 sm:px-8 sm:pt-40 lg:px-12">
-        <Reveal className="mx-auto max-w-4xl">
+        <Reveal className="mx-auto max-w-[46rem]">
           <Link
             href="/blog"
             className="group inline-flex items-center gap-2 text-[0.6875rem] font-semibold tracking-[0.22em] text-taupe uppercase transition-colors hover:text-brown-950"
@@ -64,7 +65,11 @@ export default async function BlogPostPage({ params }: Params) {
             Tutte le news
           </Link>
           <div className="mt-10 flex flex-wrap items-center gap-4">
-            <span className="bg-gold px-4 py-1.5 text-[0.5625rem] font-semibold tracking-[0.2em] text-on-gold uppercase">
+            <span
+              style={{ "--acc": categoryAccent(post.category) } as React.CSSProperties}
+              className="inline-flex items-center gap-2.5 bg-[color-mix(in_oklab,var(--acc)_14%,var(--paper))] px-4 py-1.5 text-[0.625rem] sm:text-[0.5625rem] font-semibold tracking-[0.2em] text-[var(--acc)] uppercase"
+            >
+              <span aria-hidden className="size-[5px] rotate-45 bg-[var(--acc)]" />
               {post.category}
             </span>
             <span className="text-[0.6875rem] font-semibold tracking-[0.16em] text-taupe uppercase">
@@ -78,33 +83,46 @@ export default async function BlogPostPage({ params }: Params) {
       </section>
 
       {/* Body */}
-      <article className="mx-auto max-w-4xl px-5 pb-24 sm:px-8 sm:pb-32">
+      <article className="mx-auto max-w-[46rem] px-5 pb-24 sm:px-8 sm:pb-32">
         <Reveal>
-          {post.image ? (
-            <div className="cinematic-shadow relative aspect-[16/9] overflow-hidden rounded-[32px]">
-              <Image
-                src={post.image}
-                alt={post.title}
-                fill
-                preload
-                className="object-cover"
-                sizes="(max-width: 896px) 100vw, 896px"
-              />
+          {/* Mounted, not floated: a hairline offset behind the picture, the
+              same print mount the homepage hero uses. The rounded slab with a
+              cinematic drop shadow belonged to the old dark art direction. */}
+          <div className="relative">
+            <span
+              aria-hidden
+              className="absolute -top-3 -right-3 bottom-3 left-3 border border-gold/45"
+            />
+            <div className="relative aspect-[16/9] overflow-hidden bg-paper-deep">
+              {post.image ? (
+                <Image
+                  src={post.image}
+                  alt={post.title}
+                  fill
+                  preload
+                  className="object-cover"
+                  sizes="(max-width: 896px) 100vw, 896px"
+                />
+              ) : (
+                <ProductPlate
+                  name={post.title}
+                  category={post.category}
+                  seed={post.slug}
+                />
+              )}
             </div>
-          ) : (
-            <ImagePlaceholder label={post.imageLabel} ratio="wide" className="rounded-[32px]" />
-          )}
+          </div>
         </Reveal>
         <Reveal
           delay={0.1}
-          className="mx-auto mt-14 max-w-3xl space-y-7 text-lg leading-relaxed font-light text-brown-900/85 sm:text-xl"
+          className="mt-16 space-y-7 text-lg leading-[1.75] text-brown-700"
         >
           {post.content.map((paragraph, i) => (
             <p key={i}>{paragraph}</p>
           ))}
         </Reveal>
-        <Reveal delay={0.15} className="mx-auto mt-16 max-w-3xl border-t border-brown-900/10 pt-10">
-          <p className="text-sm font-semibold text-brown-800/85">
+        <Reveal delay={0.15} className="mt-16 border-t border-rule pt-10">
+          <p className="text-[0.9375rem] text-brown-700">
             Vuoi assaggiare di persona? Passa in bottega o{" "}
             <Link href="/prenotazioni" className="underline-draw font-bold text-gold-deep">
               prenota un tavolo
@@ -116,15 +134,18 @@ export default async function BlogPostPage({ params }: Params) {
 
       {/* Altre storie */}
       {otherPosts.length > 0 && (
-        <section className="bg-cream-dark px-5 py-24 sm:px-10 sm:py-32">
-          <div className="mx-auto max-w-7xl">
-            <Reveal className="mb-14 space-y-5">
-              <span className="eyebrow eyebrow-dark block">Continua a leggere</span>
-              <h2 className="font-display text-4xl tracking-tighter text-brown-950 sm:text-5xl">
-                Altre storie dalla bottega
+        <section className="bg-paper-warm px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+          <div className="mx-auto max-w-[88rem]">
+            <Reveal className="mb-14 border-b border-rule pb-10">
+              <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
+                <span aria-hidden className="h-px w-10 bg-gold" />
+                Continua a leggere
+              </p>
+              <h2 className="font-display display-lg mt-7 font-semibold text-brown-950">
+                Altre storie <span className="wonk text-gold-deep">dalla bottega</span>
               </h2>
             </Reveal>
-            <RevealStagger className="grid grid-cols-1 gap-10 md:grid-cols-2">
+            <RevealStagger className="grid grid-cols-1 gap-x-8 gap-y-14 md:grid-cols-2 lg:grid-cols-3">
               {otherPosts.map((p) => (
                 <RevealStaggerItem key={p.slug}>
                   <BlogCard post={p} />

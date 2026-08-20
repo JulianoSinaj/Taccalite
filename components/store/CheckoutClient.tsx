@@ -7,8 +7,10 @@ import { useCart } from "./cart";
 import { formatEuro } from "@/lib/format";
 
 const inputCls =
-  "w-full rounded-xl border border-brown-900/15 bg-cream-dark/40 px-4 py-3 text-sm text-brown-950 focus:border-gold-dark focus:outline-none";
-const labelCls = "eyebrow eyebrow-dark block mb-1.5";
+  "w-full  border border-rule-strong bg-paper-warm/40 px-4 py-3.5 text-sm text-brown-950 focus:border-gold-dark focus:outline-none";
+// Field labels, not section eyebrows: no leading rule (see globals.css).
+const labelCls =
+  "mb-1.5 block text-[0.625rem] font-semibold tracking-[0.22em] text-gold-deep uppercase";
 
 type CheckoutUser = { name: string; email: string | null; phone: string | null };
 
@@ -130,10 +132,10 @@ export default function CheckoutClient({
 
   if (items.length === 0) {
     return (
-      <section className="flex min-h-[70vh] items-center justify-center bg-cream px-5 pt-32 pb-20 text-center">
+      <section className="flex min-h-[65svh] items-center justify-center bg-cream px-5 pt-32 pb-20 text-center">
         <div>
-          <h1 className="font-display text-4xl tracking-tighter text-brown-950">Il carrello è vuoto</h1>
-          <p className="mt-4 text-brown-900/70">Aggiungi le nostre specialità dal negozio online.</p>
+          <h1 className="font-display text-4xl tracking-[-0.028em] text-brown-950">Il carrello è vuoto</h1>
+          <p className="mt-4 text-brown-700">Aggiungi le nostre specialità dal negozio online.</p>
           <Link
             href="/negozio"
             className="mt-8 inline-flex rounded-full bg-gold px-8 py-3.5 text-sm font-semibold text-brown-950 hover:bg-gold-dark"
@@ -146,55 +148,84 @@ export default function CheckoutClient({
   }
 
   return (
-    <section className="bg-cream px-5 pt-32 pb-24 sm:px-10 sm:pt-40">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-12 lg:grid-cols-2">
+    <section className="bg-cream px-5 pt-28 pb-24 sm:px-8 sm:pt-40 lg:px-12">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-12">
         {/* Cart */}
         <div>
-          <h1 className="font-display mb-8 text-4xl tracking-tighter text-brown-950">Il tuo ordine</h1>
+          <h1 className="font-display mb-6 text-[2rem] tracking-[-0.028em] text-brown-950 sm:mb-8 sm:text-4xl">
+            Il tuo ordine
+          </h1>
           {cancelled && (
             <div
               role="status"
-              className="mb-8 rounded-2xl border border-gold-dark/40 bg-gold/15 px-5 py-4 text-sm text-brown-900"
+              className="mb-8 border border-gold-dark/40 bg-gold/15 px-5 py-4 text-sm text-brown-900"
             >
               <p className="font-semibold text-brown-950">Pagamento annullato</p>
-              <p className="mt-1 text-brown-900/80">
+              <p className="mt-1 text-brown-700">
                 Nessun addebito è stato effettuato. Il tuo carrello è ancora qui: puoi riprovare quando vuoi.
               </p>
             </div>
           )}
           <div className="space-y-4">
+            {/* Two rows on a phone. Name, stepper, line total and a bin on one
+                375px row left about sixty pixels for the name, so "Salame di
+                Fabriano" arrived as four wrapped lines beside a stepper that was
+                itself too small to hit. Splitting the row costs one line of
+                height and gives the name the full measure. */}
             {items.map((i) => (
-              <div key={i.slug} className="flex items-center gap-4 rounded-2xl border border-brown-900/10 bg-white/60 p-4">
-                <div className="flex-1">
-                  <p className="font-display text-lg text-brown-950">{i.name}</p>
-                  <p className="text-sm text-brown-800/60">
-                    {formatEuro(i.priceCents)}
-                    {i.unit ? ` / ${i.unit}` : ""}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 rounded-full border border-brown-900/10 bg-cream-dark/50 p-1">
-                  <button type="button" aria-label="Riduci" onClick={() => setQty(i.slug, i.qty - 1)} className="flex h-8 w-8 items-center justify-center rounded-full bg-brown-950 text-cream">
-                    <Minus className="size-3.5" />
+              <div key={i.slug} className="border border-rule bg-paper-warm p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-display text-lg leading-tight text-brown-950">{i.name}</p>
+                    <p className="mt-0.5 text-sm text-taupe">
+                      {formatEuro(i.priceCents)}
+                      {i.unit ? ` / ${i.unit}` : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`Rimuovi ${i.name}`}
+                    onClick={() => remove(i.slug)}
+                    className="tap -mt-1 -mr-1 flex size-8 shrink-0 items-center justify-center text-taupe transition-colors hover:text-danger focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
+                  >
+                    <Trash2 className="size-4" />
                   </button>
-                  <span className="w-8 text-center font-bold text-brown-950">{i.qty}</span>
-                  <button type="button" aria-label="Aumenta" onClick={() => setQty(i.slug, i.qty + 1)} className="flex h-8 w-8 items-center justify-center rounded-full bg-brown-950 text-cream">
-                    <Plus className="size-3.5" />
-                  </button>
                 </div>
-                <p className="w-20 text-right font-bold text-brown-950">{formatEuro(i.priceCents * i.qty)}</p>
-                <button type="button" aria-label="Rimuovi" onClick={() => remove(i.slug)} className="text-brown-800/50 hover:text-red-600">
-                  <Trash2 className="size-4" />
-                </button>
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1 rounded-full border border-rule bg-paper/60 p-1">
+                    <button
+                      type="button"
+                      aria-label={`Riduci ${i.name}`}
+                      onClick={() => setQty(i.slug, i.qty - 1)}
+                      className="flex size-9 items-center justify-center rounded-full bg-brown-950 text-cream focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
+                    >
+                      <Minus className="size-3.5" />
+                    </button>
+                    <span className="w-8 text-center font-bold text-brown-950 tabular-nums">{i.qty}</span>
+                    <button
+                      type="button"
+                      aria-label={`Aumenta ${i.name}`}
+                      onClick={() => setQty(i.slug, i.qty + 1)}
+                      className="flex size-9 items-center justify-center rounded-full bg-brown-950 text-cream focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
+                    >
+                      <Plus className="size-3.5" />
+                    </button>
+                  </div>
+                  <p className="font-bold text-brown-950 tabular-nums">{formatEuro(i.priceCents * i.qty)}</p>
+                </div>
               </div>
             ))}
           </div>
 
           {/* Coupon */}
-          <div className="mt-6 rounded-2xl border border-brown-900/10 bg-white/50 p-4">
+          <div className="mt-6 border border-rule bg-paper-warm p-4">
             <label className={labelCls} htmlFor="coupon">Codice sconto</label>
             <div className="flex gap-2">
               <input
                 id="coupon"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
                 value={couponInput}
                 onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                 onKeyDown={(e) => {
@@ -210,7 +241,7 @@ export default function CheckoutClient({
                 type="button"
                 onClick={applyCoupon}
                 disabled={couponBusy || !couponInput.trim()}
-                className="shrink-0 rounded-xl bg-brown-950 px-5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900 disabled:opacity-50"
+                className="shrink-0 bg-brown-950 px-5 py-3.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900 disabled:opacity-50"
               >
                 {couponBusy ? "…" : "Applica"}
               </button>
@@ -219,15 +250,15 @@ export default function CheckoutClient({
             {coupon && (
               <p className="mt-2 flex items-center justify-between text-xs font-medium text-emerald-700">
                 <span>Codice {coupon.code} applicato ✓</span>
-                <button type="button" onClick={() => { setApplied(null); setCouponInput(""); }} className="underline">
+                <button type="button" onClick={() => { setApplied(null); setCouponInput(""); }} className="py-2 pl-3 underline">
                   Rimuovi
                 </button>
               </p>
             )}
           </div>
 
-          <div className="mt-6 space-y-2 border-t border-brown-900/10 pt-6 text-sm">
-            <div className="flex justify-between text-brown-800/80">
+          <div className="mt-6 space-y-2 border-t border-rule pt-6 text-sm">
+            <div className="flex justify-between text-brown-700">
               <span>Subtotale</span>
               <span>{formatEuro(subtotalCents)}</span>
             </div>
@@ -237,7 +268,7 @@ export default function CheckoutClient({
                 <span>−{formatEuro(discountCents)}</span>
               </div>
             )}
-            <div className="flex justify-between text-brown-800/80">
+            <div className="flex justify-between text-brown-700">
               <span>Spedizione</span>
               <span>
                 {fulfilment !== "shipping"
@@ -255,7 +286,7 @@ export default function CheckoutClient({
         </div>
 
         {/* Details form */}
-        <form onSubmit={handleSubmit} className="space-y-6 rounded-[28px] border border-brown-900/10 bg-white/70 p-8 sm:p-10">
+        <form onSubmit={handleSubmit} className="space-y-6 border border-rule bg-paper p-5 sm:p-8 lg:p-10">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
               <label className={labelCls} htmlFor="name">Nome completo</label>
@@ -279,9 +310,10 @@ export default function CheckoutClient({
                   key={f}
                   type="button"
                   onClick={() => setFulfilment(f)}
-                  className={`rounded-xl border p-3 text-sm font-semibold ${
-                    fulfilment === f ? "border-gold-dark bg-gold/15 text-brown-950" : "border-brown-900/12 text-brown-800/70"
-                  }`}
+                  aria-pressed={fulfilment === f}
+                  className={` border px-3 py-4 text-sm font-semibold ${
+ fulfilment === f ? "border-gold-dark bg-gold/15 text-brown-950" : "border-rule text-taupe"
+ }`}
                 >
                   {f === "pickup" ? "Ritiro in bottega" : `Spedizione (+${formatEuro(shippingCents)})`}
                 </button>
@@ -323,7 +355,7 @@ export default function CheckoutClient({
           <input type="text" name="company" tabIndex={-1} autoComplete="off" aria-hidden className="absolute -left-[9999px] h-0 w-0" />
 
           {loyaltyEnabled && pointsPreview > 0 && (
-            <p className="rounded-xl bg-gold/10 px-4 py-3 text-sm text-brown-950">
+            <p className="bg-gold/10 px-4 py-3 text-sm text-brown-950">
               Con questo ordine guadagnerai ~{pointsPreview}{" "}
               {pointsPreview === 1 ? "punto" : "punti"} fedeltà.
             </p>
@@ -338,7 +370,7 @@ export default function CheckoutClient({
           >
             {busy ? "Elaborazione…" : `Paga ${formatEuro(totalCents)}`}
           </button>
-          <p className="text-center text-xs text-brown-800/60">
+          <p className="text-center text-xs text-taupe">
             Pagamento sicuro. In assenza di configurazione, l&apos;ordine viene registrato in
             modalità dimostrativa.
           </p>

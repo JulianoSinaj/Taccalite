@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
@@ -21,6 +21,7 @@ type Consent = "accepted" | "essential";
 export default function CookieConsent() {
   const [visible, setVisible] = useState(false);
   const reduceMotion = useReducedMotion();
+  const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -30,6 +31,36 @@ export default function CookieConsent() {
       setVisible(true);
     }
   }, []);
+
+  /**
+   * Publish this bar's height as `--consent-h` so the floating cart bar can
+   * stand on top of it instead of underneath.
+   *
+   * On the desktop the two are one line and one pill at opposite ends of the
+   * screen and never met. On a phone the notice wraps to three lines and the
+   * cart bar — the control that carries the sale — was drawn behind it, fully
+   * covered, on every first visit. Measured rather than assumed, because the
+   * height depends on where the sentence wraps.
+   */
+  useEffect(() => {
+    const node = barRef.current;
+    const root = document.documentElement;
+    if (!visible || !node) {
+      root.style.removeProperty("--consent-h");
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      // `offsetHeight`, not `contentRect`: the bar's own padding — including the
+      // safe-area inset it adds on a notched phone — is part of what the cart
+      // bar has to clear.
+      root.style.setProperty("--consent-h", `${node.offsetHeight}px`);
+    });
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--consent-h");
+    };
+  }, [visible]);
 
   function choose(value: Consent) {
     try {
@@ -45,11 +76,12 @@ export default function CookieConsent() {
     <AnimatePresence>
       {visible && (
         <motion.div
+          ref={barRef}
           role="dialog"
           aria-live="polite"
           aria-label="Preferenze cookie"
           // Above the header (80) and the mobile menu (75) so it stays dismissible.
-          className="vt-consent fixed inset-x-0 bottom-0 z-[95] border-t border-rule bg-paper/95 backdrop-blur-xl"
+          className="vt-consent px-safe pb-safe fixed inset-x-0 bottom-0 z-[95] border-t border-rule bg-paper/95 backdrop-blur-xl"
           initial={reduceMotion ? { opacity: 0 } : { y: "100%" }}
           animate={reduceMotion ? { opacity: 1 } : { y: "0%" }}
           exit={reduceMotion ? { opacity: 0 } : { y: "100%" }}
@@ -72,18 +104,24 @@ export default function CookieConsent() {
                 Privacy
               </Link>
             </p>
-            <div className="flex shrink-0 items-center gap-5">
+            {/* Reversed on a phone: the accept button leads, because a thumb
+                reaching up from the bottom edge hits the *last* item in a column
+                first and the dismissal is what the visitor is reaching for.
+                Both are full-width rows there rather than two small words side
+                by side — this bar is the first thing covering the page, so
+                getting rid of it should not need aim. */}
+            <div className="flex shrink-0 flex-col-reverse gap-2 sm:flex-row sm:items-center sm:gap-5">
               <button
                 type="button"
                 onClick={() => choose("essential")}
-                className="text-[0.6875rem] font-semibold tracking-[0.16em] text-taupe uppercase underline-offset-4 transition-colors hover:text-brown-950 hover:underline focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
+                className="rounded-full border border-rule-strong px-6 py-3 text-[0.6875rem] font-semibold tracking-[0.16em] text-taupe uppercase underline-offset-4 transition-colors hover:text-brown-950 hover:underline focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none sm:border-0 sm:px-0 sm:py-1"
               >
                 Solo necessari
               </button>
               <button
                 type="button"
                 onClick={() => choose("accepted")}
-                className="group/ck relative overflow-hidden rounded-full bg-brown-950 px-6 py-2.5 text-[0.6875rem] font-semibold tracking-[0.16em] text-cream uppercase focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="group/ck relative overflow-hidden rounded-full bg-brown-950 px-6 py-3.5 text-[0.6875rem] font-semibold tracking-[0.16em] text-cream uppercase focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:outline-none sm:py-2.5"
               >
                 <span
                   aria-hidden

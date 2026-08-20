@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Reveal from "@/components/Reveal";
 
 const inputClasses =
-  "w-full rounded-xl border border-brown-900/15 bg-cream-dark/40 px-4 py-3.5 text-sm text-brown-950 transition-colors placeholder:text-taupe/60 focus:border-gold-dark focus:outline-none";
+  "w-full  border border-rule-strong bg-paper-warm/40 px-4 py-3.5 text-sm text-brown-950 transition-colors placeholder:text-taupe/60 focus:border-gold-dark focus:outline-none";
 
 export default function AuthForms() {
   const router = useRouter();
@@ -47,9 +47,9 @@ export default function AuthForms() {
   }
 
   return (
-    <div className="px-5 pt-32 pb-28 sm:px-8 sm:pt-40">
+    <div className="px-5 pt-28 pb-20 sm:px-8 sm:pt-40 sm:pb-28">
       <Reveal className="mx-auto max-w-xl">
-        <div className="mb-12 space-y-5 text-center">
+        <div className="mb-8 space-y-4 text-center sm:mb-12 sm:space-y-5">
           <p className="inline-flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
             <span aria-hidden className="h-px w-10 bg-gold" />
             Il tuo account
@@ -64,16 +64,17 @@ export default function AuthForms() {
           </p>
         </div>
 
-        <div className="card-shadow-soft space-y-6 border border-rule bg-paper p-8 sm:p-12">
-          <div className="flex gap-2">
+        <div className="card-shadow-soft space-y-6 border border-rule bg-paper p-5 sm:p-8 lg:p-12">
+          <div className="grid grid-cols-2 gap-2 sm:flex">
             <button
               type="button"
               onClick={() => {
                 setMode("login");
                 setError(null);
               }}
-              className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                mode === "login" ? "bg-brown-950 text-cream" : "text-brown-800/75 hover:text-brown-950"
+              aria-pressed={mode === "login"}
+              className={`rounded-full px-5 py-3 text-sm font-semibold transition-colors sm:py-2 ${
+                mode === "login" ? "bg-brown-950 text-cream" : "border border-rule text-taupe hover:text-brown-950 sm:border-0"
               }`}
             >
               Accedi
@@ -84,8 +85,9 @@ export default function AuthForms() {
                 setMode("register");
                 setError(null);
               }}
-              className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                mode === "register" ? "bg-brown-950 text-cream" : "text-brown-800/75 hover:text-brown-950"
+              aria-pressed={mode === "register"}
+              className={`rounded-full px-5 py-3 text-sm font-semibold transition-colors sm:py-2 ${
+                mode === "register" ? "bg-brown-950 text-cream" : "border border-rule text-taupe hover:text-brown-950 sm:border-0"
               }`}
             >
               Registrati
@@ -145,8 +147,8 @@ export default function AuthForms() {
                   </label>
                   <input id="phone" name="phone" type="tel" placeholder="333 123 4567" className={inputClasses} />
                 </div>
-                <label className="flex items-start gap-3 text-sm text-brown-900/80">
-                  <input type="checkbox" name="marketingConsent" className="mt-1 h-4 w-4 rounded accent-brown-950" />
+                <label className="flex items-start gap-3 py-1.5 text-sm text-brown-700">
+                  <input type="checkbox" name="marketingConsent" className="mt-0.5 size-5 shrink-0 rounded accent-brown-950" />
                   Desidero ricevere novità e inviti alle degustazioni via email.
                 </label>
               </>

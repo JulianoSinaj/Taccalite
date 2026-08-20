@@ -21,7 +21,7 @@ export default function Diario({ posts }: { posts: DiarioPost[] }) {
   if (posts.length === 0) return null;
 
   return (
-    <section className="bg-paper-warm px-5 py-24 sm:px-8 sm:py-32 lg:px-12">
+    <section className="bg-paper-warm px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
       <div className="mx-auto max-w-[88rem]">
         <div className="flex flex-col justify-between gap-7 border-b border-rule pb-10 md:flex-row md:items-end">
           <div>
@@ -35,7 +35,7 @@ export default function Diario({ posts }: { posts: DiarioPost[] }) {
           </div>
           <Link
             href="/blog"
-            className="group inline-flex shrink-0 items-center gap-3 border-b border-gold/50 pb-1 text-[0.6875rem] font-semibold tracking-[0.2em] text-brown-950 uppercase transition-[gap,color] duration-500 hover:gap-5 hover:text-gold-deep focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
+            className="tap group inline-flex shrink-0 items-center gap-3 border-b border-gold/50 pb-1 text-[0.6875rem] font-semibold tracking-[0.2em] text-brown-950 uppercase transition-[gap,color] duration-500 hover:gap-5 hover:text-gold-deep focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
           >
             Tutte le storie
             <ArrowRight className="size-3.5" aria-hidden />
@@ -99,7 +99,7 @@ export default function Diario({ posts }: { posts: DiarioPost[] }) {
 
                 <Link
                   href={`/blog/${post.slug}`}
-                  className="mt-5 inline-flex items-center gap-2.5 self-start border-b border-gold/50 pb-1 text-[0.6875rem] font-semibold tracking-[0.18em] text-brown-950 uppercase transition-[gap] duration-500 hover:gap-4 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
+                  className="tap mt-5 inline-flex items-center gap-2.5 self-start border-b border-gold/50 pb-1 text-[0.6875rem] font-semibold tracking-[0.18em] text-brown-950 uppercase transition-[gap] duration-500 hover:gap-4 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
                 >
                   Scopri di più
                   <ArrowRight className="size-3.5 text-gold-deep" aria-hidden />

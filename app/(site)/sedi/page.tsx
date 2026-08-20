@@ -206,7 +206,7 @@ export default async function NegoziPage() {
                     ) : (
                       <a
                         href={telHref(shop.phone)}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-paper-warm px-3 py-1 text-[0.625rem] font-semibold tracking-[0.16em] text-taupe uppercase transition-colors hover:text-brown-950"
+                        className="tap inline-flex items-center gap-1.5 rounded-full bg-paper-warm px-3 py-2 text-[0.625rem] font-semibold tracking-[0.16em] text-taupe uppercase transition-colors hover:text-brown-950"
                       >
                         <Phone className="size-3" />
                         Chiama
@@ -230,15 +230,15 @@ export default async function NegoziPage() {
       </PageHero>
 
       {/* ── Map + locator ──────────────────────────────────────────────── */}
-      <section id="mappa" className="scroll-mt-24 bg-paper px-5 py-24 sm:px-10 sm:py-32">
-        <div className="mx-auto max-w-7xl">
+      <section id="mappa" className="scroll-mt-24 bg-paper px-5 py-16 sm:px-8 lg:px-12 sm:py-32">
+        <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-14 max-w-3xl">
             <span className="eyebrow eyebrow-dark mb-6 block">La mappa</span>
-            <h2 className="font-display text-4xl leading-[0.95] tracking-tighter text-brown-950 sm:text-5xl md:text-6xl">
+            <h2 className="font-display display-lg font-semibold text-brown-950">
               Scegli la bottega,
               <span className="wonk text-gold-deep"> ti portiamo lì.</span>
             </h2>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed font-light text-brown-900/70">
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-brown-700">
               Tocca una bottega per vederla sulla mappa e avviare le indicazioni dal punto in cui
               ti trovi.
             </p>
@@ -250,17 +250,17 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── Weekly hours, side by side ─────────────────────────────────── */}
-      <section id="orari" className="scroll-mt-24 bg-paper-warm px-5 py-24 sm:px-10 sm:py-32">
-        <div className="mx-auto max-w-7xl">
+      <section id="orari" className="scroll-mt-24 bg-paper-warm px-5 py-16 sm:px-8 lg:px-12 sm:py-32">
+        <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-14 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
               <span className="eyebrow eyebrow-dark mb-6 block">Orari di apertura</span>
-              <h2 className="font-display text-4xl leading-[0.95] tracking-tighter text-brown-950 sm:text-5xl md:text-6xl">
+              <h2 className="font-display display-lg font-semibold text-brown-950">
                 Quando siamo
                 <span className="wonk text-gold-deep"> al banco</span>
               </h2>
             </div>
-            <p className="max-w-sm text-sm leading-relaxed text-brown-900/65">
+            <p className="max-w-sm text-sm leading-relaxed text-brown-700">
               Nei giorni festivi gli orari possono variare: se vieni da lontano, chiamaci prima di
               metterti in viaggio.
             </p>
@@ -273,21 +273,21 @@ export default async function NegoziPage() {
               return (
                 <RevealStaggerItem
                   key={shop.slug}
-                  className="rounded-[28px] border border-brown-900/10 bg-white/60 p-7 sm:p-9"
+                  className="border border-rule bg-paper p-7 sm:p-9"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <span className="eyebrow eyebrow-dark mb-3 block">{shop.specialty}</span>
-                      <h3 className="font-display text-3xl leading-tight tracking-tight text-brown-950">
+                      <h3 className="font-display text-[1.75rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">
                         {shop.name}
                       </h3>
                     </div>
                     <OpenPill state={state} className="mt-1" />
                   </div>
 
-                  <dl className="mt-8 divide-y divide-brown-900/10 border-y border-brown-900/10">
+                  <dl className="mt-8 divide-y divide-rule border-y border-rule">
                     {shop.hours.length === 0 && (
-                      <div className="py-4 text-sm text-brown-900/65">
+                      <div className="py-4 text-sm text-brown-700">
                         Orari in aggiornamento — chiamaci per conferma.
                       </div>
                     )}
@@ -297,34 +297,37 @@ export default async function NegoziPage() {
                         <div
                           key={`${row.label}-${i}`}
                           className={`flex items-baseline justify-between gap-6 py-4 ${
-                            isToday ? "-mx-4 rounded-2xl bg-gold/15 px-4" : ""
-                          }`}
+ isToday ? "-mx-4 bg-gold/15 px-4" : ""
+ }`}
                         >
                           <dt className="flex items-center gap-3 text-sm font-semibold text-brown-950">
                             {row.label}
                             {isToday && (
-                              <span className="rounded-full bg-brown-950 px-2 py-0.5 text-[9px] font-bold tracking-widest text-cream uppercase">
+                              <span className="rounded-full bg-brown-950 px-2 py-0.5 text-[10px] sm:text-[9px] font-bold tracking-widest text-cream uppercase">
                                 Oggi
                               </span>
                             )}
                           </dt>
-                          <dd className="text-right text-sm text-brown-900/75">{row.value}</dd>
+                          <dd className="text-right text-sm text-brown-700">{row.value}</dd>
                         </div>
                       );
                     })}
                   </dl>
 
                   {!shop.hoursConfirmed && (
-                    <p className="mt-4 text-xs text-brown-900/55">Orari da confermare in negozio.</p>
+                    <p className="mt-4 text-xs text-taupe">Orari da confermare in negozio.</p>
                   )}
 
-                  <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm font-semibold text-brown-800/85">
-                    <a href={telHref(shop.phone)} className="inline-flex items-center gap-2 hover:text-brown-950">
-                      <Phone className="size-4 text-gold-deep" />
+                  <div className="mt-6 flex flex-col gap-3 text-sm font-semibold text-brown-700 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6">
+                    <a
+                      href={telHref(shop.phone)}
+                      className="inline-flex items-center justify-center gap-2 rounded-full bg-brown-950 px-5 py-3.5 text-cream transition-colors hover:bg-brown-800 sm:justify-start sm:rounded-none sm:bg-transparent sm:px-0 sm:py-0 sm:text-brown-700 sm:hover:bg-transparent sm:hover:text-brown-950"
+                    >
+                      <Phone className="size-4 text-gold sm:text-gold-deep" />
                       {shop.phone}
                     </a>
-                    <span className="inline-flex items-center gap-2">
-                      <MapPin className="size-4 text-gold-deep" />
+                    <span className="inline-flex items-start gap-2">
+                      <MapPin className="mt-0.5 size-4 shrink-0 text-gold-deep" />
                       {shop.address}
                     </span>
                   </div>
@@ -336,11 +339,11 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── How to get there ───────────────────────────────────────────── */}
-      <section id="come-arrivare" className="scroll-mt-24 bg-paper px-5 py-24 sm:px-10 sm:py-32">
-        <div className="mx-auto max-w-7xl">
+      <section id="come-arrivare" className="scroll-mt-24 bg-paper px-5 py-16 sm:px-8 lg:px-12 sm:py-32">
+        <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-14 max-w-3xl">
             <span className="eyebrow eyebrow-dark mb-6 block">Come arrivare</span>
-            <h2 className="font-display text-4xl leading-[0.95] tracking-tighter text-brown-950 sm:text-5xl md:text-6xl">
+            <h2 className="font-display display-lg font-semibold text-brown-950">
               A piedi, in auto
               <span className="wonk text-gold-deep"> o in autobus</span>
             </h2>
@@ -353,15 +356,15 @@ export default async function NegoziPage() {
               return (
                 <Reveal
                   key={shop.slug}
-                  className="rounded-[28px] border border-brown-900/10 bg-white/50 p-7 sm:p-9"
+                  className="border border-rule bg-paper-warm p-7 sm:p-9"
                 >
                   <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-12">
                     <div className="lg:w-[30%]">
                       <span className="eyebrow eyebrow-dark mb-3 block">{shop.specialty}</span>
-                      <h3 className="font-display text-3xl leading-tight tracking-tight text-brown-950">
+                      <h3 className="font-display text-[1.75rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">
                         {shop.name}
                       </h3>
-                      <p className="mt-3 flex items-start gap-2 text-sm font-semibold text-brown-800/80">
+                      <p className="mt-3 flex items-start gap-2 text-sm font-semibold text-brown-700">
                         <MapPin className="mt-0.5 size-4 shrink-0 text-gold-deep" />
                         {shop.address}
                       </p>
@@ -387,13 +390,13 @@ export default async function NegoziPage() {
                             <Icon className="size-4 text-gold-deep" />
                             {label}
                           </dt>
-                          <dd className="text-sm leading-relaxed text-brown-900/70">{text}</dd>
+                          <dd className="text-sm leading-relaxed text-brown-700">{text}</dd>
                         </div>
                       ))}
                     </dl>
                   </div>
                   {d.note && (
-                    <p className="mt-6 border-t border-brown-900/10 pt-5 text-xs text-brown-900/55">
+                    <p className="mt-6 border-t border-rule pt-5 text-xs text-taupe">
                       {d.note}
                     </p>
                   )}
@@ -405,32 +408,32 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── FAQ ────────────────────────────────────────────────────────── */}
-      <section id="faq" className="scroll-mt-24 bg-paper-warm px-5 py-24 sm:px-10 sm:py-32">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-20">
+      <section id="faq" className="scroll-mt-24 bg-paper-warm px-5 py-16 sm:px-8 lg:px-12 sm:py-32">
+        <div className="mx-auto grid max-w-[88rem] grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-20">
           <Reveal className="lg:col-span-4">
             <span className="eyebrow eyebrow-dark mb-6 block">Domande frequenti</span>
-            <h2 className="font-display text-4xl leading-[0.95] tracking-tighter text-brown-950 sm:text-5xl">
+            <h2 className="font-display display-lg font-semibold text-brown-950">
               Prima di
               <span className="wonk text-gold-deep"> passare</span>
             </h2>
-            <p className="mt-6 text-sm leading-relaxed text-brown-900/65">
+            <p className="mt-6 text-sm leading-relaxed text-brown-700">
               Non trovi la risposta? Chiamaci: al banco rispondiamo volentieri.
             </p>
           </Reveal>
           <Reveal delay={0.1} className="lg:col-span-8">
-            <div className="divide-y divide-brown-900/10 border-y border-brown-900/10">
+            <div className="divide-y divide-rule border-y border-rule">
               {faqs.map((f) => (
                 <details key={f.question} className="group py-2">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-4 text-left [&::-webkit-details-marker]:hidden">
                     <span className="font-display text-xl leading-snug tracking-tight text-brown-950 sm:text-2xl">
                       {f.question}
                     </span>
-                    <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-brown-950/15 text-brown-950 transition-colors duration-500 group-open:bg-brown-950 group-open:text-cream">
+                    <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-rule-strong text-brown-950 transition-colors duration-500 group-open:bg-brown-950 group-open:text-cream">
                       <span className="absolute h-[1.5px] w-3.5 bg-current" />
                       <span className="absolute h-3.5 w-[1.5px] bg-current transition-transform duration-500 group-open:rotate-90" />
                     </span>
                   </summary>
-                  <p className="max-w-2xl pb-6 text-base leading-relaxed font-light text-brown-900/75">
+                  <p className="max-w-2xl pb-6 text-base leading-relaxed text-brown-700">
                     {f.answer}
                   </p>
                 </details>
@@ -441,16 +444,16 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── Reservations funnel ────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-brown-950 px-5 py-24 sm:px-10 sm:py-32">
+      <section className="relative overflow-hidden bg-brown-950 px-5 py-16 sm:px-8 lg:px-12 sm:py-32">
         <div className="bg-noise absolute inset-0 opacity-10" />
         <div className="parallax-orb absolute -bottom-52 -left-40 h-[44rem] w-[44rem] opacity-10" />
-        <Reveal className="relative mx-auto flex max-w-7xl flex-col items-center gap-10 text-center">
+        <Reveal className="relative mx-auto flex max-w-[88rem] flex-col items-center gap-10 text-center">
           <span className="eyebrow block">Ospitalità Taccalite</span>
-          <h2 className="font-display max-w-3xl text-4xl leading-[0.95] tracking-tighter text-cream sm:text-6xl">
+          <h2 className="font-display max-w-3xl text-4xl leading-[0.95] tracking-[-0.028em] text-cream sm:text-6xl">
             Siediti al banco:
             <span className="wonk text-gold"> ti apparecchiamo noi.</span>
           </h2>
-          <p className="max-w-xl text-lg leading-relaxed font-light text-cream/75">
+          <p className="max-w-xl text-lg leading-relaxed text-cream/75">
             Taglieri di salumi e formaggi, porchetta calda e i consigli di chi la prepara da tre
             generazioni. Prenota il tuo tavolo: ti richiamiamo noi per confermare.
           </p>

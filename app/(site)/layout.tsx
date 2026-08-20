@@ -1,5 +1,6 @@
 import { ViewTransition } from "react";
 
+import { getShops } from "@/lib/db/queries";
 import SiteHeader from "@/components/site/SiteHeader";
 import SiteFooter from "@/components/site/SiteFooter";
 import ScrollProgress from "@/components/site/ScrollProgress";
@@ -25,13 +26,20 @@ export const dynamic = "force-dynamic";
  * it blocked the first word of every visit, which is the most expensive thing a
  * shop's homepage can do.
  */
-export default function SiteLayout({ children }: { children: React.ReactNode }) {
+export default async function SiteLayout({ children }: { children: React.ReactNode }) {
+  // Only for the phone menu's "chiama la bottega" rows — the numbers belong to
+  // the shops table, so they are read from it rather than restated as constants.
+  // `getShops` is React-cached, so the footer's own call costs nothing extra.
+  const shops = await getShops();
+
   return (
     <CartProvider>
       <div className="site-shell flex flex-1 flex-col">
         <SmoothScroll />
         <ScrollProgress />
-        <SiteHeader />
+        <SiteHeader
+          shops={shops.map((shop) => ({ slug: shop.slug, name: shop.name, phone: shop.phone }))}
+        />
         <main className="flex-1">
           {/* Replaces the old Framer AnimatePresence fade: that animated the DOM
               while the browser was trying to snapshot it for the transition, so

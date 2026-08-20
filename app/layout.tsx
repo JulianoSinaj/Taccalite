@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Playfair_Display, Open_Sans, Fraunces, Inter_Tight } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
@@ -76,6 +76,28 @@ export const metadata: Metadata = {
     description: siteConfig.description,
   },
   robots: { index: true, follow: true },
+};
+
+/**
+ * `viewport-fit=cover` is what makes `env(safe-area-inset-*)` resolve to
+ * anything other than zero.
+ *
+ * Without it iOS letterboxes the page inside the safe area: nothing is ever
+ * hidden, but the notch and the home-indicator strip are painted in a flat band
+ * that does not belong to the design — a white bar under a brown footer, a grey
+ * one under a full-bleed photograph. With it the page reaches both edges and the
+ * insets become real numbers, which the fixed chrome (header, cookie bar, cart
+ * bar, buy bar, cart sheet) already pads itself by via `.pb-safe` / `.px-safe`
+ * in globals.css. The two halves only work together — this is the other half.
+ *
+ * `themeColor` tints Safari's and Chrome's own address bar to the paper, so the
+ * top of the screen stops being a grey strip above a warm-white page.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#fdfaf5",
 };
 
 export default function RootLayout({

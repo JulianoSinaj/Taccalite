@@ -40,7 +40,9 @@ export default function QuickAdd({ product, stock, className }: QuickAddProps) {
       onClick={handleAdd}
       aria-label={`Aggiungi ${product.name} al carrello`}
       className={cn(
-        "flex items-center justify-center gap-2 rounded-full bg-paper/95 px-5 py-3 text-[0.6875rem] font-semibold tracking-[0.16em] text-brown-950 uppercase backdrop-blur-sm",
+        // `py-3.5` on a phone, where this is permanently visible and is the only
+        // way to buy from the grid — 41px was under the 44px a thumb needs.
+        "flex items-center justify-center gap-2 rounded-full bg-paper/95 px-4 py-3.5 text-[0.6875rem] font-semibold tracking-[0.16em] text-brown-950 uppercase backdrop-blur-sm sm:px-5 sm:py-3",
         "shadow-[0_6px_20px_-8px_rgba(42,26,16,0.45)] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
         "hover:bg-brown-950 hover:text-cream",
         "focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none",

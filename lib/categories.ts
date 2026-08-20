@@ -43,12 +43,23 @@ export function categoryAccent(category: string): string {
   const key = normalise(category);
   if (!key) return ACCENTS.casa;
 
+  // The counter.
   if (key.includes("salum")) return ACCENTS.salumi;
   if (key.includes("carn") || key.includes("macell")) return ACCENTS.carni;
   if (key.includes("formagg") || key.includes("caseari")) return ACCENTS.formaggi;
   if (key.includes("gastronom") || key.includes("cucina")) return ACCENTS.gastronomia;
   if (key.includes("cantina") || key.includes("vin")) return ACCENTS.cantina;
   if (key.includes("regal") || key.includes("cest")) return ACCENTS.regalo;
+
+  // The diary, which files its posts under a different vocabulary entirely.
+  // Without these every story fell through to the house gold, and a page of
+  // twelve posts came out one colour — the very thing the accents exist to fix.
+  if (key.includes("ricett")) return ACCENTS.gastronomia;
+  if (key.includes("bottega") || key.includes("negozi")) return ACCENTS.carni;
+  if (key.includes("stori") || key.includes("tradizion")) return ACCENTS.cantina;
+  if (key.includes("avvis") || key.includes("orari")) return ACCENTS.salumi;
+  if (key.includes("prodott") || key.includes("arriv") || key.includes("novit"))
+    return ACCENTS.regalo;
 
   return ACCENTS.casa;
 }

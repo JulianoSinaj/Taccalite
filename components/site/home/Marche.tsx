@@ -41,7 +41,8 @@ export default function Marche({ brands }: { brands: string[] }) {
       </div>
 
       {/* Masked at both ends so the names fade into the paper rather than being
-          chopped by the viewport edge. */}
+          chopped by the viewport edge. The track keeps travelling regardless of
+          the pointer — see `.marquee-track` in globals.css. */}
       <div
         className="relative mt-10 overflow-hidden"
         style={{
@@ -61,7 +62,7 @@ export default function Marche({ brands }: { brands: string[] }) {
               aria-hidden={i >= brands.length}
               className="flex shrink-0 items-center gap-14 sm:gap-20"
             >
-              <span className="font-display text-[1.75rem] leading-none font-semibold tracking-[-0.02em] whitespace-nowrap text-cream/55 transition-colors duration-500 hover:text-gold sm:text-[2.25rem]">
+              <span className="font-display text-[1.75rem] leading-none font-semibold tracking-[-0.02em] whitespace-nowrap text-cream/55 select-none sm:text-[2.25rem]">
                 {brand}
               </span>
               <span aria-hidden className="size-1 shrink-0 rotate-45 bg-gold/70" />

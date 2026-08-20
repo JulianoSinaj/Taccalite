@@ -5,7 +5,7 @@ import ParallaxMedia from "@/components/site/ParallaxMedia";
 
 export default function ChiSiamo() {
   return (
-    <section className="relative overflow-hidden bg-paper-warm px-5 py-24 sm:px-8 sm:py-32 lg:px-12">
+    <section className="relative overflow-hidden bg-paper-warm px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
       {/* The founding year as a ghost numeral, cropped by the left edge. It is
           the oldest thing the shop owns, so it gets to be the biggest. */}
       <span

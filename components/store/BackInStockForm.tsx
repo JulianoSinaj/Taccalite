@@ -29,7 +29,7 @@ export default function BackInStockForm({ slug }: { slug: string }) {
 
   if (state === "done") {
     return (
-      <p className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+      <p className="mt-4 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
         Fatto! Ti avviseremo via email appena il prodotto sarà di nuovo disponibile.
       </p>
     );
@@ -45,12 +45,12 @@ export default function BackInStockForm({ slug }: { slug: string }) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="La tua email"
-          className="w-full rounded-xl border border-brown-900/15 bg-cream-dark/40 px-4 py-3 text-sm text-brown-950 focus:border-gold-dark focus:outline-none"
+          className="w-full border border-rule-strong bg-paper-warm/40 px-4 py-3 text-sm text-brown-950 focus:border-gold-dark focus:outline-none"
         />
         <button
           type="submit"
           disabled={state === "busy"}
-          className="shrink-0 rounded-xl bg-brown-950 px-5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900 disabled:opacity-50"
+          className="shrink-0 bg-brown-950 px-5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900 disabled:opacity-50"
         >
           {state === "busy" ? "…" : "Avvisami"}
         </button>

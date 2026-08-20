@@ -97,7 +97,7 @@ function PostTile({ post, index }: { post: InstagramPost; index: number }) {
             ? undefined
             : { rotateX, rotateY, willChange: "transform" }
         }
-        className="group relative block aspect-square overflow-hidden rounded-2xl bg-brown-950 shadow-[0_18px_40px_-24px_rgba(42,26,16,0.5)] transition-shadow duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:shadow-[0_44px_80px_-28px_rgba(42,26,16,0.55)] focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream focus-visible:outline-none sm:rounded-3xl"
+        className="group relative block aspect-square overflow-hidden bg-brown-950 shadow-[0_18px_40px_-24px_rgba(42,26,16,0.5)] transition-shadow duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:shadow-[0_44px_80px_-28px_rgba(42,26,16,0.55)] focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream focus-visible:outline-none sm:"
       >
         {/* Photo — counter-drifts against the tilt and zooms on hover */}
         <motion.div
@@ -136,7 +136,7 @@ function PostTile({ post, index }: { post: InstagramPost; index: number }) {
         {/* Media-type badge */}
         {kindLabel && (
           <span
-            className="absolute top-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-brown-950/55 px-2.5 py-1 text-[9px] font-bold tracking-[0.2em] text-cream uppercase backdrop-blur-md sm:top-4 sm:right-4 sm:text-[10px]"
+            className="absolute top-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-brown-950/55 px-2.5 py-1 text-[10px] sm:text-[9px] font-bold tracking-[0.2em] text-cream uppercase backdrop-blur-md sm:top-4 sm:right-4 sm:text-[10px]"
           >
             {post.mediaType === "VIDEO" ? <Play className="size-3 fill-current" /> : <Layers className="size-3" />}
             {kindLabel}
@@ -186,7 +186,7 @@ function ProfileChip({ profile, handle, url }: { profile: InstagramProfile | nul
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group/chip inline-flex items-center gap-3 rounded-full border border-brown-900/10 bg-white/60 py-2 pr-5 pl-2 transition-colors duration-500 hover:border-brown-900/25"
+      className="group/chip inline-flex items-center gap-3 rounded-full border border-rule bg-paper py-2 pr-5 pl-2 transition-colors duration-500 hover:border-rule-strong"
     >
       <span className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-gold via-gold-dark to-brown-700 p-[2px]">
         <span className="relative flex size-full items-center justify-center overflow-hidden rounded-full bg-cream">
@@ -206,7 +206,7 @@ function ProfileChip({ profile, handle, url }: { profile: InstagramProfile | nul
       </span>
       <span className="flex flex-col leading-tight">
         <span className="text-sm font-bold text-brown-950">@{profile?.username ?? handle}</span>
-        <span className="text-[10px] font-bold tracking-[0.2em] text-brown-800/60 uppercase">
+        <span className="text-[10px] font-bold tracking-[0.2em] text-taupe uppercase">
           {stats.length ? stats.join(" · ") : "Ancona · dal 1946"}
         </span>
       </span>
@@ -232,7 +232,7 @@ export default function InstagramFeed({ posts, profile, handle, url }: Props) {
     >
       <div className="parallax-orb pointer-events-none absolute -top-40 -left-40 h-[36rem] w-[36rem] opacity-[0.07]" />
 
-      <div className="relative mx-auto max-w-7xl">
+      <div className="relative mx-auto max-w-[88rem]">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 28 }}
@@ -252,7 +252,7 @@ export default function InstagramFeed({ posts, profile, handle, url }: Props) {
             </span>
             <h2
               id="instagram-heading"
-              className="font-display max-w-2xl text-3xl leading-[0.95] tracking-tighter text-brown-950 sm:text-4xl md:text-5xl"
+              className="font-display max-w-2xl text-3xl leading-[0.95] tracking-[-0.028em] text-brown-950 sm:text-4xl md:text-5xl"
             >
               Dal banco
               <span className="text-gold-deep italic"> al tuo feed</span>
@@ -288,7 +288,7 @@ export default function InstagramFeed({ posts, profile, handle, url }: Props) {
                 : { type: "spring", stiffness: 110, damping: 20, mass: 0.9 }
             }
             whileTap={{ scale: 0.985 }}
-            className="group relative flex flex-col items-start justify-between gap-8 overflow-hidden rounded-3xl bg-brown-950 p-7 will-change-transform sm:flex-row sm:items-center sm:rounded-[28px] sm:p-10"
+            className="group relative flex flex-col items-start justify-between gap-8 overflow-hidden bg-brown-950 p-7 will-change-transform sm:flex-row sm:items-center sm: sm:p-10"
           >
             <div className="bg-noise absolute inset-0 opacity-15" />
             <div className="parallax-orb absolute -top-32 -right-24 h-[24rem] w-[24rem] opacity-15" />
@@ -310,7 +310,7 @@ export default function InstagramFeed({ posts, profile, handle, url }: Props) {
           </motion.a>
         )}
 
-        <p className="mt-6 text-[10px] font-bold tracking-[0.25em] text-brown-800/50 uppercase sm:mt-8">
+        <p className="mt-6 text-[10px] font-bold tracking-[0.25em] text-taupe uppercase sm:mt-8">
           Foto e video pubblicati su Instagram · si aprono in una nuova scheda
         </p>
       </div>

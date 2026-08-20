@@ -109,6 +109,44 @@ Container is `max-w-[88rem]` with `px-5 sm:px-8 lg:px-12`. Inner pages open with
 — title left, lede in a measure on the right, closed by a rule — because the lede
 under the title left the right-hand third of every inner page empty.
 
+### Inner pages, dead ends and the diary
+
+The port that finished the language everywhere else:
+
+- **Eyebrows** — `.eyebrow` grows the 40px gold rule itself inside `.site-shell`
+  (`::before`), so the thirty-odd inner-page call sites match the homepage
+  without being rewritten. Not on a `<label>`: a form with ten fields would
+  otherwise sprout ten little gold dashes down its edge.
+- **Dead ends** — 404, error and empty states share `components/site/NoticeScreen.tsx`:
+  eyebrow, display heading, lede, CTAs, and the status code set as a hollow
+  numeral the way `1946` is on the homepage. `app/(site)/not-found.tsx` answers a
+  `notFound()` thrown inside the storefront and keeps the chrome;
+  `app/not-found.tsx` answers an unmatched URL from the root, so it carries its
+  own `.site-shell` and wordmark. `NoticeScreen` writes its display size out
+  rather than using `.display-lg`, because that class does not exist outside the
+  shell and the headline would silently render at 16px.
+- **Loading** — a gold rule sweeping the measure, not a spinner.
+- **The diary** — `BlogCard` is the homepage card, with `lead` for a two-column
+  first item. `categoryAccent` covers the diary's own vocabulary (ricette,
+  bottega, storie, avvisi, prodotti) as well as the shop's, or every post falls
+  through to house gold and the page comes out one colour.
+- **Legal pages** open on paper like everything else. They were the last of the
+  near-black slab heroes.
+
+Mechanical conventions the port settled, for anything added later:
+
+| Instead of | Use |
+| --- | --- |
+| `max-w-7xl` | `max-w-[88rem]` |
+| `sm:px-10` | `sm:px-8 lg:px-12` |
+| `bg-white/50…70` | `bg-paper` on a warm band, `bg-paper-warm` on a paper one |
+| `border-brown-900/10…20` | `border-rule` / `border-rule-strong` |
+| `text-brown-900/55…85` | `text-taupe` / `text-brown-700` |
+| `rounded-2xl`, `rounded-[28px]` | nothing — the storefront is square but for its buttons |
+| `font-light` | nothing — Inter Tight's 400 is the body weight |
+| `text-white` | `text-cream` |
+| ad-hoc `text-4xl sm:text-5xl` | `.display-xl` / `.display-lg` / `.display-md` |
+
 ### Motion
 Reduced motion is expressed as a **duration of zero on one element**, never as a
 second tree. See `lib/use-reduced-motion-after-mount.ts`: Motion's own hook reads

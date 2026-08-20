@@ -19,7 +19,7 @@ function telHref(phone: string) {
 export default function DueBotteghe({ shops }: { shops: Shop[] }) {
   return (
     <section className="bg-paper">
-      <div className="mx-auto max-w-[88rem] px-5 pt-24 pb-12 sm:px-8 sm:pt-32 lg:px-12">
+      <div className="mx-auto max-w-[88rem] px-5 pt-24 pb-10 sm:px-8 sm:pt-32 lg:px-12">
         <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
           <span aria-hidden className="h-px w-10 bg-gold" />
           Le sedi
@@ -116,18 +116,23 @@ export default function DueBotteghe({ shops }: { shops: Shop[] }) {
           a band now: same information, given the weight a phone number deserves
           on the page of a shop people actually ring. */}
       <div className="border-b border-rule bg-paper-warm">
-        <div className="mx-auto flex max-w-[88rem] flex-col gap-4 px-5 py-7 sm:flex-row sm:items-center sm:gap-10 sm:px-8 lg:px-12">
+        <div className="mx-auto flex max-w-[88rem] flex-col gap-3.5 px-5 py-6 sm:flex-row sm:items-center sm:gap-10 sm:px-8 sm:py-7 lg:px-12">
           <p className="flex shrink-0 items-center gap-3.5 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
             <span aria-hidden className="h-px w-8 bg-gold" />
             Chiamaci
           </p>
-          <div className="flex flex-wrap gap-x-10 gap-y-3">
+          {/* Rows with a box of their own on a phone, an inline pair above it.
+              As bare text these were 26px-tall targets, and a `tel:` link is the
+              single most valuable thing on this page to somebody holding a
+              phone — it is the one action the device does better than the
+              desktop does. */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-10 sm:gap-y-3">
             {shops.map((shop) =>
               shop.phone ? (
                 <a
                   key={shop.slug}
                   href={telHref(shop.phone)}
-                  className="group flex items-baseline gap-3 text-[0.8125rem] text-taupe transition-colors hover:text-brown-950"
+                  className="group flex items-baseline gap-3 border border-rule bg-paper px-4 py-3 text-[0.8125rem] text-taupe transition-colors hover:text-brown-950 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0"
                 >
                   <Phone
                     className="size-3.5 shrink-0 translate-y-0.5 text-gold-deep"

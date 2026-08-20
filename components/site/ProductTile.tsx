@@ -106,19 +106,19 @@ export default function ProductTile({
         />
 
         {soldOut && (
-          <span className="absolute top-4 left-4 z-20 bg-brown-950 px-3 py-1.5 text-[0.625rem] font-semibold tracking-[0.18em] text-cream uppercase">
+          <span className="absolute top-2.5 left-2.5 z-20 bg-brown-950 px-2.5 py-1 text-[0.625rem] font-semibold tracking-[0.16em] text-cream uppercase sm:top-4 sm:left-4 sm:px-3 sm:py-1.5">
             Esaurito
           </span>
         )}
         {lowStock && (
-          <span className="absolute top-4 left-4 z-20 bg-gold px-3 py-1.5 text-[0.625rem] font-semibold tracking-[0.18em] text-on-gold uppercase">
+          <span className="absolute top-2.5 left-2.5 z-20 bg-gold px-2.5 py-1 text-[0.625rem] font-semibold tracking-[0.16em] text-on-gold uppercase sm:top-4 sm:left-4 sm:px-3 sm:py-1.5">
             Ultimi {product.stock}
           </span>
         )}
 
         {buyable && (
           <QuickAdd
-            className="absolute inset-x-4 bottom-4 z-20"
+            className="absolute inset-x-2.5 bottom-2.5 z-20 sm:inset-x-4 sm:bottom-4"
             product={{
               slug: product.slug,
               name: product.name,
@@ -136,17 +136,21 @@ export default function ProductTile({
         />
       </div>
 
-      <div className="flex flex-1 flex-col pt-5">
+      <div className="flex flex-1 flex-col pt-3.5 sm:pt-5">
         {/* The category, in the category's own colour — the one place the grid
             tells you what kind of thing you are looking at without you reading. */}
         <p className="flex items-center gap-2 text-[0.625rem] font-semibold tracking-[0.22em] text-[var(--acc)] uppercase">
           <span aria-hidden className="size-[5px] rotate-45 bg-[var(--acc)]" />
           {product.category}
         </p>
-        <h3 className="font-display mt-2 text-xl leading-tight font-semibold tracking-[-0.02em] text-brown-950">
+        <h3 className="font-display mt-1.5 text-[1.0625rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950 sm:mt-2 sm:text-xl">
           <Link
             href={`/negozio/${product.slug}`}
-            className="transition-colors hover:text-gold-deep focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
+            // `inline-block` + vertical padding: as an inline link the name was a
+            // 25px-tall target, and it is the one a reader actually aims at —
+            // the transparent hit area over the photograph is invisible, so
+            // nobody knows it is there.
+            className="inline-block py-1 transition-colors hover:text-gold-deep focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
           >
             {product.name}
           </Link>
@@ -154,7 +158,7 @@ export default function ProductTile({
 
         {product.origin && <p className="mt-1.5 text-[0.8125rem] text-taupe">{product.origin}</p>}
 
-        <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
+        <div className="mt-auto flex flex-wrap items-center gap-2 pt-3 sm:pt-4">
           {product.priceCents != null ? (
             // Stamped on a tinted ticket rather than set as running text: on a
             // grid of two dozen tiles the price is the thing being compared, and

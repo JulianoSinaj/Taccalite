@@ -3,11 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ShoppingBag, User } from "lucide-react";
+import { CalendarCheck, Flame, MapPin, Phone, ShoppingBag, User } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/components/store/cart";
+import { useScrollLock } from "@/lib/use-scroll-lock";
 import Magnetic from "./Magnetic";
+
+/** Only what the menu needs to offer a call — the layout reads it from the DB. */
+export type HeaderShop = { slug: string; name: string; phone: string | null };
 
 const links = [
   { href: "/", label: "Home" },
@@ -17,13 +21,29 @@ const links = [
   { href: "/contatti", label: "Contattaci" },
 ];
 
+/**
+ * The second tier of the phone menu.
+ *
+ * On the desktop these live in the footer, which a visitor reaches by scrolling
+ * past the whole page. On a phone the menu *is* the site map — it is the only
+ * full list of destinations anyone sees — so the things a norcineria is actually
+ * asked for get a row each rather than being one more scroll away.
+ */
+const shortcuts = [
+  { href: "/prenotazioni", label: "Prenota un tavolo", icon: CalendarCheck },
+  { href: "/porchetta", label: "La porchetta del sabato", icon: Flame },
+  { href: "/account", label: "Area personale", icon: User },
+  { href: "/sedi", label: "Orari e indirizzi", icon: MapPin },
+];
+
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
 
-export default function SiteHeader() {
+export default function SiteHeader({ shops = [] }: { shops?: HeaderShop[] }) {
+  const callable = shops.filter((shop) => Boolean(shop.phone));
   const pathname = usePathname();
   const { count, open: openCart } = useCart();
   const reduceMotion = useReducedMotion();
@@ -44,39 +64,43 @@ export default function SiteHeader() {
   }, []);
 
   // The overlay covers the page, so the page behind it must not scroll under it.
+  useScrollLock(menuOpen);
+
   useEffect(() => {
     if (!menuOpen) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") setMenuOpen(false);
     }
     window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = previous;
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
   return (
     <>
       <header
         className={cn(
-          "vt-header fixed inset-x-0 top-0 z-[80] border-b bg-paper/85 backdrop-blur-xl transition-[border-color,box-shadow] duration-500",
+          "vt-header px-safe fixed inset-x-0 top-0 z-[80] border-b bg-paper/85 backdrop-blur-xl transition-[border-color,box-shadow] duration-500",
           scrolled ? "border-rule shadow-[0_1px_24px_-12px_rgba(42,26,16,0.35)]" : "border-transparent"
         )}
       >
         <div
           className={cn(
-            "mx-auto flex max-w-[88rem] items-center gap-8 px-5 transition-[padding] duration-500 sm:px-8 lg:px-12",
-            scrolled ? "py-3" : "py-5"
+            // The gap collapses on a phone: at 375px the wordmark, three icons
+            // and an 8-unit gutter between them left the menu button hard against
+            // the screen edge, where a right thumb reaches it and a left one
+            // does not.
+            "mx-auto flex max-w-[88rem] items-center gap-3 px-4 transition-[padding] duration-500 sm:gap-8 sm:px-8 lg:px-12",
+            scrolled ? "py-2.5 sm:py-3" : "py-3.5 sm:py-5"
           )}
         >
-          <Link href="/" className="group flex shrink-0 flex-col leading-none">
-            <span className="font-display text-[1.45rem] font-semibold tracking-[-0.04em] text-brown-950 uppercase transition-colors group-hover:text-gold-deep sm:text-[1.6rem]">
+          <Link
+            href="/"
+            className="group flex shrink-0 flex-col justify-center py-1.5 leading-none"
+          >
+            <span className="font-display text-[1.35rem] font-semibold tracking-[-0.04em] text-brown-950 uppercase transition-colors group-hover:text-gold-deep sm:text-[1.6rem]">
               Taccalite
             </span>
-            <span className="mt-1 text-[0.5rem] font-semibold tracking-[0.38em] text-taupe uppercase sm:text-[0.5625rem]">
+            <span className="mt-1 text-[0.625rem] sm:text-[0.5625rem] font-semibold tracking-[0.3em] text-taupe uppercase sm:tracking-[0.38em]">
               Norcineria dal 1946
             </span>
           </Link>
@@ -107,11 +131,13 @@ export default function SiteHeader() {
             })}
           </nav>
 
-          <div className="ml-auto flex items-center gap-2 sm:gap-3 lg:ml-0">
+          {/* `-mr-2` pulls the row's own padding back so the last icon's 44px
+              target reaches the screen edge while the *glyph* stays inset. */}
+          <div className="-mr-2 ml-auto flex items-center gap-0.5 sm:mr-0 sm:gap-2 lg:ml-0 lg:gap-3">
             <Magnetic className="hidden sm:inline-flex">
               <Link
                 href="/prenotazioni"
-                className="group/pren relative inline-flex items-center overflow-hidden rounded-full bg-gold px-5 py-2.5 text-[0.6875rem] font-bold tracking-[0.16em] text-on-gold uppercase focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="group/pren relative inline-flex items-center overflow-hidden rounded-full bg-gold px-5 py-3 text-[0.6875rem] font-bold tracking-[0.16em] text-on-gold uppercase focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:outline-none"
               >
                 <span
                   aria-hidden
@@ -126,7 +152,7 @@ export default function SiteHeader() {
             <Link
               href="/account"
               aria-label="Area personale"
-              className="flex size-10 items-center justify-center rounded-full text-brown-700 transition-colors hover:bg-paper-warm hover:text-brown-950 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
+              className="flex size-11 items-center justify-center rounded-full text-brown-700 transition-colors hover:bg-paper-warm hover:text-brown-950 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
             >
               <User className="size-[1.15rem]" />
             </Link>
@@ -135,11 +161,11 @@ export default function SiteHeader() {
               type="button"
               onClick={openCart}
               aria-label={count > 0 ? `Carrello, ${count} articoli` : "Carrello"}
-              className="relative flex size-10 items-center justify-center rounded-full text-brown-700 transition-colors hover:bg-paper-warm hover:text-brown-950 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
+              className="relative flex size-11 items-center justify-center rounded-full text-brown-700 transition-colors hover:bg-paper-warm hover:text-brown-950 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
             >
               <ShoppingBag className="size-[1.15rem]" />
               {count > 0 && (
-                <span className="absolute top-1 right-0.5 flex min-w-[1.1rem] items-center justify-center rounded-full bg-brown-950 px-1 text-[0.625rem] font-bold text-cream tabular-nums">
+                <span className="absolute top-1.5 right-1 flex min-w-[1.1rem] items-center justify-center rounded-full bg-brown-950 px-1 text-[0.625rem] font-bold text-cream tabular-nums">
                   {count}
                 </span>
               )}
@@ -150,7 +176,8 @@ export default function SiteHeader() {
               onClick={() => setMenuOpen((v) => !v)}
               aria-label={menuOpen ? "Chiudi il menu" : "Apri il menu"}
               aria-expanded={menuOpen}
-              className="flex size-10 flex-col items-center justify-center gap-[5px] rounded-full transition-colors hover:bg-paper-warm focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none lg:hidden"
+              aria-controls="site-menu"
+              className="flex size-11 flex-col items-center justify-center gap-[5px] rounded-full transition-colors hover:bg-paper-warm focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none lg:hidden"
             >
               <span
                 className={cn(
@@ -172,24 +199,31 @@ export default function SiteHeader() {
       <AnimatePresence>
         {menuOpen && (
           <motion.div
-            className="fixed inset-0 z-[75] flex flex-col justify-center bg-paper px-6 pt-24 pb-10 lg:hidden"
+            id="site-menu"
+            /* `justify-center` is gone on purpose. Centring worked while the
+               menu was five links; with the shortcut list and the phone numbers
+               under it the tree is taller than a small phone, and a centred
+               flex column pushes its own overflow out of *both* ends where no
+               scroll can reach it. Top-aligned and scrollable holds at 568px. */
+            className="px-safe fixed inset-0 z-[75] flex flex-col overflow-y-auto overscroll-contain bg-paper pt-20 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pt-24 lg:hidden"
             initial={reduceMotion ? { opacity: 0 } : { clipPath: "inset(0 0 100% 0)" }}
             animate={reduceMotion ? { opacity: 1 } : { clipPath: "inset(0 0 0% 0)" }}
             exit={reduceMotion ? { opacity: 0 } : { clipPath: "inset(0 0 100% 0)" }}
             transition={{ duration: 0.6, ease: EASE }}
           >
-            <nav className="flex flex-col gap-1">
+            <nav className="flex flex-col px-5 sm:px-8" aria-label="Menu principale">
               {links.map((link, i) => (
                 <motion.div
                   key={link.href}
                   initial={reduceMotion ? undefined : { opacity: 0, y: 18 }}
                   animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, ease: EASE, delay: 0.15 + i * 0.05 }}
+                  transition={{ duration: 0.5, ease: EASE, delay: 0.12 + i * 0.045 }}
                 >
                   <Link
                     href={link.href}
+                    aria-current={isActive(pathname, link.href) ? "page" : undefined}
                     className={cn(
-                      "font-display display-md block border-b border-rule py-4 transition-colors",
+                      "font-display block border-b border-rule py-3.5 text-[1.75rem] leading-tight font-semibold tracking-[-0.022em] transition-colors",
                       isActive(pathname, link.href)
                         ? "text-gold-deep"
                         : "text-brown-950 hover:text-gold-deep"
@@ -200,20 +234,50 @@ export default function SiteHeader() {
                 </motion.div>
               ))}
             </nav>
-            <div className="mt-10 flex flex-col gap-3">
-              <Link
-                href="/prenotazioni"
-                className="rounded-full bg-gold px-6 py-4 text-center text-[0.6875rem] font-bold tracking-[0.16em] text-on-gold uppercase"
-              >
-                Prenota un tavolo
-              </Link>
-              <Link
-                href="/porchetta"
-                className="rounded-full border border-rule-strong px-6 py-4 text-center text-[0.6875rem] font-bold tracking-[0.16em] text-brown-950 uppercase"
-              >
-                La porchetta del sabato
-              </Link>
-            </div>
+
+            <motion.div
+              className="mt-7 px-5 sm:px-8"
+              initial={reduceMotion ? undefined : { opacity: 0, y: 18 }}
+              animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: EASE, delay: 0.34 }}
+            >
+              <span className="eyebrow eyebrow-dark">Fai in fretta</span>
+              <div className="mt-4 grid grid-cols-1 gap-px overflow-hidden border border-rule bg-rule">
+                {shortcuts.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.label}
+                      href={item.href}
+                      className="flex items-center gap-3.5 bg-paper px-4 py-4 text-[0.9375rem] font-medium text-brown-950 transition-colors hover:bg-paper-warm"
+                    >
+                      <Icon className="size-[1.05rem] shrink-0 text-gold-deep" aria-hidden />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+
+              {/* The one thing a phone can do that a desktop cannot. A norcineria
+                  is asked "is the porchetta out of the oven yet" by voice far
+                  more often than by form, and the number was previously at the
+                  bottom of the footer — a full page of scrolling away from the
+                  menu someone opened precisely because they were looking for it. */}
+              {callable.length > 0 && (
+                <div className="mt-3 flex flex-col gap-2">
+                  {callable.map((shop) => (
+                    <a
+                      key={shop.slug}
+                      href={`tel:${shop.phone!.replace(/[^\d+]/g, "")}`}
+                      className="flex items-center justify-center gap-2.5 rounded-full bg-brown-950 px-5 py-4 text-[0.6875rem] font-bold tracking-[0.14em] text-cream uppercase"
+                    >
+                      <Phone className="size-4 shrink-0 text-gold" aria-hidden />
+                      {callable.length > 1 ? `Chiama ${shop.name}` : "Chiama la bottega"}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

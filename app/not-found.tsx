@@ -1,30 +1,49 @@
 import Link from "next/link";
+import CTA from "@/components/site/CTA";
+import NoticeScreen from "@/components/site/NoticeScreen";
 
+/**
+ * The 404 for a URL that matches no route at all.
+ *
+ * A `notFound()` thrown *inside* the storefront renders `app/(site)/not-found.tsx`
+ * and keeps the site chrome; this one answers from the root, outside any layout,
+ * so it has to bring its own. It carries `.site-shell` for the paper, the grain
+ * and Fraunces — without it a mistyped storefront URL landed on the gestionale's
+ * cream in the gestionale's typeface — plus a wordmark home, which is the
+ * navigation a dead end actually needs.
+ *
+ * Not the real header: that reads the cart and would drag `CartProvider` and a
+ * client boundary onto a page whose whole job is to be a way back.
+ */
 export default function NotFound() {
   return (
-    <main className="flex flex-1 items-center justify-center bg-cream px-6 py-24 text-brown-950">
-      <div className="mx-auto max-w-md text-center">
-        <p className="text-xs font-bold tracking-widest text-gold-deep uppercase">Errore 404</p>
-        <h1 className="font-display mt-3 text-4xl text-brown-950">Pagina non trovata</h1>
-        <p className="mt-4 text-brown-900/70">
-          La pagina che cerchi non esiste o è stata spostata. Torna alla home o scopri le nostre
-          botteghe.
-        </p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-[11px] font-bold tracking-widest text-brown-950 uppercase transition-colors hover:bg-gold-dark"
-          >
-            Torna alla home
-          </Link>
-          <Link
-            href="/sedi"
-            className="inline-flex items-center gap-2 rounded-full border border-brown-950/15 px-6 py-3 text-[11px] font-bold tracking-widest text-brown-900 uppercase transition-colors hover:bg-brown-950/5"
-          >
-            Le botteghe
-          </Link>
-        </div>
+    <div className="site-shell flex flex-1 flex-col">
+      <div className="px-5 pt-8 sm:px-8 lg:px-12">
+        <Link href="/" className="group inline-flex flex-col leading-none">
+          <span className="font-display text-[1.45rem] font-semibold tracking-[-0.04em] text-brown-950 uppercase transition-colors group-hover:text-gold-deep sm:text-[1.6rem]">
+            Taccalite
+          </span>
+          <span className="mt-1 text-[0.5rem] font-semibold tracking-[0.38em] text-taupe uppercase sm:text-[0.5625rem]">
+            Norcineria dal 1946
+          </span>
+        </Link>
       </div>
-    </main>
+
+      <NoticeScreen
+        eyebrow="Errore 404"
+        ghost="404"
+        title={
+          <>
+            Questa pagina <span className="wonk text-gold-deep">non è al banco.</span>
+          </>
+        }
+        body="Il link che hai seguito non esiste più, o non è mai esistito. Torna alla home, oppure passa dalle nostre due botteghe."
+      >
+        <CTA href="/">Torna alla home</CTA>
+        <CTA href="/sedi" tone="outline">
+          Le botteghe
+        </CTA>
+      </NoticeScreen>
+    </div>
   );
 }

@@ -83,6 +83,36 @@ function useSealTexture() {
   }, []);
 }
 
+/**
+ * Tells the parent the moment the coin is worth looking at.
+ *
+ * The first frames of this scene are not. The canvas has to be measured before
+ * it has a size to draw into, `<ContactShadows>` renders its shadow map from
+ * inside the loop, and `<Float>` starts at a random phase — so the opening
+ * frames are some mix of empty, unshadowed and mid-lurch. Revealing the canvas
+ * on mount is what made the seal appear half-built and then snap into place.
+ *
+ * Counting a handful of frames costs nothing and means the parent only ever
+ * cross-fades to a finished picture. No priority argument: any `useFrame` above
+ * zero would take over the render loop and nothing would draw at all.
+ */
+function ReadySignal({ onReady }: { onReady?: () => void }) {
+  const frames = useRef(0);
+  const fired = useRef(false);
+
+  useFrame(() => {
+    if (fired.current) return;
+    frames.current += 1;
+    if (frames.current < 4) return;
+    fired.current = true;
+    // One more rAF, so the frame we just counted is on the glass before the
+    // parent starts fading the flat seal out from under it.
+    requestAnimationFrame(() => onReady?.());
+  });
+
+  return null;
+}
+
 function Coin() {
   const group = useRef<THREE.Group>(null);
   const face = useSealTexture();
@@ -136,6 +166,11 @@ function Coin() {
   );
 }
 
+type Seal3DProps = {
+  /** Fired once the canvas has painted frames worth revealing. */
+  onReady?: () => void;
+};
+
 /**
  * The brand seal as struck gold.
  *
@@ -147,7 +182,7 @@ function Coin() {
  * `<Lightformer>` panels rendered to a cubemap, giving the gold a bright sheet to
  * catch and a warm one to glance off, with no external asset.
  */
-export default function Seal3D() {
+export default function Seal3D({ onReady }: Seal3DProps) {
   return (
     <Canvas
       dpr={[1, 1.75]}
@@ -167,6 +202,8 @@ export default function Seal3D() {
         {/* Cool edge so the rim separates from a white page. */}
         <Lightformer form="ring" intensity={2} position={[-4, 1, -2]} scale={[5, 5, 1]} color="#dbe6f5" />
       </Environment>
+
+      <ReadySignal onReady={onReady} />
 
       <Float speed={1.4} rotationIntensity={0.1} floatIntensity={0.5}>
         <Coin />

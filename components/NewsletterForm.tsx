@@ -39,20 +39,24 @@ export default function NewsletterForm() {
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="flex border-b border-white/10 pb-4 transition-colors focus-within:border-gold">
+      {/* The rule is the field, and the arrow is the submit. Both grow a real
+          box on a phone: the arrow was a 20px glyph with no padding — a 20×23
+          target sitting a thumb's width from the screen edge, at the very foot
+          of the longest page on the site. */}
+      <div className="flex items-center gap-2 border-b border-white/10 transition-colors focus-within:border-gold">
         <input
           type="email"
           name="email"
           required
           placeholder="Inserisci la tua email"
           aria-label="Email per la newsletter"
-          className="w-full bg-transparent text-sm text-cream placeholder:text-white/40 focus:outline-none"
+          className="w-full min-w-0 bg-transparent py-3 text-sm text-cream placeholder:text-white/40 focus:outline-none"
         />
         <button
           type="submit"
           disabled={status === "busy"}
           aria-label="Iscriviti alla newsletter"
-          className="text-gold transition-transform hover:translate-x-1 disabled:opacity-50"
+          className="-mr-2.5 flex size-11 shrink-0 items-center justify-center rounded-full text-gold transition-transform hover:translate-x-1 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
         >
           <ArrowRight className="size-5" />
         </button>

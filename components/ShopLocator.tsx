@@ -60,7 +60,7 @@ export function OpenPill({ state, className }: { state: OpenState | null; classN
   ) : (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full bg-brown-900/8 px-3 py-1 text-[10px] font-bold tracking-widest text-brown-800/70 uppercase",
+        "inline-flex items-center gap-1.5 rounded-full bg-brown-900/8 px-3 py-1 text-[10px] font-bold tracking-widest text-taupe uppercase",
         className
       )}
     >
@@ -177,10 +177,10 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
                   onClick={() => setActiveSlug(shop.slug)}
                   whileTap={reduce ? undefined : { scale: 0.99 }}
                   className={cn(
-                    "group relative w-full overflow-hidden rounded-[28px] border p-6 text-left transition-colors duration-500 sm:p-7",
+                    "group relative w-full overflow-hidden  border p-6 text-left transition-colors duration-500 sm:p-7",
                     selected
-                      ? "border-brown-900/15 bg-white/70"
-                      : "border-brown-900/10 bg-white/30 hover:border-brown-900/25 hover:bg-white/50"
+                      ? "border-rule-strong bg-paper"
+                      : "border-rule bg-paper-warm hover:border-rule-strong hover:bg-paper"
                   )}
                 >
                   {selected && (
@@ -203,7 +203,7 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
                       <h3 className="font-display text-2xl leading-tight tracking-tight text-brown-950 sm:text-3xl">
                         {shop.name}
                       </h3>
-                      <p className="flex items-start gap-2 text-sm font-semibold text-brown-800/80">
+                      <p className="flex items-start gap-2 text-sm font-semibold text-brown-700">
                         <MapPin className="mt-0.5 size-4 shrink-0 text-gold-deep" />
                         {shop.address}
                       </p>
@@ -228,7 +228,7 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
                         transition={{ duration: 0.55, ease: EASE }}
                         className="overflow-hidden"
                       >
-                        <div className="mt-6 space-y-3 border-t border-brown-900/10 pt-6 text-sm font-semibold text-brown-800/85">
+                        <div className="mt-6 space-y-3 border-t border-rule pt-6 text-sm font-semibold text-brown-700">
                           <p className="flex items-center gap-3">
                             <Clock className="size-4 shrink-0 text-gold-deep" />
                             {shop.today ? (
@@ -240,7 +240,7 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
                             )}
                           </p>
                           {!shop.hoursConfirmed && (
-                            <p className="pl-7 text-xs font-medium text-brown-800/60">
+                            <p className="pl-7 text-xs font-medium text-taupe">
                               Orari da confermare in negozio.
                             </p>
                           )}
@@ -259,10 +259,10 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
         </ul>
 
         {/* Actions for the active shop — outside the tab button so they're real links. */}
-        <div className="mt-6 flex flex-wrap items-center gap-4">
+        <div className="mt-6 grid grid-cols-2 items-center gap-3 sm:flex sm:flex-wrap sm:gap-4">
           <MagneticAnchor
             href={directionsUrl(active.mapsQuery)}
-            className="inline-flex items-center gap-3 rounded-full bg-brown-950 px-7 py-3.5 text-sm font-semibold text-cream transition-colors duration-500 hover:bg-brown-900"
+            className="inline-flex items-center justify-center gap-3 rounded-full bg-brown-950 px-5 py-4 text-sm font-semibold text-cream transition-colors duration-500 hover:bg-brown-900 sm:px-7 sm:py-3.5"
           >
             <Navigation className="size-4" />
             Indicazioni
@@ -270,14 +270,14 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
           <MagneticAnchor
             href={telHref(active.phone)}
             external={false}
-            className="inline-flex items-center gap-3 rounded-full border border-brown-950/20 px-7 py-3.5 text-sm font-semibold text-brown-950 transition-colors duration-500 hover:bg-brown-950/5"
+            className="inline-flex items-center justify-center gap-3 rounded-full border border-brown-950/20 px-5 py-4 text-sm font-semibold text-brown-950 transition-colors duration-500 hover:bg-brown-950/5 sm:px-7 sm:py-3.5"
           >
             <Phone className="size-4" />
             Chiama
           </MagneticAnchor>
           <Link
-            href={`/negozi/${active.slug}`}
-            className="underline-draw inline-flex items-center gap-2 py-3.5 text-sm font-semibold text-brown-950"
+            href={`/sedi/${active.slug}`}
+            className="underline-draw col-span-2 inline-flex items-center justify-center gap-2 py-3 text-sm font-semibold text-brown-950 sm:col-span-1 sm:justify-start sm:py-3.5"
           >
             Scopri la bottega
             <ArrowRight className="size-4" />
@@ -287,7 +287,7 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
 
       {/* ── Map ───────────────────────────────────────────────────────── */}
       <div className="lg:col-span-7">
-        <div className="cinematic-shadow relative min-h-[440px] overflow-hidden rounded-[32px] bg-brown-950 sm:aspect-[4/3] sm:min-h-0 lg:aspect-auto lg:h-full lg:min-h-[560px]">
+        <div className="cinematic-shadow relative min-h-[300px] overflow-hidden bg-brown-950 sm:aspect-[4/3] sm:min-h-0 lg:aspect-auto lg:h-full lg:min-h-[560px]">
           <AnimatePresence mode="wait" initial={false}>
             {mapReady ? (
               <motion.div
@@ -334,7 +334,7 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
                     <p className="font-display text-3xl leading-tight tracking-tight text-cream sm:text-4xl">
                       {active.name}
                     </p>
-                    <p className="text-sm font-light text-cream/70">{active.address}</p>
+                    <p className="text-sm text-cream/70">{active.address}</p>
                   </div>
                   <motion.button
                     type="button"

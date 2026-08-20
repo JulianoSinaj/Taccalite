@@ -136,7 +136,7 @@ export default async function PorchettaPage() {
       {/* Disponibilità — live availability strip. Real numbers from the day's
           bookings, so it earns the gold border it sits behind. */}
       <section className="px-5 pb-16 sm:px-8 lg:px-12">
-        <Reveal className="mx-auto flex max-w-[88rem] flex-col items-center justify-between gap-6 border border-gold/50 bg-paper-warm px-6 py-7 sm:flex-row sm:px-10 sm:py-8">
+        <Reveal className="mx-auto flex max-w-[88rem] flex-col items-center justify-between gap-6 border border-gold/50 bg-paper-warm px-6 py-7 sm:flex-row sm:px-8 lg:px-12 sm:py-8">
           <div className="text-center sm:text-left">
             <p className="mb-3 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
               Prossima sfornata
@@ -175,13 +175,13 @@ export default async function PorchettaPage() {
       </section>
 
       {/* Eredità */}
-      <section className="relative overflow-hidden bg-brown-900 px-5 py-32 sm:px-8 sm:py-48">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 lg:grid-cols-2 lg:gap-24">
+      <section className="relative overflow-hidden bg-brown-900 px-5 py-16 sm:px-8 sm:py-48">
+        <div className="mx-auto grid max-w-[88rem] grid-cols-1 items-center gap-16 lg:grid-cols-2 lg:gap-24">
           <Reveal className="space-y-10">
-            <h2 className="font-display text-5xl leading-[0.95] tracking-tighter text-white sm:text-6xl lg:text-8xl">
+            <h2 className="font-display text-5xl leading-[0.95] tracking-[-0.028em] text-cream sm:text-6xl lg:text-8xl">
               L&apos;eredità di una ricetta segreta
             </h2>
-            <p className="text-xl leading-relaxed font-light text-cream/70">
+            <p className="text-xl leading-relaxed text-cream/70">
               Tramandata di padre in figlio per tre generazioni, questa ricetta è il cuore della
               Norcineria Taccalite. Non è solo carne: è storia, passione e il profumo delle colline
               marchigiane raccolto in ogni boccone.
@@ -210,7 +210,7 @@ export default async function PorchettaPage() {
             </a>
           </Reveal>
           <Reveal delay={0.15} className="relative flex justify-center">
-            <div className="cinematic-shadow relative z-10 h-[480px] w-full overflow-hidden rounded-[32px] sm:h-[600px] lg:w-[480px]">
+            <div className="cinematic-shadow relative z-10 h-[480px] w-full overflow-hidden sm:h-[600px] lg:w-[480px]">
               <Image
                 src="https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?auto=format&fit=crop&q=80&w=800"
                 alt="Gli ingredienti della ricetta"
@@ -224,18 +224,18 @@ export default async function PorchettaPage() {
       </section>
 
       {/* Processo */}
-      <section id="processo" className="bg-cream px-5 py-32 sm:px-8 sm:py-48">
-        <div className="mx-auto max-w-7xl">
+      <section id="processo" className="bg-cream px-5 py-16 sm:px-8 sm:py-48">
+        <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-20 text-center sm:mb-32">
             <span className="eyebrow eyebrow-dark mb-6 block">Dalla terra alla tavola</span>
-            <h2 className="font-display text-5xl tracking-tighter text-brown-950 sm:text-6xl md:text-7xl">
+            <h2 className="font-display display-xl font-semibold text-brown-950">
               Come nasce la nostra porchetta
             </h2>
           </Reveal>
           <RevealStagger className="grid grid-cols-1 gap-12 md:grid-cols-3">
             {steps.map((step, i) => (
               <RevealStaggerItem key={step.title} className="group">
-                <div className="cinematic-shadow relative mb-10 aspect-[4/5] overflow-hidden rounded-[32px]">
+                <div className="cinematic-shadow relative mb-10 aspect-[4/5] overflow-hidden">
                   <Image
                     src={step.image}
                     alt={step.alt}
@@ -247,8 +247,8 @@ export default async function PorchettaPage() {
                     {i + 1}
                   </div>
                 </div>
-                <h3 className="font-display mb-4 text-3xl text-brown-950">{step.title}</h3>
-                <p className="leading-relaxed text-brown-900/75">{step.text}</p>
+                <h3 className="font-display mb-4 text-[1.5rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">{step.title}</h3>
+                <p className="leading-relaxed text-brown-700">{step.text}</p>
               </RevealStaggerItem>
             ))}
           </RevealStagger>
@@ -256,10 +256,10 @@ export default async function PorchettaPage() {
       </section>
 
       {/* Il sapore perfetto */}
-      <section className="relative overflow-hidden bg-brown-950 px-5 py-32 sm:px-8 sm:py-48">
-        <div className="mx-auto max-w-7xl">
+      <section className="relative overflow-hidden bg-brown-950 px-5 py-16 sm:px-8 sm:py-48">
+        <div className="mx-auto max-w-[88rem]">
           <Reveal>
-            <div className="cinematic-shadow group relative h-[480px] overflow-hidden rounded-[40px] sm:h-[600px]">
+            <div className="cinematic-shadow group relative h-[480px] overflow-hidden sm:h-[600px]">
               <Image
                 src="https://images.unsplash.com/photo-1541529086526-db283c563270?auto=format&fit=crop&q=90&w=2000"
                 alt="Il tagliere di specialità Taccalite"
@@ -269,10 +269,10 @@ export default async function PorchettaPage() {
               />
               <div className="absolute inset-0 bg-gradient-to-r from-brown-950/80 via-transparent to-transparent" />
               <div className="absolute bottom-10 left-6 max-w-xl sm:bottom-20 sm:left-16">
-                <h2 className="font-display mb-6 text-4xl leading-tight tracking-tighter text-white sm:mb-8 sm:text-5xl lg:text-7xl">
+                <h2 className="font-display mb-6 text-4xl leading-tight tracking-[-0.028em] text-cream sm:mb-8 sm:text-5xl lg:text-7xl">
                   Il sapore perfetto
                 </h2>
-                <p className="text-lg leading-relaxed font-light text-cream/70 sm:text-xl">
+                <p className="text-lg leading-relaxed text-cream/70 sm:text-xl">
                   La croccantezza della pelle che si rompe sotto i denti, la morbidezza della carne,
                   il profumo delle erbe. Ogni morso racconta tre generazioni di maestria.
                 </p>
@@ -283,30 +283,30 @@ export default async function PorchettaPage() {
       </section>
 
       {/* Quando assaporarla */}
-      <section className="bg-cream-dark px-5 py-32 sm:px-8 sm:py-48">
+      <section className="bg-paper-warm px-5 py-16 sm:px-8 sm:py-48">
         <div className="mx-auto max-w-5xl text-center">
           <Reveal className="mb-20">
             <span className="eyebrow eyebrow-dark mb-6 block">Esperienza in negozio</span>
-            <h2 className="font-display text-5xl tracking-tighter text-brown-950 sm:text-6xl lg:text-7xl">
+            <h2 className="font-display display-xl font-semibold text-brown-950">
               Quando assaporarla
             </h2>
           </Reveal>
           <RevealStagger className="grid grid-cols-1 gap-12 text-left md:grid-cols-2">
-            <RevealStaggerItem className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-10 sm:p-12">
+            <RevealStaggerItem className="card-shadow-soft border border-rule bg-paper p-10 sm:p-12">
               <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-full bg-gold/10">
                 <Flame className="size-7 text-gold-dark" />
               </div>
-              <h3 className="font-display mb-4 text-3xl text-brown-950">Ogni sabato mattina</h3>
-              <p className="text-lg leading-relaxed text-brown-900/75">
+              <h3 className="font-display mb-4 text-[1.5rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">Ogni sabato mattina</h3>
+              <p className="text-lg leading-relaxed text-brown-700">
                 Disponibile calda appena sfornata presso le nostre botteghe ad Ancona.
               </p>
             </RevealStaggerItem>
-            <RevealStaggerItem className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-10 sm:p-12">
+            <RevealStaggerItem className="card-shadow-soft border border-rule bg-paper p-10 sm:p-12">
               <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-full bg-gold/10">
                 <Bell className="size-7 text-gold-dark" />
               </div>
-              <h3 className="font-display mb-4 text-3xl text-brown-950">Su prenotazione</h3>
-              <p className="text-lg leading-relaxed text-brown-900/75">
+              <h3 className="font-display mb-4 text-[1.5rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">Su prenotazione</h3>
+              <p className="text-lg leading-relaxed text-brown-700">
                 Per essere sicuro di trovarla, prenota la tua porchetta in negozio o per telefono
                 entro il venerdì.
               </p>
@@ -325,8 +325,8 @@ export default async function PorchettaPage() {
       </section>
 
       {/* Galleria */}
-      <section className="bg-paper px-5 py-32 sm:px-8 sm:py-48">
-        <div className="mx-auto max-w-7xl">
+      <section className="bg-paper px-5 py-16 sm:px-8 sm:py-48">
+        <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-16 space-y-6 sm:mb-24">
             <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
               <span aria-hidden className="h-px w-10 bg-gold" />
@@ -340,7 +340,7 @@ export default async function PorchettaPage() {
             {gallery.map((photo) => (
               <RevealStaggerItem
                 key={photo.src}
-                className="group cinematic-shadow relative aspect-square overflow-hidden rounded-[28px]"
+                className="group cinematic-shadow relative aspect-square overflow-hidden"
               >
                 <Image
                   src={photo.src}
@@ -356,7 +356,7 @@ export default async function PorchettaPage() {
       </section>
 
       {/* CTA finale */}
-      <section className="bg-paper-warm py-32 sm:py-40">
+      <section className="bg-paper-warm py-16 sm:py-40">
         <Reveal className="mx-auto max-w-4xl px-8 text-center">
           <h2 className="font-display display-lg mb-12 font-semibold text-brown-950">
             Pronto ad <span className="wonk text-gold-deep">assaggiarla?</span>

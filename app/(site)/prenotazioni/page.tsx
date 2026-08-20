@@ -18,19 +18,19 @@ export default async function PrenotazioniPage() {
   return (
     <div>
       {/* Hero: big text left, reservation form right */}
-      <section className="px-5 pt-32 pb-16 sm:px-8 sm:pt-40 sm:pb-24 lg:px-12">
+      <section className="px-5 pt-28 pb-14 sm:px-8 sm:pt-32 sm:pb-20 lg:px-12">
         <div className="mx-auto grid max-w-[88rem] grid-cols-1 items-start gap-14 lg:grid-cols-12 lg:gap-16">
           <Reveal className="lg:sticky lg:top-32 lg:col-span-5">
             <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
               <span aria-hidden className="h-px w-10 bg-gold" />
               Ospitalità · su prenotazione
             </p>
-            <h1 className="font-display display-xl mt-8 font-semibold text-brown-950">
+            <h1 className="font-display display-xl display-fit mt-6 font-semibold text-brown-950">
               Il tuo posto
               <br />
               <span className="wonk text-gold-deep">a tavola</span>
             </h1>
-            <p className="mt-8 max-w-xl text-lg leading-relaxed text-brown-700">
+            <p className="mt-7 max-w-xl text-lg leading-relaxed text-brown-700">
               Un tavolo per la degustazione o la tua porzione di porchetta del sabato: compila il
               modulo e ti richiamiamo noi per confermare data e disponibilità.
             </p>
@@ -61,16 +61,16 @@ export default async function PrenotazioniPage() {
       </section>
 
       {/* Info cards row */}
-      <section className="bg-paper-warm px-5 py-24 sm:px-10 sm:py-28">
-        <div className="mx-auto max-w-7xl">
+      <section className="bg-paper-warm px-5 py-16 sm:px-8 lg:px-12 sm:py-28">
+        <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-14 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <span className="eyebrow eyebrow-dark mb-4 block">Dove trovarci</span>
-              <h2 className="font-display max-w-md text-4xl leading-tight tracking-tight text-brown-950 sm:text-5xl">
+              <h2 className="font-display max-w-md display-lg font-semibold text-brown-950">
                 Due negozi, <span className="wonk text-gold-deep">una tradizione</span>
               </h2>
             </div>
-            <p className="max-w-sm text-sm leading-relaxed font-light text-brown-900/70">
+            <p className="max-w-sm text-sm leading-relaxed text-brown-700">
               Passa a trovarci ad Ancona: al Centro per i formaggi, al Mercato del Piano per carni
               e salumi.
             </p>
@@ -78,7 +78,7 @@ export default async function PrenotazioniPage() {
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             {/* Porchetta card */}
-            <Reveal className="group cinematic-shadow relative overflow-hidden rounded-[28px] bg-brown-950 p-8 transition-transform duration-500 will-change-transform hover:-translate-y-2 sm:p-9">
+            <Reveal className="group cinematic-shadow relative overflow-hidden bg-brown-950 p-8 transition-transform duration-500 will-change-transform hover:-translate-y-2 sm:p-9">
               <div className="bg-noise absolute inset-0 opacity-15" />
               <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-gold/10 blur-2xl transition-opacity duration-700 group-hover:opacity-100" />
               <div className="relative flex h-full flex-col">
@@ -86,16 +86,16 @@ export default async function PrenotazioniPage() {
                   <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gold/15 text-gold transition-transform duration-500 group-hover:scale-110">
                     <Flame className="size-6" />
                   </span>
-                  <span className="rounded-full border border-gold/30 px-3 py-1 text-[9px] font-bold tracking-[0.2em] text-gold uppercase">
+                  <span className="rounded-full border border-gold/30 px-3 py-1 text-[10px] sm:text-[9px] font-bold tracking-[0.2em] text-gold uppercase">
                     Ogni sabato
                   </span>
                 </div>
-                <h3 className="font-display text-3xl leading-tight text-cream">
+                <h3 className="font-display text-[1.75rem] leading-tight font-semibold tracking-[-0.02em] text-cream">
                   La porchetta
                   <br />
                   del sabato
                 </h3>
-                <p className="mt-4 flex-1 leading-relaxed font-light text-cream/70">
+                <p className="mt-4 flex-1 leading-relaxed text-cream/70">
                   Esce calda dal forno ogni sabato mattina
                   {porchettaShop ? ` presso ${porchettaShop.name}` : ""}, in quantità limitate.
                   Prenotala entro il venerdì per essere sicuro di trovarla.
@@ -111,17 +111,17 @@ export default async function PrenotazioniPage() {
               <Reveal
                 key={shop.slug}
                 delay={0.1 + i * 0.08}
-                className="group card-shadow-soft relative flex flex-col overflow-hidden rounded-[28px] border border-brown-900/10 bg-white/70 p-8 transition-all duration-500 will-change-transform hover:-translate-y-2 hover:border-gold/40 sm:p-9"
+                className="group card-shadow-soft relative flex flex-col overflow-hidden border border-rule bg-paper p-8 transition-all duration-500 will-change-transform hover:-translate-y-2 hover:border-gold/40 sm:p-9"
               >
                 <div className="absolute inset-x-0 top-0 h-1 origin-left scale-x-0 bg-gradient-to-r from-gold to-gold-dark transition-transform duration-500 group-hover:scale-x-100" />
                 <div className="mb-8 flex items-center justify-between">
-                  <span className="font-display text-4xl text-brown-900/15 transition-colors duration-500 group-hover:text-gold/50">
+                  <span className="font-display text-4xl text-rule-strong transition-colors duration-500 group-hover:text-gold/50">
                     0{i + 1}
                   </span>
                   <span className="eyebrow eyebrow-dark">{shop.specialty}</span>
                 </div>
-                <h3 className="font-display text-3xl leading-tight text-brown-950">{shop.name}</h3>
-                <div className="mt-6 flex-1 space-y-4 text-sm font-semibold text-brown-800/85">
+                <h3 className="font-display text-[1.75rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">{shop.name}</h3>
+                <div className="mt-6 flex-1 space-y-4 text-sm font-semibold text-brown-700">
                   <p className="flex items-start gap-3">
                     <MapPin className="mt-0.5 size-4 shrink-0 text-gold-deep" />
                     {shop.address}
@@ -137,13 +137,13 @@ export default async function PrenotazioniPage() {
                 </div>
                 <a
                   href={`tel:${shop.phone.replace(/\s/g, "")}`}
-                  className="mt-8 flex items-center justify-between rounded-full border border-brown-900/15 px-6 py-3.5 text-sm font-semibold text-brown-950 transition-colors duration-300 hover:border-brown-950 hover:bg-brown-950 hover:text-cream"
+                  className="mt-8 flex items-center justify-between rounded-full border border-rule-strong px-6 py-3.5 text-sm font-semibold text-brown-950 transition-colors duration-300 hover:border-brown-950 hover:bg-brown-950 hover:text-cream"
                 >
                   <span className="flex items-center gap-3">
                     <Phone className="size-4 shrink-0 text-gold-deep" />
                     {shop.phone}
                   </span>
-                  <span className="text-[9px] font-bold tracking-[0.2em] uppercase opacity-60">
+                  <span className="text-[10px] sm:text-[9px] font-bold tracking-[0.2em] uppercase opacity-60">
                     Chiama
                   </span>
                 </a>

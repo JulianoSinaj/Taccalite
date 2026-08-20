@@ -134,12 +134,12 @@ export default function AccountDashboard({
   return (
     <div>
       {/* Hero + card */}
-      <section className="relative overflow-hidden bg-brown-900 px-5 pt-40 pb-24 sm:px-10 sm:pt-48 sm:pb-32">
+      <section className="relative overflow-hidden bg-brown-900 px-5 pt-40 pb-24 sm:px-8 lg:px-12 sm:pt-48 sm:pb-32">
         <div className="parallax-orb absolute -top-40 -left-40 h-[60rem] w-[60rem] opacity-10" />
-        <div className="relative z-10 mx-auto flex max-w-7xl flex-col items-center">
+        <div className="relative z-10 mx-auto flex max-w-[88rem] flex-col items-center">
           <Reveal className="mb-14 space-y-4 text-center">
             <span className="eyebrow block">Benvenuto, {name.split(" ")[0]}</span>
-            <h1 className="font-display text-4xl tracking-tighter text-white sm:text-6xl">
+            <h1 className="font-display text-4xl tracking-[-0.028em] text-cream sm:text-6xl">
               Il tuo Club Taccalite
             </h1>
           </Reveal>
@@ -157,7 +157,7 @@ export default function AccountDashboard({
               type="button"
               onClick={logout}
               disabled={loggingOut}
-              className="rounded-full border border-white/25 px-6 py-2.5 text-xs font-bold tracking-widest text-cream/80 uppercase transition-colors hover:border-white/50 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-full border border-white/25 px-6 py-2.5 text-xs font-bold tracking-widest text-cream/80 uppercase transition-colors hover:border-white/50 hover:text-cream disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loggingOut ? "Uscita…" : "Esci"}
             </button>
@@ -166,49 +166,49 @@ export default function AccountDashboard({
       </section>
 
       {/* Profile + stats */}
-      <section className="bg-cream px-5 py-16 sm:px-10 sm:py-24">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8">
+      <section className="bg-cream px-5 py-16 sm:px-8 lg:px-12 sm:py-24">
+        <div className="mx-auto grid max-w-[88rem] grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8">
           <div className="space-y-6 lg:col-span-7">
             {/* TODO (follow-up, out of scope): profile editing (name/email/phone) and
                 change-password go here — they need dedicated server mutation actions. */}
-            <Reveal className="card-shadow-soft flex flex-col items-center gap-6 rounded-3xl border border-brown-900/10 bg-white/50 p-6 sm:p-8 md:flex-row">
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-white bg-cream-dark shadow-md">
-                <User className="size-9 text-brown-900/40" />
+            <Reveal className="card-shadow-soft flex flex-col items-center gap-6 border border-rule bg-paper-warm p-6 sm:p-8 md:flex-row">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-rule-strong bg-paper-warm shadow-md">
+                <User className="size-9 text-taupe" />
               </div>
               <div className="flex-1 space-y-3 text-center md:text-left">
                 <div className="space-y-0.5">
                   <h4 className="font-display text-2xl text-brown-950">{name}</h4>
-                  <p className="text-sm font-medium text-brown-800/75">Cliente Taccalite · #{cardNumber}</p>
+                  <p className="text-sm font-medium text-taupe">Cliente Taccalite · #{cardNumber}</p>
                 </div>
-                <p className="text-sm leading-relaxed text-brown-900/75">
+                <p className="text-sm leading-relaxed text-brown-700">
                   Presenta la tua scheda in negozio ad ogni acquisto per accumulare punti e
                   riscattare i premi del club.
                 </p>
               </div>
             </Reveal>
 
-            <Reveal className="card-shadow-soft rounded-3xl border border-brown-900/10 bg-white/50 p-6 sm:p-8">
-              <div className="mb-4 flex items-baseline justify-between border-b border-brown-900/10 pb-4">
+            <Reveal className="card-shadow-soft border border-rule bg-paper p-6 sm:p-8">
+              <div className="mb-4 flex items-baseline justify-between border-b border-rule pb-4">
                 <h3 className="font-display text-2xl tracking-tight text-brown-950">
                   Movimenti punti
                 </h3>
                 {transactions.length > 0 && (
-                  <p className="text-xs font-semibold tracking-widest text-brown-800/60 uppercase">
+                  <p className="text-xs font-semibold tracking-widest text-taupe uppercase">
                     {transactions.length} {transactions.length === 1 ? "movimento" : "movimenti"}
                   </p>
                 )}
               </div>
               {transactions.length === 0 ? (
-                <p className="py-6 text-center text-sm text-brown-900/70">
+                <p className="py-6 text-center text-sm text-brown-700">
                   Non hai ancora movimenti. I punti compaiono qui ad ogni acquisto in negozio.
                 </p>
               ) : (
-                <ul className="divide-y divide-brown-900/10">
+                <ul className="divide-y divide-rule">
                   {transactions.map((tx) => (
                     <li key={tx.id} className="flex items-center justify-between gap-4 py-3.5">
                       <div>
                         <p className="text-sm font-semibold text-brown-950">{tx.reason || "Movimento"}</p>
-                        <p className="text-xs text-brown-800/60">
+                        <p className="text-xs text-taupe">
                           {new Date(tx.createdAt).toLocaleDateString("it-IT", {
                             day: "numeric",
                             month: "long",
@@ -218,8 +218,8 @@ export default function AccountDashboard({
                       </div>
                       <span
                         className={`font-display text-lg font-bold tabular-nums ${
-                          tx.delta >= 0 ? "text-gold-deep" : "text-red-700"
-                        }`}
+ tx.delta >= 0 ? "text-gold-deep" : "text-red-700"
+ }`}
                       >
                         {tx.delta >= 0 ? "+" : ""}
                         {tx.delta}
@@ -230,10 +230,10 @@ export default function AccountDashboard({
               )}
             </Reveal>
 
-            <Reveal className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-8 sm:p-10">
+            <Reveal className="card-shadow-soft border border-rule bg-paper p-8 sm:p-10">
               <h3 className="font-display mb-6 text-3xl tracking-tight text-brown-950">I tuoi ordini</h3>
               {orders.length === 0 ? (
-                <p className="text-brown-900/70">
+                <p className="text-brown-700">
                   Non hai ancora ordini. Scopri il{" "}
                   <Link href="/negozio" className="font-semibold text-brown-950 underline">
                     negozio online
@@ -241,7 +241,7 @@ export default function AccountDashboard({
                   .
                 </p>
               ) : (
-                <ul className="divide-y divide-brown-900/10">
+                <ul className="divide-y divide-rule">
                   {orders.map((o) => {
                     const st = ORDER_STATUS[o.status] ?? {
                       label: o.status,
@@ -251,16 +251,16 @@ export default function AccountDashboard({
                       <li key={o.id}>
                         <Link
                           href={`/account/ordini/${o.orderNumber}`}
-                          className="group -mx-3 flex items-center justify-between gap-4 rounded-2xl px-3 py-3 transition-colors hover:bg-brown-900/5"
+                          className="group -mx-3 flex items-center justify-between gap-4 px-3 py-3 transition-colors hover:bg-brown-900/5"
                         >
                           <div>
                             <p className="text-sm font-semibold text-brown-950 group-hover:text-gold-deep">
                               {o.orderNumber}
-                              <span className="ml-2 text-xs font-normal text-brown-800/60">
+                              <span className="ml-2 text-xs font-normal text-taupe">
                                 {o.fulfilment === "pickup" ? "Ritiro" : "Spedizione"}
                               </span>
                             </p>
-                            <p className="text-xs text-brown-800/60">
+                            <p className="text-xs text-taupe">
                               {new Date(o.createdAt).toLocaleDateString("it-IT", dateFmt)}
                             </p>
                           </div>
@@ -273,7 +273,7 @@ export default function AccountDashboard({
                             <span className="font-display text-lg font-bold text-brown-950">
                               € {(o.totalCents / 100).toFixed(2)}
                             </span>
-                            <ChevronRight className="size-4 shrink-0 text-brown-900/30 transition-transform group-hover:translate-x-0.5 group-hover:text-brown-900/60" />
+                            <ChevronRight className="size-4 shrink-0 text-taupe transition-transform group-hover:translate-x-0.5 group-hover:text-brown-700" />
                           </div>
                         </Link>
                       </li>
@@ -284,12 +284,12 @@ export default function AccountDashboard({
             </Reveal>
 
             {/* Reservation history */}
-            <Reveal className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-8 sm:p-10">
+            <Reveal className="card-shadow-soft border border-rule bg-paper p-8 sm:p-10">
               <h3 className="font-display mb-6 text-3xl tracking-tight text-brown-950">
                 Le tue prenotazioni
               </h3>
               {reservations.length === 0 ? (
-                <p className="text-brown-900/70">
+                <p className="text-brown-700">
                   Nessuna prenotazione ancora. Prenota un{" "}
                   <Link href="/prenotazioni" className="font-semibold text-brown-950 underline">
                     tavolo o una porchetta
@@ -297,7 +297,7 @@ export default function AccountDashboard({
                   .
                 </p>
               ) : (
-                <ul className="divide-y divide-brown-900/10">
+                <ul className="divide-y divide-rule">
                   {reservations.map((r) => {
                     const st = RESERVATION_STATUS[r.status];
                     const detail =
@@ -310,13 +310,13 @@ export default function AccountDashboard({
                       <li key={r.id}>
                         <Link
                           href={`/traccia?ref=${encodeURIComponent(r.reference)}`}
-                          className="group -mx-3 flex items-center justify-between gap-4 rounded-2xl px-3 py-3 transition-colors hover:bg-brown-900/5"
+                          className="group -mx-3 flex items-center justify-between gap-4 px-3 py-3 transition-colors hover:bg-brown-900/5"
                         >
                           <div>
                             <p className="text-sm font-semibold text-brown-950 group-hover:text-gold-deep">
                               {RESERVATION_TYPE_LABEL[r.type]}
                             </p>
-                            <p className="text-xs text-brown-800/60">
+                            <p className="text-xs text-taupe">
                               {detail} · Rif. {r.reference}
                             </p>
                             {r.waitlisted && r.status !== "cancelled" && (
@@ -331,7 +331,7 @@ export default function AccountDashboard({
                             >
                               {st.label}
                             </span>
-                            <ChevronRight className="size-4 shrink-0 text-brown-900/30 transition-transform group-hover:translate-x-0.5 group-hover:text-brown-900/60" />
+                            <ChevronRight className="size-4 shrink-0 text-taupe transition-transform group-hover:translate-x-0.5 group-hover:text-brown-700" />
                           </div>
                         </Link>
                       </li>
@@ -342,23 +342,23 @@ export default function AccountDashboard({
             </Reveal>
 
             {/* Redemption history */}
-            <Reveal className="card-shadow-soft rounded-[28px] border border-brown-900/10 bg-white/50 p-8 sm:p-10">
+            <Reveal className="card-shadow-soft border border-rule bg-paper p-8 sm:p-10">
               <h3 className="font-display mb-6 text-3xl tracking-tight text-brown-950">
                 Premi riscattati
               </h3>
               {redemptions.length === 0 ? (
-                <p className="text-brown-900/70">
+                <p className="text-brown-700">
                   Non hai ancora riscattato premi. Sfoglia il catalogo fedeltà qui sotto.
                 </p>
               ) : (
-                <ul className="divide-y divide-brown-900/10">
+                <ul className="divide-y divide-rule">
                   {redemptions.map((r) => {
                     const st = REDEMPTION_STATUS[r.status];
                     return (
                       <li key={r.id} className="flex items-center justify-between gap-4 py-3.5">
                         <div>
                           <p className="text-sm font-semibold text-brown-950">{r.rewardName}</p>
-                          <p className="text-xs text-brown-800/60">
+                          <p className="text-xs text-taupe">
                             {new Date(r.createdAt).toLocaleDateString("it-IT", dateFmt)}
                           </p>
                         </div>
@@ -381,7 +381,7 @@ export default function AccountDashboard({
           </div>
 
           <div className="space-y-6 lg:sticky lg:top-24 lg:col-span-5">
-            <Reveal delay={0.1} className="card-shadow-soft rounded-3xl border border-brown-900/10 bg-white/60 p-6 sm:p-8">
+            <Reveal delay={0.1} className="card-shadow-soft border border-rule bg-paper p-6 sm:p-8">
               <div className="mb-6 flex items-center gap-3">
                 <TrendingUp className="size-5 text-gold-dark" />
                 <h5 className="text-[11px] font-bold tracking-[0.3em] text-brown-950 uppercase">
@@ -391,24 +391,24 @@ export default function AccountDashboard({
               <div className="flex items-end justify-between gap-4">
                 <div>
                   <p className="font-display text-6xl leading-none text-brown-950 tabular-nums">{points}</p>
-                  <p className="mt-2 text-xs font-medium tracking-widest text-brown-800/60 uppercase">
+                  <p className="mt-2 text-xs font-medium tracking-widest text-taupe uppercase">
                     Punti raccolti
                   </p>
                 </div>
                 {nextReward && (
                   <div className="text-right">
-                    <p className="font-display text-2xl leading-none text-brown-800/80 tabular-nums">
+                    <p className="font-display text-2xl leading-none text-brown-700 tabular-nums">
                       {nextReward.points}
                     </p>
-                    <p className="mt-2 text-xs font-medium tracking-widest text-brown-800/60 uppercase">
+                    <p className="mt-2 text-xs font-medium tracking-widest text-taupe uppercase">
                       Prossimo premio
                     </p>
                   </div>
                 )}
               </div>
               {nextReward && (
-                <div className="mt-6 border-t border-brown-900/10 pt-5">
-                  <div className="mb-2 flex items-baseline justify-between gap-4 text-[10px] font-bold tracking-widest text-brown-900/80 uppercase">
+                <div className="mt-6 border-t border-rule pt-5">
+                  <div className="mb-2 flex items-baseline justify-between gap-4 text-[10px] font-bold tracking-widest text-brown-700 uppercase">
                     <p className="truncate">{nextReward.name}</p>
                     <p className="shrink-0">{missing} pt mancanti</p>
                   </div>
@@ -419,11 +419,11 @@ export default function AccountDashboard({
               )}
             </Reveal>
 
-            <Reveal delay={0.2} className="cinematic-shadow space-y-4 rounded-3xl bg-brown-950 p-6 text-white sm:p-8">
+            <Reveal delay={0.2} className="cinematic-shadow space-y-4 bg-brown-950 p-6 text-cream sm:p-8">
               <h5 className="text-[11px] font-bold tracking-[0.3em] text-gold uppercase">
                 Vuoi accumulare più punti?
               </h5>
-              <p className="text-sm font-light leading-relaxed text-cream/75">
+              <p className="text-sm leading-relaxed text-cream/75">
                 Prenota un tavolo per una degustazione: ogni visita ti avvicina al prossimo premio.
               </p>
               <Link
@@ -439,12 +439,12 @@ export default function AccountDashboard({
       </section>
 
       {/* Rewards catalogue */}
-      <section className="relative overflow-hidden bg-brown-950 px-5 py-24 sm:px-10 sm:py-32">
-        <div className="relative z-10 mx-auto max-w-7xl">
+      <section className="relative overflow-hidden bg-brown-950 px-5 py-24 sm:px-8 lg:px-12 sm:py-32">
+        <div className="relative z-10 mx-auto max-w-[88rem]">
           <Reveal className="mb-12 flex flex-col justify-between gap-8 md:flex-row md:items-end">
             <div className="space-y-6">
               <span className="eyebrow block">I premi disponibili</span>
-              <h2 className="font-display text-4xl tracking-tighter text-white sm:text-5xl md:text-7xl">
+              <h2 className="font-display text-4xl tracking-[-0.028em] text-cream sm:text-5xl md:text-7xl">
                 Catalogo fedeltà
               </h2>
             </div>
@@ -455,9 +455,9 @@ export default function AccountDashboard({
 
           {message && (
             <div
-              className={`mb-10 rounded-2xl px-6 py-4 text-sm font-semibold ${
-                message.kind === "ok" ? "bg-gold/20 text-gold" : "bg-red-500/15 text-red-300"
-              }`}
+              className={`mb-10 px-6 py-4 text-sm font-semibold ${
+ message.kind === "ok" ? "bg-gold/20 text-gold" : "bg-red-500/15 text-red-300"
+ }`}
             >
               {message.text}
             </div>
@@ -468,7 +468,7 @@ export default function AccountDashboard({
               const canRedeem = points >= reward.points;
               return (
                 <RevealStaggerItem key={reward.id} className="group flex flex-col">
-                  <div className="cinematic-shadow relative mb-8 aspect-[4/3] overflow-hidden rounded-[24px] bg-brown-900">
+                  <div className="cinematic-shadow relative mb-8 aspect-[4/3] overflow-hidden bg-brown-900">
                     {reward.image ? (
                       <Image
                         src={reward.image}
@@ -490,17 +490,17 @@ export default function AccountDashboard({
                       </p>
                     </div>
                   </div>
-                  <h4 className="font-display mb-2 text-2xl text-white">{reward.name}</h4>
+                  <h4 className="font-display mb-2 text-2xl text-cream">{reward.name}</h4>
                   <p className="mb-6 flex-1 text-sm leading-relaxed text-cream/70">{reward.description}</p>
                   <button
                     type="button"
                     disabled={!canRedeem || busyId === reward.id}
                     onClick={() => redeem(reward)}
                     className={`rounded-full px-6 py-3 text-xs font-bold tracking-widest uppercase transition-all ${
-                      canRedeem
-                        ? "bg-gold text-brown-950 hover:bg-gold-dark"
-                        : "cursor-not-allowed border border-white/15 text-cream/40"
-                    }`}
+ canRedeem
+ ? "bg-gold text-brown-950 hover:bg-gold-dark"
+ : "cursor-not-allowed border border-white/15 text-cream/40"
+ }`}
                   >
                     {busyId === reward.id
                       ? "Attendere…"

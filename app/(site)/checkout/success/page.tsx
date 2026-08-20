@@ -48,28 +48,28 @@ export default async function CheckoutSuccess({ searchParams }: SP) {
   const items = result?.items ?? [];
 
   return (
-    <section className="flex min-h-[80vh] items-center justify-center bg-cream px-5 pt-32 pb-20">
+    <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-32 pb-20">
       <ClearCart />
       <div className="w-full max-w-lg text-center">
         <div className="mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-full bg-gold">
           <Check className="size-8 text-brown-950" />
         </div>
-        <h1 className="font-display text-4xl tracking-tighter text-brown-950 sm:text-5xl">Grazie!</h1>
-        <p className="mt-4 text-lg text-brown-900/75">
+        <h1 className="font-display display-lg font-semibold text-brown-950">Grazie!</h1>
+        <p className="mt-4 text-lg text-brown-700">
           {order
             ? `Il tuo ordine ${order.orderNumber} è stato registrato. Ti abbiamo inviato una email di conferma.`
             : "Il tuo ordine è stato registrato."}
         </p>
 
         {order && items.length > 0 && (
-          <div className="mt-8 rounded-[24px] border border-brown-900/10 bg-white/70 p-6 text-left">
+          <div className="mt-8 border border-rule bg-paper-warm p-6 text-left">
             {items.map((i) => (
-              <div key={i.id} className="flex justify-between py-1.5 text-sm text-brown-900/80">
+              <div key={i.id} className="flex justify-between py-1.5 text-sm text-brown-700">
                 <span>{i.quantity}× {i.name}</span>
                 <span>{formatEuro(i.lineTotalCents)}</span>
               </div>
             ))}
-            <div className="mt-3 flex justify-between border-t border-brown-900/10 pt-3 font-display text-lg font-bold text-brown-950">
+            <div className="mt-3 flex justify-between border-t border-rule pt-3 font-display text-lg font-bold text-brown-950">
               <span>Totale</span>
               <span>{formatEuro(order.totalCents)}</span>
             </div>

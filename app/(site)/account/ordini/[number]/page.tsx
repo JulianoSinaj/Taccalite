@@ -63,21 +63,21 @@ export default async function OrderDetailPage({ params }: PageProps) {
   const paymentStyle = PAYMENT_STYLE[order.paymentStatus] ?? "bg-brown-900/10 text-brown-800";
 
   return (
-    <section className="min-h-[80vh] bg-cream px-5 pt-32 pb-20 sm:px-10">
+    <section className="min-h-[70svh] bg-cream px-5 pt-32 pb-20 sm:px-8 lg:px-12">
       <div className="mx-auto w-full max-w-2xl">
         <Link
           href="/account"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-brown-900/70 transition-colors hover:text-brown-950"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-brown-700 transition-colors hover:text-brown-950"
         >
           <ArrowLeft className="size-4" />
           Torna all&apos;area personale
         </Link>
 
         <header className="mt-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brown-900/50">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-taupe">
             Il tuo ordine
           </p>
-          <h1 className="mt-3 font-display text-4xl tracking-tighter text-brown-950 sm:text-5xl">
+          <h1 className="mt-3 font-display display-lg font-semibold text-brown-950">
             {order.orderNumber}
           </h1>
           <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -93,7 +93,7 @@ export default async function OrderDetailPage({ params }: PageProps) {
             </span>
           </div>
           {order.createdAt && (
-            <p className="mt-4 text-sm text-brown-900/60">
+            <p className="mt-4 text-sm text-brown-700">
               Effettuato il{" "}
               {new Date(order.createdAt).toLocaleDateString("it-IT", {
                 day: "numeric",
@@ -105,14 +105,14 @@ export default async function OrderDetailPage({ params }: PageProps) {
         </header>
 
         {/* Line items */}
-        <div className="mt-10 rounded-[24px] border border-brown-900/10 bg-white/70 p-6 sm:p-8">
+        <div className="mt-10 border border-rule bg-paper-warm p-6 sm:p-8">
           <h2 className="font-display text-2xl tracking-tight text-brown-950">Prodotti</h2>
-          <ul className="mt-5 divide-y divide-brown-900/10">
+          <ul className="mt-5 divide-y divide-rule">
             {items.map((it) => (
               <li key={it.id} className="flex items-start justify-between gap-4 py-3.5">
                 <div>
                   <p className="text-sm font-semibold text-brown-950">{it.name}</p>
-                  <p className="text-xs text-brown-800/60">
+                  <p className="text-xs text-taupe">
                     {it.quantity} × {formatEuro(it.unitPriceCents)}
                   </p>
                 </div>
@@ -123,20 +123,20 @@ export default async function OrderDetailPage({ params }: PageProps) {
             ))}
           </ul>
 
-          <dl className="mt-5 space-y-2 border-t border-brown-900/10 pt-5">
+          <dl className="mt-5 space-y-2 border-t border-rule pt-5">
             <div className="flex items-center justify-between gap-4">
-              <dt className="text-sm text-brown-900/60">Subtotale</dt>
+              <dt className="text-sm text-brown-700">Subtotale</dt>
               <dd className="text-sm font-medium text-brown-950 tabular-nums">
                 {formatEuro(order.subtotalCents)}
               </dd>
             </div>
             <div className="flex items-center justify-between gap-4">
-              <dt className="text-sm text-brown-900/60">Spedizione</dt>
+              <dt className="text-sm text-brown-700">Spedizione</dt>
               <dd className="text-sm font-medium text-brown-950 tabular-nums">
                 {order.shippingCents > 0 ? formatEuro(order.shippingCents) : "Gratis"}
               </dd>
             </div>
-            <div className="flex items-center justify-between gap-4 border-t border-brown-900/10 pt-3">
+            <div className="flex items-center justify-between gap-4 border-t border-rule pt-3">
               <dt className="font-display text-lg text-brown-950">Totale</dt>
               <dd className="font-display text-xl font-bold text-brown-950 tabular-nums">
                 {formatEuro(order.totalCents)}
@@ -146,12 +146,12 @@ export default async function OrderDetailPage({ params }: PageProps) {
         </div>
 
         {/* Fulfilment */}
-        <div className="mt-6 rounded-[24px] border border-brown-900/10 bg-white/70 p-6 sm:p-8">
+        <div className="mt-6 border border-rule bg-paper-warm p-6 sm:p-8">
           <h2 className="font-display text-2xl tracking-tight text-brown-950">
             {order.fulfilment === "pickup" ? "Ritiro in negozio" : "Spedizione"}
           </h2>
           {order.fulfilment === "pickup" ? (
-            <p className="mt-3 text-sm leading-relaxed text-brown-900/75">
+            <p className="mt-3 text-sm leading-relaxed text-brown-700">
               {shop ? (
                 <>
                   Ritiro presso <span className="font-semibold text-brown-950">{shop.name}</span>
@@ -162,7 +162,7 @@ export default async function OrderDetailPage({ params }: PageProps) {
               )}
             </p>
           ) : shipping ? (
-            <address className="mt-3 text-sm not-italic leading-relaxed text-brown-900/75">
+            <address className="mt-3 text-sm not-italic leading-relaxed text-brown-700">
               <span className="font-semibold text-brown-950">{order.name}</span>
               <br />
               {shipping.address}
@@ -170,15 +170,15 @@ export default async function OrderDetailPage({ params }: PageProps) {
               {shipping.zip} {shipping.city}
             </address>
           ) : (
-            <p className="mt-3 text-sm text-brown-900/75">Consegna al tuo indirizzo.</p>
+            <p className="mt-3 text-sm text-brown-700">Consegna al tuo indirizzo.</p>
           )}
         </div>
 
         {/* Notes */}
         {order.notes && (
-          <div className="mt-6 rounded-[24px] border border-brown-900/10 bg-white/70 p-6 sm:p-8">
+          <div className="mt-6 border border-rule bg-paper-warm p-6 sm:p-8">
             <h2 className="font-display text-2xl tracking-tight text-brown-950">Note</h2>
-            <p className="mt-3 text-sm leading-relaxed text-brown-900/75">{order.notes}</p>
+            <p className="mt-3 text-sm leading-relaxed text-brown-700">{order.notes}</p>
           </div>
         )}
 
