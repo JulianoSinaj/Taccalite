@@ -36,7 +36,12 @@ export default function PageHero({
   className,
 }: PageHeroProps) {
   return (
-    <section className={cn("px-5 pt-32 pb-14 sm:px-8 sm:pt-40 sm:pb-20 lg:px-12", className)}>
+    // `pt-28` on a phone: the fixed header is 76px there, not the 110px the
+    // desktop's 8rem was clearing, so a third of the gap was measured against
+    // chrome that is not on the screen. Together with the tighter margins below,
+    // this brings the first row of an inner page — the products on /negozio, the
+    // shops on /sedi — up above the fold.
+    <section className={cn("px-5 pt-28 pb-10 sm:px-8 sm:pt-40 sm:pb-20 lg:px-12", className)}>
       <div
         className={cn(
           "mx-auto max-w-[88rem]",
@@ -51,20 +56,22 @@ export default function PageHero({
 
           {aside ? (
             <>
-              <h1 className="font-display display-xl mt-8 font-semibold text-brown-950">
+              <h1 className="font-display display-xl mt-5 font-semibold text-brown-950 sm:mt-8">
                 <RevealLines immediate lines={title} />
               </h1>
               {lede && (
-                <p className="mt-8 max-w-xl text-lg leading-relaxed text-brown-700">{lede}</p>
+                <p className="mt-6 max-w-xl text-[1.0625rem] leading-relaxed text-brown-700 sm:mt-8 sm:text-lg">
+                  {lede}
+                </p>
               )}
             </>
           ) : (
-            <div className="mt-8 grid gap-8 border-b border-rule pb-10 lg:grid-cols-12 lg:items-end lg:gap-12">
+            <div className="mt-5 grid gap-5 border-b border-rule pb-7 sm:mt-8 sm:gap-8 sm:pb-10 lg:grid-cols-12 lg:items-end lg:gap-12">
               <h1 className="font-display display-xl font-semibold text-brown-950 lg:col-span-8">
                 <RevealLines immediate lines={title} />
               </h1>
               {lede && (
-                <p className="text-lg leading-relaxed text-brown-700 lg:col-span-4 lg:pb-2 lg:text-base">
+                <p className="text-[1.0625rem] leading-relaxed text-brown-700 sm:text-lg lg:col-span-4 lg:pb-2 lg:text-base">
                   {lede}
                 </p>
               )}

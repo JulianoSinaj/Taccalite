@@ -40,6 +40,11 @@
   --rule: #e7dccb;         /* hairline between sections and around cards */
   --rule-strong: #d4c4a9;  /* the same hairline when it has to be seen */
 
+  /* The tooth in the stock. A token rather than a literal because the intro
+   * veil paints the same grain over its own ground: were the veil smooth, the
+   * page would visibly gain a texture at the moment the veil lifted. */
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.32'/%3E%3C/svg%3E");
+
   /* ── Territory accents ────────────────────────────────────────────────────
    *
    * The storefront used to be one hue — the brown ramp plus gold — which read
@@ -288,11 +293,156 @@ body:has(.site-shell) {
   pointer-events: none;
   opacity: 0.45;
   mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.32'/%3E%3C/svg%3E");
+  background-image: var(--paper-grain);
 }
 
 @media print {
   .site-shell::before {
+    display: none;
+  }
+}
+
+/* ── The intro ───────────────────────────────────────────────────────────────
+ *
+ * The shop stamping its seal on the page before handing it over.
+ *
+ * Driven entirely by a `data-intro` attribute that a tiny inline script sets on
+ * <html> (see components/site/Intro.tsx) — deliberately not by React. The veil's
+ * whole job is to cover the page *before* hydration, and its promise is that it
+ * lifts within a fixed budget; both would be hostage to hydration timing if a
+ * component owned them. React only renders the markup.
+ *
+ * `display: none` is the default state, so with the attribute absent — script
+ * blocked, JavaScript off, a repeat visit in the same session, a client-side
+ * navigation back to the homepage — there is simply no veil at all.
+ */
+.intro-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  place-items: center;
+  background: var(--paper);
+}
+
+.intro-veil::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.45;
+  mix-blend-mode: multiply;
+  background-image: var(--paper-grain);
+}
+
+html[data-intro="play"] .intro-veil {
+  display: grid;
+}
+
+/* The lift. `visibility` is delayed by exactly the fade so the veil stops
+ * catching clicks the instant it is invisible rather than the instant it starts
+ * leaving. */
+html[data-intro="done"] .intro-veil {
+  display: grid;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 420ms cubic-bezier(0.4, 0, 1, 1),
+    visibility 0s linear 420ms;
+}
+
+.intro-stack {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 1.4rem;
+  padding: 0 1.5rem;
+}
+
+.intro-seal {
+  width: clamp(6rem, 17vw, 9rem);
+  height: auto;
+  filter: drop-shadow(0 14px 26px rgba(42, 26, 16, 0.22));
+}
+
+.intro-name {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--color-gold-deep);
+}
+
+.intro-rule {
+  position: relative;
+  display: block;
+  height: 1px;
+  width: 7rem;
+  overflow: hidden;
+  background: var(--rule);
+}
+
+.intro-rule::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto;
+  width: 34%;
+  background: var(--color-gold);
+}
+
+html[data-intro="play"] .intro-seal {
+  animation: intro-stamp 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+html[data-intro="play"] .intro-name {
+  animation: intro-rise 380ms cubic-bezier(0.16, 1, 0.3, 1) 240ms both;
+}
+
+html[data-intro="play"] .intro-rule::after {
+  animation: loading-sweep 1.4s ease-in-out 300ms infinite;
+}
+
+/* The press: the seal comes down oversized and off-square, overshoots, and
+ * settles — while its shadow tightens from a long throw to a resting one, which
+ * is what sells the descent as distance rather than a scale tween. */
+@keyframes intro-stamp {
+  0% {
+    opacity: 0;
+    transform: scale(1.5) rotate(-9deg);
+    filter: drop-shadow(0 44px 40px rgba(42, 26, 16, 0));
+  }
+  50% {
+    opacity: 1;
+  }
+  68% {
+    transform: scale(0.955) rotate(1.6deg);
+    filter: drop-shadow(0 9px 16px rgba(42, 26, 16, 0.3));
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 14px 26px rgba(42, 26, 16, 0.22));
+  }
+}
+
+@keyframes intro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The script already refuses to play the intro under reduced motion. This is the
+ * second lock on the same door: a veil is worthless if it ever shows without the
+ * script that lifts it. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-intro="play"] .intro-veil,
+  html[data-intro="done"] .intro-veil {
     display: none;
   }
 }

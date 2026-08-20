@@ -197,7 +197,7 @@ export default function CheckoutClient({
                       type="button"
                       aria-label={`Riduci ${i.name}`}
                       onClick={() => setQty(i.slug, i.qty - 1)}
-                      className="flex size-9 items-center justify-center rounded-full bg-brown-950 text-cream focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
+                      className="flex size-11 items-center justify-center rounded-full bg-brown-950 text-cream focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
                     >
                       <Minus className="size-3.5" />
                     </button>
@@ -206,7 +206,7 @@ export default function CheckoutClient({
                       type="button"
                       aria-label={`Aumenta ${i.name}`}
                       onClick={() => setQty(i.slug, i.qty + 1)}
-                      className="flex size-9 items-center justify-center rounded-full bg-brown-950 text-cream focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
+                      className="flex size-11 items-center justify-center rounded-full bg-brown-950 text-cream focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
                     >
                       <Plus className="size-3.5" />
                     </button>

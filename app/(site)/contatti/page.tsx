@@ -95,14 +95,14 @@ export default async function ContattiPage() {
                         {shop.specialty}
                       </p>
 
-                      <ul className="mt-6 space-y-3.5 text-[0.9375rem] text-brown-700">
+                      <ul className="mt-6 space-y-5 text-[0.9375rem] text-brown-700 sm:space-y-3.5">
                         <li className="flex items-start gap-3">
                           <MapPin className="mt-1 size-4 shrink-0 text-gold-deep" aria-hidden />
                           <a
                             href={mapsHref(shop.address)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="group inline-flex items-center gap-1.5 transition-colors hover:text-brown-950"
+                            className="tap group inline-flex items-center gap-1.5 transition-colors hover:text-brown-950"
                           >
                             {shop.address}
                             <ExternalLink
@@ -116,7 +116,7 @@ export default async function ContattiPage() {
                             <Phone className="mt-1 size-4 shrink-0 text-gold-deep" aria-hidden />
                             <a
                               href={telHref(shop.phone)}
-                              className="transition-colors hover:text-brown-950"
+                              className="tap font-medium text-brown-950 transition-colors hover:text-gold-deep"
                             >
                               {shop.phone}
                             </a>
@@ -149,12 +149,12 @@ export default async function ContattiPage() {
                 <h3 className="text-[0.625rem] font-semibold tracking-[0.22em] text-taupe uppercase">
                   Altrimenti
                 </h3>
-                <ul className="mt-5 space-y-3.5 text-[0.9375rem] text-brown-700">
+                <ul className="mt-5 space-y-5 text-[0.9375rem] text-brown-700 sm:space-y-3.5">
                   <li className="flex items-start gap-3">
                     <Mail className="mt-1 size-4 shrink-0 text-gold-deep" aria-hidden />
                     <a
                       href={`mailto:${siteConfig.email}`}
-                      className="break-all transition-colors hover:text-brown-950"
+                      className="tap break-all transition-colors hover:text-brown-950"
                     >
                       {siteConfig.email}
                     </a>
@@ -164,7 +164,7 @@ export default async function ContattiPage() {
                       href={siteConfig.social.instagram}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="transition-colors hover:text-brown-950"
+                      className="tap transition-colors hover:text-brown-950"
                     >
                       Instagram
                     </a>
@@ -172,7 +172,7 @@ export default async function ContattiPage() {
                       href={siteConfig.social.facebook}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="transition-colors hover:text-brown-950"
+                      className="tap transition-colors hover:text-brown-950"
                     >
                       Facebook
                     </a>

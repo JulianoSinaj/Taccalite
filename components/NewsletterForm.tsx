@@ -56,7 +56,7 @@ export default function NewsletterForm() {
           type="submit"
           disabled={status === "busy"}
           aria-label="Iscriviti alla newsletter"
-          className="-mr-2.5 flex size-11 shrink-0 items-center justify-center rounded-full text-gold transition-transform hover:translate-x-1 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
+          className="flex size-11 shrink-0 items-center justify-center rounded-full text-gold transition-transform hover:translate-x-1 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
         >
           <ArrowRight className="size-5" />
         </button>

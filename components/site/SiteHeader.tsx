@@ -85,11 +85,11 @@ export default function SiteHeader({ shops = [] }: { shops?: HeaderShop[] }) {
       >
         <div
           className={cn(
-            // The gap collapses on a phone: at 375px the wordmark, three icons
-            // and an 8-unit gutter between them left the menu button hard against
-            // the screen edge, where a right thumb reaches it and a left one
-            // does not.
-            "mx-auto flex max-w-[88rem] items-center gap-3 px-4 transition-[padding] duration-500 sm:gap-8 sm:px-8 lg:px-12",
+            // The gutter and the gap both collapse on a phone. Three 44px
+            // targets and the wordmark need 296px of the 320px an iPhone SE
+            // gives you; at the desktop's `px-5 gap-8` they needed 400 and the
+            // menu button was pushed off the right edge of the screen.
+            "mx-auto flex max-w-[88rem] items-center gap-3 px-3 transition-[padding] duration-500 sm:gap-8 sm:px-8 lg:px-12",
             scrolled ? "py-2.5 sm:py-3" : "py-3.5 sm:py-5"
           )}
         >
@@ -100,7 +100,10 @@ export default function SiteHeader({ shops = [] }: { shops?: HeaderShop[] }) {
             <span className="font-display text-[1.35rem] font-semibold tracking-[-0.04em] text-brown-950 uppercase transition-colors group-hover:text-gold-deep sm:text-[1.6rem]">
               Taccalite
             </span>
-            <span className="mt-1 text-[0.625rem] sm:text-[0.5625rem] font-semibold tracking-[0.3em] text-taupe uppercase sm:tracking-[0.38em]">
+            {/* The tagline is the first thing to go on a 320px screen: it is
+                160px of wordmark that the three 44px controls beside it need
+                more than the brand does. The wordmark still says who this is. */}
+            <span className="mt-1 hidden text-[0.625rem] font-semibold tracking-[0.3em] text-taupe uppercase min-[360px]:block sm:text-[0.5625rem] sm:tracking-[0.38em]">
               Norcineria dal 1946
             </span>
           </Link>
@@ -131,9 +134,7 @@ export default function SiteHeader({ shops = [] }: { shops?: HeaderShop[] }) {
             })}
           </nav>
 
-          {/* `-mr-2` pulls the row's own padding back so the last icon's 44px
-              target reaches the screen edge while the *glyph* stays inset. */}
-          <div className="-mr-2 ml-auto flex items-center gap-0.5 sm:mr-0 sm:gap-2 lg:ml-0 lg:gap-3">
+          <div className="ml-auto flex items-center gap-0.5 sm:gap-2 lg:ml-0 lg:gap-3">
             <Magnetic className="hidden sm:inline-flex">
               <Link
                 href="/prenotazioni"

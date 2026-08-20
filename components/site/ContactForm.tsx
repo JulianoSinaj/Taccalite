@@ -43,7 +43,7 @@ export default function ContactForm() {
 
   if (state === "sent") {
     return (
-      <div className="border border-gold/40 bg-paper-warm p-8">
+      <div className="border border-gold/40 bg-paper-warm p-6 sm:p-8">
         <Check className="size-6 text-gold-deep" aria-hidden />
         <p className="font-display mt-4 text-2xl font-semibold text-brown-950">
           Messaggio ricevuto.
@@ -55,7 +55,7 @@ export default function ContactForm() {
         <button
           type="button"
           onClick={() => setState("idle")}
-          className="mt-6 text-[0.6875rem] font-semibold tracking-[0.18em] text-brown-950 uppercase underline-offset-4 hover:underline"
+          className="mt-5 py-2 text-[0.6875rem] font-semibold tracking-[0.18em] text-brown-950 uppercase underline-offset-4 hover:underline"
         >
           Scrivi un altro messaggio
         </button>
@@ -64,8 +64,8 @@ export default function ContactForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-7">
-      <div className="grid gap-7 sm:grid-cols-2">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-6 sm:gap-7">
+      <div className="grid gap-6 sm:grid-cols-2 sm:gap-7">
         <div>
           <label className={labelClass} htmlFor="contact-name">
             Nome e cognome
@@ -151,11 +151,11 @@ export default function ContactForm() {
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-5">
+      <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-5">
         <button
           type="submit"
           disabled={state === "sending"}
-          className="group/send relative inline-flex items-center justify-center gap-2.5 overflow-hidden rounded-full bg-brown-950 px-8 py-3.5 text-[0.9375rem] font-semibold text-cream transition-opacity disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:outline-none"
+          className="group/send relative inline-flex items-center justify-center gap-2.5 overflow-hidden rounded-full bg-brown-950 px-8 py-4 text-[0.9375rem] font-semibold text-cream transition-opacity disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:outline-none sm:py-3.5"
         >
           <span
             aria-hidden
@@ -166,7 +166,7 @@ export default function ContactForm() {
             {state === "sending" ? "Invio…" : "Invia il messaggio"}
           </span>
         </button>
-        <p className="text-[0.8125rem] text-taupe">
+        <p className="text-center text-[0.8125rem] text-taupe sm:text-left">
           Rispondiamo in giornata negli orari di bottega.
         </p>
       </div>

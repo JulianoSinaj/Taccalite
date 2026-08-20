@@ -205,7 +205,7 @@ export default function AccountDashboard({
               ) : (
                 <ul className="divide-y divide-rule">
                   {transactions.map((tx) => (
-                    <li key={tx.id} className="flex items-center justify-between gap-4 py-3.5">
+                    <li key={tx.id} className="flex flex-col gap-2 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                       <div>
                         <p className="text-sm font-semibold text-brown-950">{tx.reason || "Movimento"}</p>
                         <p className="text-xs text-taupe">
@@ -230,8 +230,8 @@ export default function AccountDashboard({
               )}
             </Reveal>
 
-            <Reveal className="card-shadow-soft border border-rule bg-paper p-8 sm:p-10">
-              <h3 className="font-display mb-6 text-3xl tracking-tight text-brown-950">I tuoi ordini</h3>
+            <Reveal className="card-shadow-soft border border-rule bg-paper p-5 sm:p-8 lg:p-10">
+              <h3 className="font-display mb-5 text-[1.75rem] tracking-tight text-brown-950 sm:mb-6 sm:text-3xl">I tuoi ordini</h3>
               {orders.length === 0 ? (
                 <p className="text-brown-700">
                   Non hai ancora ordini. Scopri il{" "}
@@ -251,7 +251,7 @@ export default function AccountDashboard({
                       <li key={o.id}>
                         <Link
                           href={`/account/ordini/${o.orderNumber}`}
-                          className="group -mx-3 flex items-center justify-between gap-4 px-3 py-3 transition-colors hover:bg-brown-900/5"
+                          className="group -mx-3 flex flex-col gap-2 px-3 py-3 transition-colors hover:bg-brown-900/5 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                         >
                           <div>
                             <p className="text-sm font-semibold text-brown-950 group-hover:text-gold-deep">
@@ -264,7 +264,7 @@ export default function AccountDashboard({
                               {new Date(o.createdAt).toLocaleDateString("it-IT", dateFmt)}
                             </p>
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 sm:shrink-0">
                             <span
                               className={`rounded-full px-3 py-1 text-[10px] font-bold tracking-widest uppercase ${st.cls}`}
                             >
@@ -284,8 +284,8 @@ export default function AccountDashboard({
             </Reveal>
 
             {/* Reservation history */}
-            <Reveal className="card-shadow-soft border border-rule bg-paper p-8 sm:p-10">
-              <h3 className="font-display mb-6 text-3xl tracking-tight text-brown-950">
+            <Reveal className="card-shadow-soft border border-rule bg-paper p-5 sm:p-8 lg:p-10">
+              <h3 className="font-display mb-5 text-[1.75rem] tracking-tight text-brown-950 sm:mb-6 sm:text-3xl">
                 Le tue prenotazioni
               </h3>
               {reservations.length === 0 ? (
@@ -310,7 +310,7 @@ export default function AccountDashboard({
                       <li key={r.id}>
                         <Link
                           href={`/traccia?ref=${encodeURIComponent(r.reference)}`}
-                          className="group -mx-3 flex items-center justify-between gap-4 px-3 py-3 transition-colors hover:bg-brown-900/5"
+                          className="group -mx-3 flex flex-col gap-2 px-3 py-3 transition-colors hover:bg-brown-900/5 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                         >
                           <div>
                             <p className="text-sm font-semibold text-brown-950 group-hover:text-gold-deep">
@@ -325,7 +325,7 @@ export default function AccountDashboard({
                               </p>
                             )}
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 sm:shrink-0">
                             <span
                               className={`rounded-full px-3 py-1 text-[10px] font-bold tracking-widest uppercase ${st.cls}`}
                             >
@@ -342,8 +342,8 @@ export default function AccountDashboard({
             </Reveal>
 
             {/* Redemption history */}
-            <Reveal className="card-shadow-soft border border-rule bg-paper p-8 sm:p-10">
-              <h3 className="font-display mb-6 text-3xl tracking-tight text-brown-950">
+            <Reveal className="card-shadow-soft border border-rule bg-paper p-5 sm:p-8 lg:p-10">
+              <h3 className="font-display mb-5 text-[1.75rem] tracking-tight text-brown-950 sm:mb-6 sm:text-3xl">
                 Premi riscattati
               </h3>
               {redemptions.length === 0 ? (
@@ -355,14 +355,14 @@ export default function AccountDashboard({
                   {redemptions.map((r) => {
                     const st = REDEMPTION_STATUS[r.status];
                     return (
-                      <li key={r.id} className="flex items-center justify-between gap-4 py-3.5">
+                      <li key={r.id} className="flex flex-col gap-2 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <div>
                           <p className="text-sm font-semibold text-brown-950">{r.rewardName}</p>
                           <p className="text-xs text-taupe">
                             {new Date(r.createdAt).toLocaleDateString("it-IT", dateFmt)}
                           </p>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 sm:shrink-0">
                           <span
                             className={`rounded-full px-3 py-1 text-[10px] font-bold tracking-widest uppercase ${st.cls}`}
                           >

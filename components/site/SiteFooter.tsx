@@ -164,7 +164,7 @@ export default async function SiteFooter() {
                 <li key={shop.slug}>
                   <Link
                     href={`/sedi/${shop.slug}`}
-                    className="inline-block py-0.5 font-medium text-cream transition-colors hover:text-gold"
+                    className="inline-block py-2.5 font-medium text-cream transition-colors hover:text-gold"
                   >
                     {shop.name}
                   </Link>
@@ -178,7 +178,7 @@ export default async function SiteFooter() {
                   {shop.phone && (
                     <a
                       href={telHref(shop.phone)}
-                      className="mt-1 flex items-center gap-2.5 py-2 text-cream/65 transition-colors hover:text-gold"
+                      className="mt-0.5 flex items-center gap-2.5 py-2.5 text-cream/65 transition-colors hover:text-gold"
                     >
                       <Phone className="size-3.5 shrink-0 text-cream/40" aria-hidden />
                       {shop.phone}
@@ -189,7 +189,7 @@ export default async function SiteFooter() {
               <li>
                 <a
                   href={`mailto:${siteConfig.email}`}
-                  className="flex items-center gap-2.5 py-2 break-all text-cream/65 transition-colors hover:text-gold"
+                  className="flex items-center gap-2.5 py-2.5 break-all text-cream/65 transition-colors hover:text-gold"
                 >
                   <Mail className="size-3.5 shrink-0 text-cream/40" aria-hidden />
                   {siteConfig.email}
