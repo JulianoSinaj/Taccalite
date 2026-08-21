@@ -83,6 +83,8 @@ async function accountEmailsMatching(rule: SegmentRule): Promise<Set<string>> {
   if (!needsOrders) return new Set(withEmail.map((r) => r.email.toLowerCase()));
 
   // One grouped pass over settled orders, rather than a query per customer.
+  // Indexed as an expression by `orders_fiscal_date_idx` (drizzle/0033) — keep
+  // this text identical to the index's or the planner silently reverts to a scan.
   const settledAt = sql`coalesce(${orders.paidAt}, ${orders.createdAt})`;
   const orderConds: SQL[] = [inArray(orders.paymentStatus, ["paid", "refunded"])];
   if (rule.shopSlug) orderConds.push(eq(orders.shopSlug, rule.shopSlug));

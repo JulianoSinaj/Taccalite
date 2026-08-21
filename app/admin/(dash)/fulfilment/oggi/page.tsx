@@ -4,6 +4,7 @@ import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { PrintButton } from "@/components/admin/PrintButton";
 import { getFulfilmentDay, adminGetShops, adminGetDeliveryZones } from "@/lib/admin/queries";
 import { updateOrderStatus } from "@/lib/admin/order-actions";
+import { isAdmin } from "@/lib/auth/session";
 import { agendaRange } from "@/lib/agenda-range";
 import { instantInRome, BUSINESS_TZ } from "@/lib/time";
 import { FULFILMENT_LABEL } from "@/lib/fulfilment";
@@ -124,10 +125,11 @@ export default async function FulfilmentToday({ searchParams }: SP) {
   const fromMs = instantInRome(day, "00:00").getTime();
   const toMs = instantInRome(range.next, "00:00").getTime();
 
-  const [work, shops, zones] = await Promise.all([
+  const [work, shops, zones, admin] = await Promise.all([
     getFulfilmentDay(fromMs, toMs, shopFilter),
     adminGetShops(),
     adminGetDeliveryZones(),
+    isAdmin(),
   ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
   const zoneName = new Map(zones.map((z) => [z.id, z.name]));
@@ -171,12 +173,16 @@ export default async function FulfilmentToday({ searchParams }: SP) {
         subtitle={`${total} ordini da gestire · ${formatDay(day)}`}
         action={
           <div className="flex flex-wrap items-center gap-2 print:hidden">
-            <Link
-              href="/admin/fulfilment"
-              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-            >
-              Configura
-            </Link>
+            {/* The zone/slot editor is admin-only and redirects everyone else,
+                so staff were being offered a round trip back to the dashboard. */}
+            {admin && (
+              <Link
+                href="/admin/fulfilment"
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              >
+                Configura
+              </Link>
+            )}
             <PrintButton />
           </div>
         }
@@ -186,13 +192,13 @@ export default async function FulfilmentToday({ searchParams }: SP) {
         <div className="mb-3 flex flex-wrap gap-2">
           <Link
             href={link({ giorno: range.prev })}
-            className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
           >
             ← Giorno prec.
           </Link>
           <Link
             href={link({ giorno: range.today })}
-            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+            className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
               range.preset === "oggi"
                 ? "bg-brown-950 text-cream"
                 : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
@@ -202,7 +208,7 @@ export default async function FulfilmentToday({ searchParams }: SP) {
           </Link>
           <Link
             href={link({ giorno: range.next })}
-            className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
           >
             Giorno succ. →
           </Link>
@@ -230,7 +236,7 @@ export default async function FulfilmentToday({ searchParams }: SP) {
           </div>
           <button
             type="submit"
-            className="rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
           >
             Mostra
           </button>

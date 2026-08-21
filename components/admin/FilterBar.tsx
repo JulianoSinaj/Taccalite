@@ -78,7 +78,7 @@ export function SegmentedFilter({
   return (
     // Scrolls rather than wraps on a narrow screen, so the control stays one
     // visual unit instead of breaking into ragged rows.
-    <div className="-mx-1 mb-4 overflow-x-auto px-1 pb-1">
+    <div className="no-scrollbar -mx-1 mb-4 overflow-x-auto px-1 pb-1">
       <div
         role="group"
         aria-label={label}
@@ -91,7 +91,7 @@ export function SegmentedFilter({
               key={o.value}
               href={filterHref(basePath, params, { [name]: o.value })}
               aria-current={on ? "page" : undefined}
-              className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest whitespace-nowrap uppercase transition-colors ${
+              className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest whitespace-nowrap uppercase transition-colors ${
                 on
                   ? "bg-gold text-on-gold shadow-sm"
                   : "text-brown-800/80 hover:bg-surface/60 hover:text-brown-950"
@@ -155,14 +155,14 @@ export function FilterToolbar({
       id={formId}
       action={basePath}
       method="get"
-      className="mb-3 flex flex-wrap items-end gap-3 rounded-2xl border border-brown-900/10 bg-surface p-4 shadow-sm"
+      className="mb-3 grid grid-cols-1 gap-3 rounded-2xl border border-brown-900/10 bg-surface p-4 shadow-sm sm:flex sm:flex-wrap sm:items-end"
     >
       <FilterAutoSubmit formId={formId} />
       {hidden.map(([k, v]) => (
         <input key={k} type="hidden" name={k} value={v} />
       ))}
 
-      <div className="min-w-[13rem] flex-1">
+      <div className="sm:min-w-[13rem] sm:flex-1">
         <label className={labelCls} htmlFor={`${formId}-q`}>
           {searchLabel}
         </label>
@@ -176,7 +176,7 @@ export function FilterToolbar({
       </div>
 
       {facets.map((f) => (
-        <div key={f.name} className="min-w-[10rem]">
+        <div key={f.name} className="sm:min-w-[10rem]">
           <label className={labelCls} htmlFor={`${formId}-${f.name}`}>
             {f.label}
           </label>
@@ -197,9 +197,12 @@ export function FilterToolbar({
 
       {children}
 
+      {/* Full width below `sm`. Wrapped onto its own line by `flex-wrap` it
+          otherwise sat as a short pill against the left edge under a stack of
+          full-width selects, reading as an orphan rather than as the action. */}
       <button
         type="submit"
-        className="rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+        className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900 sm:w-auto"
       >
         Filtra
       </button>

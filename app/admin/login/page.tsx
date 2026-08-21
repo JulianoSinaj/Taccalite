@@ -16,7 +16,7 @@ export default async function AdminLoginPage() {
   const wrongRole = !!user; // logged in but not staff/admin
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#1c1512] px-5 py-20">
+    <div className="flex min-h-dvh items-center justify-center bg-[#1c1512] px-5 py-20">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <p className="font-display text-3xl font-bold tracking-tighter text-cream uppercase">

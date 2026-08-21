@@ -81,7 +81,7 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
               (convertedOrder ? (
                 <Link
                   href={`/admin/orders/${convertedOrder.id}`}
-                  className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
                 >
                   Ordine {convertedOrder.orderNumber} →
                 </Link>
@@ -89,7 +89,7 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
                 r.status !== "cancelled" && (
                   <Link
                     href={`/admin/orders/new?prenotazione=${r.id}`}
-                    className="rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
+                    className="inline-flex min-h-11 items-center justify-center rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
                   >
                     Converti in ordine
                   </Link>
@@ -103,7 +103,7 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
             )}
             <Link
               href={`/admin/reservations/agenda?giorno=${r.date}`}
-              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
             >
               Agenda del giorno
             </Link>

@@ -774,10 +774,20 @@ export const orders = sqliteTable(
     // orders and the paginated list all filter/sort by createdAt (+ paymentStatus).
     index("orders_created_idx").on(t.createdAt),
     index("orders_paid_created_idx").on(t.paymentStatus, t.createdAt),
-    // The IVA report and fiscal exports select paid orders by settlement date.
-    index("orders_paid_at_idx").on(t.paymentStatus, t.paidAt),
-    // The IVA report's reversal pass selects refunds by the date they happened.
-    index("orders_refunded_at_idx").on(t.refundedAt),
+    // NOTE: the IVA report's two date indexes are NOT declared here.
+    // It selects by *fiscal* date, which is an expression —
+    // `coalesce(paid_at, created_at)` for sales and
+    // `coalesce(refunded_at, updated_at)` for reversals, so history from before
+    // those columns existed still lands in a period. SQLite will not use an
+    // index for a column wrapped in a function, so plain indexes on `paid_at` /
+    // `refunded_at` (which is what used to be here) could never serve those
+    // predicates and both passes scanned the whole table.
+    // The matching expression indexes live in `drizzle/0033_fiscal_date_idx.sql`
+    // because drizzle-kit cannot serialize an expression index — it splits the
+    // expression on its comma and emits invalid SQL. Being hand-written they are
+    // invisible to the schema snapshot, exactly like the FTS tables in 0024: a
+    // future migration that REBUILDS the orders table will silently drop them,
+    // so re-create them there if that ever happens.
     // Webhook + refund resolve the order by its Stripe session id.
     index("orders_stripe_session_idx").on(t.stripeSessionId),
     // Refund/dispute webhooks arrive keyed on the PaymentIntent.

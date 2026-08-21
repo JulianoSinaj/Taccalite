@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { AdminHeader, Panel, BackLink, inputCls, labelCls, fmtDate, euro } from "@/components/admin/ui";
-import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
+import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { ProductForm } from "@/components/admin/forms";
 import {
   adminGetProduct,
@@ -8,10 +8,11 @@ import {
   getStockMovements,
   adminGetCategories,
   getProductBatches,
+  getProductHistoryCounts,
 } from "@/lib/admin/queries";
 import { BatchPanel } from "@/components/admin/BatchPanel";
 import { dateInRome } from "@/lib/time";
-import { adjustStock } from "@/lib/admin/actions";
+import { adjustStock, archiveProduct, deleteProduct } from "@/lib/admin/actions";
 import { pendingStockNotificationCount } from "@/lib/stock-notify";
 import { margin } from "@/lib/inventory";
 import { assertShopScope } from "@/lib/admin/scope";
@@ -42,11 +43,34 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
         ])
       : [[], 0, []];
   const today = dateInRome();
+  // Deleting cascades the ledger away and blanks the name on past order lines,
+  // so the action refuses once either exists. Asking here means the button is
+  // only offered where it can succeed, and the reason is on screen otherwise.
+  const history = await getProductHistoryCounts(product.id);
+  const deletable = history.sold === 0 && history.movements === 0;
+  // The public page 404s on anything not active *and* purchasable, so the link
+  // is only shown where it leads somewhere.
+  const liveOnSite = product.active && product.purchasable && !product.archivedAt;
 
   return (
     <div>
       <BackLink href="/admin/products">Prodotti</BackLink>
-      <AdminHeader title={product.name} subtitle="Modifica prodotto" />
+      <AdminHeader
+        title={product.name}
+        subtitle="Modifica prodotto"
+        action={
+          liveOnSite ? (
+            <a
+              href={`/negozio/${product.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            >
+              Vedi sul sito ↗
+            </a>
+          ) : undefined
+        }
+      />
       <Panel>
         <ProductForm product={product} shops={shops} categories={categories} />
       </Panel>
@@ -188,7 +212,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
           </div>
 
           {movements.length > 0 && (
-            <div className="mt-8 overflow-x-auto">
+            <div className="scroll-x mt-8">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-brown-900/10 text-left text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
@@ -223,6 +247,58 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
           <BatchPanel productId={product.id} batches={batches} today={today} />
         </>
       )}
+
+      {/* Taking the product out of circulation. Archiving lived only in the
+          list, and permanent deletion had no button anywhere — so a product
+          created by mistake could only be archived, and the archive filled up
+          with rows that never meant anything. */}
+      <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Ritiro dal catalogo</h2>
+      <Panel className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="max-w-xl">
+          <p className="text-sm font-semibold text-brown-950">
+            {product.archivedAt ? "Prodotto archiviato" : "Archivia"}
+          </p>
+          <p className="mt-1 text-xs text-brown-800/60">
+            {product.archivedAt
+              ? `Archiviato il ${fmtDate(product.archivedAt)}: non compare nel catalogo né sul sito, ma storico, movimenti e righe d'ordine restano consultabili.`
+              : "Sparisce dal catalogo, dai selettori e dal sito. Storico, movimenti e righe d'ordine restano: è la scelta giusta per qualsiasi cosa sia mai stata venduta."}
+          </p>
+          {!deletable && (
+            <p className="mt-2 text-xs text-brown-800/60">
+              Questo prodotto ha uno storico ({history.sold}{" "}
+              {history.sold === 1 ? "riga d'ordine" : "righe d'ordine"}, {history.movements}{" "}
+              {history.movements === 1 ? "movimento" : "movimenti"} di magazzino) e non può essere
+              eliminato definitivamente.
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <ActionForm action={archiveProduct} className="inline-flex">
+            <input type="hidden" name="id" value={product.id} />
+            <input type="hidden" name="restore" value={product.archivedAt ? "true" : "false"} />
+            <PendingButton
+              tone="dark"
+              confirm={
+                product.archivedAt
+                  ? undefined
+                  : `Archiviare "${product.name}"? Sparisce dal catalogo e dal sito, ma storico e movimenti restano.`
+              }
+            >
+              {product.archivedAt ? "Ripristina" : "Archivia"}
+            </PendingButton>
+          </ActionForm>
+          {/* Offered only where it can succeed, like the delete on
+              /admin/categories — the action itself refuses otherwise. */}
+          {deletable && (
+            <DeleteForm
+              action={deleteProduct}
+              id={product.id}
+              redirectTo="/admin/products"
+              confirm={`Eliminare definitivamente "${product.name}"? Non è mai stato venduto e non ha movimenti, quindi non si perde nessuno storico — ma l'operazione non è reversibile.`}
+            />
+          )}
+        </div>
+      </Panel>
     </div>
   );
 }

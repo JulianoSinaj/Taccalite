@@ -514,7 +514,7 @@ export function ManualOrderForm({
             <button
               type="button"
               onClick={clearCustomer}
-              className="rounded-full bg-brown-900/10 px-3 py-1.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-3 py-1.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
             >
               Scollega
             </button>

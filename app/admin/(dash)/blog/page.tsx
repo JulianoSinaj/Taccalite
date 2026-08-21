@@ -114,7 +114,7 @@ export default async function AdminBlog({ searchParams }: SP) {
                 </ActionForm>
                 <Link
                   href={`/admin/blog/${p.id}`}
-                  className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
                 >
                   Modifica
                 </Link>

@@ -69,7 +69,7 @@ export default async function ExpiringBatches({ searchParams }: SP) {
           <Link
             key={w.days}
             href={href({ giorni: String(w.days) })}
-            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+            className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
               days === w.days ? "bg-brown-950 text-cream" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
             }`}
           >
@@ -79,7 +79,7 @@ export default async function ExpiringBatches({ searchParams }: SP) {
         <span className="mx-1 w-px self-stretch bg-brown-900/10" />
         <Link
           href={href({ negozio: "all" })}
-          className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+          className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
             shopFilter === "all" ? "bg-brown-950 text-cream" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
           }`}
         >
@@ -89,7 +89,7 @@ export default async function ExpiringBatches({ searchParams }: SP) {
           <Link
             key={s.slug}
             href={href({ negozio: s.slug })}
-            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+            className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
               shopFilter === s.slug
                 ? "bg-brown-950 text-cream"
                 : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"

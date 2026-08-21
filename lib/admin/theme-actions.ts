@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth/session";
+import { requireRole } from "@/lib/auth/session";
 import { THEMES, THEME_COOKIE, THEME_LABELS, type Theme } from "@/lib/admin/theme";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 
@@ -21,7 +21,9 @@ const YEAR_SECONDS = 60 * 60 * 24 * 365;
  */
 export async function setTheme(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireAdmin();
+    // Staff too: which theme a screen is set to is a property of the screen,
+    // not a privilege — and the counter tablet is the one that most wants it.
+    await requireRole("admin", "staff");
     const theme = String(fd.get("theme") ?? "") as Theme;
     if (!THEMES.includes(theme)) throw new ActionError("Tema non valido.");
 

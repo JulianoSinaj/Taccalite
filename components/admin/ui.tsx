@@ -20,7 +20,7 @@ export function NewButton({ href, children }: { href: string; children: ReactNod
   return (
     <Link
       href={href}
-      className="rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
+      className="inline-flex min-h-11 items-center justify-center rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
     >
       {children}
     </Link>
@@ -41,7 +41,9 @@ export function AdminHeader({ title, subtitle, action }: { title: string; subtit
 
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl border border-brown-900/10 bg-surface p-6 shadow-sm ${className}`}>{children}</div>
+    <div className={`rounded-2xl border border-brown-900/10 bg-surface p-4 shadow-sm sm:p-6 ${className}`}>
+      {children}
+    </div>
   );
 }
 
@@ -127,8 +129,14 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/** Every text input, select and textarea in the gestionale.
+ *
+ * `min-h-11` is the 44px touch floor — `py-2.5` alone left a 40px control, and
+ * the fields sit in dense rows where a mis-tap lands on the neighbouring one.
+ * Under 768px `globals.css` also forces these to 16px, without which iOS Safari
+ * zooms the viewport in on focus and never zooms back out. */
 export const inputCls =
-  "w-full rounded-lg border border-brown-900/15 bg-cream/40 px-3 py-2.5 text-sm text-brown-950 focus:border-gold-dark focus:outline-none";
+  "w-full min-h-11 rounded-lg border border-brown-900/15 bg-cream/40 px-3 py-2.5 text-sm text-brown-950 focus:border-gold-dark focus:outline-none";
 
 export const labelCls = "mb-1.5 block text-[11px] font-bold tracking-widest text-brown-800/70 uppercase";
 
@@ -141,7 +149,7 @@ export function SubmitButton({ children, tone = "gold" }: { children: ReactNode;
   return (
     <button
       type="submit"
-      className={`rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors ${tones[tone]}`}
+      className={`inline-flex min-h-11 items-center justify-center rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors ${tones[tone]}`}
     >
       {children}
     </button>
@@ -173,7 +181,7 @@ export function SearchBox({
       />
       <button
         type="submit"
-        className="rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+        className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
       >
         Cerca
       </button>
@@ -203,7 +211,7 @@ export function Pagination({
     sp.set(pageParam, String(p));
     return `${basePath}?${sp.toString()}`;
   };
-  const btn = "rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase";
+  const btn = "inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase";
   return (
     <div className="mt-6 flex items-center justify-between">
       <a

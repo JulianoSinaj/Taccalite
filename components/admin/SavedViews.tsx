@@ -65,6 +65,9 @@ export function SavedViews({
             autoFocus
             required
             maxLength={60}
+            // Prefilled with the active view's name, so re-saving tweaked
+            // filters onto it is one click; type a different name to fork it.
+            defaultValue={active?.name ?? ""}
             placeholder="es. Da evadere oggi"
             className={`${inputCls} w-44 py-1.5`}
           />
@@ -78,16 +81,18 @@ export function SavedViews({
           </button>
         </ActionForm>
       ) : (
-        !active && (
-          <button
-            type="button"
-            onClick={() => setNaming(true)}
-            className="inline-flex items-center gap-1.5 rounded-full bg-brown-900/5 px-3 py-2 text-xs font-bold tracking-widest text-brown-800/70 uppercase hover:bg-brown-900/10 hover:text-brown-950"
-          >
-            <Bookmark className="size-3" />
-            Salva questa vista
-          </button>
-        )
+        // Offered even while a saved view is active: `saveView` updates a view
+        // re-saved under the same name, so this is also how you re-point an
+        // existing view at tweaked filters — and hiding it meant a view could
+        // never be corrected, only deleted and rebuilt.
+        <button
+          type="button"
+          onClick={() => setNaming(true)}
+          className="inline-flex items-center gap-1.5 rounded-full bg-brown-900/5 px-3 py-2 text-xs font-bold tracking-widest text-brown-800/70 uppercase hover:bg-brown-900/10 hover:text-brown-950"
+        >
+          <Bookmark className="size-3" />
+          {active ? "Aggiorna o salva" : "Salva questa vista"}
+        </button>
       )}
     </div>
   );

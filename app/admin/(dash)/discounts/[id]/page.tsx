@@ -43,7 +43,7 @@ export default async function EditDiscount({ params }: { params: Promise<{ id: s
           </p>
         </Panel>
       ) : (
-        <Panel className="overflow-x-auto p-0">
+        <Panel className="scroll-x p-0">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-brown-900/10 text-left text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">

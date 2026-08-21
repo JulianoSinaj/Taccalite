@@ -19,7 +19,7 @@ import {
 import { DataTable, DensityToggle, densityFrom } from "@/components/admin/DataTable";
 import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
 import { CampaignComposer, type SegmentOption } from "@/components/admin/CampaignComposer";
-import { getSubscribersPage, SUBSCRIBER_SORTS } from "@/lib/admin/queries";
+import { getSubscribersPage, adminGetShops, SUBSCRIBER_SORTS } from "@/lib/admin/queries";
 import { subscriberFilters, sortFilters, filterQuery } from "@/lib/admin/filters";
 import { removeSubscriber } from "@/lib/admin/actions";
 import {
@@ -31,7 +31,7 @@ import {
 import { listCampaigns, getCampaign, campaignDelivery } from "@/lib/newsletter-campaigns";
 import { listSegments, countSegment, describeRule } from "@/lib/segments";
 import { isAdmin } from "@/lib/auth/session";
-import type { NewsletterCampaignRow } from "@/lib/db/schema";
+import type { CustomerSegmentRow, NewsletterCampaignRow } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +73,164 @@ const STATUS_CHIPS: { value: string; label: string }[] = [
   { value: "unsubscribed", label: "Disiscritti" },
 ];
 
+/**
+ * The create/edit form for one segment. Same fields either way — a new segment
+ * is just one with no id — because `saveSegment` already takes both paths and
+ * the list previously offered only "crea" and "elimina", so correcting a rule
+ * meant deleting it (which resets every campaign that targeted it to "tutti").
+ */
+function SegmentForm({
+  segment,
+  sources,
+  shops,
+}: {
+  segment?: CustomerSegmentRow;
+  sources: string[];
+  shops: { slug: string; name: string }[];
+}) {
+  const rule = segment?.rule ?? {};
+  // Field ids have to stay unique: several of these forms render on one page.
+  const uid = segment?.id ?? "new";
+  const num = (v: number | null | undefined) => (v == null ? "" : String(v));
+
+  return (
+    <ActionForm action={saveSegment} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {segment && <input type="hidden" name="id" value={segment.id} />}
+      <div className="sm:col-span-2">
+        <label className={labelCls} htmlFor={`seg-name-${uid}`}>
+          Nome
+        </label>
+        <input
+          id={`seg-name-${uid}`}
+          name="name"
+          required
+          maxLength={120}
+          defaultValue={segment?.name ?? ""}
+          placeholder="es. Clienti fedeli"
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label className={labelCls} htmlFor={`seg-source-${uid}`}>
+          Origine iscrizione
+        </label>
+        <select
+          id={`seg-source-${uid}`}
+          name="source"
+          defaultValue={rule.source ?? ""}
+          className={inputCls}
+        >
+          <option value="">Qualsiasi</option>
+          {sources.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="sm:col-span-3">
+        <label className={labelCls} htmlFor={`seg-desc-${uid}`}>
+          Descrizione
+        </label>
+        <input
+          id={`seg-desc-${uid}`}
+          name="description"
+          maxLength={300}
+          defaultValue={segment?.description ?? ""}
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label className={labelCls} htmlFor={`seg-points-${uid}`}>
+          Punti minimi
+        </label>
+        <input
+          id={`seg-points-${uid}`}
+          name="minPoints"
+          type="number"
+          min={0}
+          defaultValue={num(rule.minPoints)}
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label className={labelCls} htmlFor={`seg-orders-${uid}`}>
+          Ordini minimi
+        </label>
+        <input
+          id={`seg-orders-${uid}`}
+          name="minOrders"
+          type="number"
+          min={0}
+          defaultValue={num(rule.minOrders)}
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label className={labelCls} htmlFor={`seg-spend-${uid}`}>
+          Spesa minima (€)
+        </label>
+        <input
+          id={`seg-spend-${uid}`}
+          name="minSpendEuros"
+          type="number"
+          step="0.01"
+          min={0}
+          defaultValue={rule.minSpendCents == null ? "" : (rule.minSpendCents / 100).toFixed(2)}
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label className={labelCls} htmlFor={`seg-inactive-${uid}`}>
+          Inattivi da (giorni)
+        </label>
+        <input
+          id={`seg-inactive-${uid}`}
+          name="inactiveDays"
+          type="number"
+          min={1}
+          defaultValue={num(rule.inactiveDays)}
+          className={inputCls}
+        />
+      </div>
+      {/* `shopSlug` has always been part of the rule — resolved, counted and
+          described — but had no field, so it was unreachable from the UI. */}
+      <div>
+        <label className={labelCls} htmlFor={`seg-shop-${uid}`}>
+          Ha ordinato dalla sede
+        </label>
+        <select
+          id={`seg-shop-${uid}`}
+          name="shopSlug"
+          defaultValue={rule.shopSlug ?? ""}
+          className={inputCls}
+        >
+          <option value="">Qualsiasi sede</option>
+          {shops.map((sh) => (
+            <option key={sh.slug} value={sh.slug}>
+              {sh.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex items-end pb-2.5">
+        <label className="flex items-center gap-2 text-sm font-medium text-brown-900">
+          <input
+            type="checkbox"
+            name="requireMarketingConsent"
+            defaultChecked={!!rule.requireMarketingConsent}
+            className="h-4 w-4 rounded accent-brown-950"
+          />
+          Solo con consenso marketing
+        </label>
+      </div>
+      <div className="flex items-end sm:col-span-3">
+        <PendingButton tone="dark">{segment ? "Salva segmento" : "Crea segmento"}</PendingButton>
+      </div>
+    </ActionForm>
+  );
+}
+
 export default async function AdminNewsletter({ searchParams }: SP) {
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
@@ -82,14 +240,21 @@ export default async function AdminNewsletter({ searchParams }: SP) {
   const density = densityFrom(sp.densita);
   // Carried on every sort/density/page link so the view survives navigation.
   const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso, densita: sp.densita };
-  const [{ rows: subs, total, confirmed, pageCount, sources }, admin, campaigns, editing, segmentRows] =
-    await Promise.all([
-      getSubscribersPage({ ...filters, page, sort }),
-      isAdmin(),
-      listCampaigns(),
-      sp.campagna ? getCampaign(sp.campagna) : Promise.resolve(null),
-      listSegments(),
-    ]);
+  const [
+    { rows: subs, total, confirmed, pageCount, sources },
+    admin,
+    campaigns,
+    editing,
+    segmentRows,
+    shops,
+  ] = await Promise.all([
+    getSubscribersPage({ ...filters, page, sort }),
+    isAdmin(),
+    listCampaigns(),
+    sp.campagna ? getCampaign(sp.campagna) : Promise.resolve(null),
+    listSegments(),
+    adminGetShops(),
+  ]);
   const SOURCE_CHIPS = chipsFrom(sources, "Tutte le origini");
 
   // Segments carry their live size, so an operator picks an audience knowing how
@@ -104,6 +269,9 @@ export default async function AdminNewsletter({ searchParams }: SP) {
     })),
   );
   const segmentName = new Map(segments.map((s) => [s.id, s.name]));
+  // The editor needs the raw rule, which `SegmentOption` has already flattened
+  // into prose for the composer's picker.
+  const segmentSize = new Map(segments.map((s) => [s.id, s.size]));
   // Delivery outcomes, so "inviata a 412" can't hide 80 bounces.
   const delivery = await campaignDelivery(campaigns.filter((c) => c.status === "sent").map((c) => c.id));
 
@@ -117,7 +285,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
             <a
               href={`/api/admin/export/subscribers${filterQuery(filters)}`}
               download
-              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
             >
               Esporta CSV
             </a>
@@ -127,7 +295,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
 
       {/* Composer — a new draft, or the campaign named by ?campagna=<id>. */}
       <details className="mb-6" open={!!editing}>
-        <summary className="w-fit cursor-pointer rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-on-gold uppercase">
+        <summary className="w-fit cursor-pointer inline-flex min-h-11 items-center justify-center rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-on-gold uppercase">
           ✉ {editing ? "Modifica comunicazione" : "Nuova comunicazione"}
         </summary>
         <Panel className="mt-4">
@@ -210,7 +378,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
                     <>
                       <Link
                         href={`/admin/newsletter?campagna=${c.id}`}
-                        className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                        className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
                       >
                         Modifica
                       </Link>
@@ -237,92 +405,46 @@ export default async function AdminNewsletter({ searchParams }: SP) {
             Segmenti ({segments.length})
           </summary>
           <div className="mt-3 space-y-3">
-            {segments.map((s) => (
-              <Panel key={s.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-semibold text-brown-950">
-                    {s.name}{" "}
-                    {/* A translucent wash, not solid gold — so the ink here is
-                        the inverting one, not the constant `on-gold`. */}
-                    <span className="ml-1 rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-bold text-brown-950 uppercase">
-                      {s.size} iscritti
-                    </span>
-                  </p>
-                  <p className="mt-0.5 text-xs text-brown-800/60">{s.description || s.rule}</p>
+            {segmentRows.map((s) => (
+              <Panel key={s.id}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-semibold text-brown-950">
+                      {s.name}{" "}
+                      {/* A translucent wash, not solid gold — so the ink here is
+                          the inverting one, not the constant `on-gold`. */}
+                      <span className="ml-1 rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-bold text-brown-950 uppercase">
+                        {segmentSize.get(s.id) ?? 0} iscritti
+                      </span>
+                    </p>
+                    <p className="mt-0.5 text-xs text-brown-800/60">
+                      {s.description || describeRule(s.rule)}
+                    </p>
+                  </div>
+                  <DeleteForm
+                    action={deleteSegment}
+                    id={s.id}
+                    confirm={`Eliminare il segmento «${s.name}»? Le campagne che lo usavano torneranno a «tutti gli iscritti».`}
+                  />
                 </div>
-                <DeleteForm
-                  action={deleteSegment}
-                  id={s.id}
-                  confirm={`Eliminare il segmento «${s.name}»? Le campagne che lo usavano torneranno a «tutti gli iscritti».`}
-                />
+
+                {/* Correcting a rule used to mean deleting the segment and
+                    building it again, which orphaned every campaign pointing
+                    at it. Same form as "nuovo", carrying the id. */}
+                <details className="mt-3 border-t border-brown-900/10 pt-3">
+                  <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                    Modifica
+                  </summary>
+                  <div className="mt-3">
+                    <SegmentForm segment={s} sources={sources} shops={shops} />
+                  </div>
+                </details>
               </Panel>
             ))}
 
             <Panel>
-              <ActionForm action={saveSegment} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="sm:col-span-2">
-                  <label className={labelCls} htmlFor="seg-name">
-                    Nome
-                  </label>
-                  <input id="seg-name" name="name" required placeholder="es. Clienti fedeli" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls} htmlFor="seg-source">
-                    Origine iscrizione
-                  </label>
-                  <select id="seg-source" name="source" className={inputCls}>
-                    <option value="">Qualsiasi</option>
-                    {sources.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="sm:col-span-3">
-                  <label className={labelCls} htmlFor="seg-desc">
-                    Descrizione
-                  </label>
-                  <input id="seg-desc" name="description" maxLength={300} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls} htmlFor="seg-points">
-                    Punti minimi
-                  </label>
-                  <input id="seg-points" name="minPoints" type="number" min={0} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls} htmlFor="seg-orders">
-                    Ordini minimi
-                  </label>
-                  <input id="seg-orders" name="minOrders" type="number" min={0} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls} htmlFor="seg-spend">
-                    Spesa minima (€)
-                  </label>
-                  <input id="seg-spend" name="minSpendEuros" type="number" step="0.01" min={0} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls} htmlFor="seg-inactive">
-                    Inattivi da (giorni)
-                  </label>
-                  <input id="seg-inactive" name="inactiveDays" type="number" min={1} className={inputCls} />
-                </div>
-                <div className="flex items-end pb-2.5">
-                  <label className="flex items-center gap-2 text-sm font-medium text-brown-900">
-                    <input
-                      type="checkbox"
-                      name="requireMarketingConsent"
-                      className="h-4 w-4 rounded accent-brown-950"
-                    />
-                    Solo con consenso marketing
-                  </label>
-                </div>
-                <div className="flex items-end">
-                  <PendingButton tone="dark">Crea segmento</PendingButton>
-                </div>
-              </ActionForm>
+              <h3 className="font-display mb-3 text-lg text-brown-950">Nuovo segmento</h3>
+              <SegmentForm sources={sources} shops={shops} />
               <p className="mt-3 text-xs text-brown-800/60">
                 Un segmento salva la <strong>regola</strong>, non l&apos;elenco: viene ricalcolato a ogni
                 invio, quindi «clienti fedeli» significa la stessa cosa a marzo e a gennaio. Vale solo
@@ -379,6 +501,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
             key: "email",
             header: "Email",
             sortable: true,
+            sticky: true,
             cell: (s) => <span className="font-medium text-brown-950">{s.email}</span>,
           },
           {

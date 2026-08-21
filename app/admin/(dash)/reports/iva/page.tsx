@@ -25,7 +25,10 @@ function VatTable({
   const num = tone === "credit" ? "text-danger" : "text-brown-900";
 
   return (
-    <table className="w-full text-sm">
+    // Four money columns do not fit a phone; without the scroller the last one
+    // is simply cut off at the panel edge.
+    <div className="scroll-x">
+      <table className="w-full text-sm">
       <thead>
         <tr className="border-b border-brown-900/10 text-left text-[11px] tracking-widest text-brown-800/60 uppercase">
           <th className="pb-2 font-bold">Aliquota</th>
@@ -52,7 +55,8 @@ function VatTable({
           <td className="pt-3 text-right font-bold tabular-nums">{euro(gross)}</td>
         </tr>
       </tfoot>
-    </table>
+      </table>
+    </div>
   );
 }
 
@@ -89,7 +93,7 @@ export default async function VatReport({ searchParams }: SP) {
             <a
               key={p.key}
               href={presetHref(p.key)}
-              className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+              className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
                 period.preset === p.key
                   ? "bg-brown-950 text-cream"
                   : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
@@ -114,14 +118,14 @@ export default async function VatReport({ searchParams }: SP) {
           </div>
           <button
             type="submit"
-            className="rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
           >
             Aggiorna
           </button>
           <a
             href={`/api/admin/export/iva?${exportQs}`}
             download
-            className="rounded-full bg-brown-900/10 px-4 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
           >
             Esporta CSV
           </a>

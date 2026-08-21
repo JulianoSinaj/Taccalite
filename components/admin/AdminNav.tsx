@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useScrollLock } from "@/lib/use-scroll-lock";
 import {
   BarChart3,
   CalendarCheck,
@@ -11,6 +12,7 @@ import {
   LayoutDashboard,
   LogOut,
   Mail,
+  MapPin,
   Menu,
   Newspaper,
   Package,
@@ -51,6 +53,11 @@ const GROUPS: Group[] = [
       { href: "/admin/orders", label: "Ordini", icon: ShoppingBag },
       { href: "/admin/reservations", label: "Prenotazioni", icon: CalendarCheck },
       { href: "/admin/fulfilment/oggi", label: "Ritiri e consegne", icon: Truck },
+      // The screen where pickup windows, delivery zones and shipping rates are
+      // configured. It had no nav entry at all — the only ways in were the
+      // "Configura" button on the day sheet above and the ⌘K palette.
+      // `exact`, so it doesn't also light up on /admin/fulfilment/oggi.
+      { href: "/admin/fulfilment", label: "Zone e fasce", icon: MapPin, exact: true, adminOnly: true },
       { href: "/admin/products", label: "Prodotti", icon: Package },
       { href: "/admin/categories", label: "Categorie", icon: Tags, adminOnly: true },
       { href: "/admin/discounts", label: "Codici sconto", icon: TicketPercent, adminOnly: true },
@@ -112,6 +119,12 @@ export default function AdminNav({
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  // Without this the list behind the overlay scrolls under a dragging finger and
+  // takes the drawer off the top of the screen with it. The shared hook pins the
+  // body with `position: fixed` on coarse pointers only, which is the part
+  // `overflow: hidden` alone does not achieve on iOS.
+  useScrollLock(open);
 
   useEffect(() => {
     if (!open) return;
@@ -197,36 +210,52 @@ export default function AdminNav({
 
   return (
     <>
-      {/* Mobile: a bar with a drawer trigger, instead of a scroll strip. */}
-      <div className="flex items-center justify-between border-b border-brown-900/10 bg-surface px-5 py-3 lg:hidden print:hidden">
-        {brand}
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Apri il menu"
-          aria-expanded={open}
-          className="rounded-xl p-2 text-brown-800 hover:bg-brown-900/5"
-        >
-          <Menu className="size-5" />
-        </button>
+      {/* Mobile: a bar with a drawer trigger, instead of a scroll strip.
+
+          Sticky, because it was not: on a list of forty orders the only route to
+          any other section was to scroll back to the top of the page first.
+
+          `h-16` is deliberate rather than incidental — it is the value
+          `--admin-top` publishes in globals.css, which is what the sticky chrome
+          underneath (bulk bars, filter rails) clears itself by. The safe-area
+          padding sits on this wrapper because `.px-safe` *sets* padding rather
+          than adding to it, so sharing an element with `px-5` would zero the
+          gutter. */}
+      <div className="sticky top-0 z-30 border-b border-brown-900/10 bg-surface px-safe lg:hidden print:hidden">
+        <div className="flex h-16 items-center justify-between px-5">
+          {brand}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="Apri il menu"
+            aria-expanded={open}
+            className="tap rounded-xl p-2 text-brown-800 hover:bg-brown-900/5"
+          >
+            <Menu className="size-5" />
+          </button>
+        </div>
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-50 lg:hidden print:hidden">
+        <div className="fixed inset-0 z-40 lg:hidden print:hidden">
           <button
             type="button"
             aria-label="Chiudi il menu"
             onClick={() => setOpen(false)}
             className="absolute inset-0 bg-brown-950/40"
           />
-          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-surface shadow-xl">
+          {/* `px-safe`/`pb-safe` set padding outright, so they go on the panel —
+              which has none of its own — and the rows inside keep their gutter.
+              In landscape on a notched phone the drawer opens under the notch
+              without them; at the foot, under the home indicator. */}
+          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-surface px-safe pb-safe shadow-xl">
             <div className="flex items-center justify-between border-b border-brown-900/10 px-5 py-4">
               {brand}
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Chiudi il menu"
-                className="rounded-xl p-2 text-brown-800 hover:bg-brown-900/5"
+                className="tap rounded-xl p-2 text-brown-800 hover:bg-brown-900/5"
               >
                 <X className="size-5" />
               </button>
@@ -237,8 +266,14 @@ export default function AdminNav({
         </div>
       )}
 
-      {/* Desktop: the persistent sidebar. */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-brown-900/10 bg-surface lg:flex lg:h-screen print:hidden">
+      {/* Desktop: the persistent sidebar.
+
+          `sticky top-0` is what makes it persistent. It was `h-screen` in normal
+          flow, so it was exactly one viewport tall and then scrolled away with
+          the page — on any list longer than a screen the navigation simply left,
+          and getting to another section meant scrolling back to the top. `dvh`
+          rather than `vh` for the same reason the shell uses it. */}
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-brown-900/10 bg-surface lg:sticky lg:top-0 lg:flex lg:h-dvh print:hidden">
         <div className="border-b border-brown-900/10 px-6 py-5">{brand}</div>
         {nav}
         {footer}

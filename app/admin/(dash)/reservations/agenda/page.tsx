@@ -67,7 +67,7 @@ export default async function ReservationAgenda({ searchParams }: SP) {
           <div className="flex flex-wrap items-center gap-2 print:hidden">
             <Link
               href="/admin/reservations"
-              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
             >
               Elenco
             </Link>
@@ -82,13 +82,13 @@ export default async function ReservationAgenda({ searchParams }: SP) {
         <div className="mb-3 flex flex-wrap gap-2">
           <Link
             href={link({ giorno: range.prev })}
-            className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
           >
             ← Giorno prec.
           </Link>
           <Link
             href={link({ giorno: range.today })}
-            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+            className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
               range.preset === "oggi" ? "bg-brown-950 text-cream" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
             }`}
           >
@@ -96,14 +96,14 @@ export default async function ReservationAgenda({ searchParams }: SP) {
           </Link>
           <Link
             href={link({ giorno: range.next })}
-            className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
           >
             Giorno succ. →
           </Link>
           <span className="mx-1 w-px self-stretch bg-brown-900/10" />
           <Link
             href={link({ giorni: "7" })}
-            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+            className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
               range.preset === "7" ? "bg-brown-950 text-cream" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
             }`}
           >
@@ -111,7 +111,7 @@ export default async function ReservationAgenda({ searchParams }: SP) {
           </Link>
           <Link
             href={link({ giorni: "tutto" })}
-            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+            className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
               range.preset === "tutto" ? "bg-brown-950 text-cream" : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
             }`}
           >
@@ -141,7 +141,7 @@ export default async function ReservationAgenda({ searchParams }: SP) {
           </div>
           <button
             type="submit"
-            className="rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
           >
             Mostra
           </button>

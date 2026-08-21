@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { shops, products, orders, orderItems, discountCodes } from "@/lib/db/schema";
 import { recordRefund, expireOrder } from "@/lib/orders";
+import { recordDiscountUseByCode } from "@/lib/discounts";
 
 /**
  * Refund bookkeeping and abandoned-order cleanup.
@@ -53,6 +54,17 @@ async function makePaidOrder(opts: { qty: number; unitCents: number; discountCod
     quantity: opts.qty,
     lineTotalCents: total,
   });
+
+  // Count the coupon exactly as finalizeOrder does for a real paid order. The
+  // ledger row it writes is what a later refund releases — fabricating a
+  // `timesUsed` figure without one models a state the app cannot reach, and the
+  // release path reads the ledger, not the counter, to decide what to give back.
+  if (opts.discountCode) {
+    await recordDiscountUseByCode(opts.discountCode, {
+      orderId: row.id,
+      email: "cliente@example.com",
+    });
+  }
   return row.id;
 }
 
@@ -116,8 +128,10 @@ describe("recordRefund — partial refunds", () => {
 
     await recordRefund(id, 400, { reason: "Parziale" });
 
+    // 5 from the seeded history + 1 for this order, and the partial refund
+    // leaves that alone.
     const [code] = await db.select().from(discountCodes).where(eq(discountCodes.code, "RIMB10")).limit(1);
-    expect(code.timesUsed).toBe(5);
+    expect(code.timesUsed).toBe(6);
   });
 });
 
@@ -144,8 +158,10 @@ describe("recordRefund — full refunds", () => {
     // ones a partial refund might have double-counted.
     expect(await readStock()).toBe(34);
 
+    // 3 seeded + 1 for this order = 4, and the full refund gives back exactly
+    // the one use this order took.
     const [code] = await db.select().from(discountCodes).where(eq(discountCodes.code, "RIMB20")).limit(1);
-    expect(code.timesUsed).toBe(2);
+    expect(code.timesUsed).toBe(3);
   });
 
   it("is idempotent when the same cumulative amount is replayed", async () => {

@@ -123,6 +123,13 @@ async function hasPreviousOrder(customer: DiscountCustomer): Promise<boolean> {
  * enforceable and answers "which orders used this code" — a bare counter never
  * could. Best-effort: bookkeeping must not fail a paid order.
  *
+ * The ledger row is written **only when the claim succeeded**, in the same
+ * transaction, so "this order has a ledger row" and "this order is counted in
+ * `timesUsed`" can never disagree. That equivalence is load-bearing: it is the
+ * only signal `releaseDiscountUseByCode` has to tell a use that was taken from
+ * one that was refused. Writing the row either way let a refund give back a use
+ * the order never took, and a one-shot code could then be redeemed twice.
+ *
  * Returns false when the cap was already reached (the order still stands; the
  * discount was granted at validation time and honouring it is the right call).
  */
@@ -132,31 +139,34 @@ export async function recordDiscountUseByCode(
 ): Promise<boolean> {
   const normalized = normalizeCode(code);
   try {
-    const [claimed] = await db
-      .update(discountCodes)
-      .set({ timesUsed: sql`${discountCodes.timesUsed} + 1` })
-      .where(
-        and(
-          eq(discountCodes.code, normalized),
-          // Unlimited, or still under the cap — checked in the same statement
-          // that increments, so it can't be raced.
-          or(
-            isNull(discountCodes.maxRedemptions),
-            sql`${discountCodes.timesUsed} < ${discountCodes.maxRedemptions}`,
+    return await db.transaction(async (tx) => {
+      const [claimed] = await tx
+        .update(discountCodes)
+        .set({ timesUsed: sql`${discountCodes.timesUsed} + 1` })
+        .where(
+          and(
+            eq(discountCodes.code, normalized),
+            // Unlimited, or still under the cap — checked in the same statement
+            // that increments, so it can't be raced.
+            or(
+              isNull(discountCodes.maxRedemptions),
+              sql`${discountCodes.timesUsed} < ${discountCodes.maxRedemptions}`,
+            ),
           ),
-        ),
-      )
-      .returning({ id: discountCodes.id });
+        )
+        .returning({ id: discountCodes.id });
+      if (!claimed) return false;
 
-    await db.insert(discountRedemptions).values({
-      discountCode: normalized,
-      orderId: ctx.orderId ?? null,
-      userId: ctx.userId ?? null,
-      email: ctx.email ? ctx.email.toLowerCase() : null,
-      amountCents: ctx.amountCents ?? 0,
+      await tx.insert(discountRedemptions).values({
+        discountCode: normalized,
+        orderId: ctx.orderId ?? null,
+        userId: ctx.userId ?? null,
+        email: ctx.email ? ctx.email.toLowerCase() : null,
+        amountCents: ctx.amountCents ?? 0,
+      });
+
+      return true;
     });
-
-    return !!claimed;
   } catch {
     /* usage bookkeeping is non-fatal */
     return false;
@@ -183,23 +193,38 @@ export async function recordDiscountUse(
 /**
  * Release a redemption by code (used when a paid order is refunded/cancelled so a
  * capped code isn't permanently burned). Floored at 0. Best-effort.
+ *
+ * The ledger row is deleted first, and `timesUsed` is decremented by however many
+ * rows that actually removed — never blindly by one. An order that settled while
+ * the code was already at its cap was honoured but not counted (see
+ * `recordDiscountUseByCode`), so it has no ledger row and must give nothing back.
+ * Decrementing unconditionally handed a use back for it, which is how a
+ * `maxRedemptions = 1` code became redeemable again after that order was
+ * refunded — with the first, genuine redemption still standing.
+ *
+ * `orderId` is required for the same reason: it is the anchor that says which
+ * use is being reversed, and without it there is no way to tell a counted
+ * redemption from a refused one.
  */
-export async function releaseDiscountUseByCode(code: string, orderId?: string): Promise<void> {
+export async function releaseDiscountUseByCode(code: string, orderId: string): Promise<void> {
   const normalized = normalizeCode(code);
   try {
-    await db
-      .update(discountCodes)
-      .set({ timesUsed: sql`max(0, ${discountCodes.timesUsed} - 1)` })
-      .where(eq(discountCodes.code, normalized));
-    // Drop the ledger row too, so a per-customer cap is genuinely freed rather
-    // than counting a use that was reversed.
-    if (orderId) {
-      await db
+    await db.transaction(async (tx) => {
+      const removed = await tx
         .delete(discountRedemptions)
         .where(
           and(eq(discountRedemptions.discountCode, normalized), eq(discountRedemptions.orderId, orderId)),
         );
-    }
+      // Also what frees a per-customer cap: that is counted from the ledger, not
+      // from `timesUsed`, so the two have to move together.
+      const taken = removed.rowsAffected;
+      if (taken > 0) {
+        await tx
+          .update(discountCodes)
+          .set({ timesUsed: sql`max(0, ${discountCodes.timesUsed} - ${taken})` })
+          .where(eq(discountCodes.code, normalized));
+      }
+    });
   } catch {
     /* usage bookkeeping is non-fatal */
   }

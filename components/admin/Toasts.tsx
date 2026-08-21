@@ -60,35 +60,41 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {/* `fixed` keeps this out of every form's layout. The wrapper ignores
           pointer events so it can never swallow a click meant for the page
           underneath; each toast re-enables them for its own dismiss button. */}
-      <div
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col items-center gap-2 p-4 sm:inset-x-auto sm:right-0 sm:items-end"
-        aria-live="polite"
-        aria-atomic="false"
-      >
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            role={t.status === "error" ? "alert" : "status"}
-            className={`pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg ${
-              t.status === "error"
-                ? "border-danger/30 bg-danger-soft text-danger-soft-fg"
-                : "border-ok/40 bg-ok-soft text-ok-soft-fg"
-            }`}
-          >
-            <span aria-hidden className="mt-px font-bold">
-              {t.status === "error" ? "!" : "✓"}
-            </span>
-            <p className="flex-1 font-medium">{t.message}</p>
-            <button
-              type="button"
-              onClick={() => dismiss(t.id)}
-              aria-label="Chiudi notifica"
-              className="-mr-1 -mt-0.5 rounded px-1 text-base leading-none opacity-50 hover:opacity-100"
+      {/* z-70 puts this above the nav drawer (40) and the command palette (60):
+          all three used to be z-50, so which one won was decided by DOM order.
+          `pb-safe` on the outer wrapper — it *sets* padding-bottom, so it cannot
+          share an element with the `p-4` that gives the stack its inset. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[70] pb-safe">
+        <div
+          className="flex flex-col items-center gap-2 p-4 sm:items-end"
+          aria-live="polite"
+          aria-atomic="false"
+        >
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              role={t.status === "error" ? "alert" : "status"}
+              className={`pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg ${
+                t.status === "error"
+                  ? "border-danger/30 bg-danger-soft text-danger-soft-fg"
+                  : "border-ok/40 bg-ok-soft text-ok-soft-fg"
+              }`}
             >
-              ×
-            </button>
-          </div>
-        ))}
+              <span aria-hidden className="mt-px font-bold">
+                {t.status === "error" ? "!" : "✓"}
+              </span>
+              <p className="flex-1 font-medium">{t.message}</p>
+              <button
+                type="button"
+                onClick={() => dismiss(t.id)}
+                aria-label="Chiudi notifica"
+                className="tap -mr-1 -mt-0.5 rounded px-1 text-base leading-none opacity-50 hover:opacity-100"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
     </ToastContext.Provider>
   );

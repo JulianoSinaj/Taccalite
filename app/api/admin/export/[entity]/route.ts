@@ -24,7 +24,7 @@ import { getSetting } from "@/lib/db/queries";
 import { normalizeRange, getAnalyticsSummary } from "@/lib/analytics";
 import { vatRateLabel } from "@/lib/fiscal";
 import { vatPeriod } from "@/lib/fiscal-period";
-import { toCsv } from "@/lib/csv";
+import { toCsv, streamCsv } from "@/lib/csv";
 
 export const runtime = "nodejs";
 
@@ -44,19 +44,24 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
   // pages append their active filters to the download link, and both sides read
   // them through the same `lib/admin/filters` helpers.
   const params = new URL(request.url).searchParams;
-  let csv: string;
+  // Row dumps stream: they are unbounded by nature, so they are pulled from the
+  // database a page at a time instead of being materialised whole. The two
+  // aggregate reports below are already bounded (a fixed number of buckets, a
+  // capped top-N) and stay plain strings.
+  let body: string | ReadableStream<Uint8Array>;
 
   switch (entity) {
     case "orders": {
-      const rows = await getOrdersForExport(orderFilters(params));
-      csv = toCsv(
+      const f = orderFilters(params);
+      body = streamCsv(
         ["orderNumber", "date", "name", "email", "phone", "status", "paymentStatus", "fulfilment", "shop", "pickupSlot", "totalEuros"],
-        rows.map((o) => [
+        (limit, offset) => getOrdersForExport(f, limit, offset),
+        (o) => [
           o.orderNumber, iso(o.createdAt), o.name, o.email, o.phone, o.status,
           o.paymentStatus, o.fulfilment, o.shopSlug,
           o.pickupSlotAt ? o.pickupSlotAt.toISOString() : "",
           (o.totalCents / 100).toFixed(2),
-        ]),
+        ],
       );
       break;
     }
@@ -64,14 +69,15 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
       // Round-trips with the importer: the same headers, in the same order, so a
       // price list can be exported, edited in a spreadsheet and pushed back.
       const lowStockThreshold = await getSetting<number>("store.lowStockThreshold", 5);
-      const rows = await getProductsForExport(productFilters(params), lowStockThreshold);
-      csv = toCsv(
+      const f = productFilters(params);
+      body = streamCsv(
         [
           "slug", "nome", "sede", "categoria", "prezzoEuros", "costoEuros", "ivaPercento",
           "unita", "aPeso", "giacenza", "sogliaRiordino", "sku", "fornitore",
           "acquistabile", "attivo", "inEvidenza", "ordine",
         ],
-        rows.map((p) => [
+        (limit, offset) => getProductsForExport(f, lowStockThreshold, limit, offset),
+        (p) => [
           p.slug, p.name, p.shopSlug, p.category,
           p.priceCents != null ? (p.priceCents / 100).toFixed(2) : "",
           p.costCents != null ? (p.costCents / 100).toFixed(2) : "",
@@ -80,42 +86,46 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
           p.stock ?? "", p.reorderPoint ?? "", p.sku ?? "", p.supplier ?? "",
           p.purchasable ? "si" : "no", p.active ? "si" : "no", p.featured ? "si" : "no",
           p.sortOrder,
-        ]),
+        ],
       );
       break;
     }
     case "customers": {
-      const rows = await getCustomersWithPoints(customerFilters(params));
-      csv = toCsv(
+      const f = customerFilters(params);
+      body = streamCsv(
         ["username", "name", "email", "phone", "role", "points", "cardNumber", "joined"],
-        rows.map((c) => [c.username, c.name, c.email, c.phone, c.role, c.points ?? 0, c.cardNumber, iso(c.createdAt)]),
+        (limit, offset) => getCustomersWithPoints(f, limit, offset),
+        (c) => [c.username, c.name, c.email, c.phone, c.role, c.points ?? 0, c.cardNumber, iso(c.createdAt)],
       );
       break;
     }
     case "reservations": {
-      const rows = await getReservationsForExport(reservationFilters(params));
-      csv = toCsv(
+      const f = reservationFilters(params);
+      body = streamCsv(
         ["reference", "date", "type", "name", "phone", "email", "shop", "status", "guests", "quantityKg", "created"],
-        rows.map((r) => [
+        (limit, offset) => getReservationsForExport(f, limit, offset),
+        (r) => [
           r.reference, r.date, r.type, r.name, r.phone, r.email, r.shopSlug, r.status,
           r.guests, r.quantityKg, iso(r.createdAt),
-        ]),
+        ],
       );
       break;
     }
     case "subscribers": {
-      const rows = await getSubscribersForExport(subscriberFilters(params));
-      csv = toCsv(
+      const f = subscriberFilters(params);
+      body = streamCsv(
         ["email", "status", "source", "confirmedAt", "created"],
-        rows.map((s) => [s.email, s.status, s.source, iso(s.confirmedAt), iso(s.createdAt)]),
+        (limit, offset) => getSubscribersForExport(f, limit, offset),
+        (s) => [s.email, s.status, s.source, iso(s.confirmedAt), iso(s.createdAt)],
       );
       break;
     }
     case "audit": {
-      const rows = await getAuditForExport(auditFilters(params));
-      csv = toCsv(
+      const f = auditFilters(params);
+      body = streamCsv(
         ["timestamp", "actor", "action", "entity", "entityId", "summary", "meta"],
-        rows.map((r) => [
+        (limit, offset) => getAuditForExport(f, limit, offset),
+        (r) => [
           iso(r.createdAt),
           r.actorName,
           r.action,
@@ -123,7 +133,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
           r.entityId,
           r.summary,
           r.meta ? JSON.stringify(r.meta) : "",
-        ]),
+        ],
       );
       break;
     }
@@ -140,7 +150,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
       // Everything the page shows, not just the daily counts: top paths and
       // referrers used to be visible on screen and impossible to take away.
       const summary = await getAnalyticsSummary(new Date(), range);
-      csv = toCsv(
+      body = toCsv(
         ["sezione", "chiave", "valore"],
         [
           ...daily.map((r) => ["Visite giornaliere", r.day, r.n]),
@@ -172,7 +182,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
           (b.impostaCents / 100).toFixed(2),
           (b.grossCents / 100).toFixed(2),
         ]);
-      csv = toCsv(
+      body = toCsv(
         ["sezione", "aliquota", "imponibileEuros", "impostaEuros", "totaleIvatoEuros"],
         [
           ...section("Vendite", report.sales),
@@ -186,7 +196,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
       return NextResponse.json({ ok: false, error: "Entità non valida" }, { status: 404 });
   }
 
-  return new NextResponse(csv, {
+  return new NextResponse(body, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="taccalite-${entity}.csv"`,

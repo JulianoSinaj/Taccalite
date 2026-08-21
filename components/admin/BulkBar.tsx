@@ -75,13 +75,22 @@ export function BulkBar({
   }
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-brown-900/10 bg-surface px-4 py-3 shadow-sm">
-      <label className="flex items-center gap-2 text-xs font-bold tracking-widest text-brown-800/70 uppercase">
+    // Sticky only once something is selected. A bar that follows you down the
+    // page while it has nothing to apply is just a strip of the list you cannot
+    // read; a bar that follows you while forty orders are ticked is the whole
+    // point — the rows are above the fold and the action was below it.
+    // `--admin-top` is the sticky mobile bar's height, 0 on desktop.
+    <div
+      className={`mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-brown-900/10 bg-surface px-4 py-3 shadow-sm ${
+        count > 0 ? "sticky top-[var(--admin-top)] z-20" : ""
+      }`}
+    >
+      <label className="tap flex items-center gap-2 text-xs font-bold tracking-widest text-brown-800/70 uppercase">
         <input
           type="checkbox"
           onChange={(e) => toggleAll(e.target.checked)}
           checked={count > 0}
-          className="h-4 w-4 rounded accent-brown-950"
+          className="size-5 rounded accent-brown-950"
           aria-label="Seleziona tutto"
         />
         Seleziona tutto
@@ -91,16 +100,29 @@ export function BulkBar({
         {count === 0 ? `Nessun elemento selezionato` : `${count} ${label} selezionati`}
       </span>
 
-      <ActionForm id={formId} action={action} className="ml-auto flex flex-wrap items-center gap-2">
-        <select name="status" className={`${inputCls} w-44`} aria-label="Azione in blocco" disabled={count === 0}>
+      <ActionForm
+        id={formId}
+        action={action}
+        className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto"
+      >
+        <select
+          name="status"
+          className={`${inputCls} w-full sm:w-44`}
+          aria-label="Azione in blocco"
+          disabled={count === 0}
+        >
           {options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>
           ))}
         </select>
+        {/* Disabled at zero like the select beside it: submitting an empty
+            selection only ever produced "nessun elemento selezionato" from the
+            action, which is a round trip to say what the bar already says. */}
         <PendingButton
           tone="dark"
+          disabled={count === 0}
           confirm={count > 0 && confirmTemplate ? confirmTemplate.replace("{n}", String(count)) : undefined}
         >
           Applica a {count}
@@ -110,16 +132,23 @@ export function BulkBar({
   );
 }
 
-/** The per-row checkbox that joins a `BulkBar`'s form. */
+/** The per-row checkbox that joins a `BulkBar`'s form.
+ *
+ * Wrapped in a label because `.tap` works by way of an `::after`, and a replaced
+ * element like `<input>` has no pseudo-elements to grow — so a bare checkbox
+ * stays a 20px target in a 56px row however the class is applied. The label
+ * carries no text; the accessible name is the input's own `aria-label`. */
 export function BulkCheckbox({ formId, id, label }: { formId: string; id: string; label: string }) {
   return (
-    <input
-      type="checkbox"
-      name="ids"
-      value={id}
-      form={formId}
-      aria-label={label}
-      className="mt-1 h-4 w-4 shrink-0 rounded accent-brown-950"
-    />
+    <label className="tap mt-0.5 inline-flex shrink-0 items-center">
+      <input
+        type="checkbox"
+        name="ids"
+        value={id}
+        form={formId}
+        aria-label={label}
+        className="size-5 rounded accent-brown-950"
+      />
+    </label>
   );
 }

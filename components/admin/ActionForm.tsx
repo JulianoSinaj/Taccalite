@@ -56,7 +56,7 @@ export function PendingButton({
               }
             : undefined
         }
-        className={`relative rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors disabled:opacity-60 ${tones[tone]}`}
+        className={`relative inline-flex min-h-11 items-center justify-center rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors disabled:opacity-60 ${tones[tone]}`}
       >
         <span className={pending ? "invisible" : undefined}>{children}</span>
         {pending && (

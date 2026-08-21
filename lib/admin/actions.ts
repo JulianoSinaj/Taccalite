@@ -336,6 +336,9 @@ export async function archiveProduct(_prev: ActionState, fd: FormData): Promise<
       summary: `Prodotto ${row.name} ${restore ? "ripristinato dall'archivio" : "archiviato"}`,
     });
     revalidatePath("/admin/products");
+    // Also reachable from the product's own page, which has to re-read the
+    // archive stamp it renders the button from.
+    revalidatePath(`/admin/products/${id}`);
     revalidatePath("/negozio");
     return ok(restore ? "Prodotto ripristinato." : "Prodotto archiviato.");
   });
@@ -903,6 +906,9 @@ export async function updateRedemptionStatus(_prev: ActionState, fd: FormData): 
     });
 
     revalidatePath("/admin/loyalty");
+    // Also actionable from the customer's own page, which shows the same row
+    // (and, on a cancellation, the points balance that just moved).
+    revalidatePath(`/admin/loyalty/${redemption.userId}`);
     return ok("Riscatto aggiornato.");
   });
 }

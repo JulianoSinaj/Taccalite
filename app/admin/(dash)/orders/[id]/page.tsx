@@ -79,7 +79,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
         action={
           <Link
             href={`/admin/orders/${order.id}/packing-slip`}
-            className="rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
           >
             Documento di consegna
           </Link>
@@ -152,7 +152,8 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   Riepilogo IVA (prezzi ivati)
                   {order.refundedCents > 0 ? " · al netto del rimborso" : ""}
                 </p>
-                <table className="w-full text-xs text-brown-800/80">
+                <div className="scroll-x">
+                  <table className="w-full text-xs text-brown-800/80">
                   <thead>
                     <tr className="text-left text-brown-800/50">
                       <th className="pb-1 font-semibold">Aliquota</th>
@@ -169,7 +170,8 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                  </table>
+                </div>
               </div>
             )}
           </Panel>
@@ -395,7 +397,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   <a
                     href={`/api/admin/invoice/${order.id}/xml`}
                     download
-                    className="inline-block rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                    className="inline-block inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
                   >
                     Fattura XML (SdI)
                   </a>
@@ -403,7 +405,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                     <a
                       href={`/api/admin/invoice/${order.id}/xml?doc=nota-credito`}
                       download
-                      className="inline-block rounded-full bg-danger-soft px-4 py-2 text-xs font-bold tracking-widest text-danger-soft-fg uppercase hover:bg-danger-soft"
+                      className="inline-block inline-flex min-h-11 items-center justify-center rounded-full bg-danger-soft px-4 py-2 text-xs font-bold tracking-widest text-danger-soft-fg uppercase hover:bg-danger-soft"
                     >
                       Nota di credito
                     </a>

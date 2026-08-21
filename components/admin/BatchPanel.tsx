@@ -96,7 +96,7 @@ export function BatchPanel({
       </p>
 
       {open.length > 0 && (
-        <div className="mt-6 overflow-x-auto">
+        <div className="scroll-x mt-6">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-brown-900/10 text-left text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">

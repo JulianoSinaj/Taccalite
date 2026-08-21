@@ -26,7 +26,7 @@ import {
   PRODUCT_SORTS,
 } from "@/lib/admin/queries";
 import { SavedViews } from "@/components/admin/SavedViews";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, isAdmin } from "@/lib/auth/session";
 import { productFilters, sortFilters, filterQuery } from "@/lib/admin/filters";
 import { expiryWindow } from "@/lib/time";
 import { getSetting } from "@/lib/db/queries";
@@ -87,12 +87,16 @@ export default async function AdminProducts({ searchParams }: SP) {
   // A week ahead is the window a shop can still act on.
   const expiryHorizon = expiryWindow(7);
   const viewer = await getCurrentUser();
-  const [{ rows: products, total, pageCount, categories }, shops, expiringSoon, views] =
+  // Bulk CSV import and export are full-admin operations server-side (a price
+  // list rewrites the catalogue; an export is a bulk dump). Staff used to see
+  // both controls and only find out on submit.
+  const [{ rows: products, total, pageCount, categories }, shops, expiringSoon, views, admin] =
     await Promise.all([
       getProductsPage({ ...filters, page, sort, lowStockThreshold }),
       adminGetShops(),
       countExpiringSoon(expiryHorizon),
       viewer ? getSavedViews(viewer.id, BASE) : Promise.resolve([]),
+      isAdmin(),
     ]);
 
   const filtered = Object.values(filters).some((v) => v && v !== "all");
@@ -110,6 +114,7 @@ export default async function AdminProducts({ searchParams }: SP) {
       key: "nome",
       header: "Prodotto",
       sortable: true,
+      sticky: true,
       cell: (p) => (
         <div>
           <Link href={`/admin/products/${p.id}`} className="font-semibold text-brown-950 hover:underline">
@@ -190,7 +195,7 @@ export default async function AdminProducts({ searchParams }: SP) {
           </ActionForm>
           <Link
             href={`/admin/products/${p.id}`}
-            className="rounded-full bg-brown-900/10 px-3 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-3 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
           >
             Modifica
           </Link>
@@ -224,7 +229,7 @@ export default async function AdminProducts({ searchParams }: SP) {
           <div className="flex flex-wrap gap-2">
             <Link
               href="/admin/products/scadenze"
-              className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+              className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
                 expiringSoon > 0
                   ? "bg-warn-soft text-warn-soft-fg hover:brightness-95"
                   : "bg-brown-900/10 text-brown-950 hover:bg-brown-900/15"
@@ -232,13 +237,15 @@ export default async function AdminProducts({ searchParams }: SP) {
             >
               Scadenze{expiringSoon > 0 ? ` · ${expiringSoon}` : ""}
             </Link>
-            <a
-              href={`/api/admin/export/products${filterQuery({ ...filters })}`}
-              download
-              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-            >
-              Esporta CSV
-            </a>
+            {admin ? (
+              <a
+                href={`/api/admin/export/products${filterQuery({ ...filters })}`}
+                download
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              >
+                Esporta CSV
+              </a>
+            ) : null}
             <NewButton href="/admin/products/new">+ Nuovo prodotto</NewButton>
           </div>
         }
@@ -285,52 +292,55 @@ export default async function AdminProducts({ searchParams }: SP) {
       <SavedViews path={BASE} views={views} currentQuery={filterQuery(filters).replace(/^\?/, "")} />
 
       {/* Import sits behind a disclosure: it's a periodic job (a supplier price
-          list), not something to trip over while browsing the catalogue. */}
-      <details className="mb-4">
-        <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
-          Importa listino da CSV
-        </summary>
-        <Panel className="mt-3">
-          <ActionForm action={importProducts} className="flex flex-wrap items-end gap-3">
-            <div className="min-w-56 flex-1">
-              <label className={labelCls} htmlFor="import-file">
-                File CSV
+          list), not something to trip over while browsing the catalogue. Full
+          admins only, matching the action's own guard. */}
+      {admin && (
+        <details className="mb-4">
+          <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+            Importa listino da CSV
+          </summary>
+          <Panel className="mt-3">
+            <ActionForm action={importProducts} className="flex flex-wrap items-end gap-3">
+              <div className="min-w-56 flex-1">
+                <label className={labelCls} htmlFor="import-file">
+                  File CSV
+                </label>
+                <input
+                  id="import-file"
+                  name="file"
+                  type="file"
+                  accept=".csv,text/csv"
+                  required
+                  className="block w-full text-sm text-brown-800 file:mr-3 file:rounded-full file:border-0 file:bg-brown-900/10 file:px-4 file:py-2 file:text-xs file:font-bold file:tracking-widest file:uppercase"
+                />
+              </div>
+              <div>
+                <label className={labelCls} htmlFor="import-shop">
+                  Sede per i nuovi prodotti
+                </label>
+                <select id="import-shop" name="shopSlug" className={inputCls}>
+                  {shops.map((s) => (
+                    <option key={s.slug} value={s.slug}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="flex items-center gap-2 pb-2.5 text-sm font-medium text-brown-900">
+                <input type="checkbox" name="crea" value="true" className="h-4 w-4 rounded accent-brown-950" />
+                Crea i prodotti sconosciuti
               </label>
-              <input
-                id="import-file"
-                name="file"
-                type="file"
-                accept=".csv,text/csv"
-                required
-                className="block w-full text-sm text-brown-800 file:mr-3 file:rounded-full file:border-0 file:bg-brown-900/10 file:px-4 file:py-2 file:text-xs file:font-bold file:tracking-widest file:uppercase"
-              />
-            </div>
-            <div>
-              <label className={labelCls} htmlFor="import-shop">
-                Sede per i nuovi prodotti
-              </label>
-              <select id="import-shop" name="shopSlug" className={inputCls}>
-                {shops.map((s) => (
-                  <option key={s.slug} value={s.slug}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <label className="flex items-center gap-2 pb-2.5 text-sm font-medium text-brown-900">
-              <input type="checkbox" name="crea" value="true" className="h-4 w-4 rounded accent-brown-950" />
-              Crea i prodotti sconosciuti
-            </label>
-            <PendingButton tone="dark">Importa</PendingButton>
-          </ActionForm>
-          <p className="mt-3 text-xs text-brown-800/60">
-            Le colonne sono le stesse dell&apos;esportazione e i prodotti si riconoscono dallo{" "}
-            <code>slug</code>. Una cella vuota lascia il valore invariato, quindi un foglio con solo{" "}
-            <code>slug,prezzoEuros</code> è un aggiornamento prezzi. Se il file contiene errori non
-            viene importato nulla.
-          </p>
-        </Panel>
-      </details>
+              <PendingButton tone="dark">Importa</PendingButton>
+            </ActionForm>
+            <p className="mt-3 text-xs text-brown-800/60">
+              Le colonne sono le stesse dell&apos;esportazione e i prodotti si riconoscono dallo{" "}
+              <code>slug</code>. Una cella vuota lascia il valore invariato, quindi un foglio con solo{" "}
+              <code>slug,prezzoEuros</code> è un aggiornamento prezzi. Se il file contiene errori non
+              viene importato nulla.
+            </p>
+          </Panel>
+        </details>
+      )}
 
       <DataTable
         rows={products}

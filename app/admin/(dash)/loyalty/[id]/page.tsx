@@ -20,7 +20,7 @@ import {
 } from "@/lib/admin/queries";
 import { getReservationsForUser, getRedemptionsForUser } from "@/lib/db/queries";
 import { getOrdersForUser } from "@/lib/orders";
-import { adjustPoints } from "@/lib/admin/actions";
+import { adjustPoints, updateRedemptionStatus } from "@/lib/admin/actions";
 import { anonymizeCustomer, updateUserProfile } from "@/lib/admin/user-actions";
 import { isAdmin } from "@/lib/auth/session";
 
@@ -226,7 +226,7 @@ export default async function CustomerDetail({ params }: Params) {
               <a
                 href={`/api/admin/gdpr/${user.id}`}
                 download
-                className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
               >
                 Esporta dati
               </a>
@@ -249,7 +249,7 @@ export default async function CustomerDetail({ params }: Params) {
           <p className="text-brown-800/70">Nessun movimento punti.</p>
         </Panel>
       ) : (
-        <Panel className="overflow-x-auto p-0">
+        <Panel className="scroll-x p-0">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-brown-900/10 text-left text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
@@ -351,6 +351,26 @@ export default async function CustomerDetail({ params }: Params) {
                   </p>
                 </div>
               </div>
+              {/* Handing the reward over is the whole point of opening a
+                  customer's page, and it used to mean going back to the global
+                  list on /admin/loyalty and finding the row again. */}
+              <ActionForm action={updateRedemptionStatus} className="flex items-center gap-2">
+                <input type="hidden" name="id" value={r.id} />
+                <label className="sr-only" htmlFor={`red-${r.id}`}>
+                  Stato del riscatto {r.rewardName}
+                </label>
+                <select
+                  id={`red-${r.id}`}
+                  name="status"
+                  defaultValue={r.status}
+                  className={`${inputCls} w-40`}
+                >
+                  <option value="pending">In attesa</option>
+                  <option value="fulfilled">Consegnato</option>
+                  <option value="cancelled">Annullato</option>
+                </select>
+                <PendingButton tone="dark">Aggiorna</PendingButton>
+              </ActionForm>
             </Panel>
           ))}
         </div>

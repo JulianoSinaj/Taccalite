@@ -129,7 +129,7 @@ export default async function AdminOrders({ searchParams }: SP) {
           <div className="flex gap-2">
             <Link
               href="/admin/orders/new"
-              className="rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
             >
               + Nuovo ordine
             </Link>
@@ -137,7 +137,7 @@ export default async function AdminOrders({ searchParams }: SP) {
                 <a
                 href={`/api/admin/export/orders${filterQuery(filters)}`}
                 download
-                className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
               >
                 Esporta CSV
               </a>
@@ -230,25 +230,27 @@ export default async function AdminOrders({ searchParams }: SP) {
         }
         columns={[
           {
-            key: "seleziona",
-            header: <span className="sr-only">Seleziona</span>,
-            cell: (o) => (
-              <BulkCheckbox formId={BULK_FORM} id={o.id} label={`Seleziona ordine ${o.orderNumber}`} />
-            ),
-          },
-          {
+            // The select box lives inside the identity cell rather than in a
+            // column of its own: one column fewer on a narrow screen, and the
+            // pinned column then carries both the tick and what it ticks. The
+            // checkbox joins the bulk form through `form="…"`, so where it sits
+            // in the DOM makes no difference to the submission.
             key: "numero",
             header: "Ordine",
             sortable: true,
+            sticky: true,
             cell: (o) => (
-              <div>
-                <Link
-                  href={`/admin/orders/${o.id}`}
-                  className="font-mono text-xs font-bold text-brown-950 hover:underline"
-                >
-                  {o.orderNumber}
-                </Link>
-                <p className="mt-0.5 text-xs text-brown-800/50">{fmtDate(o.createdAt)}</p>
+              <div className="flex items-start gap-3">
+                <BulkCheckbox formId={BULK_FORM} id={o.id} label={`Seleziona ordine ${o.orderNumber}`} />
+                <div>
+                  <Link
+                    href={`/admin/orders/${o.id}`}
+                    className="font-mono text-xs font-bold whitespace-nowrap text-brown-950 hover:underline"
+                  >
+                    {o.orderNumber}
+                  </Link>
+                  <p className="mt-0.5 text-xs whitespace-nowrap text-brown-800/50">{fmtDate(o.createdAt)}</p>
+                </div>
               </div>
             ),
           },
@@ -322,7 +324,7 @@ export default async function AdminOrders({ searchParams }: SP) {
                 )}
                 <Link
                   href={`/admin/orders/${o.id}`}
-                  className="rounded-full bg-brown-900/10 px-3 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-3 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
                 >
                   Dettaglio
                 </Link>

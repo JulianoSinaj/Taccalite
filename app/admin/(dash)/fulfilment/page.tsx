@@ -351,7 +351,7 @@ export default async function AdminFulfilment({ searchParams }: SP) {
         action={
           <Link
             href="/admin/fulfilment/oggi"
-            className="rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
           >
             Ritiri e consegne di oggi
           </Link>
@@ -363,7 +363,7 @@ export default async function AdminFulfilment({ searchParams }: SP) {
           <Link
             key={t.value}
             href={t.value === "ritiro" ? BASE : `${BASE}?tab=${t.value}`}
-            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+            className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
               tab === t.value
                 ? "bg-brown-950 text-cream"
                 : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"

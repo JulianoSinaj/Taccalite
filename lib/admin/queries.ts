@@ -75,6 +75,8 @@ import {
  * the payment date), and `refundedCents` was ignored, so a refunded order stayed
  * on the books as takings forever.
  */
+// Indexed as an expression by `orders_fiscal_date_idx` (drizzle/0033) — keep
+// this text identical to the index's or the planner silently reverts to a scan.
 const settledAt = sql`coalesce(${orders.paidAt}, ${orders.createdAt})`;
 const netRevenue = sql<number>`coalesce(sum(${orders.totalCents} - ${orders.refundedCents}), 0)`;
 /** Every order that was ever settled — a refunded one still had a sale. */
@@ -696,7 +698,11 @@ export const getLoyaltyAccountForUser = (userId: string) =>
     .limit(1)
     .then((r) => r[0] ?? null);
 
-export async function getCustomersWithPoints(filters: CustomerFilters = {}) {
+export async function getCustomersWithPoints(
+  filters: CustomerFilters = {},
+  limit?: number,
+  offset?: number,
+) {
   const where = customersWhere(filters);
   const base = db
     .select({
@@ -712,7 +718,9 @@ export async function getCustomersWithPoints(filters: CustomerFilters = {}) {
     })
     .from(users)
     .leftJoin(loyaltyAccounts, eq(loyaltyAccounts.userId, users.id));
-  return (where ? base.where(where) : base).orderBy(desc(users.createdAt));
+  const ordered = (where ? base.where(where) : base).orderBy(desc(users.createdAt), users.id);
+  // The CSV route streams this a page at a time; the list page takes it whole.
+  return limit == null ? ordered : ordered.limit(limit).offset(offset ?? 0);
 }
 
 /**
@@ -823,28 +831,56 @@ export async function getOutboxPage(opts: OutboxFilters & { page?: number }) {
 }
 
 // ── Filtered exports ─────────────────────────────────────────────────────────
-// Unpaginated variants of the list queries, sharing the same WHERE builders, so
-// a CSV download returns exactly the rows the operator has filtered to on screen.
+// Batched variants of the list queries, sharing the same WHERE builders, so a
+// CSV download returns exactly the rows the operator has filtered to on screen.
+//
+// Each takes a limit/offset because the CSV route streams them a page at a time
+// (see `streamCsv`) rather than materialising an unbounded result set. Every
+// ORDER BY therefore ends in the primary key: the sort columns here all have
+// ties (a timestamp to the millisecond, a hand-set sortOrder), and without a
+// unique tiebreaker the order is unspecified between batches, so offset paging
+// could repeat one row and drop another.
 
-export const getOrdersForExport = (f: OrderFilters) =>
-  db.select().from(orders).where(ordersWhere(f)).orderBy(desc(orders.createdAt));
+export const getOrdersForExport = (f: OrderFilters, limit: number, offset: number) =>
+  db
+    .select()
+    .from(orders)
+    .where(ordersWhere(f))
+    .orderBy(desc(orders.createdAt), orders.id)
+    .limit(limit)
+    .offset(offset);
 
-export const getReservationsForExport = (f: ReservationFilters) =>
+export const getReservationsForExport = (f: ReservationFilters, limit: number, offset: number) =>
   db
     .select()
     .from(reservations)
     .where(reservationsWhere(f))
-    .orderBy(desc(reservations.createdAt));
+    .orderBy(desc(reservations.createdAt), reservations.id)
+    .limit(limit)
+    .offset(offset);
 
-export const getProductsForExport = (f: ProductFilters, lowStockThreshold: number) =>
-  db.select().from(products).where(productsWhere(f, lowStockThreshold)).orderBy(products.sortOrder);
+export const getProductsForExport = (
+  f: ProductFilters,
+  lowStockThreshold: number,
+  limit: number,
+  offset: number,
+) =>
+  db
+    .select()
+    .from(products)
+    .where(productsWhere(f, lowStockThreshold))
+    .orderBy(products.sortOrder, products.id)
+    .limit(limit)
+    .offset(offset);
 
-export const getSubscribersForExport = (f: SubscriberFilters) =>
+export const getSubscribersForExport = (f: SubscriberFilters, limit: number, offset: number) =>
   db
     .select()
     .from(newsletterSubscribers)
     .where(subscribersWhere(f))
-    .orderBy(desc(newsletterSubscribers.createdAt));
+    .orderBy(desc(newsletterSubscribers.createdAt), newsletterSubscribers.id)
+    .limit(limit)
+    .offset(offset);
 
 export const getAllSettings = () => db.select().from(settings).orderBy(settings.key);
 
@@ -919,6 +955,30 @@ export const getStockMovements = (productId: string, limit = 20) =>
     .orderBy(desc(stockMovements.createdAt))
     .limit(limit);
 
+/**
+ * The history that stands between a product and permanent deletion.
+ *
+ * `deleteProduct` refuses once either count is non-zero — deleting cascades the
+ * movement ledger away and would blank the name on past order lines. The detail
+ * page asks first so it can offer the button only where it can succeed, the way
+ * /admin/categories does with its own foreign key.
+ */
+export async function getProductHistoryCounts(
+  productId: string,
+): Promise<{ sold: number; movements: number }> {
+  const [[sold], [movements]] = await Promise.all([
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(orderItems)
+      .where(eq(orderItems.productId, productId)),
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(stockMovements)
+      .where(eq(stockMovements.productId, productId)),
+  ]);
+  return { sold: sold?.n ?? 0, movements: movements?.n ?? 0 };
+}
+
 /** All discount codes, newest first. */
 export const adminGetDiscounts = () =>
   db.select().from(discountCodes).orderBy(desc(discountCodes.createdAt));
@@ -961,9 +1021,15 @@ export async function getAuditPage(opts: AuditFilters & { page?: number } = {}) 
   };
 }
 
-/** Unpaginated audit feed for the CSV export, honouring the same filters. */
-export const getAuditForExport = (f: AuditFilters) =>
-  db.select().from(auditLog).where(auditWhere(f)).orderBy(desc(auditLog.createdAt));
+/** Batched audit feed for the CSV export, honouring the same filters. */
+export const getAuditForExport = (f: AuditFilters, limit: number, offset: number) =>
+  db
+    .select()
+    .from(auditLog)
+    .where(auditWhere(f))
+    .orderBy(desc(auditLog.createdAt), auditLog.id)
+    .limit(limit)
+    .offset(offset);
 
 /**
  * The timestamp that puts an order in a fiscal period: when it was paid.
@@ -972,6 +1038,8 @@ export const getAuditForExport = (f: AuditFilters) =>
  * is the best available approximation for that history and matches how those
  * periods were previously reported.
  */
+// Indexed as an expression by `orders_fiscal_date_idx` (drizzle/0033) — keep
+// this text identical to the index's or the planner silently reverts to a scan.
 const fiscalDate = sql`coalesce(${orders.paidAt}, ${orders.createdAt})`;
 
 /**
@@ -979,6 +1047,8 @@ const fiscalDate = sql`coalesce(${orders.paidAt}, ${orders.createdAt})`;
  * refunds issued before it fall back to the row's last-touched time, which for a
  * refunded order is in practice the refund itself.
  */
+// Indexed as an expression by `orders_reversal_date_idx` (drizzle/0033) — keep
+// this text identical to the index's or the planner silently reverts to a scan.
 const reversalDate = sql`coalesce(${orders.refundedAt}, ${orders.updatedAt})`;
 
 export type VatReport = {

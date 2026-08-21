@@ -75,7 +75,7 @@ function ImageField({ current }: { current?: string | null }) {
           <button
             type="button"
             onClick={clearImage}
-            className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
           >
             Rimuovi immagine
           </button>
@@ -244,7 +244,7 @@ export function ProductForm({
           className={inputCls}
         />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className={labelCls}>Codice / SKU</label>
           <input name="sku" defaultValue={product?.sku ?? ""} className={inputCls} />
@@ -406,7 +406,7 @@ export function BlogForm({
             href={`/blog/${post.slug}`}
             target="_blank"
             rel="noreferrer"
-            className="rounded-full bg-brown-900/10 px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
           >
             Vedi sul sito ↗
           </a>
@@ -612,7 +612,7 @@ export function DiscountForm({
           ))}
         </select>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className={labelCls}>Valido dal</label>
           <input name="startsAt" type="date" defaultValue={dateValue(discount?.startsAt)} className={inputCls} />

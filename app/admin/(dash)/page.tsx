@@ -126,29 +126,29 @@ export default async function AdminDashboard() {
       </div>
 
       {/* KPI strip — 30-day performance with period-over-period deltas */}
-      <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Panel>
           <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Incasso 30 giorni</p>
-          <div className="mt-2 flex items-baseline gap-2">
-            <p className="font-display text-2xl font-bold text-brown-950">{euro(insights.revenue30dCents)}</p>
+          <div className="mt-2 flex flex-wrap items-baseline gap-2">
+            <p className="font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{euro(insights.revenue30dCents)}</p>
             <DeltaBadge d={revDelta} />
           </div>
           <p className="mt-1 text-xs text-brown-800/50">vs. 30 giorni precedenti</p>
         </Panel>
         <Panel>
           <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Scontrino medio</p>
-          <p className="mt-2 font-display text-2xl font-bold text-brown-950">{euro(insights.aovCents)}</p>
+          <p className="mt-2 font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{euro(insights.aovCents)}</p>
           <p className="mt-1 text-xs text-brown-800/50">{insights.orders30d} ordini pagati (30 gg)</p>
         </Panel>
         <Panel>
           <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Ordini 30 giorni</p>
-          <p className="mt-2 font-display text-2xl font-bold text-brown-950">{insights.orders30d}</p>
+          <p className="mt-2 font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{insights.orders30d}</p>
           <p className="mt-1 text-xs text-brown-800/50">pagati</p>
         </Panel>
         <Panel>
           <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Nuovi clienti</p>
-          <div className="mt-2 flex items-baseline gap-2">
-            <p className="font-display text-2xl font-bold text-brown-950">{insights.newCustomers30d}</p>
+          <div className="mt-2 flex flex-wrap items-baseline gap-2">
+            <p className="font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{insights.newCustomers30d}</p>
             <DeltaBadge d={custDelta} />
           </div>
           <p className="mt-1 text-xs text-brown-800/50">registrati (30 gg)</p>
@@ -270,8 +270,11 @@ export default async function AdminDashboard() {
             <ul className="divide-y divide-brown-900/10">
               {todayReservations.map((r) => (
                 <li key={r.id}>
+                  {/* The booking itself, not the list it lives in: every other
+                      surface (calendar, agenda, customer 360) links straight to
+                      the detail page, and "Tutte" above already covers the list. */}
                   <Link
-                    href="/admin/reservations"
+                    href={`/admin/reservations/${r.id}`}
                     className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-brown-900/[0.03]"
                   >
                     <span className="w-12 shrink-0 font-display text-sm font-bold text-brown-950">
@@ -330,7 +333,7 @@ export default async function AdminDashboard() {
               <Panel className="transition-shadow hover:shadow-md">
                 <div className="flex items-center justify-between">
                   <Icon className="size-5 text-brown-800/50" />
-                  <span className="font-display text-2xl font-bold text-brown-950">{c.value}</span>
+                  <span className="font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{c.value}</span>
                 </div>
                 <p className="mt-2 text-xs font-medium text-brown-800/70">{c.label}</p>
               </Panel>
@@ -376,16 +379,16 @@ export default async function AdminDashboard() {
         <Panel>
           <h3 className="font-display text-lg text-brown-950">Azioni rapide</h3>
           <div className="mt-4 flex flex-wrap gap-3">
-            <Link href="/admin/reservations/new" className="rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900">
+            <Link href="/admin/reservations/new" className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900">
               Nuova prenotazione
             </Link>
-            <Link href="/admin/orders/new" className="rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900">
+            <Link href="/admin/orders/new" className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900">
               Nuovo ordine
             </Link>
-            <Link href="/admin/products/new" className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15">
+            <Link href="/admin/products/new" className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15">
               Nuovo prodotto
             </Link>
-            <Link href="/admin/blog/new" className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15">
+            <Link href="/admin/blog/new" className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15">
               Nuova news
             </Link>
           </div>

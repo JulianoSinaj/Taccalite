@@ -57,7 +57,10 @@ export function ConfirmDialog({
       onClick={(e) => {
         if (e.target === ref.current) onCancel();
       }}
-      className="max-w-md rounded-2xl border border-brown-900/10 bg-surface p-0 text-brown-950 shadow-xl backdrop:bg-brown-950/40"
+      // `max-h` + scroll because a long confirmation ("applicare a 40 ordini?
+      // i clienti riceveranno le email previste") overflowed a small phone with
+      // no way to reach the buttons. `dvh`, so the browser chrome is excluded.
+      className="max-h-[85dvh] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-2xl border border-brown-900/10 bg-surface p-0 text-brown-950 shadow-xl backdrop:bg-brown-950/40"
       aria-labelledby="confirm-title"
     >
       <div className="p-6">
@@ -73,11 +76,14 @@ export function ConfirmDialog({
             <div className="mt-1.5 text-sm leading-relaxed text-brown-800/80">{message}</div>
           </div>
         </div>
-        <div className="mt-6 flex justify-end gap-2">
+        {/* Reversed on a phone so the confirming action is the one under the
+            thumb, and both are full width rather than two short pills wrapping
+            unpredictably. */}
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-full bg-brown-900/10 px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-brown-900/10 px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15 sm:w-auto"
           >
             Annulla
           </button>
@@ -85,7 +91,7 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             autoFocus
-            className={`rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase ${tones[tone]}`}
+            className={`inline-flex min-h-11 w-full items-center justify-center rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase sm:w-auto ${tones[tone]}`}
           >
             {confirmLabel}
           </button>

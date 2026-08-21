@@ -255,8 +255,10 @@ export async function runPickupAutoFulfil(
 }
 
 /**
- * Housekeeping sweep: delete expired sessions, retry the outbox, and prune old
- * sent outbox rows. Safe to run frequently from the cron endpoint.
+ * Housekeeping sweep: delete expired sessions, retry the outbox, prune the rows
+ * that are past their retention (sent outbox mail, audit log, page views),
+ * re-verify the search indexes and reclaim orphaned uploads. Safe to run
+ * frequently from the cron endpoint — every step is idempotent.
  */
 export async function runMaintenance(
   now = new Date(),

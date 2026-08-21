@@ -68,6 +68,8 @@ export async function getAnalyticsSummary(now = new Date(), rangeDays = 30) {
   // — the beacon stays cookieless and identifier-free, so a true funnel isn't
   // available — but "how many visits, how many orders, how much money" is, and
   // it is the question the page was missing entirely.
+  // Indexed as an expression by `orders_fiscal_date_idx` (drizzle/0033) — keep
+  // this text identical to the index's or the planner silently reverts to a scan.
   const settledAt = sql`coalesce(${orders.paidAt}, ${orders.createdAt})`;
   const [commerce] = await db
     .select({

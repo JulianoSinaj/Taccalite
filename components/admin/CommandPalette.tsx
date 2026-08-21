@@ -9,10 +9,13 @@ const COMMANDS: Cmd[] = [
   // Vai a…
   { label: "Dashboard", href: "/admin", group: "Vai a" },
   { label: "Prenotazioni", href: "/admin/reservations", group: "Vai a", keywords: "booking caparra" },
+  { label: "Agenda / prep del giorno", href: "/admin/reservations/agenda", group: "Vai a", keywords: "prenotazioni giornata stampa foglio" },
+  { label: "Calendario prenotazioni", href: "/admin/reservations/calendar", group: "Vai a", keywords: "settimana prenotazioni" },
   { label: "Ordini", href: "/admin/orders", group: "Vai a" },
   { label: "Ritiri e consegne di oggi", href: "/admin/fulfilment/oggi", group: "Vai a", keywords: "asporto consegna spedizione fasce oggi" },
   { label: "Zone e fasce di ritiro", href: "/admin/fulfilment", group: "Vai a", adminOnly: true, keywords: "cap tariffe spedizione consegna slot" },
   { label: "Prodotti", href: "/admin/products", group: "Vai a", keywords: "catalogo giacenza" },
+  { label: "Scadenze lotti", href: "/admin/products/scadenze", group: "Vai a", keywords: "lotti haccp scaduti magazzino" },
   { label: "Categorie", href: "/admin/categories", group: "Vai a", adminOnly: true, keywords: "categoria tassonomia reparto" },
   { label: "News / Blog", href: "/admin/blog", group: "Vai a" },
   { label: "Negozi", href: "/admin/shops", group: "Vai a" },
@@ -92,7 +95,7 @@ export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-brown-950/40 px-4 pt-[12vh] print:hidden"
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-brown-950/40 px-4 pt-[8dvh] print:hidden"
       onClick={() => setOpen(false)}
       role="dialog"
       aria-modal="true"
@@ -124,7 +127,7 @@ export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {
           placeholder="Cerca una sezione o un'azione…"
           className="w-full border-b border-brown-900/10 px-5 py-4 text-sm text-brown-950 placeholder:text-brown-800/40 focus:outline-none"
         />
-        <ul className="max-h-80 overflow-y-auto py-2">
+        <ul className="max-h-[min(20rem,50dvh)] overflow-y-auto py-2">
           {results.length === 0 ? (
             <li className="px-5 py-6 text-center text-sm text-brown-800/50">Nessun risultato.</li>
           ) : (

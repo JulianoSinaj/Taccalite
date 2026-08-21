@@ -71,7 +71,7 @@ export default async function AdminCategories({ searchParams }: SP) {
             key={k.value}
             href={k.value === "product" ? BASE : `${BASE}?kind=${k.value}`}
             aria-current={k.value === kind ? "true" : undefined}
-            className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+            className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
               k.value === kind
                 ? "bg-brown-950 text-cream"
                 : "bg-brown-900/10 text-brown-950 hover:bg-brown-900/15"
@@ -130,7 +130,7 @@ export default async function AdminCategories({ searchParams }: SP) {
                 </ActionForm>
                 <Link
                   href={`${BASE}/${c.id}`}
-                  className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
                 >
                   Modifica
                 </Link>

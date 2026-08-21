@@ -99,19 +99,19 @@ export default async function AdminReservations({ searchParams }: SP) {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/admin/reservations/new"
-              className="rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
             >
               + Nuova prenotazione
             </Link>
             <Link
               href="/admin/reservations/calendar"
-              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
             >
               Calendario
             </Link>
             <Link
               href="/admin/reservations/agenda"
-              className="rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
             >
               Agenda / prep
             </Link>
@@ -119,7 +119,7 @@ export default async function AdminReservations({ searchParams }: SP) {
                 <a
                 href={`/api/admin/export/reservations${filterQuery(filters)}`}
                 download
-                className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
               >
                 Esporta CSV
               </a>
@@ -226,7 +226,17 @@ export default async function AdminReservations({ searchParams }: SP) {
                       </span>
                     )}
                   </div>
-                  <p className="font-display text-xl text-brown-950">{r.name}</p>
+                  {/* The list had no route to a booking's own page at all: the
+                      detail screen was reachable from the calendar, the agenda
+                      and the customer 360, but not from the list you actually
+                      search in. Linking the name matches how the orders list
+                      hangs its detail link off the order number. */}
+                  <Link
+                    href={`/admin/reservations/${r.id}`}
+                    className="font-display inline-block text-xl text-brown-950 hover:underline"
+                  >
+                    {r.name}
+                  </Link>
                   <div className="grid grid-cols-1 gap-x-8 gap-y-1 text-sm text-brown-800/80 sm:grid-cols-2">
                     <p>
                       <span aria-hidden="true">📞</span> <span className="sr-only">Telefono: </span>

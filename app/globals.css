@@ -993,6 +993,22 @@ html[data-intro="play"] .intro-rule::after {
     --input: rgba(246, 239, 228, 0.16);
     --ring: #d3ab58;
   }
+
+  /* The shell carries `data-theme`, so <body> sits outside it and keeps the
+   * light ground — which shows as a band of cream the moment the page is
+   * overscrolled, and behind a `position: fixed` scroll lock. Body cannot read
+   * the shell's redefined tokens (they are declared on a descendant), so this is
+   * the one place the dark page colour is repeated as a literal: it is
+   * `--surface-muted` from the block above. Same shape as `body:has(.site-shell)`.
+   *
+   * Deliberately OUTSIDE the token block: `test/theme-tokens.test.ts` reads the
+   * first `{ … }` after the `[data-theme="dark"]` marker and compares its token
+   * set against the system-dark copy, so a stray declaration in there fails the
+   * suite. Inside `@media screen` for the same reason the ramp is — print must
+   * never see it. */
+  body:has([data-theme="dark"]) {
+    background: #17110d;
+  }
 }
 
 @media screen and (prefers-color-scheme: dark) {
@@ -1058,6 +1074,11 @@ html[data-intro="play"] .intro-rule::after {
     --border: rgba(246, 239, 228, 0.12);
     --input: rgba(246, 239, 228, 0.16);
     --ring: #d3ab58;
+  }
+
+  /* The "automatico" twin of the rule above. */
+  body:has([data-theme="system"]) {
+    background: #17110d;
   }
 }
 
@@ -1356,5 +1377,176 @@ html {
   .site-shell {
     padding-left: env(safe-area-inset-left, 0px);
     padding-right: env(safe-area-inset-right, 0px);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Gestionale shell
+ *
+ * `.admin-shell` wraps everything under `app/admin/(dash)` and nothing else —
+ * the counterpart to `.site-shell`. Every rule in the Phone section above is
+ * scoped `.site-shell`, so until this block existed the back office had none of
+ * it: no press states, no tap-highlight suppression, no word-breaking for the
+ * order references and email addresses it is largely made of. An operator uses
+ * the gestionale on a phone behind the counter far more often than a customer
+ * uses the shop on a desktop.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Density ─────────────────────────────────────────────────────────────────
+ *
+ * `@layer base` above steps the root font-size down to 93.75% at 640px and
+ * 87.5% at 1024px. That is a storefront art-direction decision — an editorial
+ * page reads tighter than the browser default — and it was landing on the
+ * gestionale too, where it made body copy 12.25px, button labels 10.5px and
+ * every `py-2.5` control ~34px tall: under the 44px a finger needs, and under
+ * what anyone wants to read a day of order numbers in.
+ *
+ * Unlayered, so it beats all three `@layer base` steps without a specificity
+ * argument. `:has()` on <html> because only the root layout renders that
+ * element — a nested layout can mark itself and let the root follow.
+ *
+ * `--admin-top` is the height of the sticky mobile bar, declared here so it
+ * inherits everywhere and the sticky chrome beneath it (bulk bars, filter
+ * rails, anchor targets) can clear it without any of them hard-coding it. The
+ * desktop sidebar sits beside the content rather than above it, so it is 0
+ * there. Same pattern as `--consent-h` on the storefront.
+ */
+html:has(.admin-shell) {
+  font-size: 100%;
+  --admin-top: 4rem;
+  /* 6rem of scroll-padding exists for the storefront's fixed header; the admin
+   * has its own, shorter one. */
+  scroll-padding-top: var(--admin-top);
+}
+
+@media (min-width: 1024px) {
+  html:has(.admin-shell) {
+    --admin-top: 0px;
+  }
+}
+
+/* ── Long strings ────────────────────────────────────────────────────────────
+ *
+ * The gestionale is largely order references, SKUs, email addresses and Stripe
+ * ids: long, unbreakable, and the one thing that still forces a 375px page
+ * sideways however carefully the layout is built. The storefront gets this
+ * under 640px only; the admin gets it at every width, because a 260px table
+ * cell on a laptop has exactly the same problem.
+ */
+.admin-shell {
+  /* Inherited, so this reaches the bare <div>s and <span>s a table cell is
+   * built from — an element list would have covered the prose and missed the
+   * data. `break-word` and not `anywhere`: it only breaks a word that has no
+   * other way to fit, so ordinary copy is untouched. */
+  overflow-wrap: break-word;
+}
+
+/* ── Touch feedback ──────────────────────────────────────────────────────────
+ *
+ * Every control in the gestionale says what it does through `:hover`, and a
+ * finger never hovers — so on a phone the whole interface was inert until the
+ * navigation completed, which on a server-rendered list is a visible wait. The
+ * storefront's answer, applied here: drop the grey platform rectangle (wrong on
+ * pill buttons and hairlined panels) and put the house press state in its place.
+ *
+ * `pointer: coarse` rather than a width query, so a touchscreen laptop gets the
+ * press state and a narrow desktop window does not lose its hovers.
+ */
+@media (hover: none) and (pointer: coarse) {
+  .admin-shell {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .admin-shell a:active,
+  .admin-shell button:not(:disabled):active,
+  .admin-shell summary:active,
+  .admin-shell label:active {
+    opacity: 0.68;
+    /* Instant on the way down, so the press reads as contact rather than as a
+     * fade; the element's own transition carries it back on release. */
+    transition-duration: 0s;
+  }
+}
+
+/* ── Tick boxes ──────────────────────────────────────────────────────────────
+ *
+ * The browser default is 13px and the admin asked for 16 — either way it is a
+ * mark, not a target, and the gestionale is full of rows where the tick is the
+ * whole interaction (evaso, attiva, pubblicato). 20px is still small enough to
+ * sit inside a table cell without changing the row rhythm, and it is the size
+ * the bulk-select boxes already use, so the surface agrees with itself.
+ *
+ * Where the box must stay drawn small, `.tap` on its label is the other half —
+ * a pseudo-element cannot grow a replaced element like `<input>` itself.
+ */
+.admin-shell input[type="checkbox"],
+.admin-shell input[type="radio"] {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* A tick and its caption are one control, and the caption is where the finger
+ * goes — but the row is only as tall as 14px of type, so the target was ~20px
+ * in a form of them. `min-height` rather than `.tap`: it takes real space, so
+ * two stacked toggles cannot end up with overlapping hit areas the way two
+ * pseudo-elements would. Touch only, so the desktop form keeps its density.
+ *
+ * `:has(> input)` and not a class, because these labels are written out longhand
+ * at a dozen call sites and one rule beats a dozen edits that the next new form
+ * would forget anyway. */
+@media (pointer: coarse) {
+  .admin-shell label:has(> input[type="checkbox"]),
+  .admin-shell label:has(> input[type="radio"]) {
+    min-height: 2.75rem;
+  }
+}
+
+/* ── Horizontal scrollers ────────────────────────────────────────────────────
+ *
+ * A table wider than the screen scrolls, and nothing on screen says so: the
+ * last column is cut off at the panel edge in exactly the way a column that
+ * genuinely ends there would be. This is the standard scroll-shadow trick —
+ * two opaque "cover" layers pinned to the container (`local`) and two shadows
+ * pinned to the content (`scroll`). At each end the cover sits over the shadow
+ * and hides it; anywhere in between, the shadow shows. No measurement, no JS,
+ * and it costs nothing when the content fits.
+ *
+ * Both colours are tokens that the dark theme already inverts, so this needs no
+ * second copy: `--surface` is the panel either way, and `--color-brown-950` is
+ * the darkest ink in light mode and the lightest in dark — which is precisely
+ * "a shadow that reads against whatever it sits on".
+ */
+.scroll-x {
+  overflow-x: auto;
+  /* `contain: paint` is load-bearing, not an optimisation.
+   *
+   * A table wider than its `overflow-x: auto` wrapper leaves that width in the
+   * *root* scroller's scrollable area in Chromium, even though every ancestor
+   * box measures exactly the viewport. The orders list on a 390px phone could be
+   * swiped ~450px sideways into empty cream, and no element was there to find:
+   * `documentElement.scrollWidth` read 835 while `body.scrollWidth` read 390.
+   *
+   * Neither `overflow-x: hidden` nor `clip` on any ancestor stops it — measured,
+   * both leave it at 835 — so the old `overflow-x-hidden` on the content column
+   * was never containing this either; it was worse before this pass (884px).
+   * Paint containment is what actually closes the box. */
+  contain: paint;
+  --scroll-ground: var(--surface);
+  background-image:
+    linear-gradient(to right, var(--scroll-ground), rgba(0, 0, 0, 0)),
+    linear-gradient(to left, var(--scroll-ground), rgba(0, 0, 0, 0)),
+    linear-gradient(to right, color-mix(in oklab, var(--color-brown-950) 20%, transparent), rgba(0, 0, 0, 0)),
+    linear-gradient(to left, color-mix(in oklab, var(--color-brown-950) 20%, transparent), rgba(0, 0, 0, 0));
+  background-position: left center, right center, left center, right center;
+  background-repeat: no-repeat;
+  background-size: 2.5rem 100%, 2.5rem 100%, 1rem 100%, 1rem 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* Paper has no edges to fall off. */
+@media print {
+  .scroll-x {
+    overflow-x: visible;
+    background-image: none;
   }
 }

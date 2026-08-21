@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
-    db.get(sql`select 1`);
+    await db.get(sql`select 1`);
     return NextResponse.json({ status: "ok" }, { status: 200 });
   } catch {
     return NextResponse.json({ status: "unavailable" }, { status: 503 });

@@ -89,6 +89,30 @@ describe("global cap", () => {
     // The ledger row goes too, so a per-customer cap is genuinely freed.
     expect(await getDiscountUses("REFUNDABLE")).toHaveLength(0);
   });
+
+  it("doesn't give back a use for an order that was never counted", async () => {
+    await makeCode("DERIVA", { maxRedemptions: 1 });
+
+    // Both orders validated before either settled; only the first can claim.
+    expect(await recordDiscountUseByCode("DERIVA", { orderId: "ord-a", email: EMAIL })).toBe(true);
+    expect(await recordDiscountUseByCode("DERIVA", { orderId: "ord-b", email: EMAIL })).toBe(false);
+    // The refused order leaves no ledger row, so nothing can later cash it in.
+    expect(await getDiscountUses("DERIVA")).toHaveLength(1);
+
+    // Refunding the order that was honoured-but-not-counted must be a no-op for
+    // the counter: releasing it used to drop timesUsed to 0 and make a one-shot
+    // code redeemable a second time, with ord-a's redemption still standing.
+    await releaseDiscountUseByCode("DERIVA", "ord-b");
+
+    const [row] = await db.select().from(discountCodes).where(eq(discountCodes.code, "DERIVA"));
+    expect(row.timesUsed).toBe(1);
+    expect(await getDiscountUses("DERIVA")).toHaveLength(1);
+    expect(await validateDiscount("DERIVA", 5000)).toBeNull();
+
+    // The genuine redemption still releases normally.
+    await releaseDiscountUseByCode("DERIVA", "ord-a");
+    expect(await validateDiscount("DERIVA", 5000)).not.toBeNull();
+  });
 });
 
 describe("per-customer limit", () => {

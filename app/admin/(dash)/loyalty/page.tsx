@@ -62,7 +62,7 @@ export default async function AdminLoyalty({ searchParams }: SP) {
             <a
               href={`/api/admin/export/customers${filterQuery(filters)}`}
               download
-              className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
             >
               Esporta CSV
             </a>
@@ -177,7 +177,7 @@ export default async function AdminLoyalty({ searchParams }: SP) {
             <Link
               key={chip.value}
               href={`${BASE}?${qs.toString()}`}
-              className={`rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
+              className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase ${
                 rstato === chip.value
                   ? "bg-brown-950 text-cream"
                   : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"

@@ -38,7 +38,7 @@ function SubmitButton({
               }
             : undefined
         }
-        className={`rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors disabled:opacity-50 ${tones[tone]}`}
+        className={`inline-flex min-h-11 items-center justify-center rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors disabled:opacity-50 ${tones[tone]}`}
       >
         {pending ? "…" : children}
       </button>
