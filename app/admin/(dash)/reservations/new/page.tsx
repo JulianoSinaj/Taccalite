@@ -6,7 +6,13 @@ import { adminGetShops } from "@/lib/admin/queries";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewReservation() {
+type SP = { searchParams: Promise<{ data?: string }> };
+
+/** `?data=yyyy-mm-dd` pre-fills the booking date — the calendar's empty days
+ *  link here, and re-picking the day you just clicked is pure friction. */
+export default async function NewReservation({ searchParams }: SP) {
+  const { data } = await searchParams;
+  const defaultDate = data && /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : undefined;
   const shops = await adminGetShops();
 
   return (
@@ -22,7 +28,7 @@ export default async function NewReservation() {
         subtitle="Registra una prenotazione presa al telefono o al banco"
       />
       <Panel>
-        <ReservationForm shops={shops} redirectTo="/admin/reservations" />
+        <ReservationForm shops={shops} defaultDate={defaultDate} redirectTo="/admin/reservations" />
       </Panel>
       <p className="mt-4 text-xs text-brown-800/60">
         Le prenotazioni prese qui non avvisano il titolare (sei tu a inserirle) e superano i limiti

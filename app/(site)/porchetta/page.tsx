@@ -6,7 +6,8 @@ import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
 import MedallionBadge from "@/components/MedallionBadge";
 import PageHero from "@/components/site/PageHero";
 import CTA from "@/components/site/CTA";
-import { getSetting, getPorchettaKgForDate } from "@/lib/db/queries";
+import { porchettaAvailability } from "@/lib/reservations";
+import { siteRecords } from "@/lib/site-content";
 
 export const dynamic = "force-dynamic";
 
@@ -16,97 +17,27 @@ export const metadata: Metadata = {
     "La porchetta artigianale Taccalite: la ricetta di famiglia, cotta lentamente ogni sabato ad Ancona.",
 };
 
-// English weekday keys (as stored in the `porchetta.day` setting) → JS getDay().
-const WEEKDAY_INDEX: Record<string, number> = {
-  sunday: 0,
-  monday: 1,
-  tuesday: 2,
-  wednesday: 3,
-  thursday: 4,
-  friday: 5,
-  saturday: 6,
-};
-
-/** yyyy-mm-dd for a local Date, without the UTC shift of toISOString(). */
-function toIsoDate(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 /** Trim trailing ".0" from half-kg quantities for display (e.g. 12.0 → "12"). */
 function formatKg(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
 }
 
-const steps = [
-  {
-    title: "La selezione",
-    text: "Scegliamo solo carne di suino di alta qualità, lavorata a mano dai nostri norcini.",
-    image: "/images/negozio-carni-prosciutto.jpg",
-    alt: "La selezione della carne",
-  },
-  {
-    title: "L'aromatizzazione",
-    text: "Rosmarino, aglio, finocchietto selvatico e le spezie della ricetta di famiglia, custodita da tre generazioni.",
-    image:
-      "https://images.unsplash.com/photo-1486887396153-fa416526c108?auto=format&fit=crop&q=80&w=800",
-    alt: "La lavorazione artigianale a mano",
-  },
-  {
-    title: "La cottura lenta",
-    text: "Cotta lentamente in forno, fino a raggiungere la pelle croccante e la carne morbidissima all'interno.",
-    image:
-      "https://images.unsplash.com/photo-1615937657715-bc7b4b7962c1?auto=format&fit=crop&q=80&w=800",
-    alt: "La cottura lenta in forno",
-  },
-];
-
-const gallery = [
-  {
-    src: "/images/home-hero-gastronomia.jpg",
-    alt: "Il banco gastronomia",
-  },
-  {
-    src: "/images/negozio-carni-prosciutto.jpg",
-    alt: "Il banco carni e salumi",
-  },
-  {
-    src: "/images/negozio-centro-formaggi.jpg",
-    alt: "Il banco formaggi",
-  },
-  {
-    src: "/images/shop-shelves-prodotti.jpg",
-    alt: "Gli scaffali della bottega",
-  },
-];
-
 export default async function PorchettaPage() {
   // Live availability for the next porchetta pickup day (configurable; Saturday
-  // by default). All reads are best-effort — the page still renders if unset.
-  const [dayKey, capacityKg] = await Promise.all([
-    getSetting<string>("porchetta.day", "saturday"),
-    getSetting<number>("porchetta.weeklyCapacityKg", 0),
+  // by default), resolved **per shop** — each location roasts its own batch
+  // against its own cap, so a single shared figure was wrong for both. All reads
+  // are best-effort: the page still renders if nothing is configured.
+  const [availability, steps, gallery] = await Promise.all([
+    porchettaAvailability(),
+    // Editable in the gestionale (`porchetta.steps`, `porchetta.gallery`); the
+    // defaults are the text and the images this page already showed.
+    siteRecords("porchetta.steps"),
+    siteRecords("porchetta.gallery"),
   ]);
-
-  const now = new Date();
-  const target = WEEKDAY_INDEX[String(dayKey).toLowerCase()] ?? 6; // fall back to Saturday
-  const ahead = (target - now.getDay() + 7) % 7; // 0 = today is the pickup day
-  const pickup = new Date(now.getFullYear(), now.getMonth(), now.getDate() + ahead);
-  const pickupIso = toIsoDate(pickup);
-
-  const reservedKg = await getPorchettaKgForDate(pickupIso);
-  const capacity = Number(capacityKg) || 0;
-  const remainingKg = Math.max(0, capacity - reservedKg);
-  const isFull = capacity > 0 && remainingKg <= 0;
-
-  // "Sabato 26 luglio" — day name derives from the actual date, so it stays
-  // correct even if the pickup day setting changes.
-  const rawLabel = new Intl.DateTimeFormat("it-IT", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }).format(pickup);
-  const pickupLabel = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
+  const { pickupLabel, shops: shopAvailability, hasCapacity, allFull } = availability;
+  // With one roasting shop the strip reads as it always did; with more, each gets
+  // its own figure rather than being averaged into a number true of neither.
+  const capped = shopAvailability.filter((s) => s.capacityKg > 0);
 
   return (
     <div>
@@ -143,20 +74,40 @@ export default async function PorchettaPage() {
             </p>
             <p className="font-display text-2xl leading-tight font-semibold text-brown-950 sm:text-3xl">
               {pickupLabel}
-              {capacity > 0 &&
-                (isFull ? (
-                  <span className="wonk text-gold-deep"> · Al completo — lista d&apos;attesa</span>
-                ) : (
-                  <span className="text-brown-700">
-                    {" "}
-                    ·{" "}
-                    <span className="font-bold text-gold-deep tabular-nums">
-                      {formatKg(remainingKg)} kg
-                    </span>{" "}
-                    su {formatKg(capacity)} disponibili
-                  </span>
-                ))}
+              {hasCapacity && allFull && (
+                <span className="wonk text-gold-deep"> · Al completo — lista d&apos;attesa</span>
+              )}
+              {hasCapacity && !allFull && capped.length === 1 && (
+                <span className="text-brown-700">
+                  {" "}
+                  ·{" "}
+                  <span className="font-bold text-gold-deep tabular-nums">
+                    {formatKg(capped[0].remainingKg)} kg
+                  </span>{" "}
+                  su {formatKg(capped[0].capacityKg)} disponibili
+                </span>
+              )}
             </p>
+            {hasCapacity && !allFull && capped.length > 1 && (
+              <ul className="mt-3 space-y-1 text-sm text-brown-700">
+                {capped.map((s) => (
+                  <li key={s.slug}>
+                    <span className="font-semibold text-brown-950">{s.name}</span>
+                    {" · "}
+                    {s.isFull ? (
+                      <span className="text-gold-deep">al completo</span>
+                    ) : (
+                      <>
+                        <span className="font-bold text-gold-deep tabular-nums">
+                          {formatKg(s.remainingKg)} kg
+                        </span>{" "}
+                        su {formatKg(s.capacityKg)} disponibili
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <Link
             href="/prenotazioni?tipo=porchetta"

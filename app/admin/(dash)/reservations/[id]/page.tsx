@@ -18,6 +18,7 @@ import {
   adminGetReservation,
   adminGetShops,
   getReservationsSameDay,
+  getOrderForReservation,
 } from "@/lib/admin/queries";
 import { porchettaCapacityFor, seatsBookedInSlot } from "@/lib/reservations";
 import {
@@ -27,6 +28,7 @@ import {
   markPorchettaReady,
   setReservationTable,
 } from "@/lib/admin/reservation-actions";
+import { assertShopScope } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -42,11 +44,16 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
   const { id } = await params;
   const row = await adminGetReservation(id);
   if (!row) notFound();
+  // A filtered list is not access control: without this, another location
+  // 's record is one typed URL away. `notFound` rather than a message —
+  // "it exists but is not yours" is itself information.
+  await assertShopScope(row.reservation.shopSlug);
 
   const r = row.reservation;
-  const [shops, sameDay] = await Promise.all([
+  const [shops, sameDay, convertedOrder] = await Promise.all([
     adminGetShops(),
     getReservationsSameDay(r.shopSlug, r.date, r.id),
+    getOrderForReservation(r.id),
   ]);
   const shop = shops.find((s) => s.slug === r.shopSlug);
 
@@ -66,6 +73,28 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
         subtitle={`${reservationTypeLabel(r.type)} · ${fmtDate(r.date)}${r.time ? ` · ${r.time}` : ""}`}
         action={
           <div className="flex flex-wrap gap-2">
+            {/* An "ordine speciale" is the one booking type that represents a
+                sale: a name, a phone, a date and notes, with no line items, no
+                price, no VAT, no stock movement and no loyalty. This is the only
+                path from one to the other. */}
+            {r.type === "order" &&
+              (convertedOrder ? (
+                <Link
+                  href={`/admin/orders/${convertedOrder.id}`}
+                  className="rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                >
+                  Ordine {convertedOrder.orderNumber} →
+                </Link>
+              ) : (
+                r.status !== "cancelled" && (
+                  <Link
+                    href={`/admin/orders/new?prenotazione=${r.id}`}
+                    className="rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
+                  >
+                    Converti in ordine
+                  </Link>
+                )
+              ))}
             {r.type === "porchetta" && !r.readyAt && r.email && (
               <ActionForm action={markPorchettaReady} className="inline-flex">
                 <input type="hidden" name="id" value={r.id} />

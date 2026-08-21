@@ -6,7 +6,7 @@ import {
   adminGetProduct,
   adminGetShops,
   getStockMovements,
-  getCategoryVatDefaults,
+  adminGetCategories,
   getProductBatches,
 } from "@/lib/admin/queries";
 import { BatchPanel } from "@/components/admin/BatchPanel";
@@ -14,17 +14,22 @@ import { dateInRome } from "@/lib/time";
 import { adjustStock } from "@/lib/admin/actions";
 import { pendingStockNotificationCount } from "@/lib/stock-notify";
 import { margin } from "@/lib/inventory";
+import { assertShopScope } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditProduct({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [product, shops, categoryVat] = await Promise.all([
+  const [product, shops, categories] = await Promise.all([
     adminGetProduct(id),
     adminGetShops(),
-    getCategoryVatDefaults(),
+    adminGetCategories("product"),
   ]);
   if (!product) notFound();
+  // A filtered list is not access control: without this, another location
+  // 's record is one typed URL away. `notFound` rather than a message —
+  // "it exists but is not yours" is itself information.
+  await assertShopScope(product.shopSlug);
 
   const productMargin = margin(product);
 
@@ -43,7 +48,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
       <BackLink href="/admin/products">Prodotti</BackLink>
       <AdminHeader title={product.name} subtitle="Modifica prodotto" />
       <Panel>
-        <ProductForm product={product} shops={shops} categoryVat={categoryVat} />
+        <ProductForm product={product} shops={shops} categories={categories} />
       </Panel>
 
       {/* Margin, once a purchase cost is on file. */}

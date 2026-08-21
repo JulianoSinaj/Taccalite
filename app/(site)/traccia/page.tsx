@@ -6,7 +6,10 @@ import {
   getShopBySlug,
   getOrderByNumberAndEmail,
 } from "@/lib/db/queries";
+import { FULFILMENT_LABEL } from "@/lib/fulfilment";
+import { formatSlotLabel } from "@/lib/pickup-slots";
 import { formatEuro } from "@/lib/format";
+import { trackingUrlFor } from "@/lib/carriers";
 
 export const dynamic = "force-dynamic";
 
@@ -57,11 +60,6 @@ const ORDER_STATUS_STYLE: Record<OrderStatus, string> = {
   fulfilled: "bg-brown-950 text-cream",
   cancelled: "bg-red-500/15 text-red-700",
   refunded: "bg-red-500/15 text-red-700",
-};
-
-const FULFILMENT_LABEL: Record<"pickup" | "shipping", string> = {
-  pickup: "Ritiro in bottega",
-  shipping: "Spedizione",
 };
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -258,6 +256,7 @@ export default async function TracciaPage({ searchParams }: SearchParams) {
     const { order, items } = result;
     const statusLabel = ORDER_STATUS_LABEL[order.status as OrderStatus];
     const statusStyle = ORDER_STATUS_STYLE[order.status as OrderStatus];
+    const trackingHref = await trackingUrlFor(order.carrier, order.trackingNumber);
 
     return (
       <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-28 pb-20 sm:pt-32">
@@ -295,11 +294,43 @@ export default async function TracciaPage({ searchParams }: SearchParams) {
             ))}
           </div>
 
+          {/* Tracking was captured in the gestionale and mentioned in exactly one
+              email line — the page a customer visits precisely to ask "where is
+              my order" never showed it at all. */}
+          {order.fulfilment === "shipping" && order.trackingNumber && (
+            <div className="mt-4 border border-rule bg-paper-warm p-6 text-left">
+              <p className="text-xs font-semibold tracking-[0.16em] text-taupe uppercase">
+                Spedizione
+              </p>
+              <p className="mt-2 text-sm text-brown-950">
+                {order.carrier ? `${order.carrier} · ` : ""}
+                {trackingHref ? (
+                  <a
+                    href={trackingHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-gold-deep underline"
+                  >
+                    {order.trackingNumber}
+                  </a>
+                ) : (
+                  <span className="font-semibold">{order.trackingNumber}</span>
+                )}
+              </p>
+            </div>
+          )}
+
           <dl className="mt-4 space-y-1 border border-rule bg-paper-warm p-6">
             <Row label="Consegna" value={FULFILMENT_LABEL[order.fulfilment]} />
+            {order.pickupSlotAt && (
+              <Row label="Ritiro previsto" value={formatSlotLabel(order.pickupSlotAt)} />
+            )}
             <Row label="Subtotale" value={formatEuro(order.subtotalCents)} />
             {order.shippingCents > 0 && (
-              <Row label="Spedizione" value={formatEuro(order.shippingCents)} />
+              <Row
+                label={order.fulfilment === "delivery" ? "Consegna" : "Spedizione"}
+                value={formatEuro(order.shippingCents)}
+              />
             )}
             <div className="flex items-center justify-between gap-4 pt-2">
               <dt className="font-display text-lg font-bold text-brown-950">Totale</dt>

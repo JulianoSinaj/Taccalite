@@ -12,7 +12,16 @@
  *    enums are TypeScript-only and SQLite would otherwise accept any string.
  *  - Cross-entity references use real FOREIGN KEYs (foreign_keys pragma is ON).
  */
-import { sqliteTable, text, integer, real, index, check } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  index,
+  uniqueIndex,
+  check,
+  type AnySQLiteColumn,
+} from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
@@ -72,6 +81,68 @@ export const shops = sqliteTable("shops", {
 });
 
 // ── Content: products ────────────────────────────────────────────────────────
+// ── Taxonomy: product & news categories ──────────────────────────────────────
+/**
+ * Categories, as records rather than as free text typed twice.
+ *
+ * They used to exist only as a string on `products.category` and
+ * `blog_posts.category`, with everything downstream *derived*: the storefront
+ * filter rail was `select distinct`, the VAT default was inferred from whatever
+ * rate a category's products mostly used, and the accent colour came from
+ * keyword matching in `lib/categories.ts`. That meant a typo silently forked the
+ * catalogue, a mixed category (Gastronomia held two VAT rates) pre-filled the
+ * wrong rate on the next product, editorial order was impossible, and renaming
+ * meant an UPDATE by hand.
+ *
+ * `kind` keeps the two vocabularies in one table without letting them mix — the
+ * shop files products under "Formaggi" and posts under "Formaggi" too, and they
+ * are not the same list. Slugs are therefore unique *per kind*, not globally.
+ *
+ * `products.category` / `blog_posts.category` are kept as a denormalised copy of
+ * the name, rewritten whenever the category is renamed, so every existing reader
+ * (storefront filters, CSV export, the IVA report) keeps working untouched while
+ * `category_id` becomes the source of truth.
+ */
+export const categories = sqliteTable(
+  "categories",
+  {
+    id: id(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    kind: text("kind", { enum: ["product", "post"] })
+      .notNull()
+      .default("product"),
+    // Self-reference: "Salumi → Stagionati" without a second table. Deleting a
+    // parent promotes its children rather than taking them with it.
+    parentId: text("parent_id").references((): AnySQLiteColumn => categories.id, {
+      onDelete: "set null",
+    }),
+    // Declared, not inferred. Null = no opinion, so the product form keeps its
+    // own default.
+    defaultVatRateBps: integer("default_vat_rate_bps"),
+    // Accent key (see `lib/categories.ts`), e.g. "salumi". Null falls back to the
+    // keyword match, so an unclassified category still gets a sensible colour.
+    accent: text("accent"),
+    description: text("description").notNull().default(""),
+    image: text("image"),
+    seoTitle: text("seo_title"),
+    seoDescription: text("seo_description"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    // Hidden from the storefront without destroying the grouping.
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("categories_kind_slug_idx").on(t.kind, t.slug),
+    index("categories_kind_sort_idx").on(t.kind, t.sortOrder),
+    check("categories_kind_ck", sql`${t.kind} in ('product', 'post')`),
+    check(
+      "categories_vat_ck",
+      sql`${t.defaultVatRateBps} is null or (${t.defaultVatRateBps} >= 0 and ${t.defaultVatRateBps} <= 10000)`,
+    ),
+  ],
+);
+
 export const products = sqliteTable(
   "products",
   {
@@ -81,7 +152,17 @@ export const products = sqliteTable(
     shopSlug: text("shop_slug")
       .notNull()
       .references(() => shops.slug, { onDelete: "restrict", onUpdate: "cascade" }),
+    // Denormalised category name — the display/filter/export copy. `categoryId`
+    // is the source of truth; this is rewritten when the category is renamed.
+    //
+    // No `onDelete` action, i.e. RESTRICT: deleting a category that still holds
+    // products is refused by the database, not just by the admin action. A
+    // `set null` here would leave those products carrying a name that groups
+    // nothing, which is the state the taxonomy exists to prevent — so they must
+    // be merged into another category first. (SQLite cannot alter a foreign key
+    // after the fact, so this is also what migration 0029's ADD COLUMN created.)
     category: text("category").notNull().default(""),
+    categoryId: text("category_id").references(() => categories.id),
     description: text("description").notNull().default(""),
     imageLabel: text("image_label").notNull().default(""),
     image: text("image").notNull().default(""),
@@ -123,6 +204,7 @@ export const products = sqliteTable(
   },
   (t) => [
     index("products_shop_idx").on(t.shopSlug),
+    index("products_category_idx").on(t.categoryId),
     check("products_price_ck", sql`${t.priceCents} is null or ${t.priceCents} >= 0`),
     check("products_stock_ck", sql`${t.stock} is null or ${t.stock} >= 0`),
     check("products_vat_ck", sql`${t.vatRateBps} >= 0 and ${t.vatRateBps} <= 10000`),
@@ -168,7 +250,10 @@ export const blogPosts = sqliteTable("blog_posts", {
   slug: text("slug").notNull().unique(),
   title: text("title").notNull(),
   date: text("date").notNull(), // ISO yyyy-mm-dd
+  // Denormalised name; `categoryId` is the source of truth (see `categories`).
+  // RESTRICT, like `products.categoryId` — merge before deleting.
   category: text("category").notNull().default(""),
+  categoryId: text("category_id").references(() => categories.id),
   excerpt: text("excerpt").notNull().default(""),
   content: text("content", { mode: "json" }).$type<string[]>().notNull().default([]),
   imageLabel: text("image_label").notNull().default(""),
@@ -194,6 +279,25 @@ export const users = sqliteTable(
     passwordHash: text("password_hash").notNull(),
     phone: text("phone"),
     role: text("role", { enum: ["customer", "staff", "admin"] }).notNull().default("customer"),
+    // Which location a staff account works at. Null = every location, which is
+    // what an admin always is and what every account was before this column
+    // existed — so an install that never sets it behaves exactly as before.
+    //
+    // This is a real access boundary, not a UI default: `lib/admin/scope.ts`
+    // forces it into the list filters and refuses the detail pages and the
+    // mutating actions for another location's rows. Two shops shared one
+    // undivided view, so a counter person at Carni could edit Centro's
+    // products, refund Centro's orders and read Centro's customers.
+    //
+    // No FK action is declared, unlike the other `shop_slug` columns: those were
+    // written by a CREATE TABLE, where drizzle-kit emits the clause, whereas
+    // `ALTER TABLE ... ADD COLUMN ... REFERENCES` silently drops it (see the note
+    // on `products.category_id`). Declaring `onUpdate: cascade` here would put a
+    // cascade in the snapshot that the database does not have, and the next
+    // `db:generate` would want to rebuild `users` — a table with its own FTS
+    // triggers — to reconcile it. Harmless in practice: `saveShop` never writes
+    // `slug` on an existing shop, so a slug never changes under a reference.
+    shopSlug: text("shop_slug").references(() => shops.slug),
     // Deactivated accounts cannot log in (staff offboarding / suspension).
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     marketingConsent: integer("marketing_consent", { mode: "boolean" }).notNull().default(false),
@@ -214,6 +318,7 @@ export const users = sqliteTable(
     // Dashboard counts customers by role + createdAt; the users list sorts by createdAt.
     index("users_created_idx").on(t.createdAt),
     index("users_role_idx").on(t.role),
+    index("users_shop_idx").on(t.shopSlug),
     check("users_role_ck", sql`${t.role} in ('customer', 'staff', 'admin')`),
   ],
 );
@@ -457,6 +562,113 @@ export const newsletterCampaigns = sqliteTable(
   ],
 );
 
+// ── Fulfilment: delivery zones & pickup slots ────────────────────────────────
+/**
+ * Where an order can go, and what that costs.
+ *
+ * Before this the whole model was one flat `store.shippingCents` applied to
+ * anywhere in Italy, with no notion of a local delivery round at all — the enum
+ * only knew `pickup` and `shipping`, so "consegna a domicilio in Ancona" had to
+ * be sold as a courier shipment or not sold at all.
+ *
+ * A zone matches an order by its CAP. `postcodes` holds exact codes ("60121")
+ * and prefixes ("601"), and the *longest* match wins, so a specific city zone
+ * beats the province zone beats the catch-all — an empty list is the catch-all,
+ * which is what the seeded "Resto d'Italia" row is.
+ *
+ * `mode` splits the two things that were one: `delivery` is the shop's own van
+ * (its own lead time, its own minimum, usually one location's job) and
+ * `shipping` is a courier. They price differently and they appear on different
+ * halves of the daily fulfilment screen.
+ */
+export const deliveryZones = sqliteTable(
+  "delivery_zones",
+  {
+    id: id(),
+    name: text("name").notNull(),
+    mode: text("mode", { enum: ["delivery", "shipping"] }).notNull().default("delivery"),
+    // CAP allow-list: exact codes and/or prefixes. Empty = matches every CAP.
+    postcodes: text("postcodes", { mode: "json" }).$type<string[]>().notNull().default([]),
+    // Which location runs this round; null = no location in particular (a
+    // courier zone, or a single-shop business).
+    shopSlug: text("shop_slug").references(() => shops.slug, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    feeCents: integer("fee_cents").notNull().default(0),
+    // Subtotal at or above which the fee is waived; null = never free. Null
+    // rather than 0 because 0 would otherwise mean "always free", and that is
+    // the value an empty number input posts.
+    freeOverCents: integer("free_over_cents"),
+    // "Consegniamo da 25 euro in su." Refused at checkout, not silently priced.
+    minOrderCents: integer("min_order_cents").notNull().default(0),
+    // Surcharge per kg of goods sold by weight; null = flat fee only. This is
+    // the first thing that ever reads `products.soldByWeight` for pricing.
+    perKgCents: integer("per_kg_cents"),
+    // How far ahead an order must be placed for this zone.
+    leadTimeHours: integer("lead_time_hours").notNull().default(0),
+    // Shown to the customer at checkout, e.g. "consegne il martedi e il venerdi".
+    note: text("note").notNull().default(""),
+    sortOrder: integer("sort_order").notNull().default(0),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("delivery_zones_mode_idx").on(t.mode, t.active, t.sortOrder),
+    check("delivery_zones_mode_ck", sql`${t.mode} in ('delivery', 'shipping')`),
+    check(
+      "delivery_zones_amounts_ck",
+      sql`${t.feeCents} >= 0 and ${t.minOrderCents} >= 0 and ${t.leadTimeHours} >= 0
+        and (${t.freeOverCents} is null or ${t.freeOverCents} >= 0)
+        and (${t.perKgCents} is null or ${t.perKgCents} >= 0)`,
+    ),
+  ],
+);
+
+/**
+ * Bookable pickup windows, one row per weekly recurrence.
+ *
+ * Table bookings have had an agenda since day one; pickups had nothing — the
+ * customer chose "ritiro" and no time, so the counter could not know that forty
+ * people were coming at noon, and an order placed at 19:58 for a shop closing at
+ * 20:00 was accepted without comment.
+ *
+ * A shop with **no rows here keeps exactly the old behaviour**: no window is
+ * offered and none is required. Slots are opt-in per location, generated from
+ * `shops.hoursStructured` in one click or written by hand.
+ */
+export const pickupSlots = sqliteTable(
+  "pickup_slots",
+  {
+    id: id(),
+    shopSlug: text("shop_slug")
+      .notNull()
+      .references(() => shops.slug, { onDelete: "cascade", onUpdate: "cascade" }),
+    // 1 = Monday … 7 = Sunday, matching `shops.hoursStructured`.
+    weekday: integer("weekday").notNull(),
+    startTime: text("start_time").notNull(), // "HH:MM", business local time
+    endTime: text("end_time").notNull(),
+    // Orders this window can absorb; null = unlimited.
+    capacityOrders: integer("capacity_orders"),
+    // How long before the window opens it stops being offered.
+    cutoffHours: integer("cutoff_hours").notNull().default(2),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    // One window per shop/day/start: re-running the generator is then an upsert
+    // rather than a way to end up with the same slot three times.
+    uniqueIndex("pickup_slots_unique_idx").on(t.shopSlug, t.weekday, t.startTime),
+    index("pickup_slots_shop_idx").on(t.shopSlug, t.weekday),
+    check("pickup_slots_weekday_ck", sql`${t.weekday} between 1 and 7`),
+    // Zero-length and inverted windows are the two ways a generated slot can be
+    // nonsense; "HH:MM" compares correctly as text.
+    check("pickup_slots_time_ck", sql`${t.endTime} > ${t.startTime}`),
+    check("pickup_slots_capacity_ck", sql`${t.capacityOrders} is null or ${t.capacityOrders} > 0`),
+    check("pickup_slots_cutoff_ck", sql`${t.cutoffHours} >= 0`),
+  ],
+);
+
 // ── Orders (e-commerce) ──────────────────────────────────────────────────────
 export const orders = sqliteTable(
   "orders",
@@ -472,12 +684,27 @@ export const orders = sqliteTable(
     })
       .notNull()
       .default("pending"),
-    fulfilment: text("fulfilment", { enum: ["pickup", "shipping"] }).notNull().default("pickup"),
+    // `delivery` (the shop's own van) is genuinely not `shipping` (a courier):
+    // different pricing, different lead time, different half of the daily
+    // fulfilment screen. It used to have to masquerade as one or the other.
+    fulfilment: text("fulfilment", { enum: ["pickup", "delivery", "shipping"] })
+      .notNull()
+      .default("pickup"),
     shopSlug: text("shop_slug").references(() => shops.slug, {
       onDelete: "restrict",
       onUpdate: "cascade",
     }),
     shippingAddress: text("shipping_address", { mode: "json" }).$type<Record<string, string>>(),
+    // The pickup window the customer chose, as the instant it opens. Null when
+    // the shop configures no slots (the pre-slot behaviour) or the order is not
+    // a pickup. Stored resolved rather than as a slot id + date so a later edit
+    // to the weekly schedule cannot silently move an order already booked.
+    pickupSlotAt: integer("pickup_slot_at", { mode: "timestamp_ms" }),
+    // Which zone priced this order. No `onDelete` action, i.e. RESTRICT: a zone
+    // that has ever served an order cannot be deleted, only deactivated —
+    // `shippingCents` records what was charged, but the round it belonged to is
+    // what the daily screen groups by.
+    deliveryZoneId: text("delivery_zone_id").references(() => deliveryZones.id),
     subtotalCents: integer("subtotal_cents").notNull().default(0),
     shippingCents: integer("shipping_cents").notNull().default(0),
     // Applied coupon (if any) and the amount it took off the subtotal.
@@ -519,6 +746,19 @@ export const orders = sqliteTable(
     // Shipping fulfilment tracking, set by the owner when an order ships.
     carrier: text("carrier"),
     trackingNumber: text("tracking_number"),
+    // The booking this order was rung up from, when it started life as an
+    // "ordine speciale" reservation ("mi tenga 2 kg di ciauscolo per giovedì").
+    //
+    // That kind of booking has a name, a phone, a date and notes — and no line
+    // items, no price, no VAT, no stock movement and no loyalty accrual. When the
+    // customer collected it, someone re-typed the whole thing into a new order or,
+    // more often, rang it into the till and the platform never learned it had
+    // happened. This column is what closes that loop, and what stops the same
+    // booking being converted twice.
+    //
+    // No `onDelete` action, i.e. RESTRICT — nothing deletes reservations today,
+    // and a converted booking is the audit trail behind a real sale.
+    reservationId: text("reservation_id").references(() => reservations.id),
     // Notes the customer left at checkout.
     notes: text("notes"),
     // Staff-only annotations (never shown to the customer, never emailed).
@@ -542,11 +782,18 @@ export const orders = sqliteTable(
     index("orders_stripe_session_idx").on(t.stripeSessionId),
     // Refund/dispute webhooks arrive keyed on the PaymentIntent.
     index("orders_stripe_pi_idx").on(t.stripePaymentIntentId),
+    // The daily fulfilment screen scans one day of pickup windows, and groups
+    // the delivery round by zone.
+    index("orders_pickup_slot_idx").on(t.pickupSlotAt),
+    index("orders_zone_idx").on(t.deliveryZoneId),
+    // One order per booking: the guard against converting the same reservation
+    // twice lives in the database, not only in the button that hides itself.
+    uniqueIndex("orders_reservation_idx").on(t.reservationId),
     check(
       "orders_status_ck",
       sql`${t.status} in ('pending', 'paid', 'fulfilled', 'cancelled', 'refunded')`,
     ),
-    check("orders_fulfilment_ck", sql`${t.fulfilment} in ('pickup', 'shipping')`),
+    check("orders_fulfilment_ck", sql`${t.fulfilment} in ('pickup', 'delivery', 'shipping')`),
     check("orders_payment_status_ck", sql`${t.paymentStatus} in ('unpaid', 'paid', 'refunded')`),
     check(
       "orders_amounts_ck",
@@ -663,6 +910,29 @@ export const emailOutbox = sqliteTable(
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
   value: text("value", { mode: "json" }).$type<unknown>(),
+  updatedAt: updatedAt(),
+});
+
+// ── Editable storefront copy ─────────────────────────────────────────────────
+/**
+ * The words on the public pages, as data.
+ *
+ * The history page's chapters, the home page's services, the porchetta recipe
+ * and the legal texts were all hardcoded arrays in TSX, so fixing a typo needed
+ * a deploy — while two settings (`home.today`, `home.brands`) were already
+ * editable, which shows the pattern was intended and then stopped.
+ *
+ * Only the **value** lives here. The label, the group, the type and the default
+ * stay in `lib/site-content.ts`, because they are developer metadata: a row for
+ * a key nothing renders is dead weight, and a key with no row must still render
+ * its default. That also makes the seed unnecessary — an empty table renders the
+ * site exactly as it reads today, and a row appears the first time someone edits
+ * something.
+ */
+export const siteContent = sqliteTable("site_content", {
+  key: text("key").primaryKey(),
+  value: text("value", { mode: "json" }).$type<unknown>(),
+  updatedByUserId: text("updated_by_user_id"),
   updatedAt: updatedAt(),
 });
 
@@ -825,12 +1095,17 @@ export const savedViews = sqliteTable(
 
 // ── Inferred row types (canonical runtime shapes) ────────────────────────────
 export type ShopRow = typeof shops.$inferSelect;
+export type CategoryRow = typeof categories.$inferSelect;
+export type CategoryKind = CategoryRow["kind"];
 export type ProductRow = typeof products.$inferSelect;
 export type BlogPostRow = typeof blogPosts.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type ReservationRow = typeof reservations.$inferSelect;
 export type RewardRow = typeof rewards.$inferSelect;
+export type DeliveryZoneRow = typeof deliveryZones.$inferSelect;
+export type PickupSlotRow = typeof pickupSlots.$inferSelect;
 export type OrderRow = typeof orders.$inferSelect;
+export type FulfilmentMode = OrderRow["fulfilment"];
 export type OrderItemRow = typeof orderItems.$inferSelect;
 export type AuditLogRow = typeof auditLog.$inferSelect;
 export type DiscountCodeRow = typeof discountCodes.$inferSelect;

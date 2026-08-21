@@ -57,3 +57,42 @@ export function startOfTodayRome(date: Date = new Date()): Date {
   const secsElapsed = hour * 3600 + get("minute") * 60 + get("second");
   return new Date(date.getTime() - secsElapsed * 1000);
 }
+
+/**
+ * The UTC instant of `HH:MM` on `yyyy-mm-dd`, read as a Europe/Rome wall clock.
+ *
+ * Pickup windows are written the way the shop says them ("giovedì, 10:00") and
+ * stored on the order as an instant, so the two have to be converted somewhere
+ * that knows about CEST. Two passes: guess the offset at the naive timestamp,
+ * then re-read it at the corrected one, which is what makes the hour either side
+ * of a DST change come out right instead of an hour off twice a year.
+ */
+export function instantInRome(isoDate: string, time: string): Date {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const [hh, mm] = time.split(":").map(Number);
+  const naive = Date.UTC(y, m - 1, d, hh, mm, 0, 0);
+  let ts = naive - romeOffsetMs(new Date(naive));
+  ts = naive - romeOffsetMs(new Date(ts));
+  return new Date(ts);
+}
+
+/** How far ahead of UTC Europe/Rome is at `at`, in milliseconds. */
+function romeOffsetMs(at: Date): number {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BUSINESS_TZ,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(at);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
+  let hour = get("hour");
+  if (hour === 24) hour = 0;
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), hour, get("minute"), get("second"));
+  // Millisecond remainder is lost by the formatter; add it back so the result is
+  // a whole-minute offset rather than one drifting by up to 999 ms.
+  return asUtc - (at.getTime() - (at.getTime() % 1000));
+}

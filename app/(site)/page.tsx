@@ -21,6 +21,9 @@ import {
   getBlogPosts,
   getSetting,
 } from "@/lib/db/queries";
+import { siteLines, siteRecords } from "@/lib/site-content";
+import type { Servizio } from "@/components/site/home/Servizi";
+import type { Ingrediente } from "@/components/site/home/Porchetta";
 
 export const dynamic = "force-dynamic";
 
@@ -113,6 +116,14 @@ export default async function Home() {
   const brands = splitList(brandsSetting);
   const today = splitList(todaySetting);
 
+  // Editorial copy that used to be arrays in these components; each falls back
+  // to exactly the text it had, so an untouched install renders unchanged.
+  const [facts, servizi, ricetta] = await Promise.all([
+    siteLines("home.hero.facts"),
+    siteRecords("home.servizi"),
+    siteRecords("home.porchetta.ricetta"),
+  ]);
+
   // The hero's live badge speaks for the shop as a whole: open if either
   // bottega is serving right now.
   const openStates = shops.map((shop) => shopIsOpenNow(shop));
@@ -122,13 +133,13 @@ export default async function Home() {
   return (
     <>
       <JsonLd schema={[organizationSchema(), ...shops.map(shopSchema)]} />
-      <Hero openNow={openNow} />
+      <Hero openNow={openNow} facts={facts} />
       <OggiAlBanco items={today} dateLabel={todayLabel()} />
       <ChiSiamo />
       <DueBotteghe shops={shops} />
       <ProdottiMigliori products={products} />
-      <Porchetta />
-      <Servizi />
+      <Porchetta ricetta={ricetta as Ingrediente[]} />
+      <Servizi servizi={servizi as Servizio[]} />
       <Marche brands={brands} />
       <Diario posts={diario} />
       <InstagramFeed

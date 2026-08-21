@@ -27,6 +27,7 @@ import {
   reservationCreateInput,
   reservationDetailsInput,
 } from "@/lib/validation/admin";
+import { requireShopScope } from "@/lib/admin/scope";
 
 type ReservationRow = typeof reservations.$inferSelect;
 
@@ -56,10 +57,16 @@ async function emailDataFor(res: ReservationRow): Promise<ReservationEmailData> 
   };
 }
 
-/** Load a reservation or fail with a user-facing message. */
+/**
+ * Load a reservation or fail with a user-facing message — and refuse another
+ * location's booking, which is the same check the detail page makes. Every
+ * mutating action in this module already came through here, so the boundary
+ * lands in one place.
+ */
 async function mustFindReservation(id: string): Promise<ReservationRow> {
   const [res] = await db.select().from(reservations).where(eq(reservations.id, id)).limit(1);
   if (!res) throw new ActionError("Prenotazione non trovata");
+  await requireShopScope(res.shopSlug);
   return res;
 }
 

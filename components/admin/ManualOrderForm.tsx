@@ -7,6 +7,13 @@ import { ActionForm, PendingButton } from "./ActionForm";
 import { createManualOrder } from "@/lib/admin/order-actions";
 import { splitGross, vatRateLabel } from "@/lib/fiscal";
 import type { ProductRow, ShopRow } from "@/lib/db/schema";
+import {
+  FULFILMENT_MODES,
+  FULFILMENT_LABEL,
+  quoteFulfilment,
+  type FulfilmentMode,
+  type ZoneLike,
+} from "@/lib/fulfilment";
 
 type Customer = {
   id: string;
@@ -25,10 +32,31 @@ type Coupon =
   | { state: "ok"; discountCents: number; freeShipping: boolean }
   | { state: "error"; message: string };
 
-/** Pricing knobs that live in settings, resolved server-side and passed in. */
+/** Pricing inputs resolved server-side and passed in. */
+/**
+ * An `order`-type reservation being rung up.
+ *
+ * Its fields become the form's starting values and its id rides along in a
+ * hidden field, so saving both creates the sale and closes the booking. Without
+ * this the two never met: someone re-typed the whole thing, or rang it into the
+ * till and the platform never learned the sale had happened.
+ */
+export type BookingPrefill = {
+  id: string;
+  reference: string;
+  name: string;
+  phone: string;
+  email: string;
+  shopSlug: string;
+  date: string;
+  notes: string;
+};
+
 export type PricingSettings = {
-  shippingCents: number;
-  freeShippingThresholdCents: number;
+  /** Serving areas; carriage is quoted from these, exactly as at checkout. */
+  zones: ZoneLike[];
+  /** Bookable pickup windows, already filtered by cut-off and capacity. */
+  slotOptions?: { value: string; shopSlug: string; label: string }[];
 };
 
 /**
@@ -46,10 +74,12 @@ export function ManualOrderForm({
   products,
   shops,
   pricing,
+  booking = null,
 }: {
   products: ProductRow[];
   shops: ShopRow[];
   pricing: PricingSettings;
+  booking?: BookingPrefill | null;
 }) {
   const sellable = useMemo(
     () => products.filter((p) => p.active && p.priceCents != null),
@@ -66,7 +96,9 @@ export function ManualOrderForm({
 
   const [cart, setCart] = useState<Record<string, Entry>>({});
   const [search, setSearch] = useState("");
-  const [fulfilment, setFulfilment] = useState<"pickup" | "shipping">("pickup");
+  const [fulfilment, setFulfilment] = useState<FulfilmentMode>("pickup");
+  const [shopSlug, setShopSlug] = useState(booking?.shopSlug ?? shops[0]?.slug ?? "");
+  const [pickupSlot, setPickupSlot] = useState("");
   const [manualDiscount, setManualDiscount] = useState("");
   const [shippingOverride, setShippingOverride] = useState("");
 
@@ -188,18 +220,7 @@ export function ManualOrderForm({
   const couponCents = coupon.state === "ok" ? coupon.discountCents : 0;
   const discountCents = Math.min(subtotalCents, couponCents + manualDiscountCents);
   const freeShipping = coupon.state === "ok" && coupon.freeShipping;
-  const computedShipping =
-    fulfilment === "shipping" &&
-    !freeShipping &&
-    (pricing.freeShippingThresholdCents === 0 || subtotalCents < pricing.freeShippingThresholdCents)
-      ? pricing.shippingCents
-      : 0;
-  const overrideShipping =
-    shippingOverride.trim() === ""
-      ? null
-      : Math.max(0, Math.round(Number(shippingOverride.replace(",", ".")) * 100) || 0);
-  const shippingCents = overrideShipping ?? computedShipping;
-  const totalCents = Math.max(0, subtotalCents - discountCents + shippingCents);
+
 
   // VAT split of the previewed total, mirroring how the receipt will read.
   const vat = useMemo(() => {
@@ -216,8 +237,36 @@ export function ManualOrderForm({
   const [customerQuery, setCustomerQuery] = useState("");
   const [matched, setMatched] = useState<{ key: string; list: Customer[] } | null>(null);
   const [picked, setPicked] = useState<Customer | null>(null);
-  const [contact, setContact] = useState({ name: "", phone: "", email: "" });
+  const [contact, setContact] = useState({
+    name: booking?.name ?? "",
+    phone: booking?.phone ?? "",
+    email: booking?.email ?? "",
+  });
   const [address, setAddress] = useState({ address: "", city: "", zip: "" });
+
+  // Same quote the counter's order will actually be priced with. Gates are NOT
+  // enforced on this path — an out-of-area CAP still prices from the fallback,
+  // because the sale is physically happening — so a zone miss shows as a note
+  // rather than blocking the button.
+  const quote = quoteFulfilment({
+    mode: fulfilment,
+    subtotalCents,
+    zones: pricing.zones,
+    cap: address.zip,
+    // `amount` is kilos on a weighed line and units otherwise, so only the
+    // weighed lines contribute to a per-kg surcharge.
+    weightKg: lines.reduce((kg, l) => kg + (l.byWeight ? l.amount : 0), 0),
+    freeShippingCoupon: freeShipping,
+  });
+  const computedShipping = quote.zone && !quote.error ? quote.feeCents : 0;
+  const slotsForShop = (pricing.slotOptions ?? []).filter((o) => o.shopSlug === shopSlug);
+  const chosenSlot = slotsForShop.some((o) => o.value === pickupSlot) ? pickupSlot : "";
+  const overrideShipping =
+    shippingOverride.trim() === ""
+      ? null
+      : Math.max(0, Math.round(Number(shippingOverride.replace(",", ".")) * 100) || 0);
+  const shippingCents = overrideShipping ?? computedShipping;
+  const totalCents = Math.max(0, subtotalCents - discountCents + shippingCents);
 
   const customerKey = customerQuery.trim().length >= 2 ? customerQuery.trim() : "";
 
@@ -262,6 +311,22 @@ export function ManualOrderForm({
 
   return (
     <ActionForm action={createManualOrder} redirectTo="/admin/orders" className="space-y-6">
+      {booking && (
+        <>
+          <input type="hidden" name="reservationId" value={booking.id} />
+          <Panel className="border-gold/40 bg-gold/5">
+            <p className="text-sm text-brown-900">
+              Stai convertendo la prenotazione{" "}
+              <strong className="font-semibold">{booking.reference}</strong> del {booking.date}.
+              Salvando, la prenotazione viene chiusa come completata e collegata a questo ordine —
+              così la vendita entra finalmente nel riepilogo IVA, nel magazzino e nei punti fedeltà.
+            </p>
+            {booking.notes && (
+              <p className="mt-2 text-sm text-brown-800/70">Note del cliente: “{booking.notes}”</p>
+            )}
+          </Panel>
+        </>
+      )}
       {/* Only the chosen lines are submitted: kg_<slug> for a product priced per
           kg, qty_<slug> otherwise, plus price_<slug> when overridden. The server
           re-derives every amount from these. */}
@@ -537,25 +602,56 @@ export function ManualOrderForm({
             <select
               name="fulfilment"
               value={fulfilment}
-              onChange={(e) => setFulfilment(e.target.value as "pickup" | "shipping")}
+              onChange={(e) => setFulfilment(e.target.value as FulfilmentMode)}
               className={inputCls}
             >
-              <option value="pickup">Ritiro in negozio</option>
-              <option value="shipping">Spedizione</option>
+              {FULFILMENT_MODES.map((m) => (
+                <option key={m} value={m}>
+                  {FULFILMENT_LABEL[m]}
+                </option>
+              ))}
             </select>
           </div>
 
           {fulfilment === "pickup" ? (
-            <div>
-              <label className={labelCls}>Negozio</label>
-              <select name="shopSlug" defaultValue={shops[0]?.slug} className={inputCls}>
-                {shops.map((s) => (
-                  <option key={s.slug} value={s.slug}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div>
+                <label className={labelCls}>Negozio</label>
+                <select
+                  name="shopSlug"
+                  value={shopSlug}
+                  onChange={(e) => setShopSlug(e.target.value)}
+                  className={inputCls}
+                >
+                  {shops.map((s) => (
+                    <option key={s.slug} value={s.slug}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* Optional at the counter, unlike at checkout: the customer is
+                  standing here, and forcing a window on a walk-in sale would be
+                  paperwork for its own sake. */}
+              {slotsForShop.length > 0 && (
+                <div>
+                  <label className={labelCls}>Fascia di ritiro (facoltativa)</label>
+                  <select
+                    name="pickupSlot"
+                    value={chosenSlot}
+                    onChange={(e) => setPickupSlot(e.target.value)}
+                    className={inputCls}
+                  >
+                    <option value="">Nessuna</option>
+                    {slotsForShop.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
           ) : (
             <>
               <div>
@@ -631,10 +727,10 @@ export function ManualOrderForm({
             <p className="mt-1 text-xs text-brown-800/60">Si somma all&apos;eventuale codice sconto.</p>
           </div>
 
-          {fulfilment === "shipping" && (
+          {fulfilment !== "pickup" && (
             <div>
               <label className={labelCls} htmlFor="shipping-override">
-                Spedizione (€)
+                {FULFILMENT_LABEL[fulfilment]} (€)
               </label>
               <input
                 id="shipping-override"
@@ -648,14 +744,26 @@ export function ManualOrderForm({
                 className={inputCls}
               />
               <p className="mt-1 text-xs text-brown-800/60">
-                Vuoto: applica la tariffa standard ({euro(computedShipping)}).
+                Vuoto: applica la tariffa della zona ({euro(computedShipping)}
+                {quote.zone ? ` · ${quote.zone.name}` : " · nessuna zona per questo CAP"}).
               </p>
             </div>
           )}
 
           <div className="sm:col-span-2">
             <label className={labelCls}>Note</label>
-            <textarea name="notes" rows={2} className={inputCls} />
+            <textarea
+              name="notes"
+              rows={2}
+              defaultValue={
+                booking
+                  ? [`Da prenotazione ${booking.reference} del ${booking.date}`, booking.notes]
+                      .filter(Boolean)
+                      .join(" — ")
+                  : ""
+              }
+              className={inputCls}
+            />
           </div>
         </div>
 
@@ -685,9 +793,9 @@ export function ManualOrderForm({
               <dd>−{euro(manualDiscountCents)}</dd>
             </div>
           )}
-          {fulfilment === "shipping" && (
+          {fulfilment !== "pickup" && (
             <div className="flex justify-between text-brown-800/70">
-              <dt>Spedizione</dt>
+              <dt>{FULFILMENT_LABEL[fulfilment]}</dt>
               <dd>{shippingCents === 0 ? "Gratuita" : euro(shippingCents)}</dd>
             </div>
           )}

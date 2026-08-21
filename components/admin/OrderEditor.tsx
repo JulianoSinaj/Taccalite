@@ -9,6 +9,7 @@ import {
   setOrderFiscalIdentity,
 } from "@/lib/admin/order-actions";
 import { vatRateLabel } from "@/lib/fiscal";
+import { FULFILMENT_MODES, FULFILMENT_LABEL } from "@/lib/fulfilment";
 import type { OrderRow, OrderItemRow, ProductRow, ShopRow } from "@/lib/db/schema";
 
 /**
@@ -16,9 +17,20 @@ import type { OrderRow, OrderItemRow, ProductRow, ShopRow } from "@/lib/db/schem
  * swaps which block of fields is relevant, so the operator only fills in the one
  * that applies; the server re-prices afterwards because the shipping fee moves.
  */
-export function OrderDetailsForm({ order, shops }: { order: OrderRow; shops: ShopRow[] }) {
+export function OrderDetailsForm({
+  order,
+  shops,
+  slotOptions = [],
+}: {
+  order: OrderRow;
+  shops: ShopRow[];
+  /** Bookable windows, already filtered by cut-off and remaining capacity. */
+  slotOptions?: { value: string; shopSlug: string; label: string }[];
+}) {
   const [fulfilment, setFulfilment] = useState(order.fulfilment);
+  const [shopSlug, setShopSlug] = useState(order.shopSlug ?? shops[0]?.slug ?? "");
   const addr = order.shippingAddress ?? {};
+  const slotsForShop = slotOptions.filter((o) => o.shopSlug === shopSlug);
 
   return (
     <ActionForm action={updateOrderDetails} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -45,22 +57,47 @@ export function OrderDetailsForm({ order, shops }: { order: OrderRow; shops: Sho
           onChange={(e) => setFulfilment(e.target.value as typeof fulfilment)}
           className={inputCls}
         >
-          <option value="pickup">Ritiro in negozio</option>
-          <option value="shipping">Spedizione</option>
+          {FULFILMENT_MODES.map((m) => (
+            <option key={m} value={m}>
+              {FULFILMENT_LABEL[m]}
+            </option>
+          ))}
         </select>
       </div>
 
       {fulfilment === "pickup" ? (
-        <div>
-          <label className={labelCls}>Negozio di ritiro</label>
-          <select name="shopSlug" defaultValue={order.shopSlug ?? shops[0]?.slug} className={inputCls}>
-            {shops.map((s) => (
-              <option key={s.slug} value={s.slug}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <>
+          <div>
+            <label className={labelCls}>Negozio di ritiro</label>
+            <select
+              name="shopSlug"
+              value={shopSlug}
+              onChange={(e) => setShopSlug(e.target.value)}
+              className={inputCls}
+            >
+              {shops.map((s) => (
+                <option key={s.slug} value={s.slug}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {slotsForShop.length > 0 && (
+            <div>
+              <label className={labelCls}>Fascia di ritiro</label>
+              {/* Blank keeps whatever window the customer already booked — an
+                  edit to the phone number must not silently move their slot. */}
+              <select name="pickupSlot" defaultValue="" className={inputCls}>
+                <option value="">Lascia invariata</option>
+                {slotsForShop.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </>
       ) : (
         <>
           <div>

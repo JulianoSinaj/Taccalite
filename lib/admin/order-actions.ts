@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { orders, orderItems, products, users } from "@/lib/db/schema";
+import { orders, orderItems, products, users, reservations, type ReservationRow } from "@/lib/db/schema";
 import { requireAdmin, requireRole } from "@/lib/auth/session";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import {
@@ -13,7 +13,7 @@ import {
   orderDetailsInput,
   orderFiscalInput,
 } from "@/lib/validation/admin";
-import { getShopBySlug, getSetting } from "@/lib/db/queries";
+import { getShopBySlug, getSetting, getPickupSlots, getPickupSlotCounts } from "@/lib/db/queries";
 import { orderStatusEmail, orderCustomerEmail } from "@/lib/mail/templates";
 import { sendMail } from "@/lib/mail/mailer";
 import { getStripe } from "@/lib/payments/stripe";
@@ -23,11 +23,16 @@ import {
   restockOrderItems,
   recalcOrderTotals,
   recordRefund,
+  quoteCarriage,
 } from "@/lib/orders";
+import { needsAddress, FULFILMENT_LABEL } from "@/lib/fulfilment";
+import { resolvePickupSlot, formatSlotLabel } from "@/lib/pickup-slots";
 import { applyStockChange, consumeBatchesFefo } from "@/lib/stock";
 import { validateDiscount, recordDiscountUse, releaseDiscountUseByCode } from "@/lib/discounts";
 import { addPoints } from "@/lib/loyalty";
 import { logAudit } from "@/lib/audit";
+import { requireShopScope } from "@/lib/admin/scope";
+import { trackingUrlFor } from "@/lib/carriers";
 
 type OrderRow = typeof orders.$inferSelect;
 
@@ -45,7 +50,7 @@ async function notifyOrderStatus(
 ): Promise<void> {
   try {
     const shopName =
-      order.fulfilment === "pickup" && order.shopSlug
+      order.fulfilment !== "shipping" && order.shopSlug
         ? (await getShopBySlug(order.shopSlug))?.name ?? null
         : null;
     const built = orderStatusEmail(
@@ -54,8 +59,12 @@ async function notifyOrderStatus(
         name: order.name,
         fulfilment: order.fulfilment,
         shopName,
+        pickupSlotLabel: order.pickupSlotAt ? formatSlotLabel(order.pickupSlotAt) : null,
         carrier: order.carrier,
         trackingNumber: order.trackingNumber,
+        // Resolved here rather than in the template: the URL comes from a
+        // setting, and templates stay pure string-builders with no DB reads.
+        trackingUrl: await trackingUrlFor(order.carrier, order.trackingNumber),
         totalCents: order.totalCents,
         refundAmountCents: refund?.refundAmountCents ?? null,
         partialRefund: refund?.partialRefund ?? false,
@@ -66,6 +75,21 @@ async function notifyOrderStatus(
   } catch (err) {
     console.error(`[order-actions] status email failed (${status}) for ${order.orderNumber}:`, err);
   }
+}
+
+/**
+ * Load an order, or refuse with a sentence — and refuse just as firmly when it
+ * belongs to another location.
+ *
+ * Every mutating action here goes through this. A shop-scoped list is not access
+ * control on its own: the order id travels in a form field, so without the check
+ * at the write a Carni operator could still refund a Centro order by posting one.
+ */
+async function mustFindOrder(id: string): Promise<OrderRow> {
+  const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+  if (!order) throw new ActionError("Ordine non trovato.");
+  await requireShopScope(order.shopSlug);
+  return order;
 }
 
 type ProductRow = typeof products.$inferSelect;
@@ -202,12 +226,28 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
       throw new ActionError("Aggiungi almeno un prodotto con una quantità o un peso.");
     }
 
+    let pickupSlotAt: Date | null = null;
     if (d.fulfilment === "pickup" && d.shopSlug) {
       const shop = await getShopBySlug(d.shopSlug);
       if (!shop) throw new ActionError("Negozio di ritiro non valido.");
+      // A counter sale is rung up for the counter you are standing at.
+      await requireShopScope(d.shopSlug);
+      // A counter operator may leave the window blank even where slots exist —
+      // the customer is standing there. Only a window that was chosen is checked.
+      if (d.pickupSlot) {
+        const resolved = resolvePickupSlot(await getPickupSlots(d.shopSlug), d.shopSlug, d.pickupSlot, {
+          bookedCounts: await getPickupSlotCounts(Date.now()),
+        });
+        if (!resolved.ok) throw new ActionError(resolved.error);
+        pickupSlotAt = resolved.atMs == null ? null : new Date(resolved.atMs);
+      }
     }
-    if (d.fulfilment === "shipping" && (!d.address || !d.city || !d.zip)) {
-      throw new ActionError("Per la spedizione servono indirizzo, città e CAP.");
+    if (needsAddress(d.fulfilment) && (!d.address || !d.city || !d.zip)) {
+      throw new ActionError(
+        d.fulfilment === "delivery"
+          ? "Per la consegna a domicilio servono indirizzo, città e CAP."
+          : "Per la spedizione servono indirizzo, città e CAP.",
+      );
     }
 
     // Link a known customer by email so the sale shows in their history and (when
@@ -236,19 +276,52 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
     const manualDiscount = Math.min(d.manualDiscountEuros ?? 0, subtotalCents);
     const discountCents = Math.min(subtotalCents, (coupon?.discountCents ?? 0) + manualDiscount);
 
-    const flatShippingCents = await getSetting<number>("store.shippingCents", 700);
-    const freeThreshold = await getSetting<number>("store.freeShippingThresholdCents", 0);
-    const computedShipping =
-      d.fulfilment === "shipping" &&
-      !coupon?.freeShipping &&
-      (freeThreshold === 0 || subtotalCents < freeThreshold)
-        ? flatShippingCents
-        : 0;
+    // Gates off: the operator taking this order at the counter has already
+    // agreed to it, so an out-of-area CAP prices from the fallback instead of
+    // refusing a sale that is physically happening.
+    const carriage = await quoteCarriage({
+      fulfilment: d.fulfilment,
+      subtotalCents,
+      cap: d.zip,
+      lines: lines.map((l) => ({
+        quantity: l.quantity,
+        weightKg: l.weightKg,
+        soldByWeight: l.product.soldByWeight,
+        unit: l.product.unit,
+      })),
+      freeShippingCoupon: coupon?.freeShipping,
+    });
     // An explicit figure wins — a phone order to the next street isn't the flat rate.
-    const shippingCents = d.shippingEuros ?? computedShipping;
+    const shippingCents = d.shippingEuros ?? carriage.feeCents;
     const totalCents = Math.max(0, subtotalCents - discountCents + shippingCents);
     const paid = d.markPaid;
     const discount = coupon;
+
+    // A booking being rung up. Validated before the insert so a stale tab cannot
+    // convert the same one twice — the unique index on `orders.reservation_id`
+    // would refuse it anyway, but with a constraint name instead of a sentence.
+    let booking: ReservationRow | null = null;
+    if (d.reservationId) {
+      const [res] = await db
+        .select()
+        .from(reservations)
+        .where(eq(reservations.id, d.reservationId))
+        .limit(1);
+      if (!res) throw new ActionError("Prenotazione non trovata.");
+      await requireShopScope(res.shopSlug);
+      if (res.type !== "order") {
+        throw new ActionError("Solo un ordine speciale si converte in ordine.");
+      }
+      const [already] = await db
+        .select({ orderNumber: orders.orderNumber })
+        .from(orders)
+        .where(eq(orders.reservationId, res.id))
+        .limit(1);
+      if (already) {
+        throw new ActionError(`Questa prenotazione è già diventata l'ordine ${already.orderNumber}.`);
+      }
+      booking = res;
+    }
 
     const orderNumber = generateOrderNumber();
     const created = await db.transaction(async (tx) => {
@@ -262,11 +335,13 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
           phone: d.phone ?? null,
           status: paid ? "paid" : "pending",
           fulfilment: d.fulfilment,
-          shopSlug: d.fulfilment === "pickup" ? d.shopSlug ?? null : null,
-          shippingAddress:
-            d.fulfilment === "shipping"
-              ? { address: d.address ?? "", city: d.city ?? "", zip: d.zip ?? "" }
-              : null,
+          shopSlug:
+            d.fulfilment === "pickup" ? d.shopSlug ?? null : carriage.zone?.shopSlug ?? null,
+          pickupSlotAt,
+          deliveryZoneId: carriage.zone?.id ?? null,
+          shippingAddress: needsAddress(d.fulfilment)
+            ? { address: d.address ?? "", city: d.city ?? "", zip: d.zip ?? "" }
+            : null,
           subtotalCents,
           shippingCents,
           discountCode: discount?.code ?? null,
@@ -277,10 +352,20 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
           // A counter sale settles the moment it's rung up.
           paidAt: paid ? new Date() : null,
           notes: d.notes ?? null,
+          reservationId: booking?.id ?? null,
         })
         .returning({ id: orders.id })
 ;
       await tx.insert(orderItems).values(lineValues(row.id, lines));
+      // Closed in the same transaction as the order it became: a booking marked
+      // done beside an order that failed to insert is the worse of the two
+      // possible half-states, because nothing is left to say the sale is owed.
+      if (booking) {
+        await tx
+          .update(reservations)
+          .set({ status: "completed", updatedAt: new Date() })
+          .where(eq(reservations.id, booking.id));
+      }
       return row;
     });
 
@@ -369,15 +454,30 @@ export async function updateOrderDetails(_prev: ActionState, fd: FormData): Prom
     const actor = await requireAdmin();
     const d = parseForm(orderDetailsInput, fd);
 
-    const [order] = await db.select().from(orders).where(eq(orders.id, d.id)).limit(1);
-    if (!order) throw new ActionError("Ordine non trovato.");
+    const order = await mustFindOrder(d.id);
     assertEditable(order);
 
+    let pickupSlotAt: Date | null = null;
     if (d.fulfilment === "pickup") {
       if (!d.shopSlug) throw new ActionError("Scegli il negozio di ritiro.");
       if (!(await getShopBySlug(d.shopSlug))) throw new ActionError("Negozio di ritiro non valido.");
+      if (d.pickupSlot) {
+        const resolved = resolvePickupSlot(await getPickupSlots(d.shopSlug), d.shopSlug, d.pickupSlot, {
+          bookedCounts: await getPickupSlotCounts(Date.now()),
+        });
+        if (!resolved.ok) throw new ActionError(resolved.error);
+        pickupSlotAt = resolved.atMs == null ? null : new Date(resolved.atMs);
+      } else if (order.fulfilment === "pickup" && order.shopSlug === d.shopSlug) {
+        // Same shop, no new window posted: keep the appointment the customer
+        // already has rather than silently clearing it on an unrelated edit.
+        pickupSlotAt = order.pickupSlotAt;
+      }
     } else if (!d.address || !d.city || !d.zip) {
-      throw new ActionError("Per la spedizione servono indirizzo, città e CAP.");
+      throw new ActionError(
+        d.fulfilment === "delivery"
+          ? "Per la consegna a domicilio servono indirizzo, città e CAP."
+          : "Per la spedizione servono indirizzo, città e CAP.",
+      );
     }
 
     await db
@@ -387,18 +487,20 @@ export async function updateOrderDetails(_prev: ActionState, fd: FormData): Prom
         email: d.email ?? "",
         phone: d.phone ?? null,
         fulfilment: d.fulfilment,
+        // Left to `recalcOrderTotals` below, which re-matches the zone from the
+        // (possibly just-changed) CAP — setting it here would use the old one.
         shopSlug: d.fulfilment === "pickup" ? d.shopSlug ?? null : null,
-        shippingAddress:
-          d.fulfilment === "shipping"
-            ? { address: d.address ?? "", city: d.city ?? "", zip: d.zip ?? "" }
-            : null,
+        pickupSlotAt,
+        shippingAddress: needsAddress(d.fulfilment)
+          ? { address: d.address ?? "", city: d.city ?? "", zip: d.zip ?? "" }
+          : null,
         notes: d.notes ?? null,
         internalNotes: d.internalNotes ?? null,
         updatedAt: new Date(),
       })
       .where(eq(orders.id, d.id));
 
-    // The shipping fee follows the fulfilment method, so re-price.
+    // The carriage fee follows the method and the CAP, so re-price.
     const recalc = await recalcOrderTotals(d.id);
 
     await logAudit({
@@ -407,7 +509,9 @@ export async function updateOrderDetails(_prev: ActionState, fd: FormData): Prom
       entity: "order",
       entityId: order.id,
       summary: `Ordine ${order.orderNumber}: anagrafica aggiornata${
-        d.fulfilment !== order.fulfilment ? ` (${order.fulfilment} → ${d.fulfilment})` : ""
+        d.fulfilment !== order.fulfilment
+          ? ` (${FULFILMENT_LABEL[order.fulfilment]} → ${FULFILMENT_LABEL[d.fulfilment]})`
+          : ""
       }`,
       meta: { fulfilment: d.fulfilment, totalCents: recalc.totalCents },
     });
@@ -436,8 +540,7 @@ export async function setOrderFiscalIdentity(_prev: ActionState, fd: FormData): 
     const actor = await requireAdmin();
     const d = parseForm(orderFiscalInput, fd);
 
-    const [order] = await db.select().from(orders).where(eq(orders.id, d.id)).limit(1);
-    if (!order) throw new ActionError("Ordine non trovato.");
+    const order = await mustFindOrder(d.id);
     if (order.status === "refunded") {
       throw new ActionError("Ordine rimborsato: i dati di fatturazione non sono più modificabili.");
     }
@@ -493,8 +596,7 @@ export async function updateOrderItems(_prev: ActionState, fd: FormData): Promis
     const id = String(fd.get("id") ?? "").trim();
     if (!id) throw new ActionError("Ordine non valido.");
 
-    const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
-    if (!order) throw new ActionError("Ordine non trovato.");
+    const order = await mustFindOrder(id);
     assertEditable(order);
 
     const lines = await readManualLines(fd);
@@ -553,8 +655,7 @@ export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promi
   return runAction(async () => {
     const actor = await requireAdmin();
     const d = parseForm(orderStatusInput, fd);
-    const [order] = await db.select().from(orders).where(eq(orders.id, d.id)).limit(1);
-    if (!order) throw new ActionError("Ordine non trovato.");
+    const order = await mustFindOrder(d.id);
 
     // Refunds move money AND inventory — they must go through the admin-only
     // "Rimborsa" button (real Stripe refund + restock + customer email), never a
@@ -679,8 +780,7 @@ export async function setOrderTracking(_prev: ActionState, fd: FormData): Promis
     const carrier = String(fd.get("carrier") ?? "").trim() || null;
     const trackingNumber = String(fd.get("trackingNumber") ?? "").trim() || null;
 
-    const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
-    if (!order) throw new ActionError("Ordine non trovato.");
+    const order = await mustFindOrder(id);
 
     await db
       .update(orders)
@@ -715,8 +815,7 @@ export async function resendOrderEmail(_prev: ActionState, fd: FormData): Promis
     const id = String(fd.get("id") ?? "").trim();
     if (!id) throw new ActionError("Ordine non valido.");
 
-    const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
-    if (!order) throw new ActionError("Ordine non trovato.");
+    const order = await mustFindOrder(id);
     if (!order.email) throw new ActionError("Questo ordine non ha un indirizzo email.");
 
     let what: string;
@@ -740,6 +839,7 @@ export async function resendOrderEmail(_prev: ActionState, fd: FormData): Promis
           totalCents: order.totalCents,
           fulfilment: order.fulfilment,
           shopName: shop?.name ?? null,
+          pickupSlotLabel: order.pickupSlotAt ? formatSlotLabel(order.pickupSlotAt) : null,
         }),
       }).catch(() => {});
       what = "conferma d'ordine";
@@ -782,8 +882,7 @@ export async function refundOrder(_prev: ActionState, fd: FormData): Promise<Act
     const id = String(fd.get("id") ?? "").trim();
     if (!id) throw new ActionError("Ordine non valido.");
 
-    const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
-    if (!order) throw new ActionError("Ordine non trovato.");
+    const order = await mustFindOrder(id);
     if (order.status === "refunded" || order.paymentStatus === "refunded") {
       throw new ActionError("Questo ordine è già stato rimborsato.");
     }

@@ -1,7 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { products } from "@/lib/db/schema";
+import { products, categories } from "@/lib/db/schema";
 import { slugify } from "@/lib/slug";
 
 /**
@@ -215,20 +215,46 @@ export async function planProductImport(
   return { updates, creates, issues, columns };
 }
 
+/**
+ * Resolve the `categoria` column (a name, all the CSV knows) onto the taxonomy.
+ *
+ * Matched case-insensitively against the existing categories rather than
+ * creating one: an import that could mint categories would re-introduce exactly
+ * the silent forking the `categories` table was added to stop. A name that
+ * matches nothing keeps its text and leaves `categoryId` null, which the
+ * categories page counts and reports as "senza categoria".
+ */
+function withCategoryId(
+  values: Record<string, unknown>,
+  byName: Map<string, string>,
+): Record<string, unknown> {
+  if (!("category" in values)) return values;
+  const name = String(values.category ?? "").trim();
+  return { ...values, categoryId: name ? (byName.get(name.toLowerCase()) ?? null) : null };
+}
+
 /** Apply a validated plan. Returns what actually changed. */
 export async function applyProductImport(plan: ImportPlan): Promise<{ updated: number; created: number }> {
   let updated = 0;
   let created = 0;
 
+  const cats = await db
+    .select({ id: categories.id, name: categories.name })
+    .from(categories)
+    .where(eq(categories.kind, "product"));
+  const byName = new Map(cats.map((c) => [c.name.toLowerCase(), c.id]));
+
   // One transaction so a half-applied import can't leave the catalogue in a
   // state the preview never showed the user.
   await db.transaction(async (tx) => {
     for (const u of plan.updates) {
-      await tx.update(products).set(u.changes).where(eq(products.id, u.id));
+      await tx.update(products).set(withCategoryId(u.changes, byName)).where(eq(products.id, u.id));
       updated += 1;
     }
     for (const c of plan.creates) {
-      await tx.insert(products).values(c.values as typeof products.$inferInsert);
+      await tx
+        .insert(products)
+        .values(withCategoryId(c.values, byName) as typeof products.$inferInsert);
       created += 1;
     }
   });

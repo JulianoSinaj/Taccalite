@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ActionError } from "@/lib/admin/action-state";
+import { FULFILMENT_MODES } from "@/lib/fulfilment";
 
 /** Checkbox → boolean ("on"/"true" = checked). */
 const checkbox = z
@@ -52,6 +53,10 @@ export const productInput = z
     name: z.string().trim().min(1, "Il nome è obbligatorio").max(200),
     slug: slug.optional(),
     shopSlug: z.string().trim().min(1, "Scegli un negozio"),
+    // The form posts the category *id*; the action reads the row and writes the
+    // denormalised `category` name alongside it. `category` stays accepted for
+    // the CSV importer, which matches on the name it finds in the file.
+    categoryId: optionalText(40),
     category: optionalText(120),
     description: optionalText(4000),
     imageLabel: optionalText(200),
@@ -107,11 +112,41 @@ export const productInput = z
     }
   });
 
+export const categoryInput = z.object({
+  id: optionalText(40),
+  name: z.string().trim().min(1, "Il nome è obbligatorio").max(120),
+  slug: slug.optional(),
+  kind: z.enum(["product", "post"], { message: "Tipo di categoria non valido" }),
+  // "" (the empty <select> option) means "no parent", not "parent with id ''".
+  parentId: optionalText(40),
+  // Blank = no default; the product form then keeps its own.
+  defaultVatRate: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (v != null && v !== "" ? Math.round(Number(v) * 100) : null))
+    .refine((v) => v == null || (Number.isFinite(v) && v >= 0 && v <= 10000), "Aliquota IVA non valida"),
+  accent: optionalText(40),
+  description: optionalText(2000),
+  image: optionalText(1000),
+  seoTitle: optionalText(200),
+  seoDescription: optionalText(400),
+  sortOrder: z.coerce.number().int().default(0),
+  active: checkbox,
+});
+
+/** Fold one category into another — the cleanup tool for a typo that forked the
+ *  catalogue. Both ids are required; the source is deleted once emptied. */
+export const categoryMergeInput = z.object({
+  sourceId: z.string().trim().min(1, "Categoria di origine mancante"),
+  targetId: z.string().trim().min(1, "Scegli la categoria di destinazione"),
+});
+
 export const blogInput = z.object({
   id: optionalText(40),
   title: z.string().trim().min(1, "Il titolo è obbligatorio").max(300),
   slug: slug.optional(),
   date: optionalText(20),
+  categoryId: optionalText(40),
   category: optionalText(120),
   excerpt: optionalText(1000),
   content: optionalText(20000),
@@ -226,8 +261,12 @@ export const manualOrderInput = z.object({
     .optional()
     .or(z.literal("").transform(() => undefined)),
   phone: optionalText(40),
-  fulfilment: z.enum(["pickup", "shipping"]).default("pickup"),
+  fulfilment: z.enum(FULFILMENT_MODES).default("pickup"),
   shopSlug: optionalText(80),
+  /** Pickup window as `yyyy-mm-ddTHH:MM`; blank = none (or none configured). */
+  pickupSlot: optionalText(20),
+  /** The `order`-type booking this sale was rung up from, when there is one. */
+  reservationId: optionalText(40),
   address: optionalText(200),
   city: optionalText(120),
   zip: optionalText(20),
@@ -240,6 +279,67 @@ export const manualOrderInput = z.object({
   notes: optionalText(1000),
   markPaid: checkbox,
 });
+
+// ── Fulfilment: delivery zones & pickup windows ──────────────────────────────
+
+/**
+ * A serving area. `postcodes` is typed as free text — one CAP or prefix per line,
+ * or comma-separated — because that is how an operator has the list: copied off a
+ * courier's price sheet, not entered one field at a time.
+ */
+export const deliveryZoneInput = z.object({
+  id: optionalText(40),
+  name: z.string().trim().min(1, "Il nome della zona è obbligatorio").max(120),
+  mode: z.enum(["delivery", "shipping"]),
+  postcodes: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) =>
+      String(v ?? "")
+        .split(/[\s,;]+/)
+        .map((c) => c.replace(/\D+/g, "").slice(0, 5))
+        .filter(Boolean)
+        // A CAP listed twice is not two rules.
+        .filter((c, i, all) => all.indexOf(c) === i),
+    ),
+  shopSlug: optionalText(80),
+  feeEuros: optionalEuros("Costo non valido"),
+  freeOverEuros: optionalEuros("Soglia non valida"),
+  minOrderEuros: optionalEuros("Ordine minimo non valido"),
+  perKgEuros: optionalEuros("Supplemento al kg non valido"),
+  leadTimeHours: optionalCount("Preavviso non valido", 720),
+  note: optionalText(300),
+  sortOrder: optionalCount("Ordine non valido", 9999),
+  active: checkbox,
+});
+
+/** `HH:MM`, the way both the schedule and `shops.hoursStructured` write times. */
+const clockTime = z
+  .string()
+  .trim()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Orario non valido (usa il formato 09:30)");
+
+export const pickupSlotInput = z
+  .object({
+    id: optionalText(40),
+    shopSlug: z.string().trim().min(1, "Scegli una sede"),
+    weekday: z
+      .union([z.string(), z.number()])
+      .transform((v) => Number(v))
+      .refine((v) => Number.isInteger(v) && v >= 1 && v <= 7, "Giorno non valido"),
+    startTime: clockTime,
+    endTime: clockTime,
+    capacityOrders: optionalCount("Capienza non valida", 999),
+    cutoffHours: optionalCount("Preavviso non valido", 720),
+    active: checkbox,
+  })
+  .superRefine((d, ctx) => {
+    // The DB CHECK says the same thing; saying it here means the operator gets a
+    // sentence instead of a constraint name.
+    if (d.endTime <= d.startTime) {
+      ctx.addIssue({ code: "custom", message: "La fine deve venire dopo l'inizio.", path: ["endTime"] });
+    }
+  });
 
 export const reservationDepositInput = z.object({
   id: z.string().trim().min(1),
@@ -361,8 +461,9 @@ export const orderDetailsInput = z.object({
     .optional()
     .or(z.literal("").transform(() => undefined)),
   phone: optionalText(40),
-  fulfilment: z.enum(["pickup", "shipping"]),
+  fulfilment: z.enum(FULFILMENT_MODES),
   shopSlug: optionalText(80),
+  pickupSlot: optionalText(20),
   address: optionalText(200),
   city: optionalText(120),
   zip: optionalText(20),
@@ -423,6 +524,8 @@ export const settingInput = z.object({
 export const userRoleInput = z.object({
   id: z.string().trim().min(1),
   role: z.enum(["customer", "staff", "admin"]),
+  /** Which location a staff account is confined to; blank = every location. */
+  shopSlug: optionalText(80),
 });
 
 export const userPasswordInput = z.object({

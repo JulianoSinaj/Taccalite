@@ -38,6 +38,7 @@ import {
   toggleProductFeatured,
 } from "@/lib/admin/actions";
 import type { ProductRow } from "@/lib/db/schema";
+import { shopScope, lockShop } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +76,11 @@ type SP = {
 export default async function AdminProducts({ searchParams }: SP) {
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
-  const filters = productFilters(sp);
+  // A staff account assigned to a location is *confined* to it: the facet is
+  // forced here rather than merely pre-selected, so editing the query string
+  // cannot widen the view. Admins and unassigned accounts see everything.
+  const scope = await shopScope();
+  const filters = productFilters({ ...sp, negozio: lockShop(sp.negozio, scope) });
   const sort = sortFilters(sp, PRODUCT_SORTS, { colonna: "ordine", verso: "asc" });
   const density = densityFrom(sp.densita);
   const lowStockThreshold = await getSetting<number>("store.lowStockThreshold", 5);

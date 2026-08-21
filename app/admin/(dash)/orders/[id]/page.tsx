@@ -13,25 +13,49 @@ import {
 import { isAdmin } from "@/lib/auth/session";
 import { getSetting } from "@/lib/db/queries";
 import { orderVatBuckets, vatRateLabel } from "@/lib/fiscal";
+import { getCarriers, trackingUrl } from "@/lib/carriers";
+import { FULFILMENT_LABEL } from "@/lib/fulfilment";
+import { formatSlotLabel } from "@/lib/pickup-slots";
+import { getDeliveryZones, getPickupSlots, getPickupSlotCounts } from "@/lib/db/queries";
+import { pickupSlotOptions } from "@/lib/pickup-slots";
+import { assertShopScope } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrderDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [data, shops, admin, shippingVatPct, products] = await Promise.all([
+  const [data, shops, admin, shippingVatPct, products, carriers, zones, slots, booked] =
+    await Promise.all([
     adminGetOrder(id),
     adminGetShops(),
     isAdmin(),
     getSetting<number>("store.shippingVatRate", 22),
     adminGetProducts(),
+    getCarriers(),
+    getDeliveryZones(),
+    getPickupSlots(),
+    getPickupSlotCounts(),
   ]);
   if (!data) notFound();
+  // A filtered list is not access control: without this, another location
+  // 's record is one typed URL away. `notFound` rather than a message —
+  // "it exists but is not yours" is itself information.
+  await assertShopScope(data.order.shopSlug);
+  // Only active zones are listed, so an order priced by a since-suspended zone
+  // simply shows no zone rather than a stale name.
+  const zone = zones.find((z) => z.id === data.order.deliveryZoneId) ?? null;
+  const slotOptions = pickupSlotOptions(slots, { bookedCounts: booked, days: 14 }).map((o) => ({
+    value: o.value,
+    shopSlug: o.shopSlug,
+    label: o.label,
+  }));
   const { order, items } = data;
   // An order's lines and totals are frozen once the money is settled — the
   // customer was charged a specific amount. Corrections then go through a refund.
   const editable = order.paymentStatus === "unpaid" && order.status !== "cancelled";
   const shopName = order.shopSlug ? shops.find((s) => s.slug === order.shopSlug)?.name ?? order.shopSlug : null;
   const addr = order.shippingAddress;
+  const trackingHref = trackingUrl(carriers, order.carrier, order.trackingNumber);
   const refundableCents = order.totalCents - order.refundedCents;
   const canRefund =
     admin && order.paymentStatus === "paid" && order.status !== "refunded" && refundableCents > 0;
@@ -180,13 +204,24 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               <div>
                 <dt className="text-brown-800/60">Evasione</dt>
                 <dd className="text-brown-950">
-                  {order.fulfilment === "shipping"
-                    ? "Spedizione"
-                    : `Ritiro${shopName ? ` · ${shopName}` : ""}`}
+                  {FULFILMENT_LABEL[order.fulfilment]}
+                  {shopName ? ` · ${shopName}` : ""}
                 </dd>
               </div>
+              {order.pickupSlotAt && (
+                <div>
+                  <dt className="text-brown-800/60">Fascia di ritiro</dt>
+                  <dd className="text-brown-950">{formatSlotLabel(order.pickupSlotAt)}</dd>
+                </div>
+              )}
+              {zone && (
+                <div>
+                  <dt className="text-brown-800/60">Zona</dt>
+                  <dd className="text-brown-950">{zone.name}</dd>
+                </div>
+              )}
             </dl>
-            {order.fulfilment === "shipping" && addr && (
+            {order.fulfilment !== "pickup" && addr && (
               <p className="mt-3 text-sm text-brown-800/80">
                 {addr.address}, {addr.zip} {addr.city}
               </p>
@@ -223,7 +258,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   Modifica dati e consegna
                 </summary>
                 <div className="mt-4">
-                  <OrderDetailsForm order={order} shops={shops} />
+                  <OrderDetailsForm order={order} shops={shops} slotOptions={slotOptions} />
                 </div>
               </details>
             ) : (
@@ -292,12 +327,22 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 <input type="hidden" name="id" value={order.id} />
                 <div>
                   <label className={labelCls}>Corriere</label>
+                  {/* A suggestion list, not a closed select: the couriers come
+                      from a setting, and a one-off shipment must not be blocked
+                      by a name nobody has added yet. Typing "brt" still matches
+                      the preset's tracking URL — the lookup is case-insensitive. */}
                   <input
                     name="carrier"
+                    list="order-carriers"
                     defaultValue={order.carrier ?? ""}
                     placeholder="es. BRT, GLS, Poste"
                     className={inputCls}
                   />
+                  <datalist id="order-carriers">
+                    {carriers.map((c) => (
+                      <option key={c.name} value={c.name} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className={labelCls}>Numero di tracking</label>
@@ -308,6 +353,18 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                     className={inputCls}
                   />
                 </div>
+                {trackingHref && (
+                  <p className="text-xs">
+                    <a
+                      href={trackingHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-gold-deep underline"
+                    >
+                      Apri il tracking sul sito del corriere ↗
+                    </a>
+                  </p>
+                )}
                 <p className="text-xs text-brown-800/60">
                   Se l&apos;ordine è già evaso, salvando il tracking l&apos;email di spedizione viene reinviata al cliente.
                 </p>

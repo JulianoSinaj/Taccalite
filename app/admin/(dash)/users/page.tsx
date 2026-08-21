@@ -13,7 +13,7 @@ import {
 import { SegmentedFilter, FilterToolbar, ActiveFilters, labelFrom } from "@/components/admin/FilterBar";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { PasswordField } from "@/components/admin/PasswordField";
-import { getUsersPage } from "@/lib/admin/queries";
+import { getUsersPage, adminGetShops } from "@/lib/admin/queries";
 import { userFilters } from "@/lib/admin/filters";
 import { isAdmin } from "@/lib/auth/session";
 import {
@@ -68,7 +68,11 @@ export default async function AdminUsers({ searchParams }: SP) {
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
   const filters = userFilters(sp);
-  const { rows: users, total, pageCount } = await getUsersPage({ ...filters, page });
+  const [{ rows: users, total, pageCount }, shops] = await Promise.all([
+    getUsersPage({ ...filters, page }),
+    adminGetShops(),
+  ]);
+  const shopName = new Map(shops.map((s) => [s.slug, s.name]));
   const filtered = Object.values(filters).some((v) => v && v !== "all");
 
   return (
@@ -129,6 +133,14 @@ export default async function AdminUsers({ searchParams }: SP) {
                         <Tag tone="warn">Email da verificare</Tag>
                       ))}
                     {u.totpEnabled && <Tag tone="ok">2FA</Tag>}
+                    {/* An unassigned staff account sees both locations, which is
+                        the old behaviour and worth saying out loud rather than
+                        leaving as an absence. */}
+                    {u.role === "staff" && (
+                      <Tag tone={u.shopSlug ? "mute" : "warn"}>
+                        {u.shopSlug ? (shopName.get(u.shopSlug) ?? u.shopSlug) : "Tutte le sedi"}
+                      </Tag>
+                    )}
                   </p>
                   <p className="text-xs text-brown-800/60">
                     @{u.username}
@@ -151,6 +163,24 @@ export default async function AdminUsers({ searchParams }: SP) {
                       <option value="customer">Cliente</option>
                       <option value="staff">Staff</option>
                       <option value="admin">Amministratore</option>
+                    </select>
+                    {/* Submitted with the role, because the two are one
+                        privilege: it is ignored for a customer or an admin. */}
+                    <label className="sr-only" htmlFor={`shop-${u.id}`}>
+                      Sede di {u.username}
+                    </label>
+                    <select
+                      id={`shop-${u.id}`}
+                      name="shopSlug"
+                      defaultValue={u.shopSlug ?? ""}
+                      className={`${inputCls} w-40`}
+                    >
+                      <option value="">Tutte le sedi</option>
+                      {shops.map((sh) => (
+                        <option key={sh.slug} value={sh.slug}>
+                          {sh.name}
+                        </option>
+                      ))}
                     </select>
                     <PendingButton
                       tone="dark"

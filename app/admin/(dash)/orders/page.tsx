@@ -5,6 +5,7 @@ import {
   StatusBadge,
   euro,
   fmtDate,
+  fmtDateTime,
   inputCls,
   labelCls,
   Pagination,
@@ -22,9 +23,11 @@ import { DataTable, DensityToggle, densityFrom } from "@/components/admin/DataTa
 import { BulkBar, BulkCheckbox } from "@/components/admin/BulkBar";
 import { SavedViews } from "@/components/admin/SavedViews";
 import { updateOrderStatus, bulkUpdateOrderStatus } from "@/lib/admin/order-actions";
+import { FULFILMENT_SHORT } from "@/lib/fulfilment";
 import { isAdmin, getCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { orderItems } from "@/lib/db/schema";
+import { shopScope, lockShop } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +61,7 @@ const STATUS_CHIPS: { value: string; label: string }[] = [
 const FULFILMENT_CHIPS: { value: string; label: string }[] = [
   { value: "all", label: "Tutti i tipi" },
   { value: "pickup", label: "Ritiro" },
+  { value: "delivery", label: "Consegna" },
   { value: "shipping", label: "Spedizione" },
 ];
 
@@ -67,7 +71,11 @@ export default async function AdminOrders({ searchParams }: SP) {
   const sp = await searchParams;
   const { negozio = "all", q, stato = "all", tipo = "all", da = "", a = "", page: pageStr } = sp;
   const page = Number(pageStr) || 1;
-  const filters = orderFilters(sp);
+  // A staff account assigned to a location is *confined* to it: the facet is
+  // forced here rather than merely pre-selected, so editing the query string
+  // cannot widen the view. Admins and unassigned accounts see everything.
+  const scope = await shopScope();
+  const filters = orderFilters({ ...sp, negozio: lockShop(sp.negozio, scope) });
   const sort = sortFilters(sp, ORDER_SORTS, { colonna: "data", verso: "desc" });
   const density = densityFrom(sp.densita);
   const viewer = await getCurrentUser();
@@ -265,9 +273,9 @@ export default async function AdminOrders({ searchParams }: SP) {
             hideOnMobile: true,
             cell: (o) => (
               <span className="text-brown-800/70">
-                {o.fulfilment === "shipping"
-                  ? "Spedizione"
-                  : `Ritiro${o.shopSlug ? ` · ${shopName.get(o.shopSlug) ?? o.shopSlug}` : ""}`}
+                {FULFILMENT_SHORT[o.fulfilment]}
+                {o.shopSlug ? ` · ${shopName.get(o.shopSlug) ?? o.shopSlug}` : ""}
+                {o.pickupSlotAt ? ` · ${fmtDateTime(o.pickupSlotAt)}` : ""}
               </span>
             ),
           },
@@ -304,7 +312,7 @@ export default async function AdminOrders({ searchParams }: SP) {
               <div className="flex items-center justify-end gap-1.5">
                 {/* The overwhelmingly common next step for a paid pickup order
                     is "handed over" — one tap, not two selects. */}
-                {o.status === "paid" && o.fulfilment === "pickup" && (
+                {o.status === "paid" && o.fulfilment !== "shipping" && (
                   <ActionForm action={updateOrderStatus} className="inline-flex">
                     <input type="hidden" name="id" value={o.id} />
                     <input type="hidden" name="status" value="fulfilled" />

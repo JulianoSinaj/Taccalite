@@ -4,7 +4,9 @@ import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { orders, orderItems, products } from "@/lib/db/schema";
 import { applyStockChange, consumeBatchesFefo, restoreBatches } from "@/lib/stock";
-import { getShopBySlug, getSetting } from "@/lib/db/queries";
+import { getShopBySlug, getSetting, getDeliveryZones, getPickupSlots, getPickupSlotCounts } from "@/lib/db/queries";
+import { quoteFulfilment, billableWeightKg, needsAddress, type ZoneLike } from "@/lib/fulfilment";
+import { resolvePickupSlot, formatSlotLabel } from "@/lib/pickup-slots";
 import { validateDiscount, recordDiscountUseByCode, releaseDiscountUseByCode } from "@/lib/discounts";
 import { sendMail } from "@/lib/mail/mailer";
 import { orderCustomerEmail, orderOwnerEmail, lowStockOwnerEmail, type OrderEmailData } from "@/lib/mail/templates";
@@ -13,7 +15,71 @@ import { isLowStock } from "@/lib/inventory";
 import { env } from "@/lib/env";
 import type { CheckoutInput } from "@/lib/validation/order";
 
-const SHIPPING_CENTS = 700; // flat shipping fee
+const SHIPPING_CENTS = 700; // flat fee, still the seed for the catch-all zone
+
+export type CarriageLine = {
+  quantity: number;
+  weightKg?: number | null;
+  soldByWeight: boolean;
+  unit?: string | null;
+};
+
+export type Carriage = {
+  feeCents: number;
+  zone: ZoneLike | null;
+  /** Set only when `enforceGates` was on and the order cannot be placed. */
+  error: string | null;
+};
+
+/**
+ * The single carriage-pricing authority: checkout and every admin re-price go
+ * through here, so the number the customer was quoted and the number the order
+ * carries can never be computed by two different rules.
+ *
+ * Falls back to the flat `store.shippingCents` when no zone covers the CAP. That
+ * is not a nicety — an order placed before zones existed, or one to a CAP whose
+ * zone was later retired, still has to re-price without the admin being told the
+ * address is unserviceable.
+ *
+ * `enforceGates` separates the two callers. At checkout an unserviceable CAP or
+ * an under-minimum basket must stop the sale. When an operator edits an existing
+ * order at the counter they have already agreed to take it, so the gates inform
+ * rather than block.
+ */
+export async function quoteCarriage(opts: {
+  fulfilment: "pickup" | "delivery" | "shipping";
+  subtotalCents: number;
+  cap?: string | null;
+  lines?: CarriageLine[];
+  freeShippingCoupon?: boolean;
+  enforceGates?: boolean;
+}): Promise<Carriage> {
+  if (opts.fulfilment === "pickup") return { feeCents: 0, zone: null, error: null };
+
+  const zones = await getDeliveryZones();
+  const quote = quoteFulfilment({
+    mode: opts.fulfilment,
+    subtotalCents: opts.subtotalCents,
+    zones,
+    cap: opts.cap,
+    weightKg: billableWeightKg(opts.lines ?? []),
+    freeShippingCoupon: opts.freeShippingCoupon,
+  });
+
+  if (quote.zone) {
+    return { feeCents: quote.feeCents, zone: quote.zone, error: opts.enforceGates ? quote.error : null };
+  }
+  if (opts.enforceGates && quote.error) return { feeCents: 0, zone: null, error: quote.error };
+
+  // No zone matched and we are not gating: reproduce the pre-zone flat rule so
+  // nothing regresses.
+  const flat = await getSetting<number>("store.shippingCents", SHIPPING_CENTS);
+  const threshold = await getSetting<number>("store.freeShippingThresholdCents", 0);
+  const waived =
+    !!opts.freeShippingCoupon || (threshold > 0 && opts.subtotalCents >= threshold);
+  return { feeCents: waived ? 0 : flat, zone: null, error: null };
+}
+
 const orderCode = customAlphabet("0123456789", 6); // ~1M namespace/year
 
 export function generateOrderNumber(): string {
@@ -70,11 +136,22 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
   }
 
   // For pickup, the chosen shop must exist and have the store enabled.
+  let pickupSlotAt: Date | null = null;
   if (input.fulfilment === "pickup") {
     if (!input.shopSlug) throw new Error("Scegli un negozio per il ritiro");
     const shop = await getShopBySlug(input.shopSlug);
     if (!shop) throw new Error("Negozio di ritiro non valido");
     if (!shop.storeEnabled) throw new Error("Questa sede non offre il ritiro in negozio");
+
+    // Re-derived from the schedule as it stands now, never trusted from the
+    // form: the page may have rendered an hour ago, the schedule may have
+    // changed since, and the last place in a capped window may already be gone.
+    const slots = await getPickupSlots(input.shopSlug);
+    const resolved = resolvePickupSlot(slots, input.shopSlug, input.pickupSlot, {
+      bookedCounts: await getPickupSlotCounts(Date.now()),
+    });
+    if (!resolved.ok) throw new Error(resolved.error);
+    pickupSlotAt = resolved.atMs == null ? null : new Date(resolved.atMs);
   }
 
   const subtotalCents = lines.reduce((sum, l) => sum + l.lineTotalCents, 0);
@@ -89,17 +166,23 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
   });
   const discountCents = discount?.discountCents ?? 0;
 
-  // Shipping is configurable from admin settings. It applies only to shipping
-  // orders, and is waived once the subtotal reaches the free-shipping threshold
-  // (a threshold of 0 disables free shipping) or when a free-shipping code applies.
-  const flatShippingCents = await getSetting<number>("store.shippingCents", SHIPPING_CENTS);
-  const freeShippingThresholdCents = await getSetting<number>("store.freeShippingThresholdCents", 0);
-  const shippingCents =
-    input.fulfilment === "shipping" &&
-    !discount?.freeShipping &&
-    (freeShippingThresholdCents === 0 || subtotalCents < freeShippingThresholdCents)
-      ? flatShippingCents
-      : 0;
+  // Carriage comes from the zone serving the CAP. Gates are enforced here (and
+  // only here): an unserviceable postcode or an under-minimum basket must stop
+  // the sale rather than quietly price at zero.
+  const carriage = await quoteCarriage({
+    fulfilment: input.fulfilment,
+    subtotalCents,
+    cap: input.zip,
+    lines: lines.map((l) => ({
+      quantity: l.quantity,
+      soldByWeight: l.product.soldByWeight,
+      unit: l.product.unit,
+    })),
+    freeShippingCoupon: discount?.freeShipping,
+    enforceGates: true,
+  });
+  if (carriage.error) throw new Error(carriage.error);
+  const shippingCents = carriage.feeCents;
   const totalCents = Math.max(0, subtotalCents - discountCents + shippingCents);
 
   // Insert the order and its line items atomically — no zero-item orders. The
@@ -122,11 +205,18 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
             phone: input.phone ?? null,
             status: "pending",
             fulfilment: input.fulfilment,
-            shopSlug: input.fulfilment === "pickup" ? input.shopSlug ?? null : null,
-            shippingAddress:
-              input.fulfilment === "shipping"
-                ? { address: input.address ?? "", city: input.city ?? "", zip: input.zip ?? "" }
-                : null,
+            // A delivery round belongs to whichever location drives it, so the
+            // daily fulfilment screen can group it under that shop just like a
+            // pickup. Courier shipping belongs to no location.
+            shopSlug:
+              input.fulfilment === "pickup"
+                ? input.shopSlug ?? null
+                : carriage.zone?.shopSlug ?? null,
+            pickupSlotAt,
+            deliveryZoneId: carriage.zone?.id ?? null,
+            shippingAddress: needsAddress(input.fulfilment)
+              ? { address: input.address ?? "", city: input.city ?? "", zip: input.zip ?? "" }
+              : null,
             subtotalCents,
             shippingCents,
             discountCode: discount?.code ?? null,
@@ -212,14 +302,23 @@ export async function recalcOrderTotals(orderId: string): Promise<RecalcResult> 
   const discountCents = discount?.discountCents ?? 0;
   const droppedDiscountCode = order.discountCode && !discount ? order.discountCode : undefined;
 
-  const flatShippingCents = await getSetting<number>("store.shippingCents", SHIPPING_CENTS);
-  const freeShippingThresholdCents = await getSetting<number>("store.freeShippingThresholdCents", 0);
-  const shippingCents =
-    order.fulfilment === "shipping" &&
-    !discount?.freeShipping &&
-    (freeShippingThresholdCents === 0 || subtotalCents < freeShippingThresholdCents)
-      ? flatShippingCents
-      : 0;
+  // Re-quote carriage from the order's own CAP, with the gates off: the operator
+  // editing this order has already agreed to take it, so an under-minimum basket
+  // re-prices rather than refusing to save.
+  const carriage = await quoteCarriage({
+    fulfilment: order.fulfilment,
+    subtotalCents,
+    cap: order.shippingAddress?.zip,
+    lines: items.map((i) => ({
+      quantity: i.quantity,
+      weightKg: i.weightKg,
+      // Line rows carry no catalogue flags; a weighed line already states its
+      // weight, and anything else contributes nothing rather than a guess.
+      soldByWeight: false,
+    })),
+    freeShippingCoupon: discount?.freeShipping,
+  });
+  const shippingCents = carriage.feeCents;
 
   const totalCents = Math.max(0, subtotalCents - discountCents + shippingCents);
 
@@ -230,6 +329,7 @@ export async function recalcOrderTotals(orderId: string): Promise<RecalcResult> 
       discountCents,
       discountCode: discount?.code ?? null,
       shippingCents,
+      deliveryZoneId: carriage.zone?.id ?? null,
       totalCents,
       updatedAt: new Date(),
     })
@@ -248,6 +348,7 @@ export async function getOrdersForUser(userId: string) {
       status: orders.status,
       totalCents: orders.totalCents,
       fulfilment: orders.fulfilment,
+      pickupSlotAt: orders.pickupSlotAt,
     })
     .from(orders)
     .where(eq(orders.userId, userId))
@@ -351,6 +452,7 @@ export async function finalizeOrder(
     totalCents: order.totalCents,
     fulfilment: order.fulfilment,
     shopName: shop?.name ?? null,
+    pickupSlotLabel: order.pickupSlotAt ? formatSlotLabel(order.pickupSlotAt) : null,
   };
 
   await Promise.allSettled([

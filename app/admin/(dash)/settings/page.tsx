@@ -8,6 +8,7 @@ import { CRON_JOBS, getCronStatus } from "@/lib/automation";
 import { isAdmin } from "@/lib/auth/session";
 import { smtpConfigured, stripeConfigured, env } from "@/lib/env";
 import { VAT_RATES_BPS, vatRateLabel } from "@/lib/fiscal";
+import { DEFAULT_CARRIERS_TEXT } from "@/lib/carriers";
 import { InstagramPanel } from "./InstagramPanel";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ const DAYS: { value: string; label: string }[] = [
   { value: "sunday", label: "Domenica" },
 ];
 
-type Control = "number" | "boolean" | "day" | "text" | "vat";
+type Control = "number" | "boolean" | "day" | "text" | "vat" | "lines";
 
 /** Typed settings we know how to render as friendly form fields. Anything not
  *  listed here falls back to the raw JSON editor below. The `value` posted must
@@ -31,6 +32,11 @@ type Control = "number" | "boolean" | "day" | "text" | "vat";
  *  `getSetting<number>` / `getSetting<boolean>` keep working. */
 const KNOWN: {
   key: string;
+  /** A superseded key still read as a fallback by the code that consumes this
+   *  setting. Its stored value seeds the field so a renamed setting doesn't
+   *  appear to reset itself; saving writes `key` and leaves the old row alone
+   *  (harmless — the consumer prefers the new key once it exists). */
+  legacyKey?: string;
   label: string;
   help: string;
   control: Control;
@@ -78,9 +84,15 @@ const KNOWN: {
     default: "friday",
   },
   {
-    key: "porchetta.weeklyCapacityKg",
-    label: "Capacità porchetta settimanale (kg)",
-    help: "Kg massimi prenotabili per lo stesso sabato. Oltre questa soglia le richieste vanno in lista d'attesa. Imposta 0 per nessun limite.",
+    // Renamed from `porchetta.weeklyCapacityKg`, which is what the code has
+    // always *read* as a fallback while this page only ever wrote the old key —
+    // so the canonical setting was unreachable from the UI, under a label
+    // ("settimanale") that contradicted the behaviour. `legacyKey` keeps an
+    // existing install showing its real number until it is saved once.
+    key: "porchetta.capacityKgPerDay",
+    legacyKey: "porchetta.weeklyCapacityKg",
+    label: "Capacità porchetta per giorno di ritiro (kg)",
+    help: "Kg massimi prenotabili per lo stesso giorno di ritiro, per ogni negozio. Oltre questa soglia le richieste vanno in lista d'attesa. Imposta 0 per nessun limite. Un negozio può avere una capacità propria che ha la precedenza (Negozi → modifica).",
     control: "number",
     default: 0,
     min: 0,
@@ -111,8 +123,8 @@ const KNOWN: {
   },
   {
     key: "store.shippingCents",
-    label: "Costo di spedizione (centesimi)",
-    help: "Costo fisso di spedizione espresso in centesimi (es. 700 = €7,00). Si applica solo agli ordini con spedizione.",
+    label: "Costo di spedizione di riserva (centesimi)",
+    help: "Superato dalle zone di spedizione: si applica solo a un CAP che nessuna zona copre (e agli ordini creati prima che le zone esistessero). Le tariffe per zona si impostano in «Ritiri e consegne».",
     control: "number",
     default: 700,
     min: 0,
@@ -120,8 +132,8 @@ const KNOWN: {
   },
   {
     key: "store.freeShippingThresholdCents",
-    label: "Soglia spedizione gratuita (centesimi)",
-    help: "Se il subtotale dell'ordine raggiunge questo valore in centesimi (es. 5000 = €50,00), la spedizione è gratuita. Imposta 0 per disattivare.",
+    label: "Soglia spedizione gratuita di riserva (centesimi)",
+    help: "Come sopra: vale solo dove nessuna zona copre il CAP. Ogni zona ha la sua soglia «gratis oltre». Imposta 0 per disattivare.",
     control: "number",
     default: 0,
     min: 0,
@@ -130,11 +142,18 @@ const KNOWN: {
   {
     key: "orders.autoFulfilPickupDays",
     label: "Chiusura automatica ritiri (giorni)",
-    help: "Dopo quanti giorni un ordine da ritiro pagato viene segnato come evaso in automatico. Imposta 0 per chiuderli sempre a mano.",
+    help: "Dopo quanti giorni un ordine da ritiro pagato viene segnato come evaso in automatico. Imposta 0 per chiuderli sempre a mano. Non tocca le consegne a domicilio: quelle le chiude chi guida.",
     control: "number",
     default: 0,
     min: 0,
     step: 1,
+  },
+  {
+    key: "store.carriers",
+    label: "Corrieri",
+    help: "Un corriere per riga. Aggiungi «| indirizzo di tracking» per rendere cliccabile il numero di spedizione nell'email al cliente e nella pagina «Traccia» — usa {codice} al posto del numero (es. «BRT | https://esempio.it/track?n={codice}»). L'indirizzo è facoltativo: senza, il numero resta solo testo.",
+    control: "lines",
+    default: DEFAULT_CARRIERS_TEXT,
   },
   {
     key: "store.shippingVatRate",
@@ -266,6 +285,23 @@ function SettingField({
       </>
     );
   }
+  if (def.control === "lines") {
+    // Stored verbatim as a multi-line string, like `home.brands` — the value is
+    // parsed by the module that consumes it, not by the generic save action.
+    const current = typeof value === "string" ? value : value == null ? String(def.default) : String(value);
+    return (
+      <>
+        <input type="hidden" name="valueType" value="text" />
+        <textarea
+          name="value"
+          rows={6}
+          defaultValue={current}
+          spellCheck={false}
+          className={`${inputCls} max-w-md font-mono text-xs`}
+        />
+      </>
+    );
+  }
   if (def.control === "vat") {
     // Stored as a whole percent (22), rendered from the canonical bps rates.
     const current = typeof value === "number" ? value : Number(def.default);
@@ -312,7 +348,9 @@ export default async function AdminSettings() {
   const [settings, cronStatus] = await Promise.all([getAllSettings(), getCronStatus()]);
 
   const stored = new Map(settings.map((s) => [s.key, s.value]));
-  const knownKeys = new Set(KNOWN.map((k) => k.key));
+  // Superseded keys count as known too, so a renamed setting doesn't reappear in
+  // the raw JSON editor as a second, editable copy of the field above it.
+  const knownKeys = new Set(KNOWN.flatMap((k) => (k.legacyKey ? [k.key, k.legacyKey] : [k.key])));
   // Keys owned by a dedicated panel (Instagram token/cache) never surface in the
   // raw JSON editor — the token is a secret and the cache blob is not editable.
   // Two classes of key never belong in the raw JSON editor:
@@ -409,7 +447,11 @@ export default async function AdminSettings() {
       <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Parametri operativi</h2>
       <div className="space-y-3">
         {KNOWN.map((def) => {
-          const value = stored.has(def.key) ? stored.get(def.key) : def.default;
+          const value = stored.has(def.key)
+            ? stored.get(def.key)
+            : def.legacyKey && stored.has(def.legacyKey)
+              ? stored.get(def.legacyKey)
+              : def.default;
           return (
             <Panel key={def.key}>
               <ActionForm

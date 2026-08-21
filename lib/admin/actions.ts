@@ -8,6 +8,7 @@ import { isLowStock } from "@/lib/inventory";
 import { applyStockChange } from "@/lib/stock";
 import {
   products,
+  categories,
   blogPosts,
   shops,
   rewards,
@@ -38,6 +39,7 @@ import {
   settingInput,
   stockAdjustInput,
 } from "@/lib/validation/admin";
+import { requireShopScope } from "@/lib/admin/scope";
 
 // Parse "Label | Value" lines into hours; blank-separated lines into a list.
 function parseHours(raw?: string) {
@@ -123,6 +125,34 @@ const PRODUCT_AUDITED = [
 ] as const;
 
 // ── Products ─────────────────────────────────────────────────────────────────
+/**
+ * Resolve the posted category into the pair every consumer needs: the FK, and
+ * the denormalised name that the storefront filters, the CSV export and the IVA
+ * report still read.
+ *
+ * `categoryId` (from the picker) wins. `name` is the CSV importer's path — it
+ * only knows the text in the file — and is matched case-insensitively against
+ * the existing categories rather than inventing one, so an import cannot
+ * silently re-fork the taxonomy the way free text used to.
+ */
+async function resolveCategory(
+  kind: "product" | "post",
+  categoryId: string | undefined,
+  name: string | undefined,
+): Promise<{ categoryId: string | null; category: string }> {
+  if (categoryId) {
+    const [row] = await db.select().from(categories).where(eq(categories.id, categoryId)).limit(1);
+    if (row && row.kind === kind) return { categoryId: row.id, category: row.name };
+  }
+  const wanted = (name ?? "").trim();
+  if (!wanted) return { categoryId: null, category: "" };
+  const rows = await db.select().from(categories).where(eq(categories.kind, kind));
+  const match = rows.find((c) => c.name.toLowerCase() === wanted.toLowerCase());
+  // No match: keep the text so nothing is lost, and leave the FK null. Those
+  // rows are counted as "senza categoria" on /admin/categories.
+  return match ? { categoryId: match.id, category: match.name } : { categoryId: null, category: wanted };
+}
+
 export async function saveProduct(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireAdmin();
@@ -135,6 +165,7 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
     // clears the alert stamp so a future dip can alert again.
     const clearLowStock =
       d.stock != null && !isLowStock({ stock: d.stock, reorderPoint: d.reorderPoint }, threshold);
+    const cat = await resolveCategory("product", d.categoryId, d.category);
     const values = {
       // A readable slug from the product name, so catalogue URLs are
       // /negozio/salame-di-cinta rather than a random id.
@@ -148,7 +179,8 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
       }),
       name: d.name,
       shopSlug: d.shopSlug,
-      category: d.category ?? "",
+      category: cat.category,
+      categoryId: cat.categoryId,
       description: d.description ?? "",
       imageLabel: d.imageLabel ?? "",
       image: d.image ?? "",
@@ -179,6 +211,10 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
     if (d.id) {
       // Detect an out-of-stock → available transition to trigger back-in-stock mail.
       const [prev] = await db.select().from(products).where(eq(products.id, d.id)).limit(1);
+      // Both ends of the move: an operator confined to one location may neither
+      // edit another shop's product nor reassign one of their own away.
+      await requireShopScope(prev?.shopSlug);
+      await requireShopScope(d.shopSlug);
       await db.update(products).set(values).where(eq(products.id, d.id));
       if (prev && (prev.stock ?? 0) <= 0 && d.stock != null && d.stock > 0) {
         await notifyBackInStock(d.id, prev.name, prev.slug);
@@ -363,6 +399,7 @@ export async function adjustStock(_prev: ActionState, fd: FormData): Promise<Act
 
     const [product] = await db.select().from(products).where(eq(products.id, d.productId)).limit(1);
     if (!product) throw new ActionError("Prodotto non trovato.");
+    await requireShopScope(product.shopSlug);
     if (product.stock == null) {
       throw new ActionError("Questo prodotto non traccia le scorte. Imposta prima una giacenza dalla scheda.");
     }
@@ -500,6 +537,7 @@ export async function saveBlogPost(_prev: ActionState, fd: FormData): Promise<Ac
       .split(/\n{2,}/)
       .map((p) => p.trim())
       .filter(Boolean);
+    const cat = await resolveCategory("post", d.categoryId, d.category);
     const values = {
       slug: await resolveSlug({
         table: blogPosts,
@@ -511,7 +549,8 @@ export async function saveBlogPost(_prev: ActionState, fd: FormData): Promise<Ac
       }),
       title: d.title,
       date: d.date || new Date().toISOString().slice(0, 10),
-      category: d.category ?? "",
+      category: cat.category,
+      categoryId: cat.categoryId,
       // A blank excerpt is derived from the opening paragraph, so a post always
       // has something to show in listings and link previews.
       excerpt: d.excerpt ?? excerptFrom(content),

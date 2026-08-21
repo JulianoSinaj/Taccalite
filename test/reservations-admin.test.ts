@@ -7,17 +7,28 @@ import {
   checkPorchettaCapacity,
   checkSeatsCapacity,
   porchettaCapacityFor,
+  porchettaAvailability,
 } from "@/lib/reservations";
 import { filterQuery } from "@/lib/admin/filters";
 
 const SHOP = "cap-shop";
 const DATE = "2026-09-05"; // a Saturday, well clear of other fixtures
 
+/** Writes the *legacy* key, so these tests keep covering the fallback path that
+ *  installs seeded before the rename still rely on. */
 async function setCapacity(kg: number) {
+  await setSetting("porchetta.weeklyCapacityKg", kg);
+}
+
+async function setSetting(key: string, value: unknown) {
   await db
     .insert(settings)
-    .values({ key: "porchetta.weeklyCapacityKg", value: kg })
-    .onConflictDoUpdate({ target: settings.key, set: { value: kg } });
+    .values({ key, value })
+    .onConflictDoUpdate({ target: settings.key, set: { value } });
+}
+
+async function clearSetting(key: string) {
+  await db.delete(settings).where(eq(settings.key, key));
 }
 
 beforeAll(async () => {
@@ -171,6 +182,22 @@ describe("per-shop porchetta capacity", () => {
     expect(await porchettaCapacityFor(SHOP)).toBe(50);
   });
 
+  it("prefers the current key over the superseded one, including an explicit 0", async () => {
+    // The old resolution was `perDay || legacy`, so setting the canonical key to
+    // 0 ("no limit") fell through to whatever the legacy key still held. The
+    // settings page now writes the canonical key, which made that reachable.
+    await setCapacity(50); // legacy key
+    await setSetting("porchetta.capacityKgPerDay", 12);
+    expect(await porchettaCapacityFor(SHOP)).toBe(12);
+
+    await setSetting("porchetta.capacityKgPerDay", 0);
+    expect(await porchettaCapacityFor(SHOP)).toBe(0);
+
+    // Absent (not zero) is what falls back to the legacy key.
+    await clearSetting("porchetta.capacityKgPerDay");
+    expect(await porchettaCapacityFor(SHOP)).toBe(50);
+  });
+
   it("does not let one shop's bookings consume another's capacity", async () => {
     await setCapacity(50);
     await db.insert(reservations).values({
@@ -194,6 +221,74 @@ describe("per-shop porchetta capacity", () => {
     const atA = await checkPorchettaCapacity(DATE, 1, { shopSlug: SHOP });
     expect(atA.bookedKg).toBe(0);
     expect(atA.exceeded).toBe(false);
+  });
+});
+
+describe("porchettaAvailability (public page)", () => {
+  const AV_A = "avail-shop-a";
+  const AV_B = "avail-shop-b";
+  // A Saturday. `porchetta.day` defaults to saturday, so asking on the Thursday
+  // before resolves to this date.
+  const SAT = "2026-10-03";
+  const THURSDAY_BEFORE = new Date(2026, 9, 1, 12, 0, 0);
+
+  beforeAll(async () => {
+    for (const [slug, name, cap] of [
+      [AV_A, "Sede A", 10],
+      [AV_B, "Sede B", 4],
+    ] as const) {
+      await db
+        .insert(shops)
+        .values({ slug, name, specialty: "porchetta", porchettaEnabled: true, porchettaCapacityKg: cap })
+        .onConflictDoUpdate({ target: shops.slug, set: { porchettaCapacityKg: cap, porchettaEnabled: true } });
+    }
+  });
+
+  it("resolves the next pickup day and reports each shop separately", async () => {
+    const av = await porchettaAvailability(THURSDAY_BEFORE);
+    expect(av.pickupIso).toBe(SAT);
+    expect(av.pickupLabel.toLowerCase()).toContain("sabato");
+
+    const a = av.shops.find((s) => s.slug === AV_A);
+    const b = av.shops.find((s) => s.slug === AV_B);
+    expect(a?.capacityKg).toBe(10);
+    expect(b?.capacityKg).toBe(4);
+  });
+
+  it("does not let one shop's bookings eat into another's remaining kg", async () => {
+    await db.delete(reservations).where(eq(reservations.shopSlug, AV_A));
+    await db.delete(reservations).where(eq(reservations.shopSlug, AV_B));
+    // 4 kg at shop B fills it exactly. The old page summed every location against
+    // one shared cap, so this booking also ate shop A's availability.
+    await db.insert(reservations).values({
+      reference: "TAC-AVB1",
+      type: "porchetta",
+      name: "Cliente",
+      phone: "1",
+      date: SAT,
+      quantityKg: 4,
+      shopSlug: AV_B,
+      status: "confirmed",
+    });
+
+    const av = await porchettaAvailability(THURSDAY_BEFORE);
+    const a = av.shops.find((s) => s.slug === AV_A)!;
+    const b = av.shops.find((s) => s.slug === AV_B)!;
+
+    expect(b.remainingKg).toBe(0);
+    expect(b.isFull).toBe(true);
+    expect(a.remainingKg).toBe(10); // untouched
+    expect(a.isFull).toBe(false);
+    // One shop full is not "al completo" — the strip must still invite a booking.
+    expect(av.allFull).toBe(false);
+    expect(av.hasCapacity).toBe(true);
+  });
+
+  it("omits shops that don't roast", async () => {
+    await db.update(shops).set({ porchettaEnabled: false }).where(eq(shops.slug, AV_A));
+    const av = await porchettaAvailability(THURSDAY_BEFORE);
+    expect(av.shops.some((s) => s.slug === AV_A)).toBe(false);
+    await db.update(shops).set({ porchettaEnabled: true }).where(eq(shops.slug, AV_A));
   });
 });
 

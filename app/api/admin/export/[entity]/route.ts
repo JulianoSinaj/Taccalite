@@ -50,10 +50,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
     case "orders": {
       const rows = await getOrdersForExport(orderFilters(params));
       csv = toCsv(
-        ["orderNumber", "date", "name", "email", "phone", "status", "paymentStatus", "fulfilment", "shop", "totalEuros"],
+        ["orderNumber", "date", "name", "email", "phone", "status", "paymentStatus", "fulfilment", "shop", "pickupSlot", "totalEuros"],
         rows.map((o) => [
           o.orderNumber, iso(o.createdAt), o.name, o.email, o.phone, o.status,
-          o.paymentStatus, o.fulfilment, o.shopSlug, (o.totalCents / 100).toFixed(2),
+          o.paymentStatus, o.fulfilment, o.shopSlug,
+          o.pickupSlotAt ? o.pickupSlotAt.toISOString() : "",
+          (o.totalCents / 100).toFixed(2),
         ]),
       );
       break;

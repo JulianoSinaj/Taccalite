@@ -298,7 +298,11 @@ async function main() {
     const age = Math.floor(Math.pow(rand(), 1.6) * 420);
     const createdAt = daysAgo(age);
     const customer = chance(0.72) ? pick(customers) : null;
-    const fulfilment = weighted([["pickup", 7] as const, ["shipping", 3] as const]);
+    const fulfilment = weighted([
+      ["pickup", 6] as const,
+      ["delivery", 1] as const,
+      ["shipping", 3] as const,
+    ]);
     const shopSlug = pick(shopSlugs);
 
     // Lines
@@ -315,7 +319,8 @@ async function main() {
     if (lines.length === 0) continue;
 
     const subtotalCents = lines.reduce((s, l) => s + l.total, 0);
-    const shippingCents = fulfilment === "shipping" ? (subtotalCents >= 6000 ? 0 : 700) : 0;
+    const shippingCents =
+      fulfilment === "shipping" ? (subtotalCents >= 6000 ? 0 : 700) : fulfilment === "delivery" ? 300 : 0;
 
     // Coupon on roughly a fifth of orders.
     let discountCents = 0;
@@ -371,11 +376,17 @@ async function main() {
         phone: customer?.phone ?? null,
         status: finalStatus,
         fulfilment,
-        shopSlug: fulfilment === "pickup" ? shopSlug : null,
+        // A local delivery belongs to the location that drives it, exactly like a
+        // pickup, so the daily fulfilment screen can group it under that shop.
+        shopSlug: fulfilment === "shipping" ? null : shopSlug,
         shippingAddress:
-          fulfilment === "shipping"
-            ? { address: `Via ${pick(LAST)} ${int(1, 90)}`, city: pick(["Ancona", "Jesi", "Falconara", "Osimo", "Senigallia"]), zip: `600${int(10, 99)}` }
-            : null,
+          fulfilment === "pickup"
+            ? null
+            : {
+                address: `Via ${pick(LAST)} ${int(1, 90)}`,
+                city: pick(["Ancona", "Jesi", "Falconara", "Osimo", "Senigallia"]),
+                zip: `600${int(10, 99)}`,
+              },
         subtotalCents,
         shippingCents,
         discountCode,
@@ -657,7 +668,7 @@ async function main() {
 
   // ── Settings that make the demo data meaningful ────────────────────────────
   for (const [key, value] of [
-    ["porchetta.weeklyCapacityKg", 40],
+    ["porchetta.capacityKgPerDay", 40],
     ["store.lowStockThreshold", 5],
     ["store.shippingCents", 700],
     ["store.freeShippingThresholdCents", 6000],

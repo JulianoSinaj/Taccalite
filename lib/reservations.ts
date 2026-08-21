@@ -3,7 +3,7 @@ import { customAlphabet } from "nanoid";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { reservations } from "@/lib/db/schema";
-import { getShopBySlug, getSetting } from "@/lib/db/queries";
+import { getShopBySlug, getShops, getSetting } from "@/lib/db/queries";
 import { sendMail } from "@/lib/mail/mailer";
 import {
   reservationCustomerEmail,
@@ -57,11 +57,110 @@ export async function porchettaCapacityFor(shopSlug: string | null | undefined):
   // The setting was named `weeklyCapacityKg` but has always been applied per
   // pickup day. Reading the new key first and falling back keeps existing
   // installs working without a data migration.
-  const perDay = await getSetting<number>("porchetta.capacityKgPerDay", 0);
-  const fallback = perDay || (await getSetting<number>("porchetta.weeklyCapacityKg", 0));
+  //
+  // The sentinel matters: `getSetting` cannot tell "absent" from "0", and 0 is a
+  // meaningful value here (no limit). Falling back on a falsy 0 meant an admin
+  // who deliberately set the new key to "no limit" would silently inherit a
+  // stale legacy cap instead.
+  const perDay = await getSetting<number | null>("porchetta.capacityKgPerDay", null);
+  const configured = perDay ?? (await getSetting<number>("porchetta.weeklyCapacityKg", 0));
+  const fallback = Number(configured) || 0;
   if (!shopSlug) return fallback;
   const shop = await getShopBySlug(shopSlug);
   return shop?.porchettaCapacityKg ?? fallback;
+}
+
+export type PorchettaShopAvailability = {
+  slug: string;
+  name: string;
+  /** Cap in force for this shop on the pickup day; 0 = no limit configured. */
+  capacityKg: number;
+  bookedKg: number;
+  remainingKg: number;
+  isFull: boolean;
+};
+
+export type PorchettaAvailability = {
+  /** The next pickup day, ISO yyyy-mm-dd. */
+  pickupIso: string;
+  /** "Sabato 26 luglio" — derived from the date, so it survives a changed setting. */
+  pickupLabel: string;
+  /** One row per shop that actually roasts. Empty when porchetta is off everywhere. */
+  shops: PorchettaShopAvailability[];
+  /** True when every roasting shop is full (or there are none). */
+  allFull: boolean;
+  /** True when at least one shop publishes a cap worth showing. */
+  hasCapacity: boolean;
+};
+
+// English weekday keys (as stored in the `porchetta.day` setting) → JS getDay().
+const WEEKDAY_INDEX: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
+/**
+ * Live availability for the next porchetta pickup day, **per shop**.
+ *
+ * The public page used to compare one shared setting against
+ * `getPorchettaKgForDate()`, which sums *every* location — so with two shops it
+ * measured a two-shop total against a one-shop cap. It could say "al completo"
+ * while a shop still had room, or offer kilos for a shop that was already full
+ * and then refuse the booking at submit. Enforcement
+ * (`checkPorchettaCapacity`) has always been per location; this makes the
+ * display agree with it.
+ *
+ * `now` is a parameter so the date arithmetic stays out of a component's render
+ * body (the React Compiler lint forbids `new Date()` there).
+ */
+export async function porchettaAvailability(now: Date = new Date()): Promise<PorchettaAvailability> {
+  const dayKey = await getSetting<string>("porchetta.day", "saturday");
+  const target = WEEKDAY_INDEX[String(dayKey).toLowerCase()] ?? 6; // fall back to Saturday
+  const ahead = (target - now.getDay() + 7) % 7; // 0 = today is the pickup day
+  const pickup = new Date(now.getFullYear(), now.getMonth(), now.getDate() + ahead);
+  const pickupIso = `${pickup.getFullYear()}-${String(pickup.getMonth() + 1).padStart(2, "0")}-${String(pickup.getDate()).padStart(2, "0")}`;
+
+  const raw = new Intl.DateTimeFormat("it-IT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(pickup);
+  const pickupLabel = raw.charAt(0).toUpperCase() + raw.slice(1);
+
+  const allShops = await getShops();
+  const roasting = allShops.filter((s) => s.porchettaEnabled);
+
+  const shops: PorchettaShopAvailability[] = [];
+  for (const s of roasting) {
+    // Reuse the enforcement path rather than re-deriving it — a second copy of
+    // this arithmetic is exactly how the two drifted apart in the first place.
+    const { capacityKg, bookedKg } = await checkPorchettaCapacity(pickupIso, 0, {
+      shopSlug: s.slug,
+    });
+    const remainingKg = Math.max(0, capacityKg - bookedKg);
+    shops.push({
+      slug: s.slug,
+      name: s.name,
+      capacityKg,
+      bookedKg,
+      remainingKg,
+      isFull: capacityKg > 0 && remainingKg <= 0,
+    });
+  }
+
+  const capped = shops.filter((s) => s.capacityKg > 0);
+  return {
+    pickupIso,
+    pickupLabel,
+    shops,
+    hasCapacity: capped.length > 0,
+    allFull: capped.length > 0 && capped.every((s) => s.isFull),
+  };
 }
 
 /** Guests already booked in one time slot (excluding cancellations). */

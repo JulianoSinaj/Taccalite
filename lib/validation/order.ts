@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FULFILMENT_MODES, needsAddress } from "@/lib/fulfilment";
 
 export const checkoutSchema = z
   .object({
@@ -8,8 +9,10 @@ export const checkoutSchema = z
     name: z.string().trim().min(2, "Inserisci il tuo nome").max(120),
     email: z.string().trim().toLowerCase().email("Email non valida"),
     phone: z.string().trim().max(40).optional(),
-    fulfilment: z.enum(["pickup", "shipping"]).default("pickup"),
+    fulfilment: z.enum(FULFILMENT_MODES).default("pickup"),
     shopSlug: z.string().trim().optional(),
+    /** The chosen pickup window as `yyyy-mm-ddTHH:MM`; re-derived server-side. */
+    pickupSlot: z.string().trim().max(20).optional(),
     address: z.string().trim().max(200).optional(),
     city: z.string().trim().max(120).optional(),
     zip: z.string().trim().max(20).optional(),
@@ -18,7 +21,9 @@ export const checkoutSchema = z
     company: z.string().optional(), // honeypot
   })
   .superRefine((d, ctx) => {
-    if (d.fulfilment === "shipping") {
+    // Local delivery needs an address for exactly the same reason a courier
+    // shipment does — someone has to drive to it.
+    if (needsAddress(d.fulfilment)) {
       if (!d.address) ctx.addIssue({ code: "custom", message: "Inserisci l'indirizzo", path: ["address"] });
       if (!d.city) ctx.addIssue({ code: "custom", message: "Inserisci la città", path: ["city"] });
       if (!d.zip) ctx.addIssue({ code: "custom", message: "Inserisci il CAP", path: ["zip"] });

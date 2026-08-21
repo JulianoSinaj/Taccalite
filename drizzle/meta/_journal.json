@@ -204,6 +204,34 @@
       "when": 1786413989043,
       "tag": "0028_early_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1787311941928,
+      "tag": "0029_flashy_purple_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1787315304529,
+      "tag": "0030_silky_the_twelve",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1787317488361,
+      "tag": "0031_amusing_robin_chapel",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1787318065777,
+      "tag": "0032_silly_emma_frost",
+      "breakpoints": true
     }
   ]
 }

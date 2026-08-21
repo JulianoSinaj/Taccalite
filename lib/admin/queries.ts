@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, sql, type SQL } from "drizzle-orm";
 
 export const PAGE_SIZE = 25;
 import { db } from "@/lib/db/client";
@@ -43,6 +43,7 @@ import {
   orders,
   orderItems,
   products,
+  categories,
   blogPosts,
   shops,
   rewards,
@@ -58,6 +59,11 @@ import {
   stockMovements,
   productBatches,
   savedViews,
+  deliveryZones,
+  pickupSlots,
+  type CategoryRow,
+  type DeliveryZoneRow,
+  type PickupSlotRow,
 } from "@/lib/db/schema";
 
 /**
@@ -407,25 +413,70 @@ export const adminGetProducts = () =>
   db.select().from(products).where(isNull(products.archivedAt)).orderBy(products.sortOrder);
 
 /**
- * The VAT rate each category actually uses, so a new product in a known category
- * can preselect it instead of always defaulting to 10%. Where a category is
- * mixed, the most-used rate wins.
+ * Every category of one kind, in editorial order, for the pickers.
+ *
+ * `getCategoryVatDefaults()` lived here: it inferred a VAT rate per category by
+ * taking the most-used rate among that category's products, which quietly
+ * guessed wrong for a mixed category (the live catalogue had Gastronomia at two
+ * different rates). The rate is now declared on the category row itself, seeded
+ * once from that same inference by migration 0029.
  */
-export async function getCategoryVatDefaults(): Promise<Record<string, number>> {
-  const rows = await db
-    .select({
-      category: products.category,
-      vatRateBps: products.vatRateBps,
-      n: sql<number>`count(*)`,
-    })
-    .from(products)
-    .groupBy(products.category, products.vatRateBps)
-    .orderBy(desc(sql`count(*)`));
+export async function adminGetCategories(kind: "product" | "post") {
+  return db
+    .select()
+    .from(categories)
+    .where(eq(categories.kind, kind))
+    .orderBy(asc(categories.sortOrder), asc(categories.name));
+}
 
-  const out: Record<string, number> = {};
-  // Rows arrive most-frequent first, so the first hit per category wins.
-  for (const r of rows) if (r.category && !(r.category in out)) out[r.category] = r.vatRateBps;
-  return out;
+export async function adminGetCategory(id: string) {
+  const [row] = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
+  return row ?? null;
+}
+
+export type CategoryWithUsage = CategoryRow & { usage: number };
+
+/**
+ * Categories of one kind with how many rows each holds — the count is what makes
+ * a stray typo category visible ("Formaggio · 1 prodotto" next to "Formaggi ·
+ * 5") and what the delete guard and the merge picker are driven by.
+ */
+export async function adminGetCategoriesWithUsage(
+  kind: "product" | "post",
+): Promise<CategoryWithUsage[]> {
+  const rows = await adminGetCategories(kind);
+  const counts =
+    kind === "product"
+      ? await db
+          .select({ id: products.categoryId, n: sql<number>`count(*)` })
+          .from(products)
+          .groupBy(products.categoryId)
+      : await db
+          .select({ id: blogPosts.categoryId, n: sql<number>`count(*)` })
+          .from(blogPosts)
+          .groupBy(blogPosts.categoryId);
+  const byId = new Map(counts.map((c) => [c.id, Number(c.n)]));
+  return rows.map((r) => ({ ...r, usage: byId.get(r.id) ?? 0 }));
+}
+
+/**
+ * Rows whose free-text category never matched a category row — the residue of
+ * the pre-0029 world (a name edited straight in the DB, or a CSV import naming a
+ * category that doesn't exist). Surfaced on the categories page so it can be
+ * fixed rather than sitting invisible.
+ */
+export async function countUnfiled(kind: "product" | "post"): Promise<number> {
+  const [r] =
+    kind === "product"
+      ? await db
+          .select({ n: sql<number>`count(*)` })
+          .from(products)
+          .where(and(isNull(products.categoryId), ne(products.category, "")))
+      : await db
+          .select({ n: sql<number>`count(*)` })
+          .from(blogPosts)
+          .where(and(isNull(blogPosts.categoryId), ne(blogPosts.category, "")));
+  return Number(r?.n ?? 0);
 }
 
 /**
@@ -567,6 +618,7 @@ const USER_COLUMNS = {
   email: users.email,
   name: users.name,
   role: users.role,
+  shopSlug: users.shopSlug,
   phone: users.phone,
   active: users.active,
   emailVerifiedAt: users.emailVerifiedAt,
@@ -1061,4 +1113,124 @@ export async function getVatReport(from: Date, to: Date): Promise<VatReport> {
     salesCount: soldRows.length,
     reversalCount: refundedRows.length,
   };
+}
+// ── Fulfilment ───────────────────────────────────────────────────────────────
+
+export type ZoneWithUsage = DeliveryZoneRow & { orderCount: number };
+
+/**
+ * Every zone, active or not, with how many orders were priced by it.
+ *
+ * The count is what makes the delete button honest: the foreign key is RESTRICT,
+ * so a zone that has ever served an order cannot be removed, and the list says so
+ * before the operator finds out from a constraint error.
+ */
+export async function adminGetDeliveryZones(): Promise<ZoneWithUsage[]> {
+  const rows = await db
+    .select()
+    .from(deliveryZones)
+    .orderBy(asc(deliveryZones.mode), asc(deliveryZones.sortOrder), asc(deliveryZones.name));
+  const counts = await db
+    .select({ id: orders.deliveryZoneId, n: sql<number>`count(*)` })
+    .from(orders)
+    .where(isNotNull(orders.deliveryZoneId))
+    .groupBy(orders.deliveryZoneId);
+  const byId = new Map(counts.map((c) => [c.id, Number(c.n)]));
+  return rows.map((z) => ({ ...z, orderCount: byId.get(z.id) ?? 0 }));
+}
+
+/** Every pickup window, active or not, in schedule order. */
+export async function adminGetPickupSlots(): Promise<PickupSlotRow[]> {
+  return db
+    .select()
+    .from(pickupSlots)
+    .orderBy(asc(pickupSlots.shopSlug), asc(pickupSlots.weekday), asc(pickupSlots.startTime));
+}
+
+export type FulfilmentDay = {
+  /** Pickups booked into a window on this day, earliest first. */
+  pickups: (typeof orders.$inferSelect)[];
+  /** Paid pickups still waiting with no window at all (the standing backlog). */
+  unscheduled: (typeof orders.$inferSelect)[];
+  /** Paid local deliveries not yet handed over, whatever day they were placed. */
+  deliveries: (typeof orders.$inferSelect)[];
+  /** Paid courier orders still to be packed and given a tracking number. */
+  shipments: (typeof orders.$inferSelect)[];
+};
+
+/**
+ * Everything the counter has to physically do, for one day.
+ *
+ * The three lists are deliberately scoped differently, because the work is:
+ * a pickup is an appointment and belongs to its day, while a delivery or a
+ * shipment is a queue that has to be emptied regardless of when it was placed —
+ * showing only today's would hide yesterday's unshipped order, which is exactly
+ * the one that matters.
+ *
+ * "Paid but not fulfilled" is the definition of outstanding throughout the
+ * gestionale (`stato=to-fulfil` on the orders list), reused here rather than
+ * re-invented.
+ */
+export async function getFulfilmentDay(
+  fromMs: number,
+  toMs: number,
+  shopSlug?: string,
+): Promise<FulfilmentDay> {
+  const outstanding = and(eq(orders.paymentStatus, "paid"), eq(orders.status, "paid"))!;
+  const atShop = (extra: SQL) =>
+    shopSlug && shopSlug !== "all" ? and(extra, eq(orders.shopSlug, shopSlug))! : extra;
+
+  const [pickups, unscheduled, deliveries, shipments] = await Promise.all([
+    db
+      .select()
+      .from(orders)
+      .where(
+        atShop(
+          and(
+            eq(orders.fulfilment, "pickup"),
+            gte(orders.pickupSlotAt, new Date(fromMs)),
+            lt(orders.pickupSlotAt, new Date(toMs)),
+            ne(orders.status, "cancelled"),
+          )!,
+        ),
+      )
+      .orderBy(asc(orders.pickupSlotAt), asc(orders.createdAt)),
+    db
+      .select()
+      .from(orders)
+      .where(atShop(and(eq(orders.fulfilment, "pickup"), isNull(orders.pickupSlotAt), outstanding)!))
+      .orderBy(asc(orders.createdAt))
+      .limit(100),
+    db
+      .select()
+      .from(orders)
+      .where(atShop(and(eq(orders.fulfilment, "delivery"), outstanding)!))
+      .orderBy(asc(orders.createdAt))
+      .limit(100),
+    db
+      .select()
+      .from(orders)
+      .where(atShop(and(eq(orders.fulfilment, "shipping"), outstanding)!))
+      .orderBy(asc(orders.createdAt))
+      .limit(100),
+  ]);
+
+  return { pickups, unscheduled, deliveries, shipments };
+}
+/**
+ * The order a booking was converted into, if any.
+ *
+ * A reservation of type `order` ("mi tenga 2 kg di ciauscolo per giovedì") holds
+ * a name, a phone, a date and notes — and no line items, no price, no VAT, no
+ * stock movement and no loyalty. Converting it is what puts the sale on the
+ * books; this is how the booking knows it has been, so the button becomes a link
+ * instead of offering to do it twice.
+ */
+export async function getOrderForReservation(reservationId: string) {
+  const [row] = await db
+    .select({ id: orders.id, orderNumber: orders.orderNumber, totalCents: orders.totalCents })
+    .from(orders)
+    .where(eq(orders.reservationId, reservationId))
+    .limit(1);
+  return row ?? null;
 }

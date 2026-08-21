@@ -4,12 +4,16 @@ import { getReservationsPage } from "@/lib/admin/queries";
 
 export const dynamic = "force-dynamic";
 
-// Little entry colouring per reservation status.
+// Little entry colouring per reservation status. Mirrors `STATUS_STYLES` in
+// `components/admin/ui.tsx` — including the ring that keeps `no_show` apart from
+// `pending` now that both map to `warn`. Without its own entry `no_show` fell
+// through to the neutral grey and read as "completata".
 const STATUS_ENTRY: Record<string, string> = {
   pending: "bg-warn-soft text-warn-soft-fg border-warn/40",
   confirmed: "bg-ok-soft text-ok-soft-fg border-ok/40",
   completed: "bg-brown-900/10 text-brown-800 border-brown-900/20",
   cancelled: "bg-danger-soft text-danger-soft-fg border-danger/40 line-through opacity-70",
+  no_show: "bg-warn-soft text-warn-soft-fg border-warn/40 ring-1 ring-warn/50",
 };
 
 const WEEKDAYS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
@@ -139,37 +143,54 @@ export default async function ReservationCalendar({ searchParams }: SP) {
                 isToday ? "border-gold ring-1 ring-gold" : "border-brown-900/10"
               }`}
             >
-              <div className="mb-2 flex items-baseline justify-between border-b border-brown-900/10 pb-1.5">
+              {/* The header opens that day's prep sheet — the calendar answers
+                  "how does the week look", the agenda answers "what do I make
+                  today", and one is the natural next click from the other. */}
+              <Link
+                href={`/admin/reservations/agenda?giorno=${dayISO}`}
+                className="mb-2 flex items-baseline justify-between rounded-lg border-b border-brown-900/10 pb-1.5 hover:bg-brown-900/5"
+                title={`Agenda del ${fmtDayNum(dayISO)}`}
+              >
                 <span className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
                   {WEEKDAYS[i]}
                 </span>
                 <span className={`font-display text-lg ${isToday ? "text-gold-deep" : "text-brown-950"}`}>
                   {fmtDayNum(dayISO)}
                 </span>
-              </div>
+              </Link>
               {items.length === 0 ? (
-                <p className="py-2 text-center text-xs text-brown-800/40">—</p>
+                <Link
+                  href={`/admin/reservations/new?data=${dayISO}`}
+                  className="rounded-lg py-2 text-center text-xs text-brown-800/40 hover:bg-brown-900/5 hover:text-brown-800/70 print:hidden"
+                >
+                  + Nuova
+                </Link>
               ) : (
                 <ul className="space-y-1.5">
                   {items.map((r) => (
-                    <li
-                      key={r.id}
-                      className={`rounded-lg border px-2 py-1.5 text-xs ${
-                        STATUS_ENTRY[r.status] ?? "bg-brown-900/10 text-brown-800 border-brown-900/20"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1 font-semibold">
-                        {r.time && <span className="tabular-nums">{r.time}</span>}
-                        <span className="rounded bg-black/5 px-1 text-[9px] font-bold tracking-wider uppercase">
-                          {reservationTypeLabel(r.type)}
-                        </span>
-                      </div>
-                      <div className="truncate" title={r.name}>
-                        {r.name}
-                      </div>
-                      {r.type === "porchetta" && r.quantityKg != null && (
-                        <div className="font-semibold">{r.quantityKg} kg</div>
-                      )}
+                    <li key={r.id}>
+                      {/* Every other list in the gestionale opens its detail page;
+                          this one used to be the exception, so the week view was
+                          somewhere you could read a booking but never act on it. */}
+                      <Link
+                        href={`/admin/reservations/${r.id}`}
+                        className={`block rounded-lg border px-2 py-1.5 text-xs transition-shadow hover:shadow-md ${
+                          STATUS_ENTRY[r.status] ?? "bg-brown-900/10 text-brown-800 border-brown-900/20"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1 font-semibold">
+                          {r.time && <span className="tabular-nums">{r.time}</span>}
+                          <span className="rounded bg-black/5 px-1 text-[9px] font-bold tracking-wider uppercase">
+                            {reservationTypeLabel(r.type)}
+                          </span>
+                        </div>
+                        <div className="truncate" title={r.name}>
+                          {r.name}
+                        </div>
+                        {r.type === "porchetta" && r.quantityKg != null && (
+                          <div className="font-semibold">{r.quantityKg} kg</div>
+                        )}
+                      </Link>
                     </li>
                   ))}
                 </ul>

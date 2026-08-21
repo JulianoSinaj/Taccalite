@@ -1,14 +1,24 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { inputCls, labelCls } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
 import { HoursEditor } from "./HoursEditor";
 import { saveProduct, saveBlogPost, saveShop, saveReward } from "@/lib/admin/actions";
 import { saveDiscount } from "@/lib/admin/discount-actions";
+import { saveCategory } from "@/lib/admin/category-actions";
+import { CATEGORY_ACCENTS } from "@/lib/categories";
 import { createUser } from "@/lib/admin/user-actions";
 import { VAT_RATES_BPS, vatRateLabel } from "@/lib/fiscal";
-import type { ProductRow, BlogPostRow, ShopRow, RewardRow, DiscountCodeRow } from "@/lib/db/schema";
+import type {
+  ProductRow,
+  BlogPostRow,
+  ShopRow,
+  RewardRow,
+  DiscountCodeRow,
+  CategoryRow,
+} from "@/lib/db/schema";
 
 /** yyyy-mm-dd for a date input default, or "" for null. */
 function dateValue(d: Date | null | undefined): string {
@@ -81,23 +91,23 @@ function ImageField({ current }: { current?: string | null }) {
 export function ProductForm({
   product,
   shops,
-  categoryVat = {},
+  categories = [],
 }: {
   product?: ProductRow | null;
   shops: ShopRow[];
-  /** category → vatRateBps, derived from the catalogue (see getCategoryVatDefaults). */
-  categoryVat?: Record<string, number>;
+  /** Product categories, in editorial order. A closed list now: free text is what
+   *  let one mistyped "Formaggio" fork the catalogue with nothing to warn you. */
+  categories?: CategoryRow[];
 }) {
-  // For a NEW product, typing a known category preselects the rate that category
-  // already uses. An existing product keeps its stored rate — changing a saved
+  // For a NEW product, choosing a category adopts the rate that category
+  // declares. An existing product keeps its stored rate — changing a saved
   // product's category must not silently restate its VAT.
   const [vatBps, setVatBps] = useState(product?.vatRateBps ?? 1000);
-  const knownCategories = Object.keys(categoryVat);
 
-  function onCategoryChange(value: string) {
+  function onCategoryChange(id: string) {
     if (product) return;
-    const suggested = categoryVat[value.trim()];
-    if (suggested != null) setVatBps(suggested);
+    const declared = categories.find((c) => c.id === id)?.defaultVatRateBps;
+    if (declared != null) setVatBps(declared);
   }
 
   return (
@@ -132,18 +142,28 @@ export function ProductForm({
       </div>
       <div>
         <label className={labelCls}>Categoria</label>
-        <input
-          name="category"
-          list="product-categories"
-          defaultValue={product?.category}
+        <select
+          name="categoryId"
+          defaultValue={product?.categoryId ?? ""}
           onChange={(e) => onCategoryChange(e.target.value)}
           className={inputCls}
-        />
-        <datalist id="product-categories">
-          {knownCategories.map((c) => (
-            <option key={c} value={c} />
+        >
+          <option value="">— Nessuna categoria —</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.parentId ? "  ↳ " : ""}
+              {c.name}
+              {c.active ? "" : " (nascosta)"}
+            </option>
           ))}
-        </datalist>
+        </select>
+        <p className="mt-1 text-xs text-brown-800/60">
+          Gestisci l&apos;elenco in{" "}
+          <Link href="/admin/categories" className="font-semibold text-gold-deep underline">
+            Categorie
+          </Link>
+          .
+        </p>
       </div>
       <div className="sm:col-span-2">
         <label className={labelCls}>Descrizione</label>
@@ -191,9 +211,9 @@ export function ProductForm({
             </option>
           ))}
         </select>
-        {!product && knownCategories.length > 0 && (
+        {!product && categories.some((c) => c.defaultVatRateBps != null) && (
           <p className="mt-1 text-xs text-brown-800/60">
-            Proposta in base alla categoria; puoi cambiarla.
+            Proposta dall&apos;aliquota dichiarata sulla categoria; puoi cambiarla.
           </p>
         )}
       </div>
@@ -269,7 +289,16 @@ export function ProductForm({
   );
 }
 
-export function BlogForm({ post }: { post?: BlogPostRow | null }) {
+export function BlogForm({
+  post,
+  categories = [],
+}: {
+  post?: BlogPostRow | null;
+  /** News categories, in editorial order — the diary had no suggestions at all
+   *  and accumulated near-duplicates the storefront then showed as separate
+   *  filters. */
+  categories?: CategoryRow[];
+}) {
   return (
     <ActionForm
       action={saveBlogPost}
@@ -291,7 +320,22 @@ export function BlogForm({ post }: { post?: BlogPostRow | null }) {
       </div>
       <div>
         <label className={labelCls}>Categoria</label>
-        <input name="category" defaultValue={post?.category} className={inputCls} />
+        <select name="categoryId" defaultValue={post?.categoryId ?? ""} className={inputCls}>
+          <option value="">— Nessuna categoria —</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+              {c.active ? "" : " (nascosta)"}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-brown-800/60">
+          Gestisci l&apos;elenco in{" "}
+          <Link href="/admin/categories?kind=post" className="font-semibold text-gold-deep underline">
+            Categorie
+          </Link>
+          .
+        </p>
       </div>
       <div>
         <label className={labelCls}>Ordine</label>
@@ -595,7 +639,7 @@ export function DiscountForm({
 
 /** New-account form. Editing an existing account's details lives on the users
  *  list (role, password and active state each have their own guarded action). */
-export function UserForm() {
+export function UserForm({ shops = [] }: { shops?: { slug: string; name: string }[] }) {
   return (
     <ActionForm
       action={createUser}
@@ -628,6 +672,21 @@ export function UserForm() {
           <option value="staff">Staff</option>
           <option value="admin">Amministratore</option>
         </select>
+      </div>
+      <div>
+        <label className={labelCls}>Sede (solo staff)</label>
+        <select name="shopSlug" defaultValue="" className={inputCls}>
+          <option value="">Tutte le sedi</option>
+          {shops.map((s) => (
+            <option key={s.slug} value={s.slug}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-brown-800/60">
+          Uno staff assegnato a una sede vede e modifica solo gli ordini, i prodotti e le
+          prenotazioni di quella sede. Ignorato per clienti e amministratori.
+        </p>
       </div>
       <div>
         <label className={labelCls}>Password</label>
@@ -741,6 +800,153 @@ export function RewardForm({ reward }: { reward?: RewardRow | null }) {
       </div>
       <div className="sm:col-span-2">
         <PendingButton>{reward ? "Salva premio" : "Crea premio"}</PendingButton>
+      </div>
+    </ActionForm>
+  );
+}
+
+/**
+ * Create or edit a category.
+ *
+ * `kind` is fixed after creation: moving "Ricette" from the news list to the
+ * product list would silently re-file every post under it, and the slug
+ * uniqueness is per kind — so the switch is a create-time decision.
+ */
+export function CategoryForm({
+  category,
+  kind,
+  parents = [],
+}: {
+  category?: CategoryRow | null;
+  /** For a new category; ignored when editing (the row's own kind wins). */
+  kind?: "product" | "post";
+  /** Candidate parents: same kind, top level, excluding this row. */
+  parents?: CategoryRow[];
+}) {
+  const effectiveKind = category?.kind ?? kind ?? "product";
+
+  return (
+    <ActionForm
+      action={saveCategory}
+      redirectTo={`/admin/categories${effectiveKind === "post" ? "?kind=post" : ""}`}
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+    >
+      {category && <input type="hidden" name="id" value={category.id} />}
+      <input type="hidden" name="kind" value={effectiveKind} />
+
+      <div>
+        <label className={labelCls}>Nome</label>
+        <input name="name" required maxLength={120} defaultValue={category?.name} className={inputCls} />
+      </div>
+      <div>
+        <label className={labelCls}>Slug</label>
+        <input
+          name="slug"
+          defaultValue={category?.slug}
+          placeholder="auto dal nome se vuoto"
+          className={inputCls}
+        />
+        <p className="mt-1 text-xs text-brown-800/60">
+          {effectiveKind === "product"
+            ? "Usato nell'indirizzo pubblico: /negozio/categoria/<slug>."
+            : "Usato per raggruppare gli articoli."}
+        </p>
+      </div>
+
+      <div>
+        <label className={labelCls}>Categoria superiore</label>
+        <select name="parentId" defaultValue={category?.parentId ?? ""} className={inputCls}>
+          <option value="">— Nessuna (primo livello) —</option>
+          {parents.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className={labelCls}>Ordine</label>
+        <input
+          name="sortOrder"
+          type="number"
+          defaultValue={category?.sortOrder ?? 0}
+          className={inputCls}
+        />
+        <p className="mt-1 text-xs text-brown-800/60">Numero più basso = più in alto nell&apos;elenco.</p>
+      </div>
+
+      {effectiveKind === "product" && (
+        <div>
+          <label className={labelCls}>Aliquota IVA predefinita</label>
+          <select
+            name="defaultVatRate"
+            defaultValue={
+              category?.defaultVatRateBps != null ? String(category.defaultVatRateBps / 100) : ""
+            }
+            className={inputCls}
+          >
+            <option value="">— Nessuna —</option>
+            {VAT_RATES_BPS.map((bps) => (
+              <option key={bps} value={String(bps / 100)}>
+                {vatRateLabel(bps)}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-brown-800/60">
+            Proposta ai nuovi prodotti di questa categoria. Non cambia i prodotti già salvati.
+          </p>
+        </div>
+      )}
+
+      <div>
+        <label className={labelCls}>Colore</label>
+        <select name="accent" defaultValue={category?.accent ?? ""} className={inputCls}>
+          <option value="">— Automatico (dal nome) —</option>
+          {CATEGORY_ACCENTS.map((a) => (
+            <option key={a.value} value={a.value}>
+              {a.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-brown-800/60">
+          Il colore usato sul sito per questa categoria.
+        </p>
+      </div>
+
+      <div className="sm:col-span-2">
+        <label className={labelCls}>Descrizione</label>
+        <textarea
+          name="description"
+          rows={3}
+          defaultValue={category?.description}
+          className={inputCls}
+        />
+        <p className="mt-1 text-xs text-brown-800/60">
+          Mostrata in cima alla pagina della categoria sul sito.
+        </p>
+      </div>
+
+      <ImageField current={category?.image} />
+
+      <div>
+        <label className={labelCls}>Titolo SEO</label>
+        <input name="seoTitle" maxLength={200} defaultValue={category?.seoTitle ?? ""} className={inputCls} />
+      </div>
+      <div>
+        <label className={labelCls}>Descrizione SEO</label>
+        <input
+          name="seoDescription"
+          maxLength={400}
+          defaultValue={category?.seoDescription ?? ""}
+          className={inputCls}
+        />
+      </div>
+
+      <div className="sm:col-span-2 flex flex-wrap items-center gap-6">
+        <Toggle name="active" label="Mostra sul sito" defaultChecked={category?.active ?? true} />
+      </div>
+      <div className="sm:col-span-2">
+        <PendingButton>{category ? "Salva categoria" : "Crea categoria"}</PendingButton>
       </div>
     </ActionForm>
   );

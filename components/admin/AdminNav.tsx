@@ -23,6 +23,9 @@ import {
   ShieldHalf,
   ShoppingBag,
   Store,
+  Tags,
+  FileText,
+  Truck,
   Users,
   X,
 } from "lucide-react";
@@ -47,7 +50,9 @@ const GROUPS: Group[] = [
     items: [
       { href: "/admin/orders", label: "Ordini", icon: ShoppingBag },
       { href: "/admin/reservations", label: "Prenotazioni", icon: CalendarCheck },
+      { href: "/admin/fulfilment/oggi", label: "Ritiri e consegne", icon: Truck },
       { href: "/admin/products", label: "Prodotti", icon: Package },
+      { href: "/admin/categories", label: "Categorie", icon: Tags, adminOnly: true },
       { href: "/admin/discounts", label: "Codici sconto", icon: TicketPercent, adminOnly: true },
     ],
   },
@@ -65,6 +70,7 @@ const GROUPS: Group[] = [
     items: [
       { href: "/admin/blog", label: "News", icon: Newspaper },
       { href: "/admin/shops", label: "Negozi", icon: Store },
+      { href: "/admin/contenuti", label: "Testi del sito", icon: FileText, adminOnly: true },
     ],
   },
   {

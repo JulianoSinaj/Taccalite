@@ -28,6 +28,7 @@ import {
   bulkUpdateReservationStatus,
 } from "@/lib/admin/reservation-actions";
 import { isAdmin, getCurrentUser } from "@/lib/auth/session";
+import { shopScope, lockShop } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +69,11 @@ export default async function AdminReservations({ searchParams }: SP) {
   const sp = await searchParams;
   const { stato = "all", negozio = "all", tipo = "all", q = "", da = "", a = "" } = sp;
   const page = Number(sp.page) || 1;
-  const filters = reservationFilters(sp);
+  // A staff account assigned to a location is *confined* to it: the facet is
+  // forced here rather than merely pre-selected, so editing the query string
+  // cannot widen the view. Admins and unassigned accounts see everything.
+  const scope = await shopScope();
+  const filters = reservationFilters({ ...sp, negozio: lockShop(sp.negozio, scope) });
   const viewer = await getCurrentUser();
   const [{ rows, total, pageCount }, shops, admin, views] = await Promise.all([
     getReservationsPage({ ...filters, page }),

@@ -3,13 +3,13 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { AdminHeader, Panel } from "@/components/admin/ui";
 import { BlogForm } from "@/components/admin/forms";
-import { adminGetBlogPost } from "@/lib/admin/queries";
+import { adminGetBlogPost, adminGetCategories } from "@/lib/admin/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditBlogPost({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const post = await adminGetBlogPost(id);
+  const [post, categories] = await Promise.all([adminGetBlogPost(id), adminGetCategories("post")]);
   if (!post) notFound();
 
   return (
@@ -19,7 +19,7 @@ export default async function EditBlogPost({ params }: { params: Promise<{ id: s
       </Link>
       <AdminHeader title={post.title} subtitle="Modifica articolo" />
       <Panel>
-        <BlogForm post={post} />
+        <BlogForm post={post} categories={categories} />
       </Panel>
     </div>
   );

@@ -33,6 +33,8 @@ const createUserInput = z.object({
     .or(z.literal("").transform(() => undefined)),
   password: z.string().min(8, "La password deve avere almeno 8 caratteri").max(200),
   role: z.enum(["customer", "staff", "admin"]),
+  /** Only meaningful for staff; blank means every location. */
+  shopSlug: z.string().trim().max(80).optional(),
 });
 
 /** Toggle an account's active flag. */
@@ -57,7 +59,12 @@ export async function setUserRole(_prev: ActionState, fd: FormData): Promise<Act
       if (admins <= 1) throw new ActionError("Non puoi rimuovere l'ultimo amministratore.");
     }
 
-    await db.update(users).set({ role: d.role }).where(eq(users.id, d.id));
+    // The shop assignment is part of the privilege, so it moves with the role in
+    // one write: promoting a counter person to admin must not leave them pinned
+    // to one location, and demoting an admin must not silently grant them every
+    // location for ever.
+    const shopSlug = d.role === "staff" ? d.shopSlug ?? null : null;
+    await db.update(users).set({ role: d.role, shopSlug }).where(eq(users.id, d.id));
     // Force re-auth so the new privilege level takes effect immediately (a
     // demotion must not keep an elevated session alive).
     await deleteUserSessions(d.id);
@@ -66,8 +73,10 @@ export async function setUserRole(_prev: ActionState, fd: FormData): Promise<Act
       action: "user.role",
       entity: "user",
       entityId: target.id,
-      summary: `Ruolo di ${target.username}: ${target.role} → ${d.role}`,
-      meta: { from: target.role, to: d.role },
+      summary:
+        `Ruolo di ${target.username}: ${target.role} → ${d.role}` +
+        (shopSlug ? ` (sede ${shopSlug})` : target.shopSlug ? " (tutte le sedi)" : ""),
+      meta: { from: target.role, to: d.role, shopSlug },
     });
     revalidatePath("/admin/users");
     return ok(`Ruolo aggiornato a "${d.role}".`);
@@ -177,6 +186,9 @@ export async function createUser(_prev: ActionState, fd: FormData): Promise<Acti
         email: d.email,
         passwordHash,
         role: d.role,
+        // Only meaningful for staff: an admin sees every location by definition,
+        // and a customer has no back-office view to confine.
+        shopSlug: d.role === "staff" ? d.shopSlug || null : null,
       })
       .returning({ id: users.id });
 
@@ -185,8 +197,10 @@ export async function createUser(_prev: ActionState, fd: FormData): Promise<Acti
       action: "user.create",
       entity: "user",
       entityId: created?.id,
-      summary: `Nuovo utente ${d.username} (${d.role})`,
-      meta: { role: d.role },
+      summary: `Nuovo utente ${d.username} (${d.role}${
+        d.role === "staff" && d.shopSlug ? `, sede ${d.shopSlug}` : ""
+      })`,
+      meta: { role: d.role, shopSlug: d.role === "staff" ? d.shopSlug || null : null },
     });
     revalidatePath("/admin/users");
     return ok("Utente creato.");

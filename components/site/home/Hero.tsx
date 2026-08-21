@@ -7,11 +7,11 @@ import ParallaxMedia from "@/components/site/ParallaxMedia";
 type HeroProps = {
   /** Rendered as the live "aperto adesso" pill. Null when hours can't be read. */
   openNow: boolean | null;
+  /** Editable in the gestionale (`home.hero.facts`); the page resolves them. */
+  facts: string[];
 };
 
-const facts = ["Dal 1946", "Due botteghe ad Ancona", "Ritiro in giornata"];
-
-export default function Hero({ openNow }: HeroProps) {
+export default function Hero({ openNow, facts }: HeroProps) {
   return (
     <section className="relative overflow-hidden px-5 pt-28 pb-14 sm:px-8 sm:pt-32 sm:pb-20 lg:px-12">
       {/* Warmth behind the headline. The hero used to be type on flat white,

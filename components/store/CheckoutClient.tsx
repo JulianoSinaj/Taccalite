@@ -5,6 +5,13 @@ import Link from "next/link";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { useCart } from "./cart";
 import { formatEuro } from "@/lib/format";
+import {
+  FULFILMENT_MODES,
+  FULFILMENT_LABEL,
+  quoteFulfilment,
+  type FulfilmentMode,
+  type ZoneLike,
+} from "@/lib/fulfilment";
 
 const inputCls =
   "w-full  border border-rule-strong bg-paper-warm/40 px-4 py-3.5 text-sm text-brown-950 focus:border-gold-dark focus:outline-none";
@@ -14,28 +21,48 @@ const labelCls =
 
 type CheckoutUser = { name: string; email: string | null; phone: string | null };
 
+/** One bookable pickup window, already filtered by cut-off and capacity. */
+export type SlotChoice = {
+  value: string;
+  shopSlug: string;
+  label: string;
+  remaining: number | null;
+};
+
 export default function CheckoutClient({
   shops,
   pointsPerEuro = 1,
   loyaltyEnabled = true,
-  shippingCents = 700,
-  freeShippingThresholdCents = 0,
+  zones = [],
+  slotOptions = [],
   user = null,
   cancelled = false,
 }: {
   shops: { slug: string; name: string }[];
   pointsPerEuro?: number;
   loyaltyEnabled?: boolean;
-  shippingCents?: number;
-  freeShippingThresholdCents?: number;
+  /** Serving areas and their prices — quoted here, charged on the server. */
+  zones?: ZoneLike[];
+  slotOptions?: SlotChoice[];
   user?: CheckoutUser | null;
   /** The visitor came back from Stripe without paying (`?annullato=1`). */
   cancelled?: boolean;
 }) {
   const { items, subtotalCents, setQty, remove } = useCart();
-  const [fulfilment, setFulfilment] = useState<"pickup" | "shipping">("pickup");
+  const [fulfilment, setFulfilment] = useState<FulfilmentMode>("pickup");
+  const [shopSlug, setShopSlug] = useState(shops[0]?.slug ?? "");
+  const [pickupSlot, setPickupSlot] = useState("");
+  const [zip, setZip] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Local delivery only appears when the shop actually runs a round; without a
+  // zone the button would be an offer nobody could accept.
+  const modes = FULFILMENT_MODES.filter(
+    (m) => m !== "delivery" || zones.some((z) => z.active && z.mode === "delivery"),
+  );
+  const slotsForShop = slotOptions.filter((o) => o.shopSlug === shopSlug);
+  const chosenSlot = slotsForShop.some((o) => o.value === pickupSlot) ? pickupSlot : "";
 
   // Discount code (optional). The preview amount is validated server-side; the
   // order endpoint re-validates authoritatively on submit. The applied preview
@@ -78,16 +105,47 @@ export default function CheckoutClient({
     }
   }
 
-  // Display-only pricing — mirrors the server rules in lib/orders.ts. Shipping
-  // applies only to shipping orders, and is waived once the subtotal reaches the
-  // free-shipping threshold (a threshold of 0 disables free shipping) or when a
-  // free-shipping coupon applies.
   const discountCents = coupon?.discountCents ?? 0;
-  const freeShipping =
-    fulfilment === "shipping" &&
-    ((freeShippingThresholdCents > 0 && subtotalCents >= freeShippingThresholdCents) || !!coupon?.freeShipping);
-  const effectiveShippingCents = fulfilment === "shipping" && !freeShipping ? shippingCents : 0;
+
+  // Weight for zones that price per kg. The cart stores no `soldByWeight` flag,
+  // so the unit is the evidence available here; a product priced per kg that is
+  // not actually sold by weight would be over-quoted, which is the safe
+  // direction — the server re-quotes from the catalogue and charges less, never
+  // more than was shown.
+  const weightKg = items.reduce(
+    (kg, i) => kg + ((i.unit ?? "").toLowerCase() === "kg" ? i.qty : 0),
+    0,
+  );
+
+  // The identical function the server prices with, so the figure below and the
+  // figure charged cannot drift apart.
+  const quote = quoteFulfilment({
+    mode: fulfilment,
+    subtotalCents,
+    zones,
+    cap: zip,
+    weightKg,
+    freeShippingCoupon: coupon?.freeShipping,
+  });
+  const effectiveShippingCents = quote.feeCents;
   const totalCents = Math.max(0, subtotalCents - discountCents + effectiveShippingCents);
+
+  // What the mode buttons can promise before a CAP is known: the cheapest zone
+  // serving that mode. "Da €5,00" is honest; a single flat number no longer is.
+  const cheapest = (mode: FulfilmentMode) => {
+    const fees = zones.filter((z) => z.active && z.mode === mode).map((z) => z.feeCents);
+    return fees.length ? Math.min(...fees) : null;
+  };
+  const modeLabel = (m: FulfilmentMode) => {
+    if (m === "pickup") return "Ritiro in bottega";
+    const from = cheapest(m);
+    return `${FULFILMENT_LABEL[m]}${from != null ? ` (da ${formatEuro(from)})` : ""}`;
+  };
+
+  // Everything that must be true before the order can be sent. Kept as one
+  // expression so the button and the message below can never disagree.
+  const slotMissing = fulfilment === "pickup" && slotsForShop.length > 0 && !chosenSlot;
+  const blocked = quote.error ?? (slotMissing ? "Scegli un orario di ritiro." : null);
   // Loyalty points are earned on the goods subtotal (server-authoritative on award).
   const pointsPreview = Math.floor((subtotalCents / 100) * pointsPerEuro);
 
@@ -102,10 +160,11 @@ export default function CheckoutClient({
       email: fd.get("email"),
       phone: fd.get("phone"),
       fulfilment,
-      shopSlug: fd.get("shopSlug"),
+      shopSlug,
+      pickupSlot: chosenSlot || undefined,
       address: fd.get("address"),
       city: fd.get("city"),
-      zip: fd.get("zip"),
+      zip,
       notes: fd.get("notes"),
       discountCode: coupon?.code,
       company: fd.get("company"),
@@ -269,15 +328,24 @@ export default function CheckoutClient({
               </div>
             )}
             <div className="flex justify-between text-brown-700">
-              <span>Spedizione</span>
+              <span>{FULFILMENT_LABEL[fulfilment]}</span>
               <span>
-                {fulfilment !== "shipping"
-                  ? "Gratis (ritiro)"
-                  : freeShipping
-                    ? "Spedizione gratuita"
-                    : formatEuro(effectiveShippingCents)}
+                {fulfilment === "pickup"
+                  ? "Gratis"
+                  : quote.error
+                    ? "—"
+                    : quote.freeApplied
+                      ? "Gratis"
+                      : formatEuro(effectiveShippingCents)}
               </span>
             </div>
+            {quote.zone && !quote.error && (
+              <p className="text-xs text-taupe">
+                {quote.zone.name}
+                {quote.zone.note ? ` · ${quote.zone.note}` : ""}
+                {quote.zone.leadTimeHours > 0 ? ` · consegna in ${quote.zone.leadTimeHours} h` : ""}
+              </p>
+            )}
             <div className="flex justify-between pt-2 font-display text-xl font-bold text-brown-950">
               <span>Totale</span>
               <span>{formatEuro(totalCents)}</span>
@@ -304,8 +372,8 @@ export default function CheckoutClient({
 
           <div>
             <span className={labelCls}>Consegna</span>
-            <div className="grid grid-cols-2 gap-3">
-              {(["pickup", "shipping"] as const).map((f) => (
+            <div className={`grid gap-3 ${modes.length > 2 ? "sm:grid-cols-3" : "grid-cols-2"}`}>
+              {modes.map((f) => (
                 <button
                   key={f}
                   type="button"
@@ -315,20 +383,53 @@ export default function CheckoutClient({
  fulfilment === f ? "border-gold-dark bg-gold/15 text-brown-950" : "border-rule text-taupe"
  }`}
                 >
-                  {f === "pickup" ? "Ritiro in bottega" : `Spedizione (+${formatEuro(shippingCents)})`}
+                  {modeLabel(f)}
                 </button>
               ))}
             </div>
           </div>
 
           {fulfilment === "pickup" ? (
-            <div>
-              <label className={labelCls} htmlFor="shopSlug">Negozio di ritiro</label>
-              <select id="shopSlug" name="shopSlug" className={inputCls}>
-                {shops.map((s) => (
-                  <option key={s.slug} value={s.slug}>{s.name}</option>
-                ))}
-              </select>
+            <div className="grid grid-cols-1 gap-5">
+              <div>
+                <label className={labelCls} htmlFor="shopSlug">Negozio di ritiro</label>
+                <select
+                  id="shopSlug"
+                  name="shopSlug"
+                  value={shopSlug}
+                  onChange={(e) => setShopSlug(e.target.value)}
+                  className={inputCls}
+                >
+                  {shops.map((s) => (
+                    <option key={s.slug} value={s.slug}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Only rendered where the shop has published windows. A location
+                  with none keeps the old behaviour — choose the shop, turn up
+                  when you like — instead of being blocked by a picker with
+                  nothing in it. */}
+              {slotsForShop.length > 0 && (
+                <div>
+                  <label className={labelCls} htmlFor="pickupSlot">Quando passi a ritirare</label>
+                  <select
+                    id="pickupSlot"
+                    value={chosenSlot}
+                    onChange={(e) => setPickupSlot(e.target.value)}
+                    required
+                    className={inputCls}
+                  >
+                    <option value="">Scegli un orario…</option>
+                    {slotsForShop.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                        {o.remaining != null && o.remaining <= 3 ? ` — ultimi ${o.remaining} posti` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -342,8 +443,26 @@ export default function CheckoutClient({
               </div>
               <div>
                 <label className={labelCls} htmlFor="zip">CAP</label>
-                <input id="zip" name="zip" required className={inputCls} />
+                <input
+                  id="zip"
+                  name="zip"
+                  required
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  maxLength={5}
+                  value={zip}
+                  onChange={(e) => setZip(e.target.value)}
+                  aria-describedby={quote.error ? "zip-error" : undefined}
+                  className={inputCls}
+                />
               </div>
+              {/* Said here, next to the field that causes it, and before payment
+                  — the customer used to reach Stripe and only then be refused. */}
+              {quote.error && zip.length > 0 && (
+                <p id="zip-error" className="text-sm font-medium text-red-700 sm:col-span-2">
+                  {quote.error}
+                </p>
+              )}
             </div>
           )}
 
@@ -365,10 +484,10 @@ export default function CheckoutClient({
 
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || !!blocked}
             className="w-full rounded-full bg-gold px-8 py-4 text-xs font-bold tracking-widest text-brown-950 uppercase transition-colors hover:bg-gold-dark disabled:opacity-60"
           >
-            {busy ? "Elaborazione…" : `Paga ${formatEuro(totalCents)}`}
+            {busy ? "Elaborazione…" : blocked ? blocked : `Paga ${formatEuro(totalCents)}`}
           </button>
           <p className="text-center text-xs text-taupe">
             Pagamento sicuro. In assenza di configurazione, l&apos;ordine viene registrato in

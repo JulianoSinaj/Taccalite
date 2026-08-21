@@ -1,4 +1,5 @@
 import { siteConfig, absoluteUrl } from "@/lib/site";
+import type { FulfilmentMode } from "@/lib/fulfilment";
 
 type Built = { subject: string; html: string; text: string };
 
@@ -124,8 +125,10 @@ export type OrderEmailData = {
   email: string;
   items: { name: string; quantity: number; lineTotalCents: number }[];
   totalCents: number;
-  fulfilment: "pickup" | "shipping";
+  fulfilment: FulfilmentMode;
   shopName?: string | null;
+  /** Chosen pickup window, already formatted ("giovedi 22 agosto - 10:00-12:30"). */
+  pickupSlotLabel?: string | null;
 };
 
 function euro(cents: number): string {
@@ -149,10 +152,17 @@ function orderItemsTable(d: OrderEmailData): string {
 
 /** Order confirmation to the customer. */
 export function orderCustomerEmail(d: OrderEmailData): Built {
+  // The window is the single most useful line in this email for a pickup — it is
+  // the appointment the customer has to keep — so it goes with the method rather
+  // than being left to the confirmation page they may never revisit.
   const fulfil =
     d.fulfilment === "pickup"
-      ? `Ritiro in negozio${d.shopName ? ` — ${d.shopName}` : ""}`
-      : "Spedizione all'indirizzo indicato";
+      ? `Ritiro in bottega${d.shopName ? ` — ${d.shopName}` : ""}${
+          d.pickupSlotLabel ? ` · ${d.pickupSlotLabel}` : ""
+        }`
+      : d.fulfilment === "delivery"
+        ? "Consegna a domicilio all'indirizzo indicato"
+        : "Spedizione all'indirizzo indicato";
   const body = `
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
       Ciao ${esc(d.name)}, grazie per il tuo ordine <strong>${esc(d.orderNumber)}</strong>.
@@ -481,10 +491,15 @@ export function orderStatusEmail(
   d: {
     orderNumber: string;
     name: string;
-    fulfilment: "pickup" | "shipping";
+    fulfilment: FulfilmentMode;
     shopName?: string | null;
+    pickupSlotLabel?: string | null;
     carrier?: string | null;
     trackingNumber?: string | null;
+    /** Resolved by the caller from the `store.carriers` setting. When present the
+     *  tracking number becomes a link; when absent it stays plain text, which is
+     *  what every shipment did before carriers were configurable. */
+    trackingUrl?: string | null;
     totalCents: number;
     /** Amount actually given back. Defaults to the order total (full refund). */
     refundAmountCents?: number | null;
@@ -505,12 +520,25 @@ export function orderStatusEmail(
       intro = `il tuo ordine <strong>${esc(d.orderNumber)}</strong> è stato spedito.`;
       if (d.trackingNumber) {
         const carrier = d.carrier ? `${esc(d.carrier)} · ` : "";
-        extraHtml = `<p style="font-size:15px;color:#41281b;margin:0 0 8px;">Tracking: ${carrier}<strong>${esc(d.trackingNumber)}</strong></p>`;
-        extraText = `\nTracking: ${d.carrier ? d.carrier + " " : ""}${d.trackingNumber}`;
+        const code = d.trackingUrl
+          ? `<a href="${esc(d.trackingUrl)}" style="color:#8a6a2f;">${esc(d.trackingNumber)}</a>`
+          : esc(d.trackingNumber);
+        extraHtml = `<p style="font-size:15px;color:#41281b;margin:0 0 8px;">Tracking: ${carrier}<strong>${code}</strong></p>`;
+        extraText =
+          `\nTracking: ${d.carrier ? d.carrier + " " : ""}${d.trackingNumber}` +
+          (d.trackingUrl ? `\n${d.trackingUrl}` : "");
       }
+    } else if (d.fulfilment === "delivery") {
+      // Local delivery is not a shipment (there is no tracking number to give)
+      // and not a collection (nobody is coming to the counter). Saying "pronto
+      // per il ritiro" to someone waiting at home was the wrong sentence.
+      heading = "Il tuo ordine è in consegna";
+      intro = `il tuo ordine <strong>${esc(d.orderNumber)}</strong> è partito per la consegna all'indirizzo indicato.`;
     } else {
       heading = "Il tuo ordine è pronto";
-      intro = `il tuo ordine <strong>${esc(d.orderNumber)}</strong> è pronto per il ritiro${d.shopName ? ` presso ${esc(d.shopName)}` : ""}.`;
+      intro =
+        `il tuo ordine <strong>${esc(d.orderNumber)}</strong> è pronto per il ritiro${d.shopName ? ` presso ${esc(d.shopName)}` : ""}` +
+        `${d.pickupSlotLabel ? ` — ${esc(d.pickupSlotLabel)}` : ""}.`;
     }
   } else if (status === "cancelled") {
     heading = "Ordine annullato";

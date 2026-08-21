@@ -64,6 +64,7 @@ export default async function StorePage({ searchParams }: SearchParams) {
   });
 
   const hasFilters = Boolean(q || cat || sp.sort);
+  const activeCategory = cat ? categories.find((c) => c.name === cat) : undefined;
 
   return (
     <div>
@@ -161,22 +162,38 @@ export default async function StorePage({ searchParams }: SearchParams) {
                     {categories.map((c) => (
                       // Each filter wears its category's colour, so the row is the
                       // legend for the grid underneath it rather than eight
-                      // identical brown pills.
+                      // identical brown pills. The colour is now the one the shop
+                      // chose on the category, falling back to the keyword guess.
                       <Link
-                        key={c}
-                        href={buildHref({ q, sort: sp.sort }, { cat: c })}
-                        style={{ "--acc": categoryAccent(c) } as React.CSSProperties}
+                        key={c.id}
+                        href={buildHref({ q, sort: sp.sort }, { cat: c.name })}
+                        style={{ "--acc": categoryAccent(c.name, c.accent) } as React.CSSProperties}
                         className={`flex shrink-0 snap-start items-center gap-2.5 border px-5 py-3.5 text-[0.625rem] font-bold tracking-[0.18em] whitespace-nowrap uppercase transition-colors sm:py-2 ${
- cat === c
+ cat === c.name
  ? "border-[var(--acc)] bg-[color-mix(in_oklab,var(--acc)_14%,var(--paper))] text-[var(--acc)]"
  : "border-rule-strong text-brown-700 hover:border-[var(--acc)] hover:text-[var(--acc)]"
  }`}
                       >
                         <span aria-hidden className="size-[5px] rotate-45 bg-[var(--acc)]" />
-                        {c}
+                        {c.name}
                       </Link>
                     ))}
                   </nav>
+                )}
+
+                {/* The filter is a view of /negozio; the category also has a page
+                    of its own, with the shop's own words about it. Linking it
+                    here is what makes that page reachable at all. */}
+                {activeCategory && (
+                  <p className="mt-3 text-sm text-brown-700">
+                    <Link
+                      href={`/negozio/categoria/${activeCategory.slug}`}
+                      className="font-semibold text-gold-deep underline"
+                    >
+                      Scopri {activeCategory.name}
+                    </Link>{" "}
+                    — la pagina dedicata.
+                  </p>
                 )}
               </div>
 

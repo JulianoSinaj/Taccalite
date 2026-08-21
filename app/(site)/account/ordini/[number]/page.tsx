@@ -6,6 +6,9 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getOrderForViewer } from "@/lib/orders";
 import { getShopBySlug } from "@/lib/db/queries";
 import { formatEuro } from "@/lib/format";
+import { trackingUrlFor } from "@/lib/carriers";
+
+import { FULFILMENT_LABEL } from "@/lib/fulfilment";
 
 export const dynamic = "force-dynamic";
 
@@ -54,8 +57,9 @@ export default async function OrderDetailPage({ params }: PageProps) {
 
   const { order, items } = data;
   const shop =
-    order.fulfilment === "pickup" && order.shopSlug ? await getShopBySlug(order.shopSlug) : null;
+    order.fulfilment !== "shipping" && order.shopSlug ? await getShopBySlug(order.shopSlug) : null;
   const shipping = order.shippingAddress ?? null;
+  const trackingHref = await trackingUrlFor(order.carrier, order.trackingNumber);
 
   const statusLabel = STATUS_LABEL[order.status] ?? order.status;
   const statusStyle = STATUS_STYLE[order.status] ?? "bg-brown-900/10 text-brown-800";
@@ -148,7 +152,7 @@ export default async function OrderDetailPage({ params }: PageProps) {
         {/* Fulfilment */}
         <div className="mt-6 border border-rule bg-paper-warm p-6 sm:p-8">
           <h2 className="font-display text-2xl tracking-tight text-brown-950">
-            {order.fulfilment === "pickup" ? "Ritiro in negozio" : "Spedizione"}
+            {FULFILMENT_LABEL[order.fulfilment]}
           </h2>
           {order.fulfilment === "pickup" ? (
             <p className="mt-3 text-sm leading-relaxed text-brown-700">
@@ -171,6 +175,24 @@ export default async function OrderDetailPage({ params }: PageProps) {
             </address>
           ) : (
             <p className="mt-3 text-sm text-brown-700">Consegna al tuo indirizzo.</p>
+          )}
+          {order.fulfilment === "shipping" && order.trackingNumber && (
+            <p className="mt-4 border-t border-rule pt-4 text-sm text-brown-700">
+              Tracking:{" "}
+              {order.carrier ? <span className="text-brown-950">{order.carrier} · </span> : null}
+              {trackingHref ? (
+                <a
+                  href={trackingHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-gold-deep underline"
+                >
+                  {order.trackingNumber}
+                </a>
+              ) : (
+                <span className="font-semibold text-brown-950">{order.trackingNumber}</span>
+              )}
+            </p>
           )}
         </div>
 

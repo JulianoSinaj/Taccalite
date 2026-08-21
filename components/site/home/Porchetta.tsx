@@ -15,14 +15,9 @@ import SaturdayCountdown from "@/components/SaturdayCountdown";
  * costs nothing and is entirely true.
  */
 
-const ricetta = [
-  { name: "Rosmarino", note: "a rametti interi" },
-  { name: "Aglio", note: "in camicia" },
-  { name: "Finocchietto", note: "selvatico, raccolto qui" },
-  { name: "Cottura lenta", note: "dalle cinque del mattino" },
-];
+export type Ingrediente = { name: string; note: string };
 
-export default function Porchetta() {
+export default function Porchetta({ ricetta }: { ricetta: Ingrediente[] }) {
   return (
     <section className="relative overflow-hidden bg-brown-950 px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
       <div aria-hidden className="ember absolute inset-0" />

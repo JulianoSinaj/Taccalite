@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { and, asc, desc, eq, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "./client";
 import * as schema from "./schema";
 
@@ -116,12 +116,61 @@ export const getReservationByReference = cache(async (reference: string) => {
 
 /** Distinct product categories among active products, for the store filter nav. */
 export const getProductCategories = cache(async () => {
+  // Category *rows*, not distinct strings. The rail used to be `select distinct
+  // products.category`, which meant it had no order the shop could choose, no
+  // way to hide a category, no colour except a keyword guess, and no URL — and a
+  // single mistyped name grew an extra chip holding one product.
+  //
+  // Still driven by what is actually on sale: an empty category is a real
+  // grouping in the gestionale but nothing to offer a customer.
   const rows = await db
-    .selectDistinct({ category: schema.products.category })
-    .from(schema.products)
-    .where(and(eq(schema.products.active, true), eq(schema.products.purchasable, true)))
-    .orderBy(asc(schema.products.category));
-  return rows.map((r) => r.category).filter((c): c is string => !!c);
+    .selectDistinct({
+      id: schema.categories.id,
+      slug: schema.categories.slug,
+      name: schema.categories.name,
+      accent: schema.categories.accent,
+      sortOrder: schema.categories.sortOrder,
+    })
+    .from(schema.categories)
+    .innerJoin(schema.products, eq(schema.products.categoryId, schema.categories.id))
+    .where(
+      and(
+        eq(schema.categories.kind, "product"),
+        eq(schema.categories.active, true),
+        eq(schema.products.active, true),
+        eq(schema.products.purchasable, true),
+      ),
+    )
+    .orderBy(asc(schema.categories.sortOrder), asc(schema.categories.name));
+  return rows;
+});
+
+export type StoreCategory = Awaited<ReturnType<typeof getProductCategories>>[number];
+
+/** One product category by id — used to link a product to its category page. */
+export const getProductCategoryById = cache(async (id: string) => {
+  const [row] = await db
+    .select()
+    .from(schema.categories)
+    .where(eq(schema.categories.id, id))
+    .limit(1);
+  return row ?? null;
+});
+
+/** One visible product category by slug, for `/negozio/categoria/[slug]`. */
+export const getProductCategoryBySlug = cache(async (slug: string) => {
+  const [row] = await db
+    .select()
+    .from(schema.categories)
+    .where(
+      and(
+        eq(schema.categories.kind, "product"),
+        eq(schema.categories.active, true),
+        eq(schema.categories.slug, slug),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
 });
 
 /** Up to `limit` other purchasable products, preferring the same category then shop. */
@@ -160,25 +209,13 @@ export const getRedemptionsForUser = cache(async (userId: string) => {
     .limit(50);
 });
 
-/**
- * Total porchetta kg already reserved for a given pickup date (yyyy-mm-dd),
- * counting every non-cancelled pre-order (pending + confirmed + completed).
- * Mirrors the capacity check in `lib/reservations.ts`. Used by the public
- * porchetta page to show live availability against `porchetta.weeklyCapacityKg`.
- */
-export const getPorchettaKgForDate = cache(async (date: string): Promise<number> => {
-  const [row] = await db
-    .select({ total: sql<number>`coalesce(sum(${schema.reservations.quantityKg}), 0)` })
-    .from(schema.reservations)
-    .where(
-      and(
-        eq(schema.reservations.type, "porchetta"),
-        eq(schema.reservations.date, date),
-        ne(schema.reservations.status, "cancelled"),
-      ),
-    );
-  return Number(row?.total ?? 0);
-});
+/* `getPorchettaKgForDate` lived here: a shop-blind sum of the day's pre-orders,
+ * compared by the public page against a single shared cap. With two locations it
+ * measured a two-shop total against a one-shop number, so the advertised
+ * availability and the capacity actually enforced at submit could disagree.
+ * Availability now comes from `porchettaAvailability()` in `lib/reservations.ts`,
+ * which reuses the same per-shop check the booking path enforces. Deliberately
+ * not kept as a convenience: an unscoped helper is how the two drifted apart. */
 
 /**
  * Guest order tracking: look up an order by its number AND the email used to
@@ -203,3 +240,65 @@ export const getOrderByNumberAndEmail = cache(async (orderNumber: string, email:
     .where(eq(schema.orderItems.orderId, order.id));
   return { order, items };
 });
+
+// ── Fulfilment: zones and pickup windows ─────────────────────────────────────
+
+/**
+ * Active delivery/shipping zones, most specific first is *not* meaningful here —
+ * `matchZone` scores by CAP, so ordering is purely editorial (it is what the
+ * checkout and the admin list show).
+ */
+export const getDeliveryZones = cache(async () => {
+  return db
+    .select()
+    .from(schema.deliveryZones)
+    .where(eq(schema.deliveryZones.active, true))
+    .orderBy(asc(schema.deliveryZones.sortOrder), asc(schema.deliveryZones.name));
+});
+
+/** Active pickup windows, optionally for one location. */
+export const getPickupSlots = cache(async (shopSlug?: string) => {
+  const where = shopSlug
+    ? and(eq(schema.pickupSlots.active, true), eq(schema.pickupSlots.shopSlug, shopSlug))
+    : eq(schema.pickupSlots.active, true);
+  return db
+    .select()
+    .from(schema.pickupSlots)
+    .where(where)
+    .orderBy(asc(schema.pickupSlots.weekday), asc(schema.pickupSlots.startTime));
+});
+
+/**
+ * How many live orders already hold each pickup window from `fromMs` onward,
+ * keyed as `slotKey(shopSlug, atMs)`.
+ *
+ * Cancelled and refunded orders release their place — a window held by an order
+ * nobody is coming to collect is a place the shop cannot sell twice.
+ *
+ * `fromMs` defaults here rather than at each call site because the callers are
+ * server components, and the React Compiler lint forbids `Date.now()` in a
+ * render body.
+ */
+export async function getPickupSlotCounts(fromMs = Date.now()): Promise<Map<string, number>> {
+  const rows = await db
+    .select({
+      shopSlug: schema.orders.shopSlug,
+      at: schema.orders.pickupSlotAt,
+      n: sql<number>`count(*)`,
+    })
+    .from(schema.orders)
+    .where(
+      and(
+        gte(schema.orders.pickupSlotAt, new Date(fromMs)),
+        sql`${schema.orders.status} not in ('cancelled', 'refunded')`,
+      ),
+    )
+    .groupBy(schema.orders.shopSlug, schema.orders.pickupSlotAt);
+
+  const map = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.shopSlug || !r.at) continue;
+    map.set(`${r.shopSlug}|${r.at.getTime()}`, Number(r.n));
+  }
+  return map;
+}

@@ -12,6 +12,17 @@
  * and hands back a `var(...)` reference the caller assigns to `--acc`.
  */
 
+/** The accent palette, as picker options for the category form. */
+export const CATEGORY_ACCENTS = [
+  { value: "salumi", label: "Salumi (rosso salame)" },
+  { value: "carni", label: "Carni (rosso carne)" },
+  { value: "formaggi", label: "Formaggi (giallo zafferano)" },
+  { value: "gastronomia", label: "Gastronomia (verde)" },
+  { value: "cantina", label: "Cantina (vino scuro)" },
+  { value: "regalo", label: "Regalo" },
+  { value: "casa", label: "Casa (oro)" },
+] as const;
+
 const ACCENTS = {
   salumi: "var(--acc-salumi)",
   carni: "var(--acc-carni)",
@@ -39,7 +50,15 @@ function normalise(value: string) {
  * the same colour, and anything genuinely new falls back to the house gold
  * instead of rendering uncoloured.
  */
-export function categoryAccent(category: string): string {
+export function categoryAccent(category: string, declared?: string | null): string {
+  // A category row can now *declare* its colour, which is the whole point of
+  // having the taxonomy as data: adding "Tecnica" or "Territorio" used to mean
+  // editing the keyword list below, and until someone did they both fell through
+  // to the house gold. The keyword pass stays as the fallback so a category with
+  // no declared accent — and every caller that has only a name — still lands
+  // somewhere sensible.
+  if (declared && declared in ACCENTS) return ACCENTS[declared as keyof typeof ACCENTS];
+
   const key = normalise(category);
   if (!key) return ACCENTS.casa;
 

@@ -4,6 +4,7 @@ import CTA from "@/components/site/CTA";
 import Reveal from "@/components/Reveal";
 import RevealLines from "@/components/site/RevealLines";
 import { getShops } from "@/lib/db/queries";
+import { siteRecords } from "@/lib/site-content";
 
 export const dynamic = "force-dynamic";
 
@@ -15,53 +16,23 @@ export const metadata: Metadata = {
 };
 
 /**
- * Written only from what the shop has actually told us: the founding year, the
- * family running it, the two locations and their specialities, and the Saturday
- * porchetta. No invented milestones, no invented names — a history page for a
- * real business is the last place to fill gaps with plausible fiction. The
- * `capitoli` below are eras rather than dates for exactly that reason; when the
- * family supplies the real years, they slot straight in.
+ * The chapters and the pillars are editable in the gestionale
+ * (`storia.capitoli`, `storia.pilastri`), with the text below as the default.
+ *
+ * They were written only from what the shop has actually told us: the founding
+ * year, the family running it, the two locations and their specialities, and the
+ * Saturday porchetta. No invented milestones, no invented names — a history page
+ * for a real business is the last place to fill gaps with plausible fiction. The
+ * chapters are eras rather than dates for exactly that reason; when the family
+ * supplies the real years, they now slot in from `/admin/contenuti` instead of a
+ * deploy.
  */
-const capitoli = [
-  {
-    marker: "1946",
-    title: "L'inizio",
-    body: "Ad Ancona si riparte. La norcineria è un mestiere che si impara guardando: come si sceglie un capo, come si sala, quanto tempo serve prima che una forma sia pronta. La bottega apre e comincia a farsi un nome sul lavoro, non sull'insegna.",
-  },
-  {
-    marker: "Il mestiere",
-    title: "Quello che non è cambiato",
-    body: "Sono cambiati i frigoriferi, i fornitori, le regole. Non è cambiato il criterio: si assaggia prima noi, si compra da chi conosciamo, e quello che non ci convince non arriva al banco. È l'unica parte della ricetta che non si scrive.",
-  },
-  {
-    marker: "Due banchi",
-    title: "Piazza Kennedy e il Mercato del Piano",
-    body: "Il banco dei formaggi cresce fino a meritarsi una casa sua in Piazza Kennedy, con le stagionature lunghe e i cremosi. Le carni e i salumi restano dove stanno meglio, al Mercato Coperto del Piano, tra chi la spesa la fa ancora tutti i giorni.",
-  },
-  {
-    marker: "Oggi",
-    title: "La terza generazione",
-    body: "Dietro il banco c'è ancora la famiglia, e adesso c'è anche un negozio online: si ordina da casa e si ritira in giornata. Il sabato, come sempre, la porchetta esce calda dal forno e finisce prima di sera.",
-  },
-];
-
-const pilastri = [
-  {
-    title: "La scelta",
-    body: "Un produttore alla volta. Preferiamo il piccolo caseificio che ci risponde al telefono al catalogo che ci manda il listino.",
-  },
-  {
-    title: "La lavorazione",
-    body: "Salumi di produzione propria, cotture lente, stagionature che durano quello che devono durare. Il tempo è un ingrediente, non un costo.",
-  },
-  {
-    title: "Il banco",
-    body: "Tagliamo al momento, spieghiamo cosa state comprando e diciamo anche quando qualcosa non è al meglio. Un consiglio onesto vale più di una vendita.",
-  },
-];
-
 export default async function StoriaPage() {
-  const shops = await getShops();
+  const [shops, capitoli, pilastri] = await Promise.all([
+    getShops(),
+    siteRecords("storia.capitoli"),
+    siteRecords("storia.pilastri"),
+  ]);
 
   return (
     <>

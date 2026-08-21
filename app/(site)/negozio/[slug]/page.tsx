@@ -7,7 +7,12 @@ import { ArrowLeft, ArrowRight, Store } from "lucide-react";
 import JsonLd from "@/components/JsonLd";
 import ProductBuy from "@/components/store/ProductBuy";
 import BackInStockForm from "@/components/store/BackInStockForm";
-import { getProductBySlug, getRelatedProducts, getShopBySlug } from "@/lib/db/queries";
+import {
+  getProductBySlug,
+  getRelatedProducts,
+  getShopBySlug,
+  getProductCategoryById,
+} from "@/lib/db/queries";
 import { formatEuro } from "@/lib/format";
 import ProductPlate from "@/components/site/ProductPlate";
 import { categoryAccent } from "@/lib/categories";
@@ -38,10 +43,12 @@ export default async function ProductDetailPage({ params }: Params) {
   const product = await getProductBySlug(slug);
   if (!product || !product.active || !product.purchasable) notFound();
 
-  const [shop, related] = await Promise.all([
+  const [shop, related, categoryRow] = await Promise.all([
     getShopBySlug(product.shopSlug),
     getRelatedProducts({ slug: product.slug, category: product.category, shopSlug: product.shopSlug }, 4),
+    product.categoryId ? getProductCategoryById(product.categoryId) : null,
   ]);
+  const categorySlug = categoryRow?.active ? categoryRow.slug : null;
 
   const soldOut = product.stock === 0;
   const lowStock = product.stock != null && product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD;
@@ -143,9 +150,19 @@ export default async function ProductDetailPage({ params }: Params) {
             {/* Details */}
             <div className="flex flex-col">
               {product.category && (
+                // Links to the category's own page when it has one. This is what
+                // gives that page inbound links from every product in it —
+                // without them it would be reachable only from the shop's filter
+                // rail, which is not a link a customer or a crawler follows.
                 <p className="flex items-center gap-2.5 text-[0.625rem] font-bold tracking-[0.22em] text-[var(--acc)] uppercase">
                   <span aria-hidden className="size-[5px] rotate-45 bg-[var(--acc)]" />
-                  {product.category}
+                  {categorySlug ? (
+                    <Link href={`/negozio/categoria/${categorySlug}`} className="hover:underline">
+                      {product.category}
+                    </Link>
+                  ) : (
+                    product.category
+                  )}
                 </p>
               )}
               <h1 className="font-display display-lg mt-4 font-semibold text-brown-950">

@@ -13,7 +13,10 @@ const IDLE_TIMEOUT_MS = 1000 * 60 * 60 * 24 * 7; // 7 days of inactivity
 // cause a DB write on every single request (write-amplification on SQLite).
 const SLIDE_INTERVAL_MS = 1000 * 60 * 60; // 1 hour
 
-export type SessionUser = Pick<UserRow, "id" | "username" | "email" | "name" | "role" | "phone">;
+export type SessionUser = Pick<
+  UserRow,
+  "id" | "username" | "email" | "name" | "role" | "phone" | "shopSlug"
+>;
 
 /** Create a fresh session for a user and set the cookie. A new opaque token is
  *  minted on every login, so credentials never bind to a pre-existing token. */
@@ -51,6 +54,10 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
       name: users.name,
       role: users.role,
       phone: users.phone,
+      // Read on every authenticated request because it is an access boundary
+      // (`lib/admin/scope.ts`), not a preference — it has to be as fresh as the
+      // role beside it.
+      shopSlug: users.shopSlug,
       lastSeenAt: sessions.lastSeenAt,
     })
     .from(sessions)
@@ -79,6 +86,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     name: row.name,
     role: row.role,
     phone: row.phone,
+    shopSlug: row.shopSlug,
   };
 }
 

@@ -130,7 +130,9 @@ export async function seedBaseData(db: Db, log: (msg: string) => void = console.
     { key: "porchetta.cutoffDay", value: "friday" },
     { key: "reservations.enabled", value: true },
     { key: "store.enabled", value: true },
-    { key: "porchetta.weeklyCapacityKg", value: 0 },
+    // Per pickup day, per shop. (The old `porchetta.weeklyCapacityKg` name is
+    // still read as a fallback for installs seeded before the rename.)
+    { key: "porchetta.capacityKgPerDay", value: 0 },
     { key: "store.lowStockThreshold", value: 5 },
     // Read by the IVA report, the order-detail breakdown and the FatturaPA XML.
     { key: "store.shippingVatRate", value: 22 },

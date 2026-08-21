@@ -5,6 +5,8 @@ import { adminGetOrder, adminGetShops } from "@/lib/admin/queries";
 import { getSetting } from "@/lib/db/queries";
 import { orderVatBuckets, vatRateLabel, totalImposta } from "@/lib/fiscal";
 
+import { FULFILMENT_LABEL } from "@/lib/fulfilment";
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -94,9 +96,9 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
           </div>
           <div>
             <p className="mb-1 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
-              {order.fulfilment === "shipping" ? "Spedizione a" : "Ritiro presso"}
+              {order.fulfilment === "pickup" ? "Ritiro presso" : FULFILMENT_LABEL[order.fulfilment] + " a"}
             </p>
-            {order.fulfilment === "shipping" ? (
+            {order.fulfilment !== "pickup" ? (
               addr ? (
                 <p className="text-sm text-brown-950">
                   {addr.address}

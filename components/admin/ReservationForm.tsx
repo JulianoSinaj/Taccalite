@@ -23,11 +23,16 @@ function todayValue(): string {
 export function ReservationForm({
   shops,
   reservation,
+  defaultDate,
   onDone,
   redirectTo,
 }: {
   shops: ShopRow[];
   reservation?: ReservationRow | null;
+  /** yyyy-mm-dd to open the date field on, when creating. Resolved on the server
+   *  (the calendar passes the day you clicked) so the common case doesn't rely on
+   *  the client's clock at all. */
+  defaultDate?: string;
   /** Rendered under the buttons — e.g. a "back to list" link on the create page. */
   onDone?: React.ReactNode;
   /** Set by the dedicated create page so saving returns to the list. The copy of
@@ -101,7 +106,7 @@ export function ReservationForm({
           name="date"
           type="date"
           required
-          defaultValue={reservation?.date ?? todayValue()}
+          defaultValue={reservation?.date ?? defaultDate ?? todayValue()}
           className={inputCls}
         />
       </div>

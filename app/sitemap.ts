@@ -1,16 +1,22 @@
 import type { MetadataRoute } from "next";
 import { absoluteUrl } from "@/lib/site";
-import { getShops, getBlogPosts, getPurchasableProducts } from "@/lib/db/queries";
+import {
+  getShops,
+  getBlogPosts,
+  getPurchasableProducts,
+  getProductCategories,
+} from "@/lib/db/queries";
 
 // Read shop/blog URLs from the DB at request time, not at build (empty build-time DB).
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  const [shops, blogPosts, products] = await Promise.all([
+  const [shops, blogPosts, products, categories] = await Promise.all([
     getShops(),
     getBlogPosts(),
     getPurchasableProducts(),
+    getProductCategories(),
   ]);
 
   const staticRoutes: MetadataRoute.Sitemap = [
@@ -41,6 +47,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
+  // Only categories that currently hold something on sale — `getProductCategories`
+  // already filters to those, so an empty grouping never reaches the sitemap.
+  const categoryRoutes: MetadataRoute.Sitemap = categories.map((c) => ({
+    url: absoluteUrl(`/negozio/categoria/${c.slug}`),
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.75,
+  }));
+
   const productRoutes: MetadataRoute.Sitemap = products.map((p) => ({
     url: absoluteUrl(`/negozio/${p.slug}`),
     lastModified: now,
@@ -48,5 +63,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...staticRoutes, ...shopRoutes, ...productRoutes, ...blogRoutes];
+  return [...staticRoutes, ...shopRoutes, ...categoryRoutes, ...productRoutes, ...blogRoutes];
 }

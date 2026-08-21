@@ -8,45 +8,15 @@ import Reveal from "@/components/Reveal";
  * cards would have said none of that — and would have forced five descriptions
  * of the same length, which these are not.
  */
-const servizi = [
-  {
-    title: "Aperitivi",
-    accent: "var(--acc-formaggi)",
-    body: "Taglieri di salumi e formaggi composti al momento su quello che c'è di buono quel giorno. Da portare via o da aprire in compagnia.",
-    href: "/negozio",
-    cta: "Guarda la selezione",
-  },
-  {
-    title: "Asporto",
-    accent: "var(--acc-gastronomia)",
-    body: "Gastronomia pronta, primi e secondi del giorno, olive all'ascolana appena fritte. Ordina la mattina, passi quando ti fa comodo.",
-    href: "/negozio",
-    cta: "Ordina online",
-  },
-  {
-    title: "Domicilio",
-    accent: "var(--acc-carni)",
-    body: "Portiamo la spesa a casa ad Ancona e dintorni. Per la consegna in giornata basta chiamare entro mezzogiorno.",
-    href: "/contatti",
-    cta: "Chiedi la consegna",
-  },
-  {
-    title: "Catering",
-    accent: "var(--acc-salumi)",
-    body: "Compleanni, uffici, feste di famiglia. Prepariamo noi: dal tagliere per otto al buffet completo, concordato voce per voce.",
-    href: "/contatti",
-    cta: "Richiedi un preventivo",
-  },
-  {
-    title: "Richieste speciali",
-    accent: "var(--acc-regalo)",
-    body: "Una forma intera, un taglio che non trovi, una porchetta per cinquanta persone. Se esiste ve la troviamo, se serve tempo ve lo diciamo.",
-    href: "/contatti",
-    cta: "Scrivici",
-  },
-];
+export type Servizio = {
+  title: string;
+  body: string;
+  href: string;
+  cta: string;
+  accent: string;
+};
 
-export default function Servizi() {
+export default function Servizi({ servizi }: { servizi: Servizio[] }) {
   return (
     <section className="bg-paper-warm px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
       <div className="mx-auto max-w-[88rem]">

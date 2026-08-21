@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ChevronRight, TrendingUp, User } from "lucide-react";
 import LoyaltyCard from "@/components/LoyaltyCard";
 import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
+import { FULFILMENT_SHORT, type FulfilmentMode } from "@/lib/fulfilment";
 
 type Reward = { id: string; name: string; description: string; points: number; image: string | null };
 type Tx = { id: string; delta: number; reason: string; balanceAfter: number; createdAt: string | Date };
@@ -257,7 +258,7 @@ export default function AccountDashboard({
                             <p className="text-sm font-semibold text-brown-950 group-hover:text-gold-deep">
                               {o.orderNumber}
                               <span className="ml-2 text-xs font-normal text-taupe">
-                                {o.fulfilment === "pickup" ? "Ritiro" : "Spedizione"}
+                                {FULFILMENT_SHORT[o.fulfilment as FulfilmentMode] ?? o.fulfilment}
                               </span>
                             </p>
                             <p className="text-xs text-taupe">
