@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Reveal from "@/components/Reveal";
 
@@ -12,6 +13,18 @@ export default function AuthForms() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Revealed only after the server says this account has a second factor. It
+  // has to exist here at all because `/api/auth/login` can return
+  // `twoFactorRequired` for any account — the storefront form used to have no
+  // code field, so a customer with 2FA could authenticate everywhere except the
+  // page built for them.
+  const [twoFactor, setTwoFactor] = useState(false);
+
+  function switchMode(next: "login" | "register") {
+    setMode(next);
+    setError(null);
+    setTwoFactor(false);
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -21,10 +34,13 @@ export default function AuthForms() {
     const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
     const payload =
       mode === "login"
-        ? { username: fd.get("username"), password: fd.get("password") }
+        ? {
+            identifier: fd.get("identifier"),
+            password: fd.get("password"),
+            code: fd.get("code") || undefined,
+          }
         : {
             name: fd.get("name"),
-            username: fd.get("username"),
             email: fd.get("email"),
             password: fd.get("password"),
             phone: fd.get("phone"),
@@ -38,7 +54,15 @@ export default function AuthForms() {
         body: JSON.stringify(payload),
       });
       const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error ?? "Errore imprevisto");
+      if (!res.ok || !json.ok) {
+        if (json.twoFactorRequired) {
+          setTwoFactor(true);
+          setError(fd.get("code") ? (json.error ?? "Codice non valido.") : null);
+          setBusy(false);
+          return;
+        }
+        throw new Error(json.error ?? "Errore imprevisto");
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Errore imprevisto");
@@ -68,10 +92,7 @@ export default function AuthForms() {
           <div className="grid grid-cols-2 gap-2 sm:flex">
             <button
               type="button"
-              onClick={() => {
-                setMode("login");
-                setError(null);
-              }}
+              onClick={() => switchMode("login")}
               aria-pressed={mode === "login"}
               className={`rounded-full px-5 py-3 text-sm font-semibold transition-colors sm:py-2 ${
                 mode === "login" ? "bg-brown-950 text-cream" : "border border-rule text-taupe hover:text-brown-950 sm:border-0"
@@ -81,10 +102,7 @@ export default function AuthForms() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setMode("register");
-                setError(null);
-              }}
+              onClick={() => switchMode("register")}
               aria-pressed={mode === "register"}
               className={`rounded-full px-5 py-3 text-sm font-semibold transition-colors sm:py-2 ${
                 mode === "register" ? "bg-brown-950 text-cream" : "border border-rule text-taupe hover:text-brown-950 sm:border-0"
@@ -103,22 +121,51 @@ export default function AuthForms() {
                 <input id="name" name="name" required placeholder="Mario Rossi" className={inputClasses} />
               </div>
             )}
-            <div className="space-y-2">
-              <label className="eyebrow eyebrow-dark block" htmlFor="username">
-                Username
-              </label>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                required
-                autoCapitalize="none"
-                autoComplete="username"
-                minLength={mode === "register" ? 3 : undefined}
-                placeholder="mario.rossi"
-                className={inputClasses}
-              />
-            </div>
+
+            {mode === "login" ? (
+              <div className="space-y-2">
+                <label className="eyebrow eyebrow-dark block" htmlFor="identifier">
+                  Email
+                </label>
+                <input
+                  id="identifier"
+                  name="identifier"
+                  type="text"
+                  required
+                  autoCapitalize="none"
+                  autoComplete="username"
+                  inputMode="email"
+                  placeholder="mario.rossi@email.it"
+                  className={inputClasses}
+                />
+                {/* Accounts created before the email-first switch still have a
+                    handle, and their owners will type it here. `loginUser`
+                    accepts either, so say so rather than rejecting them. */}
+                <p className="text-xs text-taupe">
+                  Hai un vecchio account? Puoi ancora entrare con il tuo username.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="eyebrow eyebrow-dark block" htmlFor="email">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  placeholder="mario.rossi@email.it"
+                  className={inputClasses}
+                />
+                <p className="text-xs text-taupe">
+                  Serve a ritrovare i tuoi ordini e a rientrare se dimentichi la password.
+                </p>
+              </div>
+            )}
+
             <div className="space-y-2">
               <label className="eyebrow eyebrow-dark block" htmlFor="password">
                 Password
@@ -129,18 +176,43 @@ export default function AuthForms() {
                 type="password"
                 required
                 minLength={mode === "register" ? 8 : undefined}
+                autoComplete={mode === "register" ? "new-password" : "current-password"}
                 placeholder={mode === "register" ? "Almeno 8 caratteri" : "••••••••"}
                 className={inputClasses}
               />
+              {mode === "login" && (
+                <p className="pt-1 text-right text-sm">
+                  <Link href="/password/recupera" className="text-taupe underline hover:text-brown-950">
+                    Password dimenticata?
+                  </Link>
+                </p>
+              )}
             </div>
+
+            {mode === "login" && twoFactor && (
+              <div className="space-y-2">
+                <label className="eyebrow eyebrow-dark block" htmlFor="code">
+                  Codice di verifica (2FA)
+                </label>
+                <input
+                  id="code"
+                  name="code"
+                  autoComplete="one-time-code"
+                  autoCapitalize="characters"
+                  autoFocus
+                  maxLength={20}
+                  placeholder="123456"
+                  className={inputClasses}
+                />
+                <p className="text-xs text-taupe">
+                  Il codice a 6 cifre dalla tua app di autenticazione, oppure uno dei codici di
+                  recupero se non hai il telefono.
+                </p>
+              </div>
+            )}
+
             {mode === "register" && (
               <>
-                <div className="space-y-2">
-                  <label className="eyebrow eyebrow-dark block" htmlFor="email">
-                    Email (opzionale)
-                  </label>
-                  <input id="email" name="email" type="email" placeholder="mario.rossi@email.it" className={inputClasses} />
-                </div>
                 <div className="space-y-2">
                   <label className="eyebrow eyebrow-dark block" htmlFor="phone">
                     Telefono (opzionale)

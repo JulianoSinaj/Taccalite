@@ -5,7 +5,10 @@ import { finalizeOrder, getOrderForViewer } from "@/lib/orders";
 import { getStripe } from "@/lib/payments/stripe";
 import { getCurrentUser } from "@/lib/auth/session";
 import { formatEuro } from "@/lib/format";
+import { settlesOnHandover } from "@/lib/payments/methods";
 import ClearCart from "@/components/store/ClearCart";
+import ClaimOrderOffer from "@/components/store/ClaimOrderOffer";
+import { getSetting } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +50,21 @@ export default async function CheckoutSuccess({ searchParams }: SP) {
   const order = result?.order ?? null;
   const items = result?.items ?? [];
 
+  // The offer only makes sense for an order nobody owns yet, and only to a
+  // viewer entitled to see the order at all (`getOrderForViewer` already
+  // decided that — a null `order` means no token, no verified session, no
+  // ownership, so there is nothing to claim).
+  const claimable = !!order && !order.userId;
+  const loyaltyEnabled = claimable ? await getSetting<boolean>("loyalty.enabled", true) : false;
+  const perEuro = loyaltyEnabled ? ((await getSetting<number>("loyalty.pointsPerEuro", 1)) || 1) : 0;
+  // Only a settled order would actually credit points, so don't quote a number
+  // for one still awaiting payment at the counter.
+  const claimPoints =
+    loyaltyEnabled && order?.paymentStatus === "paid"
+      ? Math.floor((order.subtotalCents / 100) * perEuro)
+      : 0;
+  const awaitingPayment = !!order && order.paymentStatus === "unpaid" && settlesOnHandover(order.paymentMethod);
+
   return (
     <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-32 pb-20">
       <ClearCart />
@@ -61,6 +79,22 @@ export default async function CheckoutSuccess({ searchParams }: SP) {
             : "Il tuo ordine è stato registrato."}
         </p>
 
+        {/* An order paid on handover is not a completed purchase, and this page
+            is the last thing the customer reads before closing the tab. Say what
+            is still owed, and where, rather than letting "Grazie!" imply the
+            money has already changed hands. */}
+        {order && awaitingPayment && (
+          <p className="mt-6 border border-gold-dark/40 bg-gold/15 px-5 py-4 text-left text-sm text-brown-900">
+            <span className="block font-semibold text-brown-950">
+              Da pagare {order.paymentMethod === "on_delivery" ? "alla consegna" : "al ritiro"}:{" "}
+              {formatEuro(order.totalCents)}
+            </span>
+            <span className="mt-1 block text-brown-700">
+              Nessun addebito è stato effettuato online. Puoi pagare in contanti o con il POS.
+            </span>
+          </p>
+        )}
+
         {order && items.length > 0 && (
           <div className="mt-8 border border-rule bg-paper-warm p-6 text-left">
             {items.map((i) => (
@@ -74,6 +108,15 @@ export default async function CheckoutSuccess({ searchParams }: SP) {
               <span>{formatEuro(order.totalCents)}</span>
             </div>
           </div>
+        )}
+
+        {claimable && order && (
+          <ClaimOrderOffer
+            orderId={order.id}
+            email={order.email}
+            points={claimPoints}
+            signedIn={!!viewer}
+          />
         )}
 
         <Link

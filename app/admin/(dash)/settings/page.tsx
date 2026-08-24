@@ -7,6 +7,8 @@ import { runAutomationNow } from "@/lib/admin/automation-actions";
 import { CRON_JOBS, getCronStatus } from "@/lib/automation";
 import { isAdmin } from "@/lib/auth/session";
 import { smtpConfigured, stripeConfigured, env } from "@/lib/env";
+import { simulatedPayments } from "@/lib/payments/config";
+import { absoluteUrl } from "@/lib/site";
 import { VAT_RATES_BPS, vatRateLabel } from "@/lib/fiscal";
 import { DEFAULT_CARRIERS_TEXT } from "@/lib/carriers";
 import { InstagramPanel } from "./InstagramPanel";
@@ -138,6 +140,46 @@ const KNOWN: {
     default: 0,
     min: 0,
     step: 100,
+  },
+  // ── Pagamenti ──
+  {
+    key: "payments.cardEnabled",
+    label: "Pagamento con carta online",
+    help: "Offre il pagamento immediato con carta al checkout. Richiede le chiavi Stripe: senza, l'opzione non viene mostrata anche se questa è attiva.",
+    control: "boolean",
+    default: true,
+  },
+  {
+    key: "payments.inStoreEnabled",
+    label: "Pagamento in bottega (ritiro)",
+    help: "Permette di ordinare online e pagare al banco al momento del ritiro. L'ordine viene accettato, la merce messa da parte e l'incasso registrato dal gestionale alla consegna.",
+    control: "boolean",
+    default: true,
+  },
+  {
+    key: "payments.onDeliveryEnabled",
+    label: "Contrassegno (consegna a domicilio)",
+    help: "Permette di pagare in contanti o con il POS a chi effettua la consegna. Vale solo per le consegne con mezzo proprio, mai per le spedizioni con corriere.",
+    control: "boolean",
+    default: true,
+  },
+  {
+    key: "payments.onDeliveryMaxCents",
+    label: "Tetto contrassegno (centesimi)",
+    help: "Sopra questo totale il contrassegno non viene offerto e resta solo la carta — utile per non far girare troppo contante. Imposta 0 per non porre limiti.",
+    control: "number",
+    default: 0,
+    min: 0,
+    step: 500,
+  },
+  {
+    key: "orders.abandonedAfterHours",
+    label: "Annullamento checkout abbandonati (ore)",
+    help: "Dopo quante ore un ordine con carta rimasto non pagato viene annullato in automatico, liberando la coda. Non tocca gli ordini da pagare in bottega o alla consegna. Imposta 0 per disattivare.",
+    control: "number",
+    default: 24,
+    min: 0,
+    step: 1,
   },
   {
     key: "orders.autoFulfilPickupDays",
@@ -393,14 +435,44 @@ export default async function AdminSettings() {
           <h3 className="font-display text-lg text-brown-950">Pagamenti (Stripe)</h3>
           <p className="mt-2 text-sm text-brown-800/70">
             Stato:{" "}
-            <span className={stripeConfigured ? "font-semibold text-ok" : "font-semibold text-warn"}>
-              {stripeConfigured ? "configurato" : "modalità simulazione"}
+            <span
+              className={
+                stripeConfigured
+                  ? "font-semibold text-ok"
+                  : simulatedPayments
+                    ? "font-semibold text-warn"
+                    : "font-semibold text-danger"
+              }
+            >
+              {stripeConfigured
+                ? "configurato"
+                : simulatedPayments
+                  ? "modalità simulazione (solo sviluppo)"
+                  : "non configurato — carta non disponibile"}
             </span>
           </p>
+          {/* The distinction that matters: with no keys in production the card
+              option disappears rather than quietly marking orders paid. Saying
+              so here is the difference between a warning and a silent hole. */}
           <p className="mt-2 text-xs text-brown-800/60">
-            Imposta <code>STRIPE_SECRET_KEY</code> e <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code>{" "}
-            (chiavi di test) per abilitare il checkout reale. Senza chiavi, gli ordini vengono
-            registrati in modalità simulazione.
+            {stripeConfigured
+              ? "Il checkout con carta è attivo. Registra il webhook su Stripe (Sviluppatori → Webhook) puntandolo a "
+              : simulatedPayments
+                ? "Senza chiavi, in sviluppo gli ordini con carta vengono segnati come pagati senza alcun addebito, per poter provare l'intero ciclo offline. In produzione questo non accade: il pagamento con carta viene semplicemente nascosto. Endpoint del webhook: "
+                : "Senza chiavi il pagamento con carta non viene offerto al checkout: restano il pagamento in bottega e il contrassegno. Imposta STRIPE_SECRET_KEY e STRIPE_WEBHOOK_SECRET, poi registra il webhook su "}
+            <code>{absoluteUrl("/api/checkout/webhook")}</code>.
+          </p>
+          <p className="mt-2 text-xs text-brown-800/60">
+            Eventi da sottoscrivere: <code>checkout.session.completed</code>,{" "}
+            <code>checkout.session.async_payment_succeeded</code>,{" "}
+            <code>checkout.session.async_payment_failed</code>,{" "}
+            <code>checkout.session.expired</code>, <code>charge.refunded</code>,{" "}
+            <code>charge.dispute.created</code>.
+          </p>
+          <p className="mt-2 text-xs text-brown-800/60">
+            Webhook: <strong>{env.stripe.webhookSecret ? "segreto impostato" : "segreto mancante"}</strong>
+            {!env.stripe.webhookSecret &&
+              " — senza STRIPE_WEBHOOK_SECRET gli aggiornamenti da Stripe (pagamenti differiti, rimborsi dalla dashboard, contestazioni) non arrivano."}
           </p>
         </Panel>
       </div>

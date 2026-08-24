@@ -70,7 +70,7 @@ business's online operations. Everything is in **Italian**.
 | Database | **SQLite / libSQL** via `@libsql/client` + **Drizzle ORM** + `drizzle-kit` — a local file (WAL) in dev/Docker, a remote **Turso** database on Vercel (`DATABASE_URL`) |
 | Auth | Custom — scrypt password hashing + signed HTTP-only cookie sessions |
 | Email | **Nodemailer** (SMTP), provider-agnostic, with DB outbox fallback |
-| Payments | **Stripe** Checkout (test mode), env-gated with simulate fallback |
+| Payments | **Stripe** Checkout (carta) + pagamento in bottega / contrassegno; dev-only simulate fallback |
 | Validation | **Zod** on every public API boundary |
 | Icons | `lucide-react` · Fonts: Playfair Display + Open Sans (`next/font`) |
 
@@ -201,8 +201,8 @@ Origin).
 | `/api/newsletter` | POST | Subscribe (pending) → confirmation email |
 | `/api/newsletter/confirm` | GET | Double opt-in confirm (token) → `/newsletter?stato=confermato` |
 | `/api/newsletter/unsubscribe` | GET | Unsubscribe (token) |
-| `/api/checkout` | POST | Create order (server-priced) → Stripe session **or** simulate → success URL |
-| `/api/checkout/webhook` | POST | Stripe `checkout.session.completed` → finalize (idempotent) |
+| `/api/checkout` | POST | Create order (server-priced, server-chosen payment method) → Stripe session, or register an order to be paid on handover → success URL |
+| `/api/checkout/webhook` | POST | Stripe `session.completed` / `async_payment_succeeded` → finalize · `expired` / `async_payment_failed` → release · `charge.refunded` → mirror refund · `charge.dispute.created` → alert (all idempotent) |
 | `/api/cron` | GET/POST | Scheduled jobs; `Authorization: Bearer CRON_SECRET` (timing-safe); `job=porchetta-reminders`, `maintenance` (drains + prunes the outbox, GCs sessions), `points-expiry`, `owner-digest` (once-a-day owner summary email), `instagram-refresh` (rolls the Instagram long-lived token, self-limited to once a week), or `all` |
 | `/api/admin/export/[entity]` | GET | **Admin-gated** CSV export — `orders` / `customers` / `reservations` / `subscribers` |
 | `/api/analytics` | POST | First-party cookieless page-view beacon (records path + referrer-host; skips `/admin` + `/api` paths) |
@@ -314,9 +314,47 @@ All optional with safe local defaults — the app runs with an empty env file.
 | Bootstrap admin | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_NAME` |
 
 Three feature flags degrade gracefully: **no SMTP → outbox mode** (emails stored, viewable
-in Admin → Email); **no Stripe → simulate mode** (orders recorded + confirmed, no charge);
-**no Instagram token → the homepage social section shows a plain "Seguici" band** instead of
-the live post grid.
+in Admin → Email); **no Stripe → the card option disappears from checkout** (pagamento in
+bottega and contrassegno remain), or, in `NODE_ENV=development` only, **simulate mode**
+(orders recorded + confirmed, no charge); **no Instagram token → the homepage social section
+shows a plain "Seguici" band** instead of the live post grid.
+
+### Payments — the full cycle
+
+Two moments, deliberately separate: when the goods are **reserved** and when the money
+**arrives**. `orders.stockAppliedAt` is the claim that makes the decrement happen exactly
+once whichever came first, and `restockOrderItems` releases the same claim, so a cancel can
+never give back goods that were never taken.
+
+| Method (`orders.paymentMethod`) | Offered for | Stock leaves at | Money arrives at |
+| --- | --- | --- | --- |
+| `card` | ritiro · consegna · spedizione | payment (Stripe) | Stripe Checkout, before the goods move |
+| `in_store` | ritiro only | order placed (reserved) | the counter, on collection |
+| `on_delivery` | consegna only (never a courier) | order placed (reserved) | the driver, on delivery |
+| `counter` | admin only | the sale is rung up | the till |
+
+`orders.paidWith` records the **instrument** — `cash` / `pos` / `transfer` / `card` — and is
+null until the money actually arrives. It is not a duplicate of the method: the same "pago al
+ritiro" order is `MP01` on its invoice in contanti and `MP08` on the POS, and
+`lib/fattura.ts` derives `ModalitaPagamento` from it.
+
+Availability is settings-driven (`payments.cardEnabled`, `payments.inStoreEnabled`,
+`payments.onDeliveryEnabled`, `payments.onDeliveryMaxCents`) and computed by
+`lib/payments/methods.ts` — the same isomorphic module the checkout renders from and the
+server refuses with, so the two cannot disagree.
+
+**Closing the cycle.** An offline order is settled from Admin → Ordini → *Registra incasso*,
+which asks for the instrument and runs the same `finalizeOrder` a card payment does (loyalty,
+coupon count, fiscal date). The status dropdown deliberately refuses to flip an order to
+"pagato" — a dropdown cannot know whether it was contanti or POS, and that answer ends up on
+a fiscal document. Today's fulfilment sheet prints **"Da incassare €X"** on every unpaid
+order so whoever hands the parcel over knows to take money for it.
+
+**Abandoned checkouts.** `checkout.session.expired` releases them when the webhook is
+registered; the `abandoned-orders` cron job (`orders.abandonedAfterHours`, default 24) is the
+backstop that does not depend on anything reaching the server. Both are strictly card-only —
+an order awaiting payment in bottega is *meant* to be unpaid, and sweeping one away would
+cancel a real sale and shelve reserved goods.
 
 ### Instagram feed (homepage "Dal banco al tuo feed")
 

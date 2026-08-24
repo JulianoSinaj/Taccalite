@@ -6,6 +6,7 @@ import { Panel, euro, inputCls, labelCls } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
 import { createManualOrder } from "@/lib/admin/order-actions";
 import { splitGross, vatRateLabel } from "@/lib/fiscal";
+import { SETTLEMENT_INSTRUMENTS, PAYMENT_INSTRUMENT_LABEL } from "@/lib/payments/methods";
 import type { ProductRow, ShopRow } from "@/lib/db/schema";
 import {
   FULFILMENT_MODES,
@@ -101,6 +102,7 @@ export function ManualOrderForm({
   const [pickupSlot, setPickupSlot] = useState("");
   const [manualDiscount, setManualDiscount] = useState("");
   const [shippingOverride, setShippingOverride] = useState("");
+  const [markPaid, setMarkPaid] = useState(false);
 
   // ── Products ───────────────────────────────────────────────────────────────
   const matches = useMemo(() => {
@@ -767,10 +769,35 @@ export function ManualOrderForm({
           </div>
         </div>
 
-        <label className="mt-4 flex items-center gap-2 text-sm font-medium text-brown-900">
-          <input type="checkbox" name="markPaid" className="h-4 w-4 rounded accent-brown-950" />
-          Segna come pagato (vendita al banco) — scala la giacenza
-        </label>
+        <div className="mt-4 border-t border-brown-900/10 pt-4">
+          <label className="flex items-center gap-2 text-sm font-medium text-brown-900">
+            <input
+              type="checkbox"
+              name="markPaid"
+              checked={markPaid}
+              onChange={(e) => setMarkPaid(e.target.checked)}
+              className="h-4 w-4 rounded accent-brown-950"
+            />
+            Segna come pagato (vendita al banco) — scala la giacenza
+          </label>
+          {/* Asked only when it is about to be recorded. Contanti and POS are
+              different ModalitaPagamento on the fattura, so this is a fiscal
+              field, not a statistic. */}
+          {markPaid && (
+            <div className="mt-3 max-w-xs">
+              <label className={labelCls} htmlFor="manual-paid-with">
+                Incassato con
+              </label>
+              <select id="manual-paid-with" name="paidWith" defaultValue="cash" className={inputCls}>
+                {SETTLEMENT_INSTRUMENTS.map((i) => (
+                  <option key={i} value={i}>
+                    {PAYMENT_INSTRUMENT_LABEL[i]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </Panel>
 
       {/* ── Totals ── */}

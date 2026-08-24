@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FULFILMENT_MODES, needsAddress } from "@/lib/fulfilment";
+import { CUSTOMER_PAYMENT_METHODS } from "@/lib/payments/methods";
 
 export const checkoutSchema = z
   .object({
@@ -10,6 +11,13 @@ export const checkoutSchema = z
     email: z.string().trim().toLowerCase().email("Email non valida"),
     phone: z.string().trim().max(40).optional(),
     fulfilment: z.enum(FULFILMENT_MODES).default("pickup"),
+    /**
+     * Shape only. Whether this method is actually *offered* depends on the
+     * fulfilment mode, the shop's settings and the server's own total, so the
+     * real check lives in `createOrder` where all three are known — and where a
+     * refusal can say why in the customer's words.
+     */
+    paymentMethod: z.enum(CUSTOMER_PAYMENT_METHODS).default("card"),
     shopSlug: z.string().trim().optional(),
     /** The chosen pickup window as `yyyy-mm-ddTHH:MM`; re-derived server-side. */
     pickupSlot: z.string().trim().max(20).optional(),

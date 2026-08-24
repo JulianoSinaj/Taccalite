@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, Environment, Float, Lightformer } from "@react-three/drei";
 import * as THREE from "three";
 
@@ -113,6 +113,67 @@ function ReadySignal({ onReady }: { onReady?: () => void }) {
   return null;
 }
 
+/**
+ * Keeps the scene's clock to time the visitor was actually here for.
+ *
+ * three's `Clock` measures wall time and rAF does not run in a hidden tab, so a
+ * page left in the background hands the first frame back on return a delta of
+ * however long it sat there — minutes, as a single tick. Nothing downstream
+ * clamps it: react-three-fiber passes `clock.getDelta()` to `useFrame` raw, and
+ * drei's `<Float>` reads `clock.elapsedTime`. So the turn below advances by tens
+ * of radians and the bob jumps to an unrelated phase, and what the returning
+ * visitor sees is the seal snapping somewhere else the moment they look at it.
+ *
+ * Pushing `oldTime` up to now on the way back in swallows the gap: the next
+ * delta is one frame, and because `elapsedTime` only ever grows by deltas it is
+ * never advanced across the pause either, so the bob resumes on the phase it
+ * stopped at. The coin carries on exactly where the visitor left it.
+ */
+function SteadyClock() {
+  const clock = useThree((state) => state.clock);
+
+  useEffect(() => {
+    function onVisible() {
+      if (document.hidden) return;
+      clock.oldTime = performance.now();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [clock]);
+
+  return null;
+}
+
+/**
+ * Reports the GPU taking the drawing context away, and giving it back.
+ *
+ * A backgrounded tab is where this actually happens: the driver reclaims memory
+ * from what nobody is looking at. three handles its own half well — it calls
+ * `preventDefault` so the browser will offer the context back, refuses to render
+ * while it is gone, and rebuilds its GL state on restore — but none of that is
+ * visible to the parent, and the parent is the one holding the flat seal at zero
+ * opacity underneath. Left unreported, a lost context is a blank canvas over a
+ * hidden foil mark: an empty corner where the brand should be, for the life of
+ * the page.
+ *
+ * Listeners rather than the renderer's own state so nothing has to be polled
+ * from inside a loop that, while the context is gone, is not running anyway.
+ */
+function ContextGuard({ onLost, onRestored }: { onLost: () => void; onRestored: () => void }) {
+  const canvas = useThree((state) => state.gl.domElement);
+
+  useEffect(() => {
+    canvas.addEventListener("webglcontextlost", onLost);
+    canvas.addEventListener("webglcontextrestored", onRestored);
+    return () => {
+      canvas.removeEventListener("webglcontextlost", onLost);
+      canvas.removeEventListener("webglcontextrestored", onRestored);
+    };
+  }, [canvas, onLost, onRestored]);
+
+  return null;
+}
+
 function Coin() {
   const group = useRef<THREE.Group>(null);
   const face = useSealTexture();
@@ -169,6 +230,14 @@ function Coin() {
 type Seal3DProps = {
   /** Fired once the canvas has painted frames worth revealing. */
   onReady?: () => void;
+  /**
+   * Fired when the GPU takes the drawing context away — the canvas is blank from
+   * that instant, so whatever is layered under it has to come back.
+   *
+   * If the context is restored, `onReady` fires again on the other side of it:
+   * the two are a pair, and the second one is not a one-shot.
+   */
+  onLost?: () => void;
 };
 
 /**
@@ -182,7 +251,15 @@ type Seal3DProps = {
  * `<Lightformer>` panels rendered to a cubemap, giving the gold a bright sheet to
  * catch and a warm one to glance off, with no external asset.
  */
-export default function Seal3D({ onReady }: Seal3DProps) {
+export default function Seal3D({ onReady, onLost }: Seal3DProps) {
+  // Bumped on every restored context, purely to re-key <ReadySignal/> below.
+  // Its frame count is a one-shot by design, and a restored context needs it to
+  // be a one-shot again rather than a spent one — remounting is the whole reset.
+  const [context, setContext] = useState(0);
+
+  const handleLost = useCallback(() => onLost?.(), [onLost]);
+  const handleRestored = useCallback(() => setContext((n) => n + 1), []);
+
   return (
     <Canvas
       dpr={[1, 1.75]}
@@ -203,7 +280,9 @@ export default function Seal3D({ onReady }: Seal3DProps) {
         <Lightformer form="ring" intensity={2} position={[-4, 1, -2]} scale={[5, 5, 1]} color="#dbe6f5" />
       </Environment>
 
-      <ReadySignal onReady={onReady} />
+      <SteadyClock />
+      <ContextGuard onLost={handleLost} onRestored={handleRestored} />
+      <ReadySignal key={context} onReady={onReady} />
 
       <Float speed={1.4} rotationIntensity={0.1} floatIntensity={0.5}>
         <Coin />

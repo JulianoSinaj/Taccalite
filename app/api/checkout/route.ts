@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { checkoutSchema } from "@/lib/validation/order";
-import { createOrder, finalizeOrder } from "@/lib/orders";
+import { createOrder, finalizeOrder, registerOfflineOrder } from "@/lib/orders";
 import { db } from "@/lib/db/client";
 import { orders, orderItems } from "@/lib/db/schema";
 import { getStripe } from "@/lib/payments/stripe";
+import { simulatedPayments } from "@/lib/payments/config";
 import { getCurrentUser } from "@/lib/auth/session";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { absoluteUrl } from "@/lib/site";
 import { isSameOrigin } from "@/lib/security/origin";
 
 export const runtime = "nodejs";
+
+/** A Stripe Checkout Session is worth abandoning after half an hour. */
+const SESSION_TTL_SECONDS = 30 * 60;
 
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) {
@@ -40,6 +44,9 @@ export async function POST(request: Request) {
 
   let created;
   try {
+    // Authoritative for the payment method too: `createOrder` re-checks it
+    // against the shop's live settings and its own total, so a client that posts
+    // "contrassegno" on a courier shipment is refused here, not humoured.
     created = await createOrder(parsed.data, user?.id);
   } catch (err) {
     return NextResponse.json(
@@ -48,21 +55,46 @@ export async function POST(request: Request) {
     );
   }
 
+  // ── Paid when the goods change hands ───────────────────────────────────────
+  // No payment provider is involved at all: the order is registered as unpaid,
+  // the goods are reserved and the customer is told what to bring.
+  if (created.paymentMethod !== "card") {
+    await registerOfflineOrder(created.orderId);
+    return NextResponse.json({
+      ok: true,
+      // The order id is an unguessable nanoid — it entitles this browser to view
+      // the order details on the success page (see getOrderForViewer).
+      url: `/checkout/success?order=${created.orderNumber}&token=${created.orderId}`,
+    });
+  }
+
   const stripe = getStripe();
 
-  // No Stripe keys → simulate a successful payment (fully testable offline).
+  // No Stripe keys. In development this simulates a successful payment so the
+  // whole lifecycle stays testable offline. Anywhere else it is a configuration
+  // failure, and the order must NOT be finalized: marking it paid would hand
+  // over goods for a payment that never existed. The order stays pending, so the
+  // shop can still see it and ring the customer.
   if (!stripe) {
-    await finalizeOrder(created.orderId);
+    if (!simulatedPayments) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Il pagamento con carta non è al momento disponibile. Scegli il pagamento in bottega o riprova più tardi.",
+        },
+        { status: 503 },
+      );
+    }
+    await finalizeOrder(created.orderId, { paidWith: "card" });
     return NextResponse.json({
       ok: true,
       simulated: true,
-      // The order id is an unguessable nanoid — it entitles this browser to view
-      // the order details on the success page (see getOrderForViewer).
       url: `/checkout/success?order=${created.orderNumber}&token=${created.orderId}&sim=1`,
     });
   }
 
-  // Real Stripe Checkout (test mode).
+  // Real Stripe Checkout.
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, created.orderId));
   const [order] = await db.select().from(orders).where(eq(orders.id, created.orderId)).limit(1);
 
@@ -82,36 +114,66 @@ export async function POST(request: Request) {
   }
 
   // Reflect any applied coupon as a Stripe discount so the charged total matches
-  // the order total (Stripe forbids negative line items).
-  const discounts =
-    order.discountCents > 0
-      ? [
-          {
-            coupon: (
-              await stripe.coupons.create({
-                amount_off: order.discountCents,
-                currency: "eur",
-                duration: "once",
-                name: order.discountCode ?? "Sconto",
-              })
-            ).id,
-          },
-        ]
-      : undefined;
+  // the order total (Stripe forbids negative line items). The coupon object has
+  // to exist before the session can reference it, so it is cleaned up by hand if
+  // the session then fails — otherwise every failed discounted checkout would
+  // leave an orphan behind in the Stripe account.
+  let couponId: string | null = null;
+  try {
+    if (order.discountCents > 0) {
+      const coupon = await stripe.coupons.create({
+        amount_off: order.discountCents,
+        currency: "eur",
+        duration: "once",
+        name: order.discountCode ?? "Sconto",
+      });
+      couponId = coupon.id;
+    }
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    line_items: lineItems,
-    ...(discounts ? { discounts } : {}),
-    customer_email: parsed.data.email,
-    metadata: { orderId: created.orderId },
-    success_url: absoluteUrl(
-      `/checkout/success?order=${created.orderNumber}&session={CHECKOUT_SESSION_ID}`,
-    ),
-    cancel_url: absoluteUrl("/checkout?annullato=1"),
-  });
+    const session = await stripe.checkout.sessions.create(
+      {
+        mode: "payment",
+        line_items: lineItems,
+        ...(couponId ? { discounts: [{ coupon: couponId }] } : {}),
+        customer_email: parsed.data.email,
+        // The customer is Italian and so is every other word they have read to
+        // get here; Stripe's own default would guess from their browser.
+        locale: "it",
+        metadata: { orderId: created.orderId, orderNumber: created.orderNumber },
+        // Makes the Stripe dashboard readable without cross-referencing ids,
+        // and puts the order number on the customer's card statement.
+        payment_intent_data: {
+          description: `Ordine ${created.orderNumber} — Norcineria Taccalite`,
+          metadata: { orderId: created.orderId, orderNumber: created.orderNumber },
+        },
+        // Without an expiry the session lives 24 h and the `expired` webhook that
+        // releases the order arrives a day late. Stripe's minimum is 30 minutes.
+        expires_at: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
+        success_url: absoluteUrl(
+          `/checkout/success?order=${created.orderNumber}&session={CHECKOUT_SESSION_ID}`,
+        ),
+        cancel_url: absoluteUrl("/checkout?annullato=1"),
+      },
+      // Keyed on the order, which is created fresh per submit: a retried request
+      // (a flaky network, a double click that got past the button's disabled
+      // state) reuses the same session instead of opening a second one against
+      // the same order.
+      { idempotencyKey: `checkout:${created.orderId}` },
+    );
 
-  await db.update(orders).set({ stripeSessionId: session.id }).where(eq(orders.id, created.orderId));
+    await db.update(orders).set({ stripeSessionId: session.id }).where(eq(orders.id, created.orderId));
 
-  return NextResponse.json({ ok: true, url: session.url });
+    return NextResponse.json({ ok: true, url: session.url });
+  } catch (err) {
+    if (couponId) {
+      // Best-effort: an orphan coupon is untidy, not dangerous, and must not
+      // mask the real error.
+      await stripe.coupons.del(couponId).catch(() => {});
+    }
+    console.error(`[checkout] Stripe session failed for ${created.orderNumber}:`, err);
+    return NextResponse.json(
+      { ok: false, error: "Non è stato possibile avviare il pagamento. Riprova tra poco." },
+      { status: 502 },
+    );
+  }
 }

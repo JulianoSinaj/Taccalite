@@ -16,7 +16,20 @@ import { quoteFulfilment, billableWeightKg, needsAddress, type ZoneLike } from "
 import { resolvePickupSlot, formatSlotLabel } from "@/lib/pickup-slots";
 import { validateDiscount, recordDiscountUseByCode, releaseDiscountUseByCode } from "@/lib/discounts";
 import { sendMail } from "@/lib/mail/mailer";
-import { orderCustomerEmail, orderOwnerEmail, lowStockOwnerEmail, type OrderEmailData } from "@/lib/mail/templates";
+import {
+  orderCustomerEmail,
+  orderOwnerEmail,
+  orderAwaitingPaymentEmail,
+  lowStockOwnerEmail,
+  type OrderEmailData,
+} from "@/lib/mail/templates";
+import {
+  paymentMethodError,
+  settlesOnHandover,
+  type PaymentInstrument,
+  type CustomerPaymentMethod,
+} from "@/lib/payments/methods";
+import { getPaymentAvailability } from "@/lib/payments/config";
 import { addPoints } from "@/lib/loyalty";
 import { isLowStock } from "@/lib/inventory";
 import { env } from "@/lib/env";
@@ -102,6 +115,8 @@ export type CreatedOrder = {
   orderId: string;
   orderNumber: string;
   totalCents: number;
+  /** The method actually recorded — re-derived server-side, not the client's. */
+  paymentMethod: CustomerPaymentMethod;
   items: { name: string; quantity: number; lineTotalCents: number }[];
 };
 
@@ -196,6 +211,23 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
   const shippingCents = carriage.feeCents;
   const totalCents = Math.max(0, subtotalCents - discountCents + shippingCents);
 
+  // The payment method is re-checked here against the shop's live settings and
+  // the server's own total, never taken on the client's word: the rules depend
+  // on the fulfilment mode (you cannot pay at a counter you'll never stand at)
+  // and on a total the browser doesn't get to decide (the contrassegno cap).
+  // Defaulted here as well as in the zod schema. `createOrder` is a plain
+  // function, not an HTTP handler: anything calling it without going through the
+  // checkout parser must get the historical behaviour (pay by card) rather than
+  // an undefined method that reaches the rules table as a missing key.
+  const paymentMethod: CustomerPaymentMethod = input.paymentMethod ?? "card";
+  const methodError = paymentMethodError(
+    paymentMethod,
+    input.fulfilment,
+    totalCents,
+    await getPaymentAvailability(),
+  );
+  if (methodError) throw new Error(methodError);
+
   // Insert the order and its line items atomically — no zero-item orders. The
   // order number is random, so on the (rare) unique-constraint collision we
   // regenerate and retry rather than failing the checkout.
@@ -233,6 +265,7 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
             discountCode: discount?.code ?? null,
             discountCents,
             totalCents,
+            paymentMethod,
             paymentStatus: "unpaid",
             notes: input.notes ?? null,
           })
@@ -273,6 +306,7 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
     orderId: order.id,
     orderNumber,
     totalCents,
+    paymentMethod,
     items: lines.map((l) => ({ name: l.product.name, quantity: l.quantity, lineTotalCents: l.lineTotalCents })),
   };
 }
@@ -401,12 +435,153 @@ export async function getOrderForViewer(
 }
 
 /**
+ * Take an order's goods out of stock, exactly once, whenever that moment is.
+ *
+ * A card order applies this at payment. An order to be paid on collection or on
+ * delivery applies it the moment it is placed — the ciauscolo has to be set
+ * aside for Thursday, and a shop that only decrements at payment would keep
+ * selling meat it has already promised. Both paths later run through
+ * `finalizeOrder`, so the decrement has to be claimed rather than repeated:
+ * `stockAppliedAt` is the claim, flipped null → now in the same statement that
+ * wins the right to do the work.
+ *
+ * Best-effort throughout. Inventory bookkeeping must never be the reason a paid
+ * order fails to finalize, so nothing in here throws.
+ *
+ * Returns true when this call is the one that applied it.
+ */
+export async function applyOrderStock(orderId: string, reason: string): Promise<boolean> {
+  const [claimed] = await db
+    .update(orders)
+    .set({ stockAppliedAt: new Date() })
+    .where(and(eq(orders.id, orderId), sql`${orders.stockAppliedAt} is null`))
+    .returning({ id: orders.id });
+  if (!claimed) return false;
+
+  try {
+    const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+
+    // Aggregate ordered quantity per product (an order could list a product
+    // across more than one line).
+    const qtyByProduct = new Map<string, number>();
+    for (const it of items) {
+      if (!it.productId) continue;
+      qtyByProduct.set(it.productId, (qtyByProduct.get(it.productId) ?? 0) + it.quantity);
+    }
+    if (qtyByProduct.size === 0) return true;
+
+    const threshold = await getSetting<number>("store.lowStockThreshold", 5);
+    const lowStock: { name: string; stock: number }[] = [];
+    const notifyIds: string[] = [];
+
+    for (const [productId, qty] of qtyByProduct) {
+      // One atomic read-modify-write that ledgers the delta ACTUALLY applied,
+      // so the movement history always sums to the balance even if the order
+      // oversold (createOrder guards against that, but a concurrent buyer can
+      // still race it).
+      const change = await applyStockChange({ productId, delta: -qty, reason });
+      if (!change) continue;
+      // Lot-level bookkeeping, earliest expiry first.
+      await consumeBatchesFefo(productId, -change.applied);
+
+      const [updated] = await db
+        .select({
+          name: products.name,
+          stock: products.stock,
+          reorderPoint: products.reorderPoint,
+          lowStockNotifiedAt: products.lowStockNotifiedAt,
+        })
+        .from(products)
+        .where(eq(products.id, productId))
+        .limit(1);
+      if (!updated || updated.stock == null) continue;
+
+      // Alert once per dip: collect products now at/under the threshold that
+      // haven't already been notified. Stamping lowStockNotifiedAt below
+      // stops a single dip from spamming repeat alerts on later orders. When
+      // an admin restocks a product back above the threshold, that stamp
+      // should be reset to null so a future dip can alert again — that reset
+      // lives in the product-update action (lib/admin/actions.ts, owned by
+      // another agent) and is intentionally not handled here.
+      if (isLowStock(updated, threshold) && updated.lowStockNotifiedAt == null) {
+        lowStock.push({ name: updated.name, stock: updated.stock });
+        notifyIds.push(productId);
+      }
+    }
+
+    if (notifyIds.length > 0) {
+      await sendMail({ to: env.ownerEmail, ...lowStockOwnerEmail(lowStock) });
+      await db
+        .update(products)
+        .set({ lowStockNotifiedAt: new Date() })
+        .where(inArray(products.id, notifyIds));
+    }
+  } catch {
+    // Swallowed on purpose — stock/alert bookkeeping is best-effort.
+  }
+  return true;
+}
+
+/** The shape both confirmation emails are built from. */
+async function orderEmailData(order: typeof orders.$inferSelect): Promise<OrderEmailData> {
+  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
+  const shop = order.shopSlug ? await getShopBySlug(order.shopSlug) : null;
+  return {
+    orderNumber: order.orderNumber,
+    name: order.name,
+    email: order.email,
+    items: items.map((i) => ({ name: i.name, quantity: i.quantity, lineTotalCents: i.lineTotalCents })),
+    totalCents: order.totalCents,
+    fulfilment: order.fulfilment,
+    shopName: shop?.name ?? null,
+    pickupSlotLabel: order.pickupSlotAt ? formatSlotLabel(order.pickupSlotAt) : null,
+  };
+}
+
+/**
+ * Accept an order that will be paid when the goods change hands (in bottega or
+ * alla consegna). Nothing has been charged, so this is NOT `finalizeOrder`:
+ *
+ *  - stock IS reserved, because the order is a firm commitment the shop has to
+ *    honour, unlike a card checkout the customer may simply abandon;
+ *  - the customer is emailed a confirmation that states plainly what is still
+ *    owed and how to settle it, rather than "grazie del pagamento";
+ *  - loyalty and the coupon count are NOT touched. Both belong to money that has
+ *    actually arrived, and both happen at `finalizeOrder` when the operator
+ *    registers the payment.
+ *
+ * Idempotent: the stock claim is atomic, and the mail is keyed off winning it,
+ * so a double submit cannot double-reserve or double-email.
+ */
+export async function registerOfflineOrder(orderId: string): Promise<void> {
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) return;
+
+  const first = await applyOrderStock(orderId, `Ordine ${order.orderNumber} (da incassare)`);
+  if (!first) return;
+
+  const data = await orderEmailData(order);
+  await Promise.allSettled([
+    sendMail({
+      to: order.email,
+      ...orderAwaitingPaymentEmail(data, order.paymentMethod === "on_delivery" ? "on_delivery" : "in_store"),
+    }),
+    sendMail({ to: env.ownerEmail, ...orderOwnerEmail(data, { toCollectCents: order.totalCents }) }),
+  ]);
+}
+
+/**
  * Idempotently finalize a paid order: mark paid, email customer + owner, award
  * loyalty points. Safe to call more than once (webhook + success page).
+ *
+ * `paidWith` records the instrument the money arrived on. It is what the
+ * electronic invoice's ModalitaPagamento is derived from, so an operator
+ * settling an order at the counter must pass what actually happened (contanti
+ * vs POS) rather than letting it default.
  */
 export async function finalizeOrder(
   orderId: string,
-  opts: { paymentIntentId?: string | null } = {},
+  opts: { paymentIntentId?: string | null; paidWith?: PaymentInstrument | null } = {},
 ): Promise<void> {
   // Atomically claim the order: flip unpaid → paid only if it isn't already paid.
   // Only the caller whose UPDATE actually changed a row proceeds to award points
@@ -422,6 +597,8 @@ export async function finalizeOrder(
       // Recorded here because this is the first point at which a PaymentIntent
       // exists; refund events later arrive keyed on it.
       ...(opts.paymentIntentId ? { stripePaymentIntentId: opts.paymentIntentId } : {}),
+      // A Stripe payment is a card by definition. Anything else has to say so.
+      ...(opts.paidWith ? { paidWith: opts.paidWith } : opts.paymentIntentId ? { paidWith: "card" as const } : {}),
     })
     .where(and(eq(orders.id, orderId), ne(orders.paymentStatus, "paid")))
     .returning({ id: orders.id })
@@ -452,24 +629,18 @@ export async function finalizeOrder(
     });
   }
 
-  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
-  const shop = order.shopSlug ? await getShopBySlug(order.shopSlug) : null;
+  const emailData = await orderEmailData(order);
 
-  const emailData: OrderEmailData = {
-    orderNumber: order.orderNumber,
-    name: order.name,
-    email: order.email,
-    items: items.map((i) => ({ name: i.name, quantity: i.quantity, lineTotalCents: i.lineTotalCents })),
-    totalCents: order.totalCents,
-    fulfilment: order.fulfilment,
-    shopName: shop?.name ?? null,
-    pickupSlotLabel: order.pickupSlotAt ? formatSlotLabel(order.pickupSlotAt) : null,
-  };
-
-  await Promise.allSettled([
-    sendMail({ to: order.email, ...orderCustomerEmail(emailData) }),
-    sendMail({ to: env.ownerEmail, ...orderOwnerEmail(emailData) }),
-  ]);
+  // An order paid on handover was already confirmed when it was placed, and its
+  // owner notification already fired. Re-sending both at settlement would tell
+  // the customer their order has been received a second time, hours after they
+  // walked out with it. The receipt for that payment is the fiscal document.
+  if (!settlesOnHandover(order.paymentMethod)) {
+    await Promise.allSettled([
+      sendMail({ to: order.email, ...orderCustomerEmail(emailData) }),
+      sendMail({ to: env.ownerEmail, ...orderOwnerEmail(emailData) }),
+    ]);
+  }
 
   // Loyalty accrual for logged-in customers, when the programme is enabled.
   const loyaltyEnabled = await getSetting<boolean>("loyalty.enabled", true);
@@ -479,73 +650,10 @@ export async function finalizeOrder(
     if (points > 0) await addPoints(order.userId, points, `Ordine ${order.orderNumber}`);
   }
 
-  // Best-effort stock decrement + low-stock owner alert. Anything here is
-  // non-fatal: a paid order must never be un-finalized because inventory
-  // bookkeeping or an email failed.
-  try {
-    // Aggregate ordered quantity per product (an order could list a product
-    // across more than one line).
-    const qtyByProduct = new Map<string, number>();
-    for (const it of items) {
-      if (!it.productId) continue;
-      qtyByProduct.set(it.productId, (qtyByProduct.get(it.productId) ?? 0) + it.quantity);
-    }
-
-    if (qtyByProduct.size > 0) {
-      const threshold = await getSetting<number>("store.lowStockThreshold", 5);
-      const lowStock: { name: string; stock: number }[] = [];
-      const notifyIds: string[] = [];
-
-      for (const [productId, qty] of qtyByProduct) {
-        // One atomic read-modify-write that ledgers the delta ACTUALLY applied,
-        // so the movement history always sums to the balance even if the order
-        // oversold (createOrder guards against that, but a concurrent buyer can
-        // still race it).
-        const change = await applyStockChange({
-          productId,
-          delta: -qty,
-          reason: `Ordine ${order.orderNumber}`,
-        });
-        if (!change) continue;
-        // Lot-level bookkeeping, earliest expiry first.
-        await consumeBatchesFefo(productId, -change.applied);
-
-        const [updated] = await db
-          .select({
-            name: products.name,
-            stock: products.stock,
-            reorderPoint: products.reorderPoint,
-            lowStockNotifiedAt: products.lowStockNotifiedAt,
-          })
-          .from(products)
-          .where(eq(products.id, productId))
-          .limit(1);
-        if (!updated || updated.stock == null) continue;
-
-        // Alert once per dip: collect products now at/under the threshold that
-        // haven't already been notified. Stamping lowStockNotifiedAt below
-        // stops a single dip from spamming repeat alerts on later orders. When
-        // an admin restocks a product back above the threshold, that stamp
-        // should be reset to null so a future dip can alert again — that reset
-        // lives in the product-update action (lib/admin/actions.ts, owned by
-        // another agent) and is intentionally not handled here.
-        if (isLowStock(updated, threshold) && updated.lowStockNotifiedAt == null) {
-          lowStock.push({ name: updated.name, stock: updated.stock });
-          notifyIds.push(productId);
-        }
-      }
-
-      if (notifyIds.length > 0) {
-        await sendMail({ to: env.ownerEmail, ...lowStockOwnerEmail(lowStock) });
-        await db.update(products)
-          .set({ lowStockNotifiedAt: new Date() })
-          .where(inArray(products.id, notifyIds))
-;
-      }
-    }
-  } catch {
-    // Swallowed on purpose — stock/alert bookkeeping is best-effort.
-  }
+  // The goods leave stock exactly once, whichever moment that was: an order
+  // paid on handover already reserved them when it was placed, and this call
+  // finds the claim taken and does nothing.
+  await applyOrderStock(orderId, `Ordine ${order.orderNumber}`);
 }
 
 export type RefundOutcome = {
@@ -616,12 +724,18 @@ export async function recordRefund(
 }
 
 /**
- * Abandon an order whose Stripe Checkout Session expired.
+ * Abandon a card checkout that was never completed — the Stripe session expired,
+ * or the abandoned-order sweep found it still pending long after it was placed.
  *
- * Nothing was charged and nothing was reserved (stock is only decremented at
- * finalize, and the coupon is only counted there too), so this just clears the
- * order out of the work queue instead of leaving a "pending" row the operator
- * has to reason about forever. Never touches an order that did get paid.
+ * Nothing was charged and (for a card order) nothing was reserved, so this just
+ * clears the row out of the work queue instead of leaving a "pending" order the
+ * operator has to reason about forever.
+ *
+ * Restricted to `card` on purpose. An order to be paid in bottega or alla
+ * consegna is *supposed* to sit unpaid until the customer turns up; sweeping one
+ * away because nobody had paid yet would cancel a perfectly good order the shop
+ * has already set the goods aside for. Those are cancelled by a human, through
+ * the admin, which is also what puts the goods back.
  */
 export async function expireOrder(orderId: string): Promise<boolean> {
   const [claimed] = await db
@@ -632,25 +746,44 @@ export async function expireOrder(orderId: string): Promise<boolean> {
         eq(orders.id, orderId),
         eq(orders.status, "pending"),
         eq(orders.paymentStatus, "unpaid"),
+        eq(orders.paymentMethod, "card"),
       ),
     )
     .returning({ id: orders.id })
 ;
-  return !!claimed;
+  if (!claimed) return false;
+  // Belt and braces: a card order should never hold a stock claim, but if one
+  // somehow does, abandoning it has to give the goods back.
+  await restockOrderItems(orderId, "Checkout abbandonato");
+  return true;
 }
 
 /**
- * Return an order's goods to stock (used when a paid order is refunded or
- * cancelled). Increments each stock-tracked product atomically and writes a
- * compensating `stock_movements` row so the ledger reconciles. Best-effort:
- * inventory bookkeeping must never block the refund/cancel itself. Callers must
- * ensure this runs at most once per reversal (it is not itself idempotent).
+ * Return an order's goods to stock (used when a refunded or cancelled order's
+ * goods come back). Increments each stock-tracked product atomically and writes
+ * a compensating `stock_movements` row so the ledger reconciles.
+ *
+ * Idempotent, and the mirror image of `applyOrderStock`: it releases the same
+ * `stockAppliedAt` claim, so it can only ever give back goods that were actually
+ * taken out, and only once. That guard is what lets callers stop reasoning about
+ * whether a given order ever reached the decrement — an unpaid card checkout
+ * never did, an unpaid "pago al ritiro" order did, and both now cancel safely
+ * through the same call.
+ *
+ * Best-effort: inventory bookkeeping must never block the refund/cancel itself.
  */
 export async function restockOrderItems(
   orderId: string,
   reason: string,
   byUserId?: string | null,
 ): Promise<void> {
+  const [claimed] = await db
+    .update(orders)
+    .set({ stockAppliedAt: null })
+    .where(and(eq(orders.id, orderId), sql`${orders.stockAppliedAt} is not null`))
+    .returning({ id: orders.id });
+  if (!claimed) return;
+
   try {
     const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
     const qtyByProduct = new Map<string, number>();

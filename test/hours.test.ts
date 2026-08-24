@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseStructuredHours, structuredToRows, shopIsOpenNow } from "@/lib/hours";
+import { parseStructuredHours, structuredToRows, shopIsOpenNow, shopWeekGrid } from "@/lib/hours";
 import { isOpenNow } from "@/lib/hours";
 
 // "Tutti i giorni" matches any weekday, so these assertions don't depend on the run date.
@@ -114,5 +114,67 @@ describe("shopIsOpenNow", () => {
     expect(
       shopIsOpenNow({ hours: [{ label: "Mercoledì", value: "9:00–13:00" }], hoursStructured: null }, wed(10)),
     ).toEqual({ open: true, nextChange: "13:00" });
+  });
+});
+
+describe("free-text hours with a bracketed note", () => {
+  // The Centro's real row. With the note left in, the whole value was
+  // unparseable and the shop showed no open/closed pill at all.
+  const continuato = [
+    { label: "Lun – Sab", value: "9:00 – 20:00 (orario continuato)" },
+    { label: "Domenica", value: "Chiuso" },
+  ];
+
+  it("reads the times and ignores the prose", () => {
+    // 2026-08-12 is a Wednesday.
+    expect(isOpenNow(continuato, new Date(2026, 7, 12, 10, 0))).toEqual({
+      open: true,
+      nextChange: "20:00",
+    });
+    expect(isOpenNow(continuato, new Date(2026, 7, 12, 21, 0))).toEqual({ open: false });
+  });
+
+  it("still refuses to guess when there are no times at all", () => {
+    expect(isOpenNow([{ label: "Lun – Sab", value: "(su appuntamento)" }], new Date(2026, 7, 12, 10, 0))).toBeNull();
+  });
+});
+
+describe("shopWeekGrid", () => {
+  it("prefers structured hours and returns all seven days in minutes", () => {
+    const grid = shopWeekGrid({
+      hours: [{ label: "Lun–Ven", value: "prosa non interpretabile" }],
+      hoursStructured: [
+        { day: 1, ranges: [{ open: "07:00", close: "13:30" }] },
+        { day: 7, ranges: [] },
+      ],
+    });
+    expect(grid).not.toBeNull();
+    expect(grid!.map((d) => d.day)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(grid![0]).toEqual({ day: 1, name: "Lunedì", ranges: [{ start: 420, end: 810 }] });
+    // Explicitly closed stays [], a day nobody configured stays null.
+    expect(grid![6].ranges).toEqual([]);
+    expect(grid![1].ranges).toBeNull();
+  });
+
+  it("expands a free-text weekday range across the days it covers", () => {
+    const grid = shopWeekGrid({
+      hours: [
+        { label: "Lun – Sab", value: "9:00 – 20:00 (orario continuato)" },
+        { label: "Domenica", value: "Chiuso" },
+      ],
+      hoursStructured: null,
+    });
+    expect(grid).not.toBeNull();
+    for (const day of grid!.slice(0, 6)) {
+      expect(day.ranges).toEqual([{ start: 540, end: 1200 }]);
+    }
+    expect(grid![6].ranges).toEqual([]);
+  });
+
+  it("returns null when not one day could be read", () => {
+    expect(shopWeekGrid({ hours: [], hoursStructured: null })).toBeNull();
+    expect(
+      shopWeekGrid({ hours: [{ label: "???", value: "quando capita" }], hoursStructured: null }),
+    ).toBeNull();
   });
 });

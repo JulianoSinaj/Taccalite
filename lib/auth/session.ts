@@ -1,10 +1,11 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, gt, lt, ne } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { sessions, users, type UserRow } from "@/lib/db/schema";
 import { env } from "@/lib/env";
+import { clientIp } from "@/lib/rate-limit";
 
 const COOKIE = "taccalite_session";
 const MAX_AGE_SEC = 60 * 60 * 24 * 30; // 30 days absolute cap
@@ -15,7 +16,7 @@ const SLIDE_INTERVAL_MS = 1000 * 60 * 60; // 1 hour
 
 export type SessionUser = Pick<
   UserRow,
-  "id" | "username" | "email" | "name" | "role" | "phone" | "shopSlug"
+  "id" | "username" | "email" | "name" | "role" | "phone" | "shopSlug" | "emailVerifiedAt"
 >;
 
 /** Create a fresh session for a user and set the cookie. A new opaque token is
@@ -24,7 +25,23 @@ export async function createSession(userId: string): Promise<void> {
   const token = randomBytes(32).toString("hex");
   const now = new Date();
   const expiresAt = new Date(now.getTime() + MAX_AGE_SEC * 1000);
-  await db.insert(sessions).values({ id: token, userId, expiresAt, lastSeenAt: now });
+
+  // Recorded so the session list can describe each entry to its owner. Failing
+  // to read the request must never block a sign-in, hence the guard: this is
+  // supplementary information, not part of the credential.
+  let userAgent: string | null = null;
+  let ip: string | null = null;
+  try {
+    const h = await headers();
+    userAgent = h.get("user-agent")?.slice(0, 400) ?? null;
+    ip = clientIp(new Request("http://local", { headers: h }));
+  } catch {
+    /* no request scope (a script, a test) — leave both null */
+  }
+
+  await db
+    .insert(sessions)
+    .values({ id: token, userId, expiresAt, lastSeenAt: now, userAgent, ip });
 
   const store = await cookies();
   store.set(COOKIE, token, {
@@ -58,6 +75,9 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
       // (`lib/admin/scope.ts`), not a preference — it has to be as fresh as the
       // role beside it.
       shopSlug: users.shopSlug,
+      // Drives the "conferma la tua email" nudge and gates the self-service
+      // surfaces that need a proven address.
+      emailVerifiedAt: users.emailVerifiedAt,
       lastSeenAt: sessions.lastSeenAt,
     })
     .from(sessions)
@@ -67,6 +87,13 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
         eq(sessions.id, token),
         gt(sessions.expiresAt, now),
         gt(sessions.lastSeenAt, idleCutoff),
+        // Defence in depth. `setUserActive` already deletes a deactivated
+        // account's sessions, so in the normal path this changes nothing — but
+        // this read is the enforcement point for every authenticated request,
+        // and it should not depend on a *different* function having remembered
+        // to clean up. A row deactivated by hand in the database, or by a future
+        // code path that forgets, must not keep working until its cookie expires.
+        eq(users.active, true),
       ),
     )
     .limit(1);
@@ -87,6 +114,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     role: row.role,
     phone: row.phone,
     shopSlug: row.shopSlug,
+    emailVerifiedAt: row.emailVerifiedAt,
   };
 }
 
@@ -120,6 +148,8 @@ export async function listUserSessions(userId: string) {
       lastSeenAt: sessions.lastSeenAt,
       expiresAt: sessions.expiresAt,
       createdAt: sessions.createdAt,
+      userAgent: sessions.userAgent,
+      ip: sessions.ip,
     })
     .from(sessions)
     .where(and(eq(sessions.userId, userId), gt(sessions.expiresAt, new Date())))
@@ -127,7 +157,40 @@ export async function listUserSessions(userId: string) {
 
   // Never hand a raw session token to the UI — it is a bearer credential. The
   // caller only needs to know which row is the current one.
-  return rows.map(({ id, ...rest }) => ({ ...rest, isCurrent: id === current }));
+  return rows.map(({ id, userAgent, ...rest }) => ({
+    ...rest,
+    device: describeUserAgent(userAgent),
+    isCurrent: id === current,
+  }));
+}
+
+/**
+ * Turn a raw user-agent into something a customer can recognise.
+ *
+ * Deliberately crude, and deliberately done at read time rather than stored: the
+ * question this answers is only "is one of these not me?", which needs a browser
+ * and a platform, not a version matrix. Parsing at read time also means the
+ * heuristics can be improved without a backfill.
+ */
+export function describeUserAgent(ua: string | null): string {
+  if (!ua) return "Dispositivo sconosciuto";
+  const browser =
+    /\bEdg\//.test(ua) ? "Edge"
+    : /\bOPR\/|\bOpera\b/.test(ua) ? "Opera"
+    : /\bFirefox\//.test(ua) ? "Firefox"
+    // Chrome's UA contains "Safari", so Chrome has to be ruled out first.
+    : /\bChrome\/|\bCriOS\//.test(ua) ? "Chrome"
+    : /\bSafari\//.test(ua) ? "Safari"
+    : "Browser";
+  const platform =
+    /\biPhone\b/.test(ua) ? "iPhone"
+    : /\biPad\b/.test(ua) ? "iPad"
+    : /\bAndroid\b/.test(ua) ? "Android"
+    : /\bWindows\b/.test(ua) ? "Windows"
+    : /\bMac OS X\b/.test(ua) ? "Mac"
+    : /\bLinux\b/.test(ua) ? "Linux"
+    : null;
+  return platform ? `${browser} su ${platform}` : browser;
 }
 
 /**

@@ -16,7 +16,7 @@ import {
   chipsFrom,
   labelFrom,
 } from "@/components/admin/FilterBar";
-import { DataTable, DensityToggle, densityFrom, type Column } from "@/components/admin/DataTable";
+import { DataTable, type Column } from "@/components/admin/DataTable";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import {
   getProductsPage,
@@ -69,7 +69,6 @@ type SP = {
     page?: string;
     colonna?: string;
     verso?: string;
-    densita?: string;
   }>;
 };
 
@@ -82,7 +81,6 @@ export default async function AdminProducts({ searchParams }: SP) {
   const scope = await shopScope();
   const filters = productFilters({ ...sp, negozio: lockShop(sp.negozio, scope) });
   const sort = sortFilters(sp, PRODUCT_SORTS, { colonna: "ordine", verso: "asc" });
-  const density = densityFrom(sp.densita);
   const lowStockThreshold = await getSetting<number>("store.lowStockThreshold", 5);
   // A week ahead is the window a shop can still act on.
   const expiryHorizon = expiryWindow(7);
@@ -100,8 +98,8 @@ export default async function AdminProducts({ searchParams }: SP) {
     ]);
 
   const filtered = Object.values(filters).some((v) => v && v !== "all");
-  // Carried on every sort/density/page link so the view survives navigation.
-  const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso, densita: sp.densita };
+  // Carried on every sort/page link so the view survives navigation.
+  const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso };
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
   const SHOP_CHIPS = [
     { value: "all", label: "Tutte le sedi" },
@@ -278,7 +276,7 @@ export default async function AdminProducts({ searchParams }: SP) {
         basePath={BASE}
         params={linkParams}
         searchPlaceholder="Nome, slug o categoria…"
-        carry={["scorte", "densita"]}
+        carry={["scorte"]}
         formId="products-filters"
         facets={[
           { name: "negozio", label: "Sede", options: SHOP_CHIPS },
@@ -299,7 +297,6 @@ export default async function AdminProducts({ searchParams }: SP) {
             q: { title: "Ricerca", format: (v) => `“${v}”` },
           }}
         />
-        <DensityToggle basePath={BASE} params={linkParams} density={density} />
       </div>
 
       <SavedViews path={BASE} views={views} currentQuery={filterQuery(filters).replace(/^\?/, "")} />
@@ -362,7 +359,6 @@ export default async function AdminProducts({ searchParams }: SP) {
         basePath={BASE}
         params={linkParams}
         sort={sort}
-        density={density}
         empty={
           filtered
             ? "Nessun prodotto corrisponde ai filtri."

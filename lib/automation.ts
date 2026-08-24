@@ -13,6 +13,8 @@ import {
   auditLog,
 } from "@/lib/db/schema";
 import { deleteExpiredSessions } from "@/lib/auth/session";
+import { deleteExpiredAuthTokens } from "@/lib/auth/tokens";
+import { deleteExpiredRateLimits } from "@/lib/rate-limit";
 import { sendMail, enqueueMail, drainOutbox } from "@/lib/mail/mailer";
 import { porchettaReminderEmail, newsletterBroadcast, ownerDigestEmail } from "@/lib/mail/templates";
 import { getSetting, setSetting } from "@/lib/db/queries";
@@ -20,6 +22,7 @@ import { env } from "@/lib/env";
 import { addPoints } from "@/lib/loyalty";
 import { absoluteUrl } from "@/lib/site";
 import { dateInRome } from "@/lib/time";
+import { expireOrder } from "@/lib/orders";
 import { verifySearchIndexes } from "@/lib/admin/search";
 import { sweepOrphanedMedia } from "@/lib/media";
 
@@ -38,6 +41,7 @@ export type CronJobKey =
   | "points-expiry"
   | "owner-digest"
   | "pickup-autofulfil"
+  | "abandoned-orders"
   | "campaigns";
 
 export type CronJob = {
@@ -255,6 +259,53 @@ export async function runPickupAutoFulfil(
 }
 
 /**
+ * Release card checkouts that were started and never paid.
+ *
+ * `checkout.session.expired` is supposed to do this, but it only arrives if the
+ * webhook endpoint is registered — and on a shop that has not got that far, or
+ * during any spell where Stripe cannot reach the server, abandoned orders
+ * accumulate in the "in attesa" queue with nothing to say they are dead. This is
+ * the backstop that does not depend on anything reaching us.
+ *
+ * Strictly card-only, and `expireOrder` enforces that again at the row level: an
+ * order to be paid in bottega or alla consegna is *meant* to be unpaid until the
+ * customer turns up, and sweeping one away would cancel a real sale and put
+ * reserved goods back on the shelf.
+ *
+ * `orders.abandonedAfterHours` defaults to 24 — comfortably past the 30-minute
+ * Stripe session, and long enough that a customer who wandered off mid-payment
+ * and came back after lunch still finds their order. Set 0 to disable.
+ */
+export async function runAbandonedOrderSweep(
+  now = new Date(),
+): Promise<{ cancelled: number; afterHours: number }> {
+  const hours = await getSetting<number>("orders.abandonedAfterHours", 24);
+  if (!hours || hours <= 0) return { cancelled: 0, afterHours: 0 };
+
+  const cutoff = new Date(now.getTime() - hours * 60 * 60 * 1000);
+  const stale = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.status, "pending"),
+        eq(orders.paymentStatus, "unpaid"),
+        eq(orders.paymentMethod, "card"),
+        lt(orders.createdAt, cutoff),
+      ),
+    )
+    .limit(500);
+
+  let cancelled = 0;
+  // One at a time rather than a bulk UPDATE: `expireOrder` also releases any
+  // stock claim, and going around it would leave the ledger short.
+  for (const row of stale) {
+    if (await expireOrder(row.id)) cancelled++;
+  }
+  return { cancelled, afterHours: hours };
+}
+
+/**
  * Housekeeping sweep: delete expired sessions, retry the outbox, prune the rows
  * that are past their retention (sent outbox mail, audit log, page views),
  * re-verify the search indexes and reclaim orphaned uploads. Safe to run
@@ -265,6 +316,8 @@ export async function runMaintenance(
   outboxRetentionDays = 90,
 ): Promise<{
   sessionsDeleted: number;
+  authTokensDeleted: number;
+  rateLimitsDeleted: number;
   outboxDrained: number;
   outboxPruned: number;
   auditPruned: number;
@@ -273,6 +326,11 @@ export async function runMaintenance(
   mediaBytesFreed: number;
 }> {
   const { deleted: sessionsDeleted } = await deleteExpiredSessions();
+  // Reset/verification links outlive their usefulness by design (a spent token
+  // is kept so a second click can say "già usato" rather than "non valido"),
+  // so something has to collect them. Same sweep as the sessions they resemble.
+  const { deleted: authTokensDeleted } = await deleteExpiredAuthTokens();
+  const { deleted: rateLimitsDeleted } = await deleteExpiredRateLimits();
   const drain = await drainOutbox();
   const cutoff = new Date(now.getTime() - outboxRetentionDays * 24 * 60 * 60 * 1000);
   const pruned = await db
@@ -298,6 +356,8 @@ export async function runMaintenance(
   const media = await sweepOrphanedMedia(now);
   return {
     sessionsDeleted,
+    authTokensDeleted,
+    rateLimitsDeleted,
     outboxDrained: drain.sent,
     outboxPruned: pruned.rowsAffected,
     auditPruned,
@@ -430,6 +490,13 @@ export const CRON_JOBS: CronJob[] = [
     run: (now) => runPickupAutoFulfil(now),
   },
   {
+    key: "abandoned-orders",
+    label: "Checkout abbandonati",
+    description:
+      "Annulla gli ordini con carta rimasti non pagati oltre la soglia. Non tocca gli ordini da pagare in bottega o alla consegna.",
+    run: (now) => runAbandonedOrderSweep(now),
+  },
+  {
     key: "points-expiry",
     label: "Scadenza punti",
     description: "Azzera i punti degli account inattivi oltre la soglia. Disattivato se la scadenza è 0.",
@@ -438,7 +505,8 @@ export const CRON_JOBS: CronJob[] = [
   {
     key: "maintenance",
     label: "Manutenzione",
-    description: "Elimina le sessioni scadute, ritenta le email in coda e ripulisce lo storico invii.",
+    description:
+      "Elimina sessioni e link di recupero scaduti, ritenta le email in coda e ripulisce lo storico invii.",
     run: () => runMaintenance(),
   },
 ];

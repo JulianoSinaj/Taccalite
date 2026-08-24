@@ -111,11 +111,11 @@ describe("login with a recovery code", () => {
       totpRecoveryCodes: toStored(codes),
     });
 
-    const first = await loginUser({ username: USERNAME, password: "password123", code: codes[0] });
+    const first = await loginUser({ identifier: USERNAME, password: "password123", code: codes[0] });
     expect(first.ok).toBe(true);
 
     // Spent: the same code must not work a second time.
-    const replay = await loginUser({ username: USERNAME, password: "password123", code: codes[0] });
+    const replay = await loginUser({ identifier: USERNAME, password: "password123", code: codes[0] });
     expect(replay).toMatchObject({ ok: false, twoFactorRequired: true });
 
     const [row] = await db.select().from(users).where(eq(users.username, USERNAME));
@@ -132,7 +132,7 @@ describe("login with a recovery code", () => {
       totpSecret: "JBSWY3DPEHPK3PXP",
       totpRecoveryCodes: toStored(generateRecoveryCodes(2)),
     });
-    const res = await loginUser({ username: USERNAME, password: "password123", code: "NOPE1-NOPE2" });
+    const res = await loginUser({ identifier: USERNAME, password: "password123", code: "NOPE1-NOPE2" });
     expect(res).toMatchObject({ ok: false, twoFactorRequired: true });
   });
 });

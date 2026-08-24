@@ -15,9 +15,20 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function AccountPage() {
+type SearchParams = {
+  searchParams: Promise<{ verifica?: string; ordini?: string; punti?: string }>;
+};
+
+export default async function AccountPage({ searchParams }: SearchParams) {
   const user = await getCurrentUser();
   if (!user) return <AuthForms />;
+
+  // Set by the redirect out of /api/auth/email/verify.
+  const { verifica, ordini, punti } = await searchParams;
+  const claimed =
+    verifica === "ok"
+      ? { orders: Number(ordini ?? 0) || 0, points: Number(punti ?? 0) || 0 }
+      : null;
 
   const [{ account, transactions, rewards, nextReward }, orders, reservations, redemptions] =
     await Promise.all([
@@ -34,6 +45,8 @@ export default async function AccountPage() {
   return (
     <AccountDashboard
       name={user.name || user.username}
+      emailVerified={user.email ? !!user.emailVerifiedAt : null}
+      claimed={claimed}
       points={account.points}
       cardNumber={account.cardNumber}
       qrSvg={qrSvg}

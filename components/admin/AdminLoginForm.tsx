@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 const inputClasses =
@@ -24,7 +25,7 @@ export default function AdminLoginForm({ wrongRole }: { wrongRole: boolean }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: fd.get("username"),
+          identifier: fd.get("identifier"),
           password: fd.get("password"),
           code: fd.get("code") || undefined,
         }),
@@ -56,10 +57,19 @@ export default function AdminLoginForm({ wrongRole }: { wrongRole: boolean }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-5 rounded-[24px] border border-white/10 bg-white/[0.03] p-8">
       <div className="space-y-2">
-        <label className="eyebrow block" htmlFor="username">
-          Username
+        <label className="eyebrow block" htmlFor="identifier">
+          Email o username
         </label>
-        <input id="username" name="username" type="text" required autoCapitalize="none" autoComplete="username" placeholder="admin" className={inputClasses} />
+        <input
+          id="identifier"
+          name="identifier"
+          type="text"
+          required
+          autoCapitalize="none"
+          autoComplete="username"
+          placeholder="admin"
+          className={inputClasses}
+        />
       </div>
       <div className="space-y-2">
         <label className="eyebrow block" htmlFor="password">
@@ -99,6 +109,15 @@ export default function AdminLoginForm({ wrongRole }: { wrongRole: boolean }) {
       >
         {busy ? "Accesso…" : "Accedi"}
       </button>
+
+      {/* Staff lock themselves out on a Saturday morning too, and until this
+          link existed the only fix was an admin (or a shell) — which is not a
+          thing a counter person has at eight in the morning. */}
+      <p className="text-center text-xs">
+        <Link href="/password/recupera" className="font-semibold text-cream/60 underline hover:text-cream">
+          Password dimenticata?
+        </Link>
+      </p>
 
       {wrongRole && (
         <button

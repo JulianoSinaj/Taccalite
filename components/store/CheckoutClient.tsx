@@ -12,6 +12,13 @@ import {
   type FulfilmentMode,
   type ZoneLike,
 } from "@/lib/fulfilment";
+import {
+  paymentMethodsFor,
+  PAYMENT_METHOD_LABEL,
+  PAYMENT_METHOD_HINT,
+  type CustomerPaymentMethod,
+  type PaymentAvailability,
+} from "@/lib/payments/methods";
 
 const inputCls =
   "w-full  border border-rule-strong bg-paper-warm/40 px-4 py-3.5 text-sm text-brown-950 focus:border-gold-dark focus:outline-none";
@@ -20,6 +27,13 @@ const labelCls =
   "mb-1.5 block text-[0.625rem] font-semibold tracking-[0.22em] text-gold-deep uppercase";
 
 type CheckoutUser = { name: string; email: string | null; phone: string | null };
+
+/** The signed-in customer's default saved address, when they have one. */
+export type CheckoutAddress = {
+  street: string;
+  city: string;
+  postcode: string;
+};
 
 /** One bookable pickup window, already filtered by cut-off and capacity. */
 export type SlotChoice = {
@@ -36,7 +50,9 @@ export default function CheckoutClient({
   zones = [],
   slotOptions = [],
   user = null,
+  defaultAddress = null,
   cancelled = false,
+  payments,
 }: {
   shops: { slug: string; name: string }[];
   pointsPerEuro?: number;
@@ -45,14 +61,22 @@ export default function CheckoutClient({
   zones?: ZoneLike[];
   slotOptions?: SlotChoice[];
   user?: CheckoutUser | null;
+  defaultAddress?: CheckoutAddress | null;
   /** The visitor came back from Stripe without paying (`?annullato=1`). */
   cancelled?: boolean;
+  /** Which payment methods the shop currently offers. Re-checked on the server. */
+  payments: PaymentAvailability;
 }) {
   const { items, subtotalCents, setQty, remove } = useCart();
   const [fulfilment, setFulfilment] = useState<FulfilmentMode>("pickup");
   const [shopSlug, setShopSlug] = useState(shops[0]?.slug ?? "");
   const [pickupSlot, setPickupSlot] = useState("");
-  const [zip, setZip] = useState("");
+  // Seeded from the saved address so a repeat customer is not retyping their
+  // own street every order. Still a plain input afterwards: this is a starting
+  // value, not a binding — the address that ships is whatever is in the fields
+  // at submit, and `createOrder` re-prices the CAP server-side regardless.
+  const [zip, setZip] = useState(defaultAddress?.postcode ?? "");
+  const [payMethod, setPayMethod] = useState<CustomerPaymentMethod>("card");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,6 +154,15 @@ export default function CheckoutClient({
   const effectiveShippingCents = quote.feeCents;
   const totalCents = Math.max(0, subtotalCents - discountCents + effectiveShippingCents);
 
+  // Which methods this order may use, from the same function the server refuses
+  // with. Derived rather than kept in sync by an effect: switching from ritiro to
+  // spedizione retires "pago in bottega", and a selection that is no longer on
+  // offer has to fall back to one that is, not silently post itself anyway.
+  const methodOptions = paymentMethodsFor(fulfilment, totalCents, payments);
+  const paymentMethod: CustomerPaymentMethod | undefined = methodOptions.includes(payMethod)
+    ? payMethod
+    : methodOptions[0];
+
   // What the mode buttons can promise before a CAP is known: the cheapest zone
   // serving that mode. "Da €5,00" is honest; a single flat number no longer is.
   const cheapest = (mode: FulfilmentMode) => {
@@ -145,7 +178,13 @@ export default function CheckoutClient({
   // Everything that must be true before the order can be sent. Kept as one
   // expression so the button and the message below can never disagree.
   const slotMissing = fulfilment === "pickup" && slotsForShop.length > 0 && !chosenSlot;
-  const blocked = quote.error ?? (slotMissing ? "Scegli un orario di ritiro." : null);
+  const blocked =
+    quote.error ??
+    (slotMissing
+      ? "Scegli un orario di ritiro."
+      : !paymentMethod
+        ? "Nessun metodo di pagamento disponibile. Chiamaci in bottega."
+        : null);
   // Loyalty points are earned on the goods subtotal (server-authoritative on award).
   const pointsPreview = Math.floor((subtotalCents / 100) * pointsPerEuro);
 
@@ -166,6 +205,7 @@ export default function CheckoutClient({
       city: fd.get("city"),
       zip,
       notes: fd.get("notes"),
+      paymentMethod,
       discountCode: coupon?.code,
       company: fd.get("company"),
     };
@@ -435,11 +475,25 @@ export default function CheckoutClient({
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label className={labelCls} htmlFor="address">Indirizzo</label>
-                <input id="address" name="address" required className={inputCls} />
+                <input
+                  id="address"
+                  name="address"
+                  required
+                  autoComplete="street-address"
+                  defaultValue={defaultAddress?.street ?? ""}
+                  className={inputCls}
+                />
               </div>
               <div>
                 <label className={labelCls} htmlFor="city">Città</label>
-                <input id="city" name="city" required className={inputCls} />
+                <input
+                  id="city"
+                  name="city"
+                  required
+                  autoComplete="address-level2"
+                  defaultValue={defaultAddress?.city ?? ""}
+                  className={inputCls}
+                />
               </div>
               <div>
                 <label className={labelCls} htmlFor="zip">CAP</label>
@@ -466,6 +520,42 @@ export default function CheckoutClient({
             </div>
           )}
 
+          {/* Payment method. Only rendered when there is a genuine choice: a
+              single option is not a decision, it is a paragraph of text between
+              the customer and the button. */}
+          {methodOptions.length > 1 && (
+            <fieldset>
+              <legend className={labelCls}>Pagamento</legend>
+              <div className="space-y-2">
+                {methodOptions.map((m) => (
+                  <label
+                    key={m}
+                    className={`flex cursor-pointer gap-3 border px-4 py-3.5 ${
+                      paymentMethod === m
+                        ? "border-gold-dark bg-gold/15"
+                        : "border-rule hover:border-rule-strong"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value={m}
+                      checked={paymentMethod === m}
+                      onChange={() => setPayMethod(m)}
+                      className="mt-1 size-4 shrink-0 accent-brown-950"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-brown-950">
+                        {PAYMENT_METHOD_LABEL[m]}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-taupe">{PAYMENT_METHOD_HINT[m]}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
           <div>
             <label className={labelCls} htmlFor="notes">Note (opzionale)</label>
             <textarea id="notes" name="notes" rows={2} className={inputCls} />
@@ -473,11 +563,27 @@ export default function CheckoutClient({
 
           <input type="text" name="company" tabIndex={-1} autoComplete="off" aria-hidden className="absolute -left-[9999px] h-0 w-0" />
 
+          {/* Points are credited by `finalizeOrder` only when the order has a
+              `userId`, i.e. only when the buyer was signed in. This block used
+              to render for everyone, so a guest was promised points the system
+              would never pay them. Say the true thing to each visitor — and to
+              the guest, make it the reason to have an account. */}
           {loyaltyEnabled && pointsPreview > 0 && (
-            <p className="bg-gold/10 px-4 py-3 text-sm text-brown-950">
-              Con questo ordine guadagnerai ~{pointsPreview}{" "}
-              {pointsPreview === 1 ? "punto" : "punti"} fedeltà.
-            </p>
+            user ? (
+              <p className="bg-gold/10 px-4 py-3 text-sm text-brown-950">
+                Con questo ordine guadagnerai ~{pointsPreview}{" "}
+                {pointsPreview === 1 ? "punto" : "punti"} fedeltà.
+              </p>
+            ) : (
+              <p className="bg-gold/10 px-4 py-3 text-sm text-brown-950">
+                <Link href="/account" className="font-semibold underline">
+                  Accedi o registrati
+                </Link>{" "}
+                per guadagnare ~{pointsPreview}{" "}
+                {pointsPreview === 1 ? "punto" : "punti"} fedeltà con questo ordine. Puoi anche
+                completare l&apos;ordine come ospite e collegarlo dopo.
+              </p>
+            )
           )}
 
           {error && <p className="text-sm font-medium text-red-700">{error}</p>}
@@ -487,11 +593,23 @@ export default function CheckoutClient({
             disabled={busy || !!blocked}
             className="w-full rounded-full bg-gold px-8 py-4 text-xs font-bold tracking-widest text-brown-950 uppercase transition-colors hover:bg-gold-dark disabled:opacity-60"
           >
-            {busy ? "Elaborazione…" : blocked ? blocked : `Paga ${formatEuro(totalCents)}`}
+            {busy
+              ? "Elaborazione…"
+              : blocked
+                ? blocked
+                : paymentMethod === "card"
+                  ? `Paga ${formatEuro(totalCents)}`
+                  : `Conferma ordine · ${formatEuro(totalCents)}`}
           </button>
+          {/* The reassurance has to match what is about to happen: telling
+              someone paying at the counter that their payment is secure invites
+              them to look for a card form that is not there. */}
           <p className="text-center text-xs text-taupe">
-            Pagamento sicuro. In assenza di configurazione, l&apos;ordine viene registrato in
-            modalità dimostrativa.
+            {paymentMethod === "card"
+              ? "Pagamento sicuro con Stripe. I dati della carta non transitano dai nostri server."
+              : paymentMethod === "on_delivery"
+                ? "Nessun addebito online: pagherai alla consegna, in contanti o con il POS."
+                : "Nessun addebito online: pagherai in bottega al momento del ritiro."}
           </p>
         </form>
       </div>

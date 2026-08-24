@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ActionError } from "@/lib/admin/action-state";
 import { FULFILMENT_MODES } from "@/lib/fulfilment";
+import { SETTLEMENT_INSTRUMENTS } from "@/lib/payments/methods";
 
 /** Checkbox → boolean ("on"/"true" = checked). */
 const checkbox = z
@@ -278,6 +279,20 @@ export const manualOrderInput = z.object({
   shippingEuros: optionalEuros("Spese di spedizione non valide"),
   notes: optionalText(1000),
   markPaid: checkbox,
+  /** How the counter sale was settled. Only meaningful with `markPaid`; it is
+   *  what the invoice's ModalitaPagamento is derived from, so contanti and POS
+   *  are not interchangeable. */
+  paidWith: z.enum(SETTLEMENT_INSTRUMENTS).default("cash"),
+});
+
+/**
+ * Register a payment taken outside Stripe — the customer paid at the counter, or
+ * handed the money to the driver. The instrument is required rather than
+ * defaulted, because it ends up on a fiscal document.
+ */
+export const orderSettleInput = z.object({
+  id: z.string().trim().min(1),
+  paidWith: z.enum(SETTLEMENT_INSTRUMENTS),
 });
 
 // ── Fulfilment: delivery zones & pickup windows ──────────────────────────────
@@ -565,6 +580,38 @@ export const userPasswordInput = z.object({
   id: z.string().trim().min(1),
   password: z.string().min(8, "La password deve avere almeno 8 caratteri").max(200),
 });
+
+/**
+ * Enrolling a walk-in customer at the counter.
+ *
+ * Deliberately looser than the public `registerSchema`: a norcineria genuinely
+ * has loyalty customers with no email address, and refusing to enrol them is
+ * how the programme ends up with no members. Email OR phone is enough — but at
+ * least one, or there is no way to ever reach the person whose points these are.
+ *
+ * No password field: a counter-created account is a loyalty card, not a login.
+ * It becomes a real account when its owner sets a password through the ordinary
+ * "password dimenticata" flow, which needs the email — hence the nudge to
+ * capture one when the customer has it.
+ */
+export const staffCustomerInput = z
+  .object({
+    name: z.string().trim().min(2, "Il nome è obbligatorio").max(200),
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .max(200)
+      .email("Email non valida")
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    phone: optionalText(40),
+    marketingConsent: z.coerce.boolean().optional().default(false),
+  })
+  .refine((d) => !!d.email || !!d.phone, {
+    message: "Serve almeno un'email o un telefono per identificare il cliente.",
+    path: ["email"],
+  });
 
 /** Editable contact details of an account. `username` and `role` are deliberately
  *  out of scope here — they have their own guarded actions. A cleared email is

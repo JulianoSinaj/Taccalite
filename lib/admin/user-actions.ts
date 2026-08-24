@@ -5,13 +5,23 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
-import { requireRole, deleteUserSessions } from "@/lib/auth/session";
+import { requireAdmin, requireRole, deleteUserSessions } from "@/lib/auth/session";
 import { hashPasswordAsync } from "@/lib/auth/password";
 import { countAdmins } from "@/lib/admin/queries";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
-import { parseForm, userRoleInput, userPasswordInput, userProfileInput } from "@/lib/validation/admin";
+import {
+  parseForm,
+  userRoleInput,
+  userPasswordInput,
+  userProfileInput,
+  staffCustomerInput,
+} from "@/lib/validation/admin";
 import { logAudit } from "@/lib/audit";
 import { anonymizeUser } from "@/lib/gdpr";
+import { getOrCreateLoyaltyAccount } from "@/lib/loyalty";
+import { deriveUsername, sendVerificationEmail } from "@/lib/auth/service";
+import { subscribeNewsletter } from "@/lib/newsletter";
+import { randomBytes } from "node:crypto";
 
 /** New-account fields. Username is normalised to lowercase and constrained to a
  *  safe handle charset; email is optional. */
@@ -204,6 +214,77 @@ export async function createUser(_prev: ActionState, fd: FormData): Promise<Acti
     });
     revalidatePath("/admin/users");
     return ok("Utente creato.");
+  });
+}
+
+/**
+ * Enrol a walk-in customer at the counter — available to **staff**, not only to
+ * admins.
+ *
+ * `createUser` next door is admin-only, and rightly so: it can mint an
+ * administrator. But that meant the person actually standing at the till could
+ * credit points to an existing card and could not create one, so the loyalty
+ * programme had no way in from the shop floor — the only place most of these
+ * customers ever appear. This action is the narrow version of that power: it can
+ * only ever produce a `customer`, never a role, never a shop assignment.
+ *
+ * The account gets an unusable random password rather than a chosen one. Nobody
+ * should be inventing a password for someone else at a counter — and the owner
+ * has a real route in (email + "password dimenticata") the moment they want one.
+ */
+export async function createCustomerAccount(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    // requireAdmin() admits admin AND staff — see lib/auth/session.ts.
+    const actor = await requireAdmin();
+    const d = parseForm(staffCustomerInput, fd);
+
+    if (d.email) {
+      const [clash] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, d.email))
+        .limit(1);
+      if (clash) {
+        throw new ActionError("Esiste già un account con questa email.");
+      }
+    }
+
+    const username = await deriveUsername(d.email ?? `cliente-${randomBytes(4).toString("hex")}@banco.local`);
+    const [created] = await db
+      .insert(users)
+      .values({
+        username,
+        name: d.name,
+        email: d.email ?? null,
+        phone: d.phone ?? null,
+        // Random and never shown to anyone: this is a card, not a login. The
+        // owner sets a real password via the reset flow if they ever want one.
+        passwordHash: await hashPasswordAsync(randomBytes(32).toString("hex")),
+        role: "customer",
+        marketingConsent: d.marketingConsent ?? false,
+      })
+      .returning({ id: users.id, name: users.name, username: users.username });
+
+    const account = await getOrCreateLoyaltyAccount(created.id);
+
+    // Give them a way to take ownership, when there is an address to send it to.
+    if (d.email) {
+      await sendVerificationEmail(created, d.email);
+      if (d.marketingConsent) await subscribeNewsletter(d.email, "banco").catch(() => {});
+    }
+
+    await logAudit({
+      actor,
+      action: "user.create",
+      entity: "user",
+      entityId: created.id,
+      summary: `Cliente ${d.name} iscritto al banco (tessera ${account.cardNumber})`,
+      meta: { cardNumber: account.cardNumber, viaCounter: true },
+    });
+
+    revalidatePath("/admin/users");
+    revalidatePath("/admin/loyalty");
+    return ok(`Tessera ${account.cardNumber} creata per ${d.name}.`);
   });
 }
 

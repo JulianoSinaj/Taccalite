@@ -1,14 +1,24 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
-import { db } from "@/lib/db/client";
-import { users } from "@/lib/db/schema";
 import { requireAdmin, deleteOtherUserSessions } from "@/lib/auth/session";
-import { verifyTotp, generateTotpSecret } from "@/lib/auth/totp";
-import { generateRecoveryCodes, toStored } from "@/lib/auth/recovery-codes";
+import {
+  startEnrolment,
+  confirmEnrolment,
+  regenerateCodes,
+  disableEnrolment,
+} from "@/lib/auth/enrolment";
 import { logAudit } from "@/lib/audit";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
+
+/**
+ * Back-office two-factor and session controls.
+ *
+ * The mechanics live in `lib/auth/enrolment.ts` and are shared with the
+ * customer-facing equivalents in `lib/account/actions.ts`. What stays here is
+ * what is genuinely back-office: the `requireAdmin()` guard (which admits staff
+ * too) and the `/admin/security` revalidation.
+ */
 
 /**
  * Mint (or re-mint) a pending TOTP secret for the current user.
@@ -23,13 +33,10 @@ export async function startTotpEnrolment(_prev: ActionState, fd: FormData): Prom
   return runAction(async () => {
     const actor = await requireAdmin();
     void fd;
-
-    const [user] = await db.select().from(users).where(eq(users.id, actor.id)).limit(1);
-    if (user?.totpEnabled) return ok("La verifica in due passaggi è già attiva.");
-
-    await db.update(users).set({ totpSecret: generateTotpSecret() }).where(eq(users.id, actor.id));
+    const res = await startEnrolment(actor);
+    if (!res.ok) throw new ActionError(res.error);
     revalidatePath("/admin/security");
-    return ok("Scansiona il QR con la tua app di autenticazione.");
+    return ok(res.message);
   });
 }
 
@@ -37,27 +44,10 @@ export async function startTotpEnrolment(_prev: ActionState, fd: FormData): Prom
 export async function confirmTotp(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireAdmin();
-    const code = String(fd.get("code") ?? "").trim();
-
-    const [user] = await db.select().from(users).where(eq(users.id, actor.id)).limit(1);
-    if (!user?.totpSecret) throw new ActionError("Configurazione non avviata. Ricarica la pagina.");
-    if (user.totpEnabled) return ok("La verifica in due passaggi è già attiva.");
-    if (!verifyTotp(user.totpSecret, code)) throw new ActionError("Codice non valido. Riprova.");
-
-    // Issue recovery codes with the same call that enables 2FA — an account
-    // should never be one lost phone away from lockout.
-    const codes = generateRecoveryCodes();
-    await db
-      .update(users)
-      .set({ totpEnabled: true, totpRecoveryCodes: toStored(codes) })
-      .where(eq(users.id, actor.id));
-
-    await logAudit({ actor, action: "security.2fa_enable", entity: "user", entityId: actor.id, summary: "2FA attivata" });
+    const res = await confirmEnrolment(actor, String(fd.get("code") ?? "").trim());
+    if (!res.ok) throw new ActionError(res.error);
     revalidatePath("/admin/security");
-    return ok(
-      "Verifica in due passaggi attivata. Conserva i codici di recupero qui sotto: non potrai rivederli.",
-      codes,
-    );
+    return ok(res.message, res.codes);
   });
 }
 
@@ -71,24 +61,10 @@ export async function regenerateRecoveryCodes(_prev: ActionState, fd: FormData):
   return runAction(async () => {
     const actor = await requireAdmin();
     void fd;
-
-    const [user] = await db.select().from(users).where(eq(users.id, actor.id)).limit(1);
-    if (!user?.totpEnabled) {
-      throw new ActionError("Attiva prima la verifica in due passaggi.");
-    }
-
-    const codes = generateRecoveryCodes();
-    await db.update(users).set({ totpRecoveryCodes: toStored(codes) }).where(eq(users.id, actor.id));
-
-    await logAudit({
-      actor,
-      action: "security.recovery_codes",
-      entity: "user",
-      entityId: actor.id,
-      summary: "Codici di recupero 2FA rigenerati (i precedenti non sono più validi)",
-    });
+    const res = await regenerateCodes(actor);
+    if (!res.ok) throw new ActionError(res.error);
     revalidatePath("/admin/security");
-    return ok("Nuovi codici generati. I precedenti non funzionano più.", codes);
+    return ok(res.message, res.codes);
   });
 }
 
@@ -123,13 +99,9 @@ export async function disableTotp(_prev: ActionState, fd: FormData): Promise<Act
   return runAction(async () => {
     const actor = await requireAdmin();
     void fd;
-    // Clearing the codes with the secret: they only ever protected this factor.
-    await db
-      .update(users)
-      .set({ totpEnabled: false, totpSecret: null, totpRecoveryCodes: null })
-      .where(eq(users.id, actor.id));
-    await logAudit({ actor, action: "security.2fa_disable", entity: "user", entityId: actor.id, summary: "2FA disattivata" });
+    const res = await disableEnrolment(actor);
+    if (!res.ok) throw new ActionError(res.error);
     revalidatePath("/admin/security");
-    return ok("Verifica in due passaggi disattivata.");
+    return ok(res.message);
   });
 }

@@ -1,6 +1,7 @@
 import "server-only";
 import type { OrderRow, OrderItemRow } from "@/lib/db/schema";
 import { splitGross, orderVatBuckets, refundVatBuckets, vatRateLabel } from "@/lib/fiscal";
+import { modalitaPagamento } from "@/lib/payments/methods";
 
 /**
  * FatturaPA (fattura elettronica) XML builder — FormatoTrasmissione FPR12, the
@@ -351,7 +352,7 @@ ${p.riepilogo}
     <DatiPagamento>
       <CondizioniPagamento>TP02</CondizioniPagamento>
       <DettaglioPagamento>
-        <ModalitaPagamento>MP08</ModalitaPagamento>
+        <ModalitaPagamento>${modalitaPagamento(p.order.paymentMethod, p.order.paidWith)}</ModalitaPagamento>
         <ImportoPagamento>${eur(p.totalCents)}</ImportoPagamento>
       </DettaglioPagamento>
     </DatiPagamento>

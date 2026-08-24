@@ -4,6 +4,8 @@ import RevealLines from "./RevealLines";
 
 type PageHeroProps = {
   eyebrow: string;
+  /** Optional line *above* the eyebrow — a breadcrumb trail, a back link. */
+  trail?: ReactNode;
   /** One entry per visual line, so the break is a design choice not an accident. */
   title: ReactNode[];
   lede?: ReactNode;
@@ -29,6 +31,7 @@ type PageHeroProps = {
  */
 export default function PageHero({
   eyebrow,
+  trail,
   title,
   lede,
   aside,
@@ -49,6 +52,7 @@ export default function PageHero({
         )}
       >
         <div className={cn(aside && "lg:col-span-7")}>
+          {trail && <div className="mb-5">{trail}</div>}
           <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
             <span aria-hidden className="h-px w-10 bg-gold" />
             {eyebrow}

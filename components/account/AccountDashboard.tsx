@@ -95,6 +95,8 @@ export default function AccountDashboard({
   orders,
   reservations,
   redemptions,
+  emailVerified,
+  claimed,
 }: {
   name: string;
   points: number;
@@ -106,6 +108,11 @@ export default function AccountDashboard({
   orders: Order[];
   reservations: Reservation[];
   redemptions: Redemption[];
+  /** Null when the account has no address at all — a counter-created card. */
+  emailVerified: boolean | null;
+  /** Set right after a verification link landed, so the page can report what
+   *  the click actually did rather than leaving the customer to spot it. */
+  claimed: { orders: number; points: number } | null;
 }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -184,8 +191,23 @@ export default function AccountDashboard({
       <section className="bg-cream px-5 py-16 sm:px-8 lg:px-12 sm:py-24">
         <div className="mx-auto grid max-w-[88rem] grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8">
           <div className="space-y-6 lg:col-span-7">
-            {/* TODO (follow-up, out of scope): profile editing (name/email/phone) and
-                change-password go here — they need dedicated server mutation actions. */}
+            {/* The verification click happens in a redirect, so without this the
+                customer lands on a page that looks identical to before and has
+                to work out for themselves whether anything happened. */}
+            {claimed && (
+              <Reveal className="border border-gold-dark/40 bg-gold/15 px-5 py-4">
+                <p className="text-sm font-semibold text-brown-950">Indirizzo confermato</p>
+                <p className="mt-1 text-sm text-brown-800">
+                  {claimed.orders > 0
+                    ? `Abbiamo collegato ${claimed.orders} ${
+                        claimed.orders === 1 ? "ordine" : "ordini"
+                      } fatti con questo indirizzo${
+                        claimed.points > 0 ? `, con ${claimed.points} punti fedeltà` : ""
+                      }.`
+                    : "Ora puoi reimpostare la password da solo se ti serve."}
+                </p>
+              </Reveal>
+            )}
             <Reveal className="card-shadow-soft flex flex-col items-center gap-6 border border-rule bg-paper-warm p-6 sm:p-8 md:flex-row">
               <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-rule-strong bg-paper-warm shadow-md">
                 <User className="size-9 text-taupe" />
@@ -199,8 +221,35 @@ export default function AccountDashboard({
                   Presenta la tua scheda in negozio ad ogni acquisto per accumulare punti e
                   riscattare i premi del club.
                 </p>
+                <div className="flex flex-wrap justify-center gap-3 pt-1 md:justify-start">
+                  <Link
+                    href="/account/impostazioni"
+                    className="inline-flex min-h-11 items-center justify-center rounded-full border border-rule-strong px-5 py-2.5 text-xs font-bold tracking-widest text-brown-800 uppercase transition-colors hover:bg-paper"
+                  >
+                    Impostazioni account
+                  </Link>
+                </div>
               </div>
             </Reveal>
+
+            {/* The one state where things silently do not work: recovery is
+                impossible and past guest orders stay unclaimed until the address
+                is proven. Worth a line on the page the customer actually opens. */}
+            {emailVerified === false && (
+              <Reveal className="border border-danger/30 bg-danger-soft px-5 py-4">
+                <p className="text-sm font-semibold text-danger-soft-fg">
+                  Conferma il tuo indirizzo email
+                </p>
+                <p className="mt-1 text-sm text-danger-soft-fg/90">
+                  Serve per reimpostare la password e per ritrovare gli ordini fatti prima di
+                  registrarti.{" "}
+                  <Link href="/account/impostazioni" className="underline">
+                    Invia di nuovo il link
+                  </Link>
+                  .
+                </p>
+              </Reveal>
+            )}
 
             <Reveal className="card-shadow-soft border border-rule bg-paper p-6 sm:p-8">
               <div className="mb-4 flex items-baseline justify-between border-b border-rule pb-4">

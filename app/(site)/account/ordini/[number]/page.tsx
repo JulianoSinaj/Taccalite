@@ -9,6 +9,7 @@ import { formatEuro } from "@/lib/format";
 import { trackingUrlFor } from "@/lib/carriers";
 
 import { FULFILMENT_LABEL } from "@/lib/fulfilment";
+import { settlesOnHandover } from "@/lib/payments/methods";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,17 @@ export default async function OrderDetailPage({ params }: PageProps) {
 
   const statusLabel = STATUS_LABEL[order.status] ?? order.status;
   const statusStyle = STATUS_STYLE[order.status] ?? "bg-brown-900/10 text-brown-800";
-  const paymentLabel = PAYMENT_LABEL[order.paymentStatus] ?? order.paymentStatus;
+  // "Non pagato" reads like a problem. For an order the customer chose to settle
+  // on collection it is simply the arrangement, so say which one it is.
+  const awaitingPayment =
+    order.paymentStatus === "unpaid" &&
+    order.status !== "cancelled" &&
+    settlesOnHandover(order.paymentMethod);
+  const paymentLabel = awaitingPayment
+    ? order.paymentMethod === "on_delivery"
+      ? "Da pagare alla consegna"
+      : "Da pagare al ritiro"
+    : PAYMENT_LABEL[order.paymentStatus] ?? order.paymentStatus;
   const paymentStyle = PAYMENT_STYLE[order.paymentStatus] ?? "bg-brown-900/10 text-brown-800";
 
   return (
@@ -96,6 +107,17 @@ export default async function OrderDetailPage({ params }: PageProps) {
               {paymentLabel}
             </span>
           </div>
+          {awaitingPayment && (
+            <p className="mt-5 border border-gold-dark/40 bg-gold/15 px-5 py-4 text-sm text-brown-900">
+              <span className="block font-semibold text-brown-950">
+                Da pagare {order.paymentMethod === "on_delivery" ? "alla consegna" : "al ritiro"}:{" "}
+                {formatEuro(order.totalCents)}
+              </span>
+              <span className="mt-1 block text-brown-700">
+                Nessun addebito è stato effettuato online. Puoi pagare in contanti o con il POS.
+              </span>
+            </p>
+          )}
           {order.createdAt && (
             <p className="mt-4 text-sm text-brown-700">
               Effettuato il{" "}

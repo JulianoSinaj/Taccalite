@@ -27,6 +27,15 @@ import SealSvg from "@/components/site/SealSvg";
  * veil that flickers past in 200ms is worse than no veil, so the stamp always
  * gets long enough to read.
  *
+ * Both are measured in time the visitor was actually here for. A page opened in
+ * a background tab gets no rAF, so nothing draws and no animation advances — but
+ * timers keep firing, and the veil used to spend its entire budget covering an
+ * empty room, lift while still hidden, and hand the visitor a page whose seal
+ * then cross-faded to gold in front of them on arrival. Which is precisely the
+ * thing it exists to prevent. So the paper goes up immediately and unconditionally
+ * — a visitor switching in must never catch a frame of the raw page — and the
+ * clock does not start until somebody is looking.
+ *
  * It plays on every hard load of the homepage. It used to play once per session
  * and stamp a sessionStorage key to remember, which meant the thing was invisible
  * to anyone who reloaded — including whoever was building the page. If the cost
@@ -53,8 +62,10 @@ const INTRO_SCRIPT = `(function () {
   // stops the veil flickering past is shorter when there is no stamp to read.
   var MIN = reduced ? 320 : 700;
   var CAP = 1800;
-  var start = Date.now();
   var lifted = false;
+  // Stamped when the visitor is first actually looking at this, which on a page
+  // opened in a background tab is not the same moment the script ran.
+  var start = 0;
 
   // The seal gate. components/site/SealMark.tsx resolves this the moment its
   // canvas has drawn something worth revealing — and, on its own short timer,
@@ -78,31 +89,75 @@ const INTRO_SCRIPT = `(function () {
   addEventListener("wheel", hold, HOLD);
   addEventListener("touchmove", hold, HOLD);
 
+  // Run something the next time this tab is actually on screen — now, if it
+  // already is.
+  function whenSeen(run) {
+    if (document.visibilityState !== "hidden") return run();
+    document.addEventListener("visibilitychange", function onVisible() {
+      if (document.visibilityState === "hidden") return;
+      document.removeEventListener("visibilitychange", onVisible);
+      run();
+    });
+  }
+
+  function reveal() {
+    root.setAttribute("data-intro", "done");
+    removeEventListener("wheel", hold, HOLD);
+    removeEventListener("touchmove", hold, HOLD);
+  }
+
+  // Lifting a veil nobody is in front of is not lifting it — the fade is on the
+  // document timeline, which is frozen while the tab is hidden, so the paper
+  // would simply still be there when the visitor arrived and the page underneath
+  // would finish assembling in plain sight. So the reveal waits for them, and
+  // then owes them the floor from *their* first frame.
+  function settle(immediate) {
+    if (document.visibilityState === "hidden") {
+      whenSeen(function () {
+        start = Date.now();
+        settle(false);
+      });
+      return;
+    }
+    setTimeout(function () {
+      if (document.visibilityState === "hidden") return settle(false);
+      reveal();
+    }, immediate ? 0 : Math.max(0, MIN - (Date.now() - start)));
+  }
+
   function lift(immediate) {
     if (lifted) return;
     lifted = true;
-    var hold_ms = immediate ? 0 : Math.max(0, MIN - (Date.now() - start));
-    setTimeout(function () {
-      root.setAttribute("data-intro", "done");
-      removeEventListener("wheel", hold, HOLD);
-      removeEventListener("touchmove", hold, HOLD);
-    }, hold_ms);
+    settle(immediate);
   }
 
   function skip() { lift(true); }
 
+  // The paper, straight away and whether or not anyone is here to see it. This
+  // is the one part that cannot wait for visibility: it is what a visitor
+  // switching into the tab has to find already in place.
   root.setAttribute("data-intro", "play");
-  setTimeout(function () { lift(false); }, CAP);
 
-  // The escape hatch, armed only once the stamp has had its floor. Live from the
-  // first frame it is not an escape hatch but a hazard: a page that has just
-  // loaded collects stray clicks and keystrokes, and any one of them used to
-  // tear the veil off mid-animation — which reads as the intro breaking rather
-  // than as the visitor skipping it.
-  setTimeout(function () {
-    addEventListener("pointerdown", skip, { once: true });
-    addEventListener("keydown", skip, { once: true });
-  }, MIN);
+  whenSeen(function () {
+    start = Date.now();
+    setTimeout(function () { lift(false); }, CAP);
+
+    // The escape hatch, armed only once the stamp has had its floor. Live from
+    // the first frame it is not an escape hatch but a hazard: a page that has
+    // just loaded collects stray clicks and keystrokes, and any one of them used
+    // to tear the veil off mid-animation — which reads as the intro breaking
+    // rather than as the visitor skipping it.
+    setTimeout(function () {
+      addEventListener("pointerdown", skip, { once: true });
+      addEventListener("keydown", skip, { once: true });
+    }, MIN);
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", whenSettled, { once: true });
+    } else {
+      whenSettled();
+    }
+  });
 
   function whenSettled() {
     var waits = [seal];
@@ -118,12 +173,6 @@ const INTRO_SCRIPT = `(function () {
     });
 
     Promise.all(waits).then(function () { lift(false); }, function () { lift(false); });
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", whenSettled, { once: true });
-  } else {
-    whenSettled();
   }
 })();`;
 

@@ -20,8 +20,6 @@ import type { SortSpec } from "@/lib/admin/filters";
  * into columns would read worse.
  */
 
-export type Density = "comoda" | "compatta";
-
 export type Column<T> = {
   /** Stable key; also the sort key when `sortable`. */
   key: string;
@@ -49,44 +47,6 @@ export type Column<T> = {
 };
 
 const alignCls = { left: "text-left", right: "text-right", center: "text-center" } as const;
-
-export const DENSITIES: { value: Density; label: string }[] = [
-  { value: "comoda", label: "Comoda" },
-  { value: "compatta", label: "Compatta" },
-];
-
-export function densityFrom(value: string | undefined): Density {
-  return value === "compatta" ? "compatta" : "comoda";
-}
-
-/** Density toggle, rendered next to the filters. */
-export function DensityToggle({
-  basePath,
-  params,
-  density,
-}: {
-  basePath: string;
-  params: Record<string, string | undefined>;
-  density: Density;
-}) {
-  return (
-    <div className="flex items-center gap-1 print:hidden">
-      {DENSITIES.map((d) => (
-        <Link
-          key={d.value}
-          href={filterHref(basePath, params, { densita: d.value, page: undefined })}
-          className={`tap rounded-full px-3 py-1.5 text-[12px] font-bold tracking-widest uppercase ${
-            density === d.value
-              ? "bg-brown-950 text-cream"
-              : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
-          }`}
-        >
-          {d.label}
-        </Link>
-      ))}
-    </div>
-  );
-}
 
 function SortHeader({
   basePath,
@@ -124,7 +84,6 @@ export function DataTable<T>({
   basePath,
   params,
   sort,
-  density = "comoda",
   empty,
 }: {
   rows: T[];
@@ -134,7 +93,6 @@ export function DataTable<T>({
   /** Active filters, so a sort link preserves them. */
   params: Record<string, string | undefined>;
   sort: SortSpec;
-  density?: Density;
   empty?: ReactNode;
 }) {
   if (rows.length === 0) {
@@ -145,7 +103,7 @@ export function DataTable<T>({
     );
   }
 
-  const pad = density === "compatta" ? "px-4 py-2" : "px-5 py-3.5";
+  const pad = "px-5 py-3.5";
   const hidden = (c: Column<T>) => (c.hideOnMobile ? "hidden sm:table-cell" : "");
   // An opaque ground is what makes a pinned cell pin: without it the columns it
   // is meant to sit in front of scroll straight through it.

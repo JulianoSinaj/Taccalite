@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { reservationSchema } from "@/lib/validation/reservation";
-import { registerSchema, loginSchema } from "@/lib/validation/auth";
+import { registerSchema, loginSchema, passwordResetSchema } from "@/lib/validation/auth";
 
 describe("reservationSchema", () => {
   const base = { name: "Mario Rossi", phone: "0711234567", shop: "centro" };
@@ -38,19 +38,47 @@ describe("reservationSchema", () => {
 });
 
 describe("auth schemas", () => {
-  it("accepts a valid registration and lowercases the username", () => {
-    const r = registerSchema.safeParse({ name: "Anna", username: "Anna_B", password: "supersegreta" });
+  it("accepts a registration without a username and lowercases the email", () => {
+    const r = registerSchema.safeParse({ name: "Anna", email: "Anna.B@Example.IT", password: "supersegreta" });
     expect(r.success).toBe(true);
-    if (r.success) expect(r.data.username).toBe("anna_b");
+    // Nobody picks a handle any more — `deriveUsername` builds one from the address.
+    if (r.success) {
+      expect(r.data.email).toBe("anna.b@example.it");
+      expect(r.data.username).toBeUndefined();
+    }
   });
 
-  it("rejects invalid username characters and short passwords", () => {
-    expect(registerSchema.safeParse({ name: "Anna", username: "bad name!", password: "supersegreta" }).success).toBe(false);
-    expect(registerSchema.safeParse({ name: "Anna", username: "anna", password: "short" }).success).toBe(false);
+  it("requires an email, because an account without one cannot be recovered", () => {
+    expect(registerSchema.safeParse({ name: "Anna", password: "supersegreta" }).success).toBe(false);
+    expect(registerSchema.safeParse({ name: "Anna", email: "", password: "supersegreta" }).success).toBe(false);
+    expect(registerSchema.safeParse({ name: "Anna", email: "not-an-email", password: "supersegreta" }).success).toBe(false);
   });
 
-  it("loginSchema requires a username and any non-empty password", () => {
-    expect(loginSchema.safeParse({ username: "anna", password: "x" }).success).toBe(true);
-    expect(loginSchema.safeParse({ username: "anna", password: "" }).success).toBe(false);
+  it("still honours an explicitly supplied username, and its charset", () => {
+    const r = registerSchema.safeParse({ name: "Anna", email: "a@b.it", username: "Anna_B", password: "supersegreta" });
+    expect(r.success && r.data.username).toBe("anna_b");
+    expect(registerSchema.safeParse({ name: "Anna", email: "a@b.it", username: "bad name!", password: "supersegreta" }).success).toBe(false);
+  });
+
+  it("rejects short passwords", () => {
+    expect(registerSchema.safeParse({ name: "Anna", email: "a@b.it", password: "short" }).success).toBe(false);
+  });
+
+  it("loginSchema takes either an email or a legacy handle as the identifier", () => {
+    expect(loginSchema.safeParse({ identifier: "anna", password: "x" }).success).toBe(true);
+    expect(loginSchema.safeParse({ identifier: "anna@example.it", password: "x" }).success).toBe(true);
+    expect(loginSchema.safeParse({ identifier: "anna", password: "" }).success).toBe(false);
+    expect(loginSchema.safeParse({ identifier: "", password: "x" }).success).toBe(false);
+  });
+
+  it("normalizes the identifier so case and stray spaces can't fork an account", () => {
+    const r = loginSchema.safeParse({ identifier: "  Anna@Example.IT ", password: "x" });
+    expect(r.success && r.data.identifier).toBe("anna@example.it");
+  });
+
+  it("passwordResetSchema needs both a token and a long-enough password", () => {
+    expect(passwordResetSchema.safeParse({ token: "abc", password: "supersegreta" }).success).toBe(true);
+    expect(passwordResetSchema.safeParse({ token: "", password: "supersegreta" }).success).toBe(false);
+    expect(passwordResetSchema.safeParse({ token: "abc", password: "short" }).success).toBe(false);
   });
 });

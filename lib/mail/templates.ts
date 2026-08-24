@@ -179,20 +179,117 @@ export function orderCustomerEmail(d: OrderEmailData): Built {
   };
 }
 
-/** Order notification to the shop owner. */
-export function orderOwnerEmail(d: OrderEmailData): Built {
+/**
+ * Confirmation for an order that will be paid when the goods change hands.
+ *
+ * Deliberately NOT `orderCustomerEmail`: that one says "ordine confermato" next
+ * to a total the customer has already been charged. Sending it here would tell
+ * someone who has paid nothing that their payment went through, and the shop
+ * would have no written record of having asked for the money. The amount to
+ * bring is therefore the loudest thing in the message.
+ */
+export function orderAwaitingPaymentEmail(
+  d: OrderEmailData,
+  method: "in_store" | "on_delivery",
+): Built {
+  const where =
+    method === "on_delivery"
+      ? "al momento della consegna"
+      : `al ritiro${d.shopName ? ` presso ${esc(d.shopName)}` : " in bottega"}`;
+  const fulfil =
+    d.fulfilment === "pickup"
+      ? `Ritiro in bottega${d.shopName ? ` — ${d.shopName}` : ""}${
+          d.pickupSlotLabel ? ` · ${d.pickupSlotLabel}` : ""
+        }`
+      : "Consegna a domicilio all'indirizzo indicato";
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(d.name)}, abbiamo ricevuto il tuo ordine <strong>${esc(d.orderNumber)}</strong> e lo
+      stiamo preparando.
+    </p>
+    ${orderItemsTable(d)}
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:16px 0 0;padding:14px 16px;background:#f6efe3;border-left:3px solid #e1be64;">
+      <strong>Da pagare ${where}: ${euro(d.totalCents)}</strong><br />
+      <span style="font-size:13px;color:#807868;">Puoi pagare in contanti o con il POS. Nessun addebito è stato effettuato online.</span>
+    </p>
+    <p style="font-size:13px;color:#807868;margin:14px 0 0;">${esc(fulfil)}</p>`;
+  return {
+    subject: `Ordine ricevuto · ${d.orderNumber} — Norcineria Taccalite`,
+    html: layout({
+      heading: "Ordine ricevuto",
+      body,
+      preheader: `Da pagare ${where}: ${euro(d.totalCents)}`,
+    }),
+    text:
+      `Abbiamo ricevuto il tuo ordine ${d.orderNumber}.\n` +
+      d.items.map((i) => `${i.quantity}× ${i.name} — ${euro(i.lineTotalCents)}`).join("\n") +
+      `\nDa pagare ${method === "on_delivery" ? "alla consegna" : "al ritiro"}: ${euro(d.totalCents)}\n` +
+      `Nessun addebito è stato effettuato online.\n${fulfil}`,
+  };
+}
+
+/**
+ * Order notification to the shop owner.
+ *
+ * `toCollectCents` is set for an order that arrives unpaid: whoever hands the
+ * parcel over has to know there is money to take, and the one place they are
+ * guaranteed to look is the notification that told them the order exists.
+ */
+export function orderOwnerEmail(d: OrderEmailData, opts: { toCollectCents?: number } = {}): Built {
+  const collect =
+    opts.toCollectCents != null
+      ? `<p style="font-size:15px;line-height:1.7;color:#41281b;margin:16px 0 0;padding:12px 16px;background:#f6efe3;border-left:3px solid #e1be64;">
+      <strong>Da incassare alla consegna: ${euro(opts.toCollectCents)}</strong>
+    </p>`
+      : "";
   const body = `
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
       Nuovo ordine <strong>${esc(d.orderNumber)}</strong> da ${esc(d.name)} (${esc(d.email)}).
     </p>
     ${orderItemsTable(d)}
+    ${collect}
     <p style="margin:20px 0 0;">
       <a href="${absoluteUrl("/admin/orders")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Apri nel gestionale</a>
     </p>`;
   return {
-    subject: `Nuovo ordine · ${d.orderNumber}`,
+    subject: `Nuovo ordine · ${d.orderNumber}${opts.toCollectCents != null ? " (da incassare)" : ""}`,
     html: layout({ heading: "Nuovo ordine", body }),
-    text: `Nuovo ordine ${d.orderNumber} da ${d.name} (${d.email}). Totale ${euro(d.totalCents)}.`,
+    text:
+      `Nuovo ordine ${d.orderNumber} da ${d.name} (${d.email}). Totale ${euro(d.totalCents)}.` +
+      (opts.toCollectCents != null ? ` Da incassare: ${euro(opts.toCollectCents)}.` : ""),
+  };
+}
+
+/**
+ * Alert the owner about something wrong with an order's money — a payment that
+ * failed after the customer left, or a chargeback opened against a completed
+ * one. Both have deadlines attached and neither shows up anywhere the shop
+ * looks during a normal day, so they get pushed rather than waited for.
+ */
+export function paymentIssueOwnerEmail(d: {
+  orderNumber: string;
+  orderId: string;
+  kind: "failed" | "disputed";
+  amountCents?: number | null;
+  detail?: string | null;
+}): Built {
+  const disputed = d.kind === "disputed";
+  const heading = disputed ? "Pagamento contestato" : "Pagamento non riuscito";
+  const lead = disputed
+    ? `È stata aperta una contestazione (chargeback) sull'ordine <strong>${esc(d.orderNumber)}</strong>${
+        d.amountCents != null ? ` per ${euro(d.amountCents)}` : ""
+      }. Stripe applica una scadenza per rispondere con le prove: apri la dashboard Stripe il prima possibile.`
+    : `Il pagamento dell'ordine <strong>${esc(d.orderNumber)}</strong> non è andato a buon fine. L'ordine resta in attesa e la merce non è stata consegnata.`;
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">${lead}</p>
+    ${d.detail ? `<p style="font-size:13px;color:#807868;margin:0 0 16px;">${esc(d.detail)}</p>` : ""}
+    <p style="margin:20px 0 0;">
+      <a href="${absoluteUrl(`/admin/orders/${d.orderId}`)}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Apri l'ordine</a>
+    </p>`;
+  return {
+    subject: `${heading} · ${d.orderNumber}`,
+    html: layout({ heading, body }),
+    text: `${heading} — ordine ${d.orderNumber}${d.detail ? `. ${d.detail}` : ""}`,
   };
 }
 
@@ -597,5 +694,132 @@ export function contactOwnerEmail(d: ContactEmailData): Built {
       preheader: `${d.name}: ${d.message.slice(0, 90)}`,
     }),
     text: `Nuovo messaggio dal sito\n\nNome: ${d.name}\nEmail: ${d.email}\nTelefono: ${d.phone ?? "—"}\nMotivo: ${d.topic}\n\n${d.message}`,
+  };
+}
+
+// ── Account: recovery and verification ───────────────────────────────────────
+
+/**
+ * The password-reset link.
+ *
+ * Says how long it lasts and what to do if it wasn't them, because those are
+ * the only two questions this email ever raises. It deliberately does NOT name
+ * the account's username or any other stored detail: the address may have been
+ * typed by someone who is not the owner, and this message must not confirm
+ * anything about the account to them beyond its existence.
+ */
+export function passwordResetEmail(resetUrl: string, minutes: number): Built {
+  const heading = "Reimposta la tua password";
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Hai chiesto di reimpostare la password del tuo account Taccalite. Il link qui sotto
+      resta valido per <strong>${minutes} minuti</strong> e può essere usato una volta sola.
+    </p>
+    <p style="margin:22px 0 0;">
+      <a href="${resetUrl}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Scegli una nuova password</a>
+    </p>
+    <p style="font-size:12px;color:#807868;margin:18px 0 0;">
+      Se non sei stato tu, puoi ignorare questa email: la password attuale resta valida e
+      nessuno può accedere senza questo link.
+    </p>`;
+  return {
+    subject: "Reimposta la tua password — Norcineria Taccalite",
+    html: layout({ heading, body, preheader: `Il link scade tra ${minutes} minuti` }),
+    text: `Hai chiesto di reimpostare la password del tuo account Taccalite.\n\nApri questo link entro ${minutes} minuti (valido una volta sola):\n${resetUrl}\n\nSe non sei stato tu, ignora questa email.`,
+  };
+}
+
+/**
+ * Sent *after* a password changes, by any route — reset link, account area, or
+ * an admin reset.
+ *
+ * This is the tripwire. A customer whose account has been taken over learns
+ * about it here, and it is the only message in the system whose value lies
+ * entirely in being unwanted. Hence the phone number rather than a link: someone
+ * who has just lost control of their account should not be asked to click.
+ */
+export function passwordChangedEmail(name: string, contact: { phone?: string | null }): Built {
+  const heading = "La tua password è stata cambiata";
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(name)}, ti confermiamo che la password del tuo account Taccalite è appena
+      stata cambiata. Tutte le sessioni aperte sono state chiuse.
+    </p>
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      <strong>Non sei stato tu?</strong> Chiamaci${
+        contact.phone ? ` allo ${esc(contact.phone)}` : ""
+      } il prima possibile: possiamo bloccare l&apos;account subito.
+    </p>`;
+  return {
+    subject: "La tua password è stata cambiata — Norcineria Taccalite",
+    html: layout({ heading, body, preheader: "Se non sei stato tu, contattaci subito" }),
+    text: `Ciao ${name}, la password del tuo account Taccalite è appena stata cambiata e tutte le sessioni aperte sono state chiuse.\n\nSe non sei stato tu, chiamaci${contact.phone ? ` allo ${contact.phone}` : ""} il prima possibile.`,
+  };
+}
+
+/**
+ * The address-verification link.
+ *
+ * `claimable` is the number of past guest orders waiting to be attached to this
+ * account once the address is proven. Naming it is what turns a chore into an
+ * incentive — "verifica" alone gets ignored, "abbiamo trovato 3 ordini" does not.
+ */
+export function verifyEmailEmail(verifyUrl: string, name: string, claimable = 0): Built {
+  const heading = "Conferma il tuo indirizzo email";
+  const claim =
+    claimable > 0
+      ? `<p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Abbiamo trovato <strong>${claimable} ${claimable === 1 ? "ordine" : "ordini"}</strong>
+      fatti con questo indirizzo prima che creassi l&apos;account: confermando li ritrovi
+      nella tua area personale, con i punti fedeltà che ti spettano.
+    </p>`
+      : "";
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(name)}, confermaci che questo indirizzo è tuo. Serve a ritrovare i tuoi
+      ordini e a rimettere in piedi l&apos;accesso se un giorno dimentichi la password.
+    </p>
+    ${claim}
+    <p style="margin:22px 0 0;">
+      <a href="${verifyUrl}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Conferma il mio indirizzo</a>
+    </p>
+    <p style="font-size:12px;color:#807868;margin:18px 0 0;">
+      Il link resta valido 24 ore. Se non hai creato tu questo account, ignora questa email.
+    </p>`;
+  return {
+    subject: "Conferma il tuo indirizzo — Norcineria Taccalite",
+    html: layout({
+      heading,
+      body,
+      preheader: claimable > 0 ? `${claimable} ordini ti aspettano` : "Bastano pochi secondi",
+    }),
+    text: `Ciao ${name}, conferma il tuo indirizzo email per il tuo account Taccalite${claimable > 0 ? ` e ritrova i ${claimable} ordini fatti con questo indirizzo` : ""}.\n\n${verifyUrl}\n\nIl link resta valido 24 ore.`,
+  };
+}
+
+/** Sent once past guest orders have actually been attached to an account. */
+export function ordersClaimedEmail(name: string, count: number, points: number): Built {
+  const heading = "Abbiamo ritrovato i tuoi ordini";
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(name)}, abbiamo collegato al tuo account
+      <strong>${count} ${count === 1 ? "ordine" : "ordini"}</strong> fatti con il tuo indirizzo
+      prima che lo creassi.${
+        points > 0
+          ? ` Ti abbiamo accreditato <strong>${points} punti</strong> fedeltà per quegli acquisti.`
+          : ""
+      }
+    </p>
+    <p style="margin:22px 0 0;">
+      <a href="${absoluteUrl("/account")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Vedi i tuoi ordini</a>
+    </p>`;
+  return {
+    subject: "Abbiamo ritrovato i tuoi ordini — Norcineria Taccalite",
+    html: layout({
+      heading,
+      body,
+      preheader: points > 0 ? `${points} punti accreditati` : `${count} ordini collegati`,
+    }),
+    text: `Ciao ${name}, abbiamo collegato ${count} ordini al tuo account Taccalite${points > 0 ? ` e accreditato ${points} punti fedeltà` : ""}. Area personale: ${absoluteUrl("/account")}`,
   };
 }

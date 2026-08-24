@@ -40,6 +40,13 @@ const DEV_DEFAULTS = {
 
 export const env = {
   isProd,
+  /**
+   * True ONLY for an explicit `NODE_ENV=development`. Deliberately not
+   * `!isProd`: an unset or unrecognized NODE_ENV must not unlock development
+   * affordances (see `enforceSecurity`). This is what gates simulated payments,
+   * which mark an order paid with no money moving.
+   */
+  isDev,
   nodeEnv: nodeEnv ?? "development",
 
   /**

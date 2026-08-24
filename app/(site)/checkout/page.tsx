@@ -9,6 +9,8 @@ import {
 } from "@/lib/db/queries";
 import { pickupSlotOptions } from "@/lib/pickup-slots";
 import { getCurrentUser } from "@/lib/auth/session";
+import { getDefaultAddress } from "@/lib/addresses";
+import { getPaymentAvailability } from "@/lib/payments/config";
 import CheckoutClient from "@/components/store/CheckoutClient";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +25,7 @@ type SP = { searchParams: Promise<{ annullato?: string }> };
 
 export default async function CheckoutPage({ searchParams }: SP) {
   const { annullato } = await searchParams;
-  const [shops, user, pointsPerEuro, loyaltyEnabled, zones, slots, booked, closures] =
+  const [shops, user, pointsPerEuro, loyaltyEnabled, zones, slots, booked, closures, payments] =
     await Promise.all([
       getShops(),
       getCurrentUser(),
@@ -33,7 +35,12 @@ export default async function CheckoutPage({ searchParams }: SP) {
       getPickupSlots(),
       getPickupSlotCounts(),
       getClosures(),
+      getPaymentAvailability(),
     ]);
+  // Fetched after the session resolves, since it is keyed on the user. A guest
+  // has no address book, so this stays null and the fields render empty.
+  const defaultAddress = user ? await getDefaultAddress(user.id) : null;
+
   // Only shops with the store enabled can take pickup orders.
   const pickupShops = shops.filter((s) => s.storeEnabled).map((s) => ({ slug: s.slug, name: s.name }));
   const open = new Set(pickupShops.map((s) => s.slug));
@@ -77,7 +84,17 @@ export default async function CheckoutPage({ searchParams }: SP) {
       zones={zoneProps}
       slotOptions={slotOptions}
       user={user ? { name: user.name, email: user.email, phone: user.phone } : null}
+      defaultAddress={
+        defaultAddress
+          ? {
+              street: defaultAddress.street,
+              city: defaultAddress.city,
+              postcode: defaultAddress.postcode,
+            }
+          : null
+      }
       cancelled={annullato === "1"}
+      payments={payments}
     />
   );
 }

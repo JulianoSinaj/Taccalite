@@ -58,3 +58,68 @@ if (typeof globalThis !== "undefined") {
     }, 5 * 60_000).unref?.();
   }
 }
+
+/**
+ * Durable, DB-backed sliding window — same contract as `rateLimit`, but the
+ * counter survives a process restart and is shared across instances.
+ *
+ * Use it for the auth-sensitive endpoints (login, registration, password reset)
+ * and nothing else. The in-memory limiter above is free; this one costs a write
+ * per call, which is the right trade only where the limit is a security control
+ * rather than flood protection.
+ *
+ * The upsert is one statement — `ON CONFLICT ... DO UPDATE` with the window
+ * check inline — so two concurrent requests cannot both read a stale count and
+ * both decide they are the first. `excluded.reset_at` is the *new* window's
+ * expiry, so an expired bucket restarts rather than accumulating forever.
+ */
+export async function rateLimitDurable(
+  key: string,
+  { limit = 5, windowMs = 60_000 }: { limit?: number; windowMs?: number } = {},
+): Promise<{ ok: boolean; remaining: number; retryAfterSec: number }> {
+  const { db } = await import("@/lib/db/client");
+  const { rateLimits } = await import("@/lib/db/schema");
+  const { sql } = await import("drizzle-orm");
+
+  const now = Date.now();
+  const resetAt = new Date(now + windowMs);
+
+  try {
+    const [row] = await db
+      .insert(rateLimits)
+      .values({ key, count: 1, resetAt })
+      .onConflictDoUpdate({
+        target: rateLimits.key,
+        set: {
+          // Expired window → start a new one at 1; live window → increment.
+          count: sql`case when ${rateLimits.resetAt} <= ${now} then 1 else ${rateLimits.count} + 1 end`,
+          resetAt: sql`case when ${rateLimits.resetAt} <= ${now} then excluded.reset_at else ${rateLimits.resetAt} end`,
+        },
+      })
+      .returning({ count: rateLimits.count, resetAt: rateLimits.resetAt });
+
+    if (!row) return { ok: true, remaining: limit - 1, retryAfterSec: 0 };
+    if (row.count > limit) {
+      return {
+        ok: false,
+        remaining: 0,
+        retryAfterSec: Math.max(1, Math.ceil((row.resetAt.getTime() - now) / 1000)),
+      };
+    }
+    return { ok: true, remaining: Math.max(0, limit - row.count), retryAfterSec: 0 };
+  } catch (err) {
+    // A limiter that hard-fails takes the login page down with it. Fall back to
+    // the in-memory bucket, which is weaker but never unavailable.
+    console.error("[rate-limit] durable store unavailable, falling back to memory:", err);
+    return rateLimit(key, { limit, windowMs });
+  }
+}
+
+/** Drop finished windows. Run from the maintenance cron sweep. */
+export async function deleteExpiredRateLimits(): Promise<{ deleted: number }> {
+  const { db } = await import("@/lib/db/client");
+  const { rateLimits } = await import("@/lib/db/schema");
+  const { lt } = await import("drizzle-orm");
+  const res = await db.delete(rateLimits).where(lt(rateLimits.resetAt, new Date()));
+  return { deleted: res.rowsAffected };
+}

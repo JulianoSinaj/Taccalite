@@ -19,11 +19,12 @@ import {
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getOrdersPage, adminGetShops, getSavedViews, ORDER_SORTS } from "@/lib/admin/queries";
 import { orderFilters, sortFilters, filterQuery } from "@/lib/admin/filters";
-import { DataTable, DensityToggle, densityFrom } from "@/components/admin/DataTable";
+import { DataTable } from "@/components/admin/DataTable";
 import { BulkBar, BulkCheckbox } from "@/components/admin/BulkBar";
 import { SavedViews } from "@/components/admin/SavedViews";
 import { updateOrderStatus, bulkUpdateOrderStatus } from "@/lib/admin/order-actions";
 import { FULFILMENT_SHORT } from "@/lib/fulfilment";
+import { PAYMENT_METHOD_SHORT, settlesOnHandover } from "@/lib/payments/methods";
 import { isAdmin, getCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { orderItems } from "@/lib/db/schema";
@@ -45,7 +46,6 @@ type SP = {
     page?: string;
     colonna?: string;
     verso?: string;
-    densita?: string;
   }>;
 };
 
@@ -77,7 +77,6 @@ export default async function AdminOrders({ searchParams }: SP) {
   const scope = await shopScope();
   const filters = orderFilters({ ...sp, negozio: lockShop(sp.negozio, scope) });
   const sort = sortFilters(sp, ORDER_SORTS, { colonna: "data", verso: "desc" });
-  const density = densityFrom(sp.densita);
   const viewer = await getCurrentUser();
   const [{ rows: orders, total, pageCount }, shops, admin, views] = await Promise.all([
     getOrdersPage({ ...filters, page, sort }),
@@ -86,8 +85,8 @@ export default async function AdminOrders({ searchParams }: SP) {
     viewer ? getSavedViews(viewer.id, BASE) : Promise.resolve([]),
   ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
-  // Carried on every sort/density/page link so the view survives navigation.
-  const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso, densita: sp.densita };
+  // Carried on every sort/page link so the view survives navigation.
+  const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso };
 
   // Per-order item preview: fetch line items for the current page in one query,
   // then group into a total-quantity count + the first product names.
@@ -211,7 +210,6 @@ export default async function AdminOrders({ searchParams }: SP) {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         {/* "Cosa devo evadere oggi" was three facets to re-select every morning. */}
         <SavedViews path={BASE} views={views} currentQuery={filterQuery(filters).replace(/^\?/, "")} />
-        <DensityToggle basePath={BASE} params={linkParams} density={density} />
       </div>
 
       <BulkBar
@@ -235,7 +233,6 @@ export default async function AdminOrders({ searchParams }: SP) {
         basePath={BASE}
         params={linkParams}
         sort={sort}
-        density={density}
         empty={
           q || stato !== "all" || tipo !== "all" || negozio !== "all"
             ? "Nessun ordine corrisponde ai filtri."
@@ -302,6 +299,14 @@ export default async function AdminOrders({ searchParams }: SP) {
               <div className="flex flex-wrap gap-1">
                 <StatusBadge status={o.status} />
                 <StatusBadge status={o.paymentStatus} />
+                {/* "Da pagare" alone doesn't distinguish an abandoned card
+                    checkout from a live order the customer will pay for on
+                    collection — opposite meanings, opposite actions. */}
+                {o.paymentStatus === "unpaid" && settlesOnHandover(o.paymentMethod) && (
+                  <span className="border border-gold-dark/50 bg-gold/20 px-2 py-0.5 text-[10px] font-bold tracking-wider text-brown-950 uppercase">
+                    {PAYMENT_METHOD_SHORT[o.paymentMethod]}
+                  </span>
+                )}
               </div>
             ),
           },

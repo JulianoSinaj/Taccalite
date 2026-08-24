@@ -312,8 +312,28 @@ export const users = sqliteTable(
     // remain of how many were issued.
     totpRecoveryCodes: text("totp_recovery_codes", { mode: "json" })
       .$type<{ hash: string; usedAt: number | null }[]>(),
+    // ── Login telemetry / throttling ───────────────────────────────────────
+    // Stamped on every successful login. Its first job is support ("when did
+    // this account last work?"); its second is `runPointsExpiry`-style sweeps
+    // that need to tell a dormant account from a new one.
+    lastLoginAt: integer("last_login_at", { mode: "timestamp_ms" }),
+    // Consecutive failed password/2FA attempts, reset to 0 on success. The
+    // per-IP limiter in `lib/rate-limit.ts` cannot see credential stuffing that
+    // rotates IPs against one account, which is the attack that actually
+    // matters for a shop whose usernames are guessable.
+    failedLoginCount: integer("failed_login_count").notNull().default(0),
+    // Set when `failedLoginCount` crosses the threshold; login refuses until it
+    // passes. Deliberately a timestamp rather than a boolean so the lock
+    // expires on its own and never needs an operator to clear it.
+    lockedUntil: integer("locked_until", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
   },
+  // NB: no CHECK constraint may be ADDED to this table. SQLite forces a full
+  // table rebuild for a new CHECK, and rebuilding `users` silently destroys the
+  // `users_fts` index and its three triggers (drizzle/0024) — with tsc, eslint
+  // and the build all staying green. The `role` check below predates the FTS
+  // index and is fine where it is; new enums here are enforced by Drizzle's
+  // types plus zod at the entry points, exactly as `orders.paymentMethod` is.
   (t) => [
     // Dashboard counts customers by role + createdAt; the users list sorts by createdAt.
     index("users_created_idx").on(t.createdAt),
@@ -321,6 +341,91 @@ export const users = sqliteTable(
     index("users_shop_idx").on(t.shopSlug),
     check("users_role_ck", sql`${t.role} in ('customer', 'staff', 'admin')`),
   ],
+);
+
+// ── Auth tokens (password reset + email verification) ────────────────────────
+/**
+ * One-shot, emailed credentials — the two flows that let an account recover
+ * itself without an operator.
+ *
+ * Password reset and email verification differ only in `purpose`, so they share
+ * one table: one expiry sweep, one consume path, one set of tests. Splitting
+ * them would duplicate every one of those for no gain.
+ *
+ * `tokenHash` stores SHA-256 of a 32-byte random token, never the token itself —
+ * so a database read (a backup, a stray dump, a read-only SQL injection) cannot
+ * mint a session. A fast hash is the right choice here, unlike for passwords:
+ * the input is already 256 bits of entropy, so there is nothing to brute-force,
+ * and a slow KDF would only tax the server. Same reasoning as the 2FA recovery
+ * codes on `users.totpRecoveryCodes`.
+ *
+ * `email` is a snapshot of the address being proven, NOT a copy of
+ * `users.email`. An email *change* has to be verified before it is written to
+ * the user row — otherwise a typo (or a hostile change) locks the account to an
+ * address nobody controls. For `password_reset` it records where the link was
+ * sent, which is what makes the audit trail readable a month later.
+ */
+export const authTokens = sqliteTable(
+  "auth_tokens",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    purpose: text("purpose", { enum: ["password_reset", "email_verify"] }).notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    email: text("email"),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    // Marks a spent token instead of deleting it, so a second click on the same
+    // link can say "questo link è già stato usato" rather than the indistinct
+    // "non valido" — and so the audit trail survives until the GC sweep.
+    usedAt: integer("used_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    // Issuing a token supersedes that user's outstanding ones of the same kind.
+    index("auth_tokens_user_idx").on(t.userId, t.purpose),
+    // The maintenance cron deletes by expiry.
+    index("auth_tokens_expires_idx").on(t.expiresAt),
+    check("auth_tokens_purpose_ck", sql`${t.purpose} in ('password_reset', 'email_verify')`),
+  ],
+);
+
+// ── Saved addresses ──────────────────────────────────────────────────────────
+/**
+ * A customer's address book.
+ *
+ * `orders.shippingAddress` is a per-order JSON snapshot and stays that way — an
+ * order must record where it actually went, frozen, even if the customer later
+ * edits or deletes the address. This table is the *source* those snapshots are
+ * copied from, so a repeat customer stops retyping their street on every
+ * checkout.
+ */
+export const addresses = sqliteTable(
+  "addresses",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    label: text("label").notNull().default(""), // "Casa", "Ufficio" — free text
+    name: text("name").notNull().default(""),
+    phone: text("phone"),
+    street: text("street").notNull().default(""),
+    city: text("city").notNull().default(""),
+    postcode: text("postcode").notNull().default(""),
+    province: text("province").notNull().default(""),
+    country: text("country").notNull().default("IT"),
+    notes: text("notes"),
+    // Exactly one default per user is enforced in `lib/addresses.ts` (clear the
+    // others in the same transaction), not by a constraint: SQLite has no
+    // partial-unique-index-with-predicate that survives drizzle's snapshot
+    // round-trip cleanly, and the invariant is cheap to hold in one place.
+    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("addresses_user_idx").on(t.userId)],
 );
 
 // ── Sessions (cookie-based) ──────────────────────────────────────────────────
@@ -338,9 +443,46 @@ export const sessions = sqliteTable(
     lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" })
       .$defaultFn(() => new Date())
       .default(nowMs),
+    // Captured at sign-in so "questo dispositivo" in the session list can be
+    // told apart from the other three rows. Without them every entry read
+    // "Altro dispositivo, ultimo accesso <date>", which is not enough for the
+    // one question the list exists to answer: is one of these not me?
+    //
+    // Deliberately a raw UA string, parsed for display only. Storing a parsed
+    // "Chrome su iPhone" would bake today's parser into the data.
+    userAgent: text("user_agent"),
+    // Best-effort, and only meaningful behind a trusted proxy (see
+    // `clientIp`). Kept because a familiar-looking city is often what makes a
+    // stranger's session obvious.
+    ip: text("ip"),
     createdAt: createdAt(),
   },
   (t) => [index("sessions_user_idx").on(t.userId), index("sessions_expires_idx").on(t.expiresAt)],
+);
+
+// ── Rate limiting (durable) ──────────────────────────────────────────────────
+/**
+ * Counters for the sliding-window limiter in `lib/rate-limit.ts`.
+ *
+ * The in-memory map that module started as is per-process, which is exactly
+ * wrong for the endpoints that most need limiting: on a serverless deployment
+ * each lambda gets its own empty map, so "10 login attempts per minute" is
+ * really "10 per minute per instance" — close to no limit at all under load,
+ * and reset by every cold start.
+ *
+ * Only the auth-sensitive routes pay for this table; everything else keeps
+ * using the in-memory path, which is free and adequate for flood control.
+ */
+export const rateLimits = sqliteTable(
+  "rate_limits",
+  {
+    // The caller's bucket key, e.g. "login:1.2.3.4". Primary key so the upsert
+    // is a single statement with no read-modify-write race.
+    key: text("key").primaryKey(),
+    count: integer("count").notNull().default(0),
+    resetAt: integer("reset_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("rate_limits_reset_idx").on(t.resetAt)],
 );
 
 // ── Loyalty ──────────────────────────────────────────────────────────────────
@@ -759,6 +901,26 @@ export const orders = sqliteTable(
     totalCents: integer("total_cents").notNull().default(0),
     currency: text("currency").notNull().default("eur"),
     paymentProvider: text("payment_provider").default("stripe"),
+    // How the order is *meant* to be paid, fixed at creation. `card` is prepaid
+    // through Stripe; `in_store` and `on_delivery` legitimately sit unpaid until
+    // the goods are handed over, which is why the abandoned-checkout sweep has
+    // to be able to tell them apart from a card checkout nobody completed.
+    // See `lib/payments/methods.ts` for the rules.
+    //
+    // NB: no CHECK constraint, deliberately. SQLite forces a full table rebuild
+    // for a new CHECK, and a rebuild of `orders` silently destroys its FTS5
+    // index (drizzle/0024) — see the note on the fiscal date indexes above. The
+    // enum is enforced by Drizzle's types and by zod at every entry point.
+    paymentMethod: text("payment_method", {
+      enum: ["card", "in_store", "on_delivery", "counter"],
+    })
+      .notNull()
+      .default("card"),
+    // The instrument the money actually arrived on — null until it does. The
+    // invoice's ModalitaPagamento is derived from this, so it is not a duplicate
+    // of `paymentMethod`: "pago al ritiro" settled in contanti is MP01, the same
+    // order settled on the POS is MP08.
+    paidWith: text("paid_with", { enum: ["card", "cash", "pos", "transfer", "other"] }),
     paymentStatus: text("payment_status", { enum: ["unpaid", "paid", "refunded"] })
       .notNull()
       .default("unpaid"),
@@ -771,6 +933,14 @@ export const orders = sqliteTable(
     // date, not the date the order was placed — an order taken on the 31st and
     // paid on the 1st belongs to the following month's VAT return.
     paidAt: integer("paid_at", { mode: "timestamp_ms" }),
+    // When this order's goods were taken out of stock. Its only job is to make
+    // the decrement happen exactly once: a card order applies it at payment, an
+    // order to be paid on collection applies it the moment it is placed (the
+    // meat has to be set aside, or the shop oversells what it has promised), and
+    // both paths then converge on `finalizeOrder`. Claiming the transition on
+    // this column is what stops the second path from decrementing twice — and
+    // what tells a cancellation whether there is anything to give back.
+    stockAppliedAt: integer("stock_applied_at", { mode: "timestamp_ms" }),
     // When money was last given back. A refund is booked as a credit note in the
     // period it happened, NOT by removing the sale from the (possibly already
     // filed) period it was paid in — so the reversal needs its own date.
@@ -1172,4 +1342,8 @@ export type ProductBatchRow = typeof productBatches.$inferSelect;
 export type CustomerSegmentRow = typeof customerSegments.$inferSelect;
 export type SegmentRule = CustomerSegmentRow["rule"];
 export type SavedViewRow = typeof savedViews.$inferSelect;
+export type AuthTokenRow = typeof authTokens.$inferSelect;
+export type AuthTokenPurpose = AuthTokenRow["purpose"];
+export type AddressRow = typeof addresses.$inferSelect;
+export type SessionRow = typeof sessions.$inferSelect;
 export type ShopHours = NonNullable<ShopRow["hoursStructured"]>;

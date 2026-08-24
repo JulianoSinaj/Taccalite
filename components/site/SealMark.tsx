@@ -79,11 +79,21 @@ export default function SealMark({ className }: { className?: string }) {
    */
   const [phase, setPhase] = useState<"flat" | "warming" | "struck">("flat");
   /**
-   * Set when the handover happened while the veil was still down, i.e. entirely
-   * out of sight. A cross-fade there is not a cross-fade — it is a visitor
-   * arriving partway through one. See the class lists below.
+   * Whether the next handover should happen without a cross-fade. Two causes,
+   * one behaviour:
+   *
+   * The veil is still down, so the handover is entirely out of sight — and a
+   * cross-fade nobody watches is not a cross-fade, it is a visitor arriving
+   * partway through one.
+   *
+   * Or the drawing context has just been lost, so the canvas went blank in a
+   * single frame — and half a second of fading the foil back in is half a second
+   * of empty corner. Matching the abruptness of what happened is what stops it
+   * reading as a fault.
+   *
+   * See the class lists below.
    */
-  const [behindVeil, setBehindVeil] = useState(false);
+  const [snap, setSnap] = useState(false);
 
   // Mount the canvas the moment hydration is done with the thread. This used to
   // wait for `requestIdleCallback`, on the reasoning that the canvas should not
@@ -109,22 +119,63 @@ export default function SealMark({ className }: { className?: string }) {
 
   // The gate's own deadline, whatever the canvas is doing. Reduced motion never
   // mounts a canvas at all, so it releases at once.
+  //
+  // The deadline does not start until the tab is on screen. It is there to catch
+  // a machine that will *never* draw the coin — and a backgrounded tab is not
+  // that machine, it is a paused one: rAF does not run, so the canvas cannot
+  // report a frame however long it is given. Counting anyway meant a page opened
+  // in a background tab released the gate on a stopwatch nobody was watching,
+  // the veil lifted while still hidden, and the visitor arrived to find the seal
+  // cross-fading to gold in front of them.
   useEffect(() => {
     if (reduceMotion) {
       releaseIntroVeil();
       return;
     }
-    const id = window.setTimeout(releaseIntroVeil, GATE_TIMEOUT);
-    return () => window.clearTimeout(id);
+
+    let timer = 0;
+
+    function arm() {
+      timer = window.setTimeout(releaseIntroVeil, GATE_TIMEOUT);
+    }
+
+    function onVisible() {
+      if (document.hidden) return;
+      document.removeEventListener("visibilitychange", onVisible);
+      arm();
+    }
+
+    if (document.hidden) document.addEventListener("visibilitychange", onVisible);
+    else arm();
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearTimeout(timer);
+    };
   }, [reduceMotion]);
 
   const handleReady = useCallback(() => {
     // Read at the moment of the handover, not during render: whether the veil is
     // still down is exactly the question "is anyone looking at this right now",
-    // and the answer is only meaningful now.
-    if (document.documentElement.dataset.intro === "play") setBehindVeil(true);
+    // and the answer is only meaningful now. Assigned rather than only set, so a
+    // handover that follows a restored context clears the snap the loss asked
+    // for and comes back as an ordinary cross-fade.
+    setSnap(document.documentElement.dataset.intro === "play");
     setPhase("struck");
     releaseIntroVeil();
+  }, []);
+
+  // The GPU has taken the context away — most often from a tab left in the
+  // background, which is exactly where nobody is watching to notice. The canvas
+  // is blank from this instant, so the foil has to be back in this instant.
+  //
+  // Back to `warming`, not `flat`: the canvas stays mounted, three rebuilds its
+  // GL state on restore, and <Seal3D/> re-arms its ready signal on the other
+  // side — so the coin can simply return. Unmounting would throw away a context
+  // the browser is in the middle of handing back.
+  const handleLost = useCallback(() => {
+    setSnap(true);
+    setPhase((current) => (current === "struck" ? "warming" : current));
   }, []);
 
   // Nothing times the canvas out. A canvas that has not reported a frame is not
@@ -150,8 +201,8 @@ export default function SealMark({ className }: { className?: string }) {
           // way up before it starts leaving. A straight cross-fade would dip
           // through a washed-out halfway point where neither mark is solid.
           "absolute inset-0 flex items-center justify-center transition-opacity ease-out",
-          behindVeil ? "duration-0 delay-0" : "duration-500",
-          struck ? (behindVeil ? "opacity-0" : "opacity-0 delay-300") : "opacity-100"
+          snap ? "duration-0 delay-0" : "duration-500",
+          struck ? (snap ? "opacity-0" : "opacity-0 delay-300") : "opacity-100"
         )}
       >
         <SealSvg className="h-full w-full drop-shadow-[0_18px_36px_rgba(42,26,16,0.22)]" />
@@ -161,11 +212,11 @@ export default function SealMark({ className }: { className?: string }) {
         <div
           className={cn(
             "absolute inset-0 transition-opacity ease-out",
-            behindVeil ? "duration-0" : "duration-700",
+            snap ? "duration-0" : "duration-700",
             struck ? "opacity-100" : "opacity-0"
           )}
         >
-          <Seal3D onReady={handleReady} />
+          <Seal3D onReady={handleReady} onLost={handleLost} />
         </div>
       )}
     </div>

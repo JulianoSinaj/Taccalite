@@ -121,7 +121,12 @@ type TimeRange = { start: number; end: number };
  */
 function parseRanges(value: string): TimeRange[] | null {
   const ranges: TimeRange[] = [];
-  for (const part of value.split(/\s*[,;/]\s*/)) {
+  // A bracketed note — "(orario continuato)", "(su prenotazione)" — is prose the
+  // shop writes for the reader, not part of the times. Left in, it made the
+  // whole row unparseable, which is why the Centro's "9:00 – 20:00 (orario
+  // continuato)" showed no "aperto adesso" pill at all.
+  const times = value.replace(/\([^)]*\)/g, " ");
+  for (const part of times.split(/\s*[,;/]\s*/)) {
     const seg = part.trim();
     if (!seg) continue;
     const ends = seg.split(/\s*[–—-]\s*|\s+alle?\s+|\s+to\s+/).map((s) => s.trim());
@@ -361,4 +366,87 @@ export function todayRowIndex(hours: HoursRow[] | null | undefined, now: Date = 
   } catch {
     return -1;
   }
+}
+
+// ── The week, as a grid ──────────────────────────────────────────────────────
+/**
+ * One weekday's opening ranges, in minutes since midnight.
+ *
+ * `ranges: null` means "we could not read this day" and `ranges: []` means
+ * "explicitly closed" — the same distinction the structured format draws, kept
+ * here because a chart that renders an unknown day as a closed one is stating
+ * something the shop never said.
+ */
+export type WeekDayRanges = {
+  /** ISO weekday: 1 = Monday … 7 = Sunday. */
+  day: number;
+  name: string;
+  ranges: { start: number; end: number }[] | null;
+};
+
+/**
+ * The whole week resolved to numbers, so a page can *draw* the opening hours
+ * instead of only listing them.
+ *
+ * Same precedence and same fail-safe contract as `shopIsOpenNow`: structured
+ * hours win when present, free text is parsed only as a fallback, and anything
+ * unreadable stays `null` rather than becoming a confident-looking bar. Returns
+ * null when not one of the seven days could be read, so the caller can drop the
+ * chart entirely rather than render an empty frame.
+ */
+export function shopWeekGrid(shop: {
+  hours: HoursRow[] | null;
+  hoursStructured?: DayHours[] | null;
+}): WeekDayRanges[] | null {
+  try {
+    const byDay = new Map<number, { start: number; end: number }[] | null>();
+
+    if (shop.hoursStructured && shop.hoursStructured.length > 0) {
+      for (const entry of shop.hoursStructured) {
+        const ranges = entry.ranges
+          .map((r) => ({ start: parseTimeToMinutes(r.open), end: parseTimeToMinutes(r.close) }))
+          .filter((r): r is TimeRange => r.start != null && r.end != null && r.end > r.start);
+        // An entry whose ranges all failed to parse is unknown, not closed; an
+        // entry that genuinely carries none is the shop saying "closed".
+        byDay.set(entry.day, entry.ranges.length > 0 && ranges.length === 0 ? null : ranges);
+      }
+    } else {
+      for (const row of shop.hours ?? []) {
+        if (!row || typeof row.label !== "string" || typeof row.value !== "string") continue;
+        const days = parseDaysFromLabel(row.label);
+        if (!days) continue;
+        const closed = /\bchius/i.test(row.value);
+        const parsed = closed ? [] : parseRanges(row.value);
+        // Overnight ranges are dropped: a norcineria does not have them, and a
+        // bar drawn from 20:00 back to 02:00 would be nonsense on the chart.
+        const usable = (parsed ?? []).filter((r) => r.end > r.start);
+        const value =
+          parsed == null || (parsed.length > 0 && usable.length === 0) ? null : usable;
+        for (const day of days) {
+          // First matching row wins, exactly as `isOpenNow` resolves today.
+          if (!byDay.has(day)) byDay.set(day, value);
+        }
+      }
+    }
+
+    const grid: WeekDayRanges[] = [];
+    for (let day = 1; day <= 7; day++) {
+      grid.push({ day, name: weekdayName(day), ranges: byDay.get(day) ?? null });
+    }
+    return grid.some((d) => d.ranges != null) ? grid : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * "Now", as the two numbers a chart needs: the ISO weekday and the minutes
+ * since midnight.
+ *
+ * A plain function rather than something a component computes inline, because
+ * the React Compiler lint rejects impure calls (`new Date()`) in a render body —
+ * time-dependent values belong in a helper that hands back finished data.
+ */
+export function clockNow(now: Date = new Date()): { day: number; minutes: number } {
+  return { day: isoWeekday(now), minutes: now.getHours() * 60 + now.getMinutes() };
 }

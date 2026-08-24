@@ -14,12 +14,18 @@ import {
   setOrderTracking,
   refundOrder,
   resendOrderEmail,
+  settleOrderPayment,
 } from "@/lib/admin/order-actions";
 import { isAdmin } from "@/lib/auth/session";
 import { getSetting } from "@/lib/db/queries";
 import { orderVatBuckets, vatRateLabel } from "@/lib/fiscal";
 import { getCarriers, trackingUrl } from "@/lib/carriers";
 import { FULFILMENT_LABEL } from "@/lib/fulfilment";
+import {
+  PAYMENT_METHOD_LABEL,
+  PAYMENT_INSTRUMENT_LABEL,
+  SETTLEMENT_INSTRUMENTS,
+} from "@/lib/payments/methods";
 import { formatSlotLabel } from "@/lib/pickup-slots";
 import { getDeliveryZones, getPickupSlots, getPickupSlotCounts, getClosures } from "@/lib/db/queries";
 import { pickupSlotOptions } from "@/lib/pickup-slots";
@@ -71,6 +77,9 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   const addr = order.shippingAddress;
   const trackingHref = trackingUrl(carriers, order.carrier, order.trackingNumber);
   const refundableCents = order.totalCents - order.refundedCents;
+  // Money still owed on an order that was never charged online. Staff can take
+  // it, not just admins — collecting at the counter is the job.
+  const canSettle = order.paymentStatus === "unpaid" && order.status !== "cancelled";
   const canRefund =
     admin && order.paymentStatus === "paid" && order.status !== "refunded" && refundableCents > 0;
   // IVA breakdown reconciled with the money actually kept: line grosses net of
@@ -314,9 +323,13 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               <input type="hidden" name="id" value={order.id} />
               <div>
                 <label className={labelCls}>Stato ordine</label>
+                {/* "Pagato" is not offered while the order is unpaid: settling
+                    goes through "Registra incasso" above, which is the only
+                    path that records what the money arrived on. Still listed
+                    once it IS paid, so the state can be read back. */}
                 <select name="status" defaultValue={order.status} className={inputCls}>
                   <option value="pending">In attesa</option>
-                  <option value="paid">Pagato</option>
+                  {!canSettle && <option value="paid">Pagato</option>}
                   <option value="fulfilled">Evaso</option>
                   <option value="cancelled">Annullato</option>
                   {order.status === "refunded" && <option value="refunded">Rimborsato</option>}
@@ -326,7 +339,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 <label className={labelCls}>Stato pagamento</label>
                 <select name="paymentStatus" defaultValue={order.paymentStatus} className={inputCls}>
                   <option value="unpaid">Da pagare</option>
-                  <option value="paid">Pagato</option>
+                  {!canSettle && <option value="paid">Pagato</option>}
                   {order.paymentStatus === "refunded" && <option value="refunded">Rimborsato</option>}
                 </select>
               </div>
@@ -406,7 +419,56 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
 
           <Panel>
             <h3 className="font-display mb-3 text-lg text-brown-950">Pagamento</h3>
+
+            {/* The whole point of the offline cycle: an order that was never
+                charged online is closed here, and the instrument is asked for
+                rather than assumed — contanti is MP01 on the fattura, POS is
+                MP08, and nothing downstream can work out which it was. */}
+            {canSettle && (
+              <div className="mb-4 border border-gold-dark/40 bg-gold/10 p-4">
+                <p className="font-display text-base text-brown-950">
+                  Da incassare: {euro(order.totalCents - order.refundedCents)}
+                </p>
+                <p className="mt-1 mb-3 text-xs text-brown-800/60">
+                  {PAYMENT_METHOD_LABEL[order.paymentMethod]}
+                  {order.paymentMethod === "card"
+                    ? " — il pagamento online non è stato completato."
+                    : "."}
+                </p>
+                <ActionForm action={settleOrderPayment} className="space-y-3">
+                  <input type="hidden" name="id" value={order.id} />
+                  <div>
+                    <label className={labelCls} htmlFor="settle-with">
+                      Incassato con
+                    </label>
+                    <select id="settle-with" name="paidWith" defaultValue="cash" className={inputCls}>
+                      {SETTLEMENT_INSTRUMENTS.map((i) => (
+                        <option key={i} value={i}>
+                          {PAYMENT_INSTRUMENT_LABEL[i]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <PendingButton tone="dark">Registra incasso</PendingButton>
+                </ActionForm>
+                <p className="mt-2 text-xs text-brown-800/60">
+                  Registra il pagamento, accredita i punti fedeltà e conta l&apos;eventuale codice
+                  sconto. La giacenza è già stata scalata quando l&apos;ordine è stato accettato.
+                </p>
+              </div>
+            )}
+
             <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-brown-800/60">Metodo</dt>
+                <dd className="text-brown-950">{PAYMENT_METHOD_LABEL[order.paymentMethod]}</dd>
+              </div>
+              {order.paidWith && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-brown-800/60">Incassato con</dt>
+                  <dd className="text-brown-950">{PAYMENT_INSTRUMENT_LABEL[order.paidWith]}</dd>
+                </div>
+              )}
               <div className="flex justify-between gap-3">
                 <dt className="text-brown-800/60">Provider</dt>
                 <dd className="text-brown-950">{order.paymentProvider ?? "—"}</dd>

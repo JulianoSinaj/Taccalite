@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useCart } from "@/components/store/cart";
 import { useScrollLock } from "@/lib/use-scroll-lock";
 import Magnetic from "./Magnetic";
+import AccountBadge from "./AccountBadge";
 
 /** Only what the menu needs to offer a call — the layout reads it from the DB. */
 export type HeaderShop = { slug: string; name: string; phone: string | null };
@@ -150,13 +151,7 @@ export default function SiteHeader({ shops = [] }: { shops?: HeaderShop[] }) {
               </Link>
             </Magnetic>
 
-            <Link
-              href="/account"
-              aria-label="Area personale"
-              className="flex size-11 items-center justify-center rounded-full text-brown-700 transition-colors hover:bg-paper-warm hover:text-brown-950 focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
-            >
-              <User className="size-[1.15rem]" />
-            </Link>
+            <AccountBadge />
 
             <button
               type="button"

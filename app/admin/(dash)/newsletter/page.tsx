@@ -16,7 +16,7 @@ import {
   chipsFrom,
   labelFrom,
 } from "@/components/admin/FilterBar";
-import { DataTable, DensityToggle, densityFrom } from "@/components/admin/DataTable";
+import { DataTable } from "@/components/admin/DataTable";
 import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
 import { CampaignComposer, type SegmentOption } from "@/components/admin/CampaignComposer";
 import { getSubscribersPage, adminGetShops, SUBSCRIBER_SORTS } from "@/lib/admin/queries";
@@ -51,7 +51,6 @@ type SP = {
     campagna?: string;
     colonna?: string;
     verso?: string;
-    densita?: string;
   }>;
 };
 
@@ -242,9 +241,8 @@ export default async function AdminNewsletter({ searchParams }: SP) {
   const { stato = "all", origine = "all", q } = sp;
   const filters = subscriberFilters(sp);
   const sort = sortFilters(sp, SUBSCRIBER_SORTS, { colonna: "iscritto", verso: "desc" });
-  const density = densityFrom(sp.densita);
-  // Carried on every sort/density/page link so the view survives navigation.
-  const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso, densita: sp.densita };
+  // Carried on every sort/page link so the view survives navigation.
+  const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso };
   const [
     { rows: subs, total, confirmed, pageCount, sources },
     admin,
@@ -530,7 +528,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
         basePath={BASE}
         params={linkParams}
         searchPlaceholder="Indirizzo email…"
-        carry={["stato", "densita"]}
+        carry={["stato"]}
         formId="newsletter-filters"
         facets={[{ name: "origine", label: "Origine", options: SOURCE_CHIPS }]}
       />
@@ -545,7 +543,6 @@ export default async function AdminNewsletter({ searchParams }: SP) {
             q: { title: "Ricerca", format: (v) => `“${v}”` },
           }}
         />
-        <DensityToggle basePath={BASE} params={linkParams} density={density} />
       </div>
 
       <DataTable
@@ -554,7 +551,6 @@ export default async function AdminNewsletter({ searchParams }: SP) {
         basePath={BASE}
         params={linkParams}
         sort={sort}
-        density={density}
         empty={
           q || stato !== "all" || origine !== "all"
             ? "Nessun iscritto corrisponde ai filtri."

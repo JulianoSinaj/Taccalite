@@ -145,11 +145,10 @@ export default async function SecurityPage() {
           {sessions.map((s, i) => (
             <li key={i} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0">
               <div>
-                <p className="text-sm font-semibold text-brown-950">
-                  {s.isCurrent ? "Questo dispositivo" : "Altra sessione"}
-                </p>
+                <p className="text-sm font-semibold text-brown-950">{s.device}</p>
                 <p className="text-xs text-brown-800/60">
-                  Ultimo accesso {fmtDateTime(s.lastSeenAt)} · scade il {fmtDateTime(s.expiresAt)}
+                  Ultimo accesso {fmtDateTime(s.lastSeenAt)}
+                  {s.ip ? ` · ${s.ip}` : ""} · scade il {fmtDateTime(s.expiresAt)}
                 </p>
               </div>
               {s.isCurrent && (

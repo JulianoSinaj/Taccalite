@@ -51,6 +51,7 @@ function OrderLine({
   shopName?: string | null;
   detail?: string | null;
 }) {
+  const toCollect = order.paymentStatus === "unpaid" && order.status !== "cancelled";
   return (
     <Panel className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -70,8 +71,16 @@ function OrderLine({
       </div>
       <div className="flex items-center gap-2">
         <span className="font-semibold text-brown-950 tabular-nums">{euro(order.totalCents)}</span>
+        {/* The single most important thing on this sheet for an unpaid order:
+            whoever hands the parcel over has to take money for it, and this is
+            the page they are holding when they do. Printed too, deliberately. */}
+        {toCollect && (
+          <span className="border border-gold-dark/50 bg-gold/20 px-2 py-1 text-[11px] font-bold tracking-wider text-brown-950 uppercase">
+            Da incassare {euro(order.totalCents)}
+          </span>
+        )}
         <StatusBadge status={order.status} />
-        {order.status === "paid" && (
+        {order.status === "paid" && !toCollect && (
           <ActionForm action={updateOrderStatus} className="inline-flex print:hidden">
             <input type="hidden" name="id" value={order.id} />
             <input type="hidden" name="status" value="fulfilled" />

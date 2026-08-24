@@ -9,6 +9,7 @@ import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action
 import {
   parseForm,
   orderStatusInput,
+  orderSettleInput,
   manualOrderInput,
   orderDetailsInput,
   orderFiscalInput,
@@ -20,7 +21,7 @@ import {
   getPickupSlotCounts,
   getClosures,
 } from "@/lib/db/queries";
-import { orderStatusEmail, orderCustomerEmail } from "@/lib/mail/templates";
+import { orderStatusEmail, orderCustomerEmail, orderAwaitingPaymentEmail } from "@/lib/mail/templates";
 import { sendMail } from "@/lib/mail/mailer";
 import { getStripe } from "@/lib/payments/stripe";
 import {
@@ -32,6 +33,7 @@ import {
   quoteCarriage,
 } from "@/lib/orders";
 import { needsAddress, FULFILMENT_LABEL } from "@/lib/fulfilment";
+import { PAYMENT_INSTRUMENT_LABEL, settlesOnHandover } from "@/lib/payments/methods";
 import { resolvePickupSlot, formatSlotLabel } from "@/lib/pickup-slots";
 import { applyStockChange, consumeBatchesFefo } from "@/lib/stock";
 import { validateDiscount, recordDiscountUse, releaseDiscountUseByCode } from "@/lib/discounts";
@@ -355,9 +357,17 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
           discountCents,
           totalCents,
           paymentProvider: "manual",
+          paymentMethod: "counter",
           paymentStatus: paid ? "paid" : "unpaid",
+          // Contanti or POS, as the operator rang it up — this is what puts the
+          // right ModalitaPagamento on the receipt/invoice.
+          paidWith: paid ? d.paidWith : null,
           // A counter sale settles the moment it's rung up.
           paidAt: paid ? new Date() : null,
+          // The goods left the shelf with the customer; the ledger entry below
+          // is the movement, and this stamp is what stops a later cancellation
+          // from putting back stock that was never returned.
+          stockAppliedAt: paid ? new Date() : null,
           notes: d.notes ?? null,
           reservationId: booking?.id ?? null,
         })
@@ -675,20 +685,31 @@ export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promi
     }
 
     // Marking an unpaid order paid runs the full paid-order flow (stock decrement
-    // + ledger, loyalty accrual, confirmation email) instead of a bare flip.
-    const wantsPaid =
-      (d.status === "paid" || d.paymentStatus === "paid") && order.paymentStatus !== "paid";
-    if (wantsPaid) await finalizeOrder(order.id);
+    // + ledger, loyalty accrual, confirmation email) instead of a bare flip — and
+    // it has to record HOW the money arrived, because that becomes the invoice's
+    // ModalitaPagamento. A dropdown cannot know whether it was contanti or POS,
+    // so, exactly as with refunds, it sends the operator to the form that asks.
+    if ((d.status === "paid" || d.paymentStatus === "paid") && order.paymentStatus !== "paid") {
+      throw new ActionError(
+        'Per segnare un ordine come pagato usa "Registra incasso": serve sapere se il pagamento è avvenuto in contanti o con il POS, perché finisce sulla fattura.',
+      );
+    }
 
-    // Re-read after any finalize so comparisons use the current row.
-    const [fresh] = await db.select().from(orders).where(eq(orders.id, d.id)).limit(1);
-    const cur = fresh ?? order;
+    const cur = order;
 
-    // Cancelling a paid order returns its goods to stock and frees its coupon
-    // (mirror of finalize).
-    if (d.status === "cancelled" && cur.status !== "cancelled" && cur.paymentStatus === "paid") {
+    // Cancelling returns whatever the order was actually holding. The call is
+    // unconditional because `restockOrderItems` releases the order's own stock
+    // claim and no-ops when there isn't one — which is the only way to get this
+    // right now that reservation and payment are separate moments: an abandoned
+    // card checkout never took stock, while an unpaid "pago al ritiro" order did,
+    // and both arrive here as `paymentStatus: "unpaid"`.
+    if (d.status === "cancelled" && cur.status !== "cancelled") {
       await restockOrderItems(order.id, `Annullo ordine ${order.orderNumber}`, actor.id);
-      if (order.discountCode) await releaseDiscountUseByCode(order.discountCode, order.id);
+      // The coupon is only ever counted at payment, so only a paid order has one
+      // to give back.
+      if (cur.paymentStatus === "paid" && order.discountCode) {
+        await releaseDiscountUseByCode(order.discountCode, order.id);
+      }
     }
 
     const statusChanged = d.status !== cur.status;
@@ -710,14 +731,14 @@ export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promi
       await notifyOrderStatus({ ...cur, status: d.status }, d.status);
     }
 
-    if (d.status !== order.status || wantsPaid) {
+    if (d.status !== order.status) {
       await logAudit({
         actor,
         action: "order.status",
         entity: "order",
         entityId: order.id,
-        summary: `Ordine ${order.orderNumber}: stato ${order.status} → ${d.status}${wantsPaid ? " (pagato)" : ""}`,
-        meta: { from: order.status, to: d.status, paymentStatus: d.paymentStatus, finalized: wantsPaid },
+        summary: `Ordine ${order.orderNumber}: stato ${order.status} → ${d.status}`,
+        meta: { from: order.status, to: d.status, paymentStatus: d.paymentStatus },
       });
     }
 
@@ -854,27 +875,37 @@ export async function resendOrderEmail(_prev: ActionState, fd: FormData): Promis
     if (order.status === "fulfilled" || order.status === "cancelled") {
       await notifyOrderStatus(order, order.status);
       what = order.status === "fulfilled" ? "avviso di evasione" : "avviso di annullamento";
-    } else if (order.paymentStatus === "paid") {
+    } else if (order.paymentStatus === "paid" || settlesOnHandover(order.paymentMethod)) {
       const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
       const shop = order.shopSlug ? await getShopBySlug(order.shopSlug) : null;
+      const data = {
+        orderNumber: order.orderNumber,
+        name: order.name,
+        email: order.email,
+        items: items.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          lineTotalCents: i.lineTotalCents,
+        })),
+        totalCents: order.totalCents,
+        fulfilment: order.fulfilment,
+        shopName: shop?.name ?? null,
+        pickupSlotLabel: order.pickupSlotAt ? formatSlotLabel(order.pickupSlotAt) : null,
+      };
+      // An order still awaiting payment gets the email it actually received —
+      // the one that states what is owed. Re-sending "ordine confermato" would
+      // tell someone who has paid nothing that their payment went through.
+      const awaiting = order.paymentStatus === "unpaid";
       await sendMail({
         to: order.email,
-        ...orderCustomerEmail({
-          orderNumber: order.orderNumber,
-          name: order.name,
-          email: order.email,
-          items: items.map((i) => ({
-            name: i.name,
-            quantity: i.quantity,
-            lineTotalCents: i.lineTotalCents,
-          })),
-          totalCents: order.totalCents,
-          fulfilment: order.fulfilment,
-          shopName: shop?.name ?? null,
-          pickupSlotLabel: order.pickupSlotAt ? formatSlotLabel(order.pickupSlotAt) : null,
-        }),
+        ...(awaiting
+          ? orderAwaitingPaymentEmail(
+              data,
+              order.paymentMethod === "on_delivery" ? "on_delivery" : "in_store",
+            )
+          : orderCustomerEmail(data)),
       }).catch(() => {});
-      what = "conferma d'ordine";
+      what = awaiting ? "ricevuta d'ordine" : "conferma d'ordine";
     } else {
       throw new ActionError(
         "L'ordine non è ancora pagato: non c'è nessuna conferma da reinviare.",
@@ -892,6 +923,56 @@ export async function resendOrderEmail(_prev: ActionState, fd: FormData): Promis
 
     revalidatePath("/admin/outbox");
     return ok(`Email reinviata a ${order.email}.`);
+  });
+}
+
+/**
+ * Register a payment taken outside Stripe: the customer paid at the counter when
+ * they collected, or handed the money to whoever drove the round.
+ *
+ * This is the closing half of the "paga alla consegna" cycle. It runs the same
+ * `finalizeOrder` as a card payment — so loyalty accrues, the coupon is counted
+ * and the fiscal date is stamped exactly as it would be online — with two
+ * differences that matter:
+ *
+ *  - the instrument is recorded, because contanti is MP01 and POS is MP08 and
+ *    the invoice cannot guess;
+ *  - the goods are already out of stock (reserved when the order was placed), so
+ *    `applyOrderStock` finds its claim taken and correctly does nothing.
+ *
+ * Available to staff, not just admins: taking money at the counter is the job.
+ */
+export async function settleOrderPayment(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const d = parseForm(orderSettleInput, fd);
+    const order = await mustFindOrder(d.id);
+
+    if (order.paymentStatus === "paid") throw new ActionError("Questo ordine risulta già pagato.");
+    if (order.paymentStatus === "refunded") {
+      throw new ActionError("Questo ordine è stato rimborsato: non può essere incassato.");
+    }
+    if (order.status === "cancelled") {
+      throw new ActionError("Questo ordine è annullato. Riportalo in attesa prima di incassarlo.");
+    }
+
+    await finalizeOrder(order.id, { paidWith: d.paidWith });
+
+    await logAudit({
+      actor,
+      action: "order.settle",
+      entity: "order",
+      entityId: order.id,
+      summary: `Incasso registrato per l'ordine ${order.orderNumber}: ${(order.totalCents / 100).toFixed(2)} € (${PAYMENT_INSTRUMENT_LABEL[d.paidWith]})`,
+      meta: { paidWith: d.paidWith, totalCents: order.totalCents, paymentMethod: order.paymentMethod },
+    });
+
+    revalidatePath(`/admin/orders/${d.id}`);
+    revalidatePath("/admin/orders");
+    revalidatePath("/admin/fulfilment");
+    return ok(
+      `Incasso di ${(order.totalCents / 100).toFixed(2)} € registrato (${PAYMENT_INSTRUMENT_LABEL[d.paidWith]}).`,
+    );
   });
 }
 

@@ -8,6 +8,7 @@ import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 import { ThemeToggle } from "@/components/admin/ThemeToggle";
 import { getTheme, themeAttr } from "@/lib/admin/theme";
 import { ephemeralDatabase } from "@/lib/db/client";
+import { smtpConfigured } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,27 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <strong className="font-semibold">non vengono salvati</strong> e spariscono a ogni riavvio.
               Per rendere i dati permanenti collega un database Turso (Vercel → Storage → Turso) e
               ridistribuisci. Vedi <code>DEPLOYMENT.md §V</code>.
+            </div>
+          )}
+          {/* Not a nicety any more. Before self-service recovery existed, an
+              unsent email was an inconvenience the shop could work around by
+              phoning the customer. Now the reset link, the verification link and
+              the order-claiming that hangs off it all travel by email — with no
+              SMTP host, a customer who forgets their password is locked out with
+              no way back, and nothing anywhere would say so. Hence an alert at
+              the top of every page rather than a line in the settings screen. */}
+          {!smtpConfigured && (
+            <div
+              role="alert"
+              className="border-b border-danger/30 bg-danger-soft px-5 py-3 text-sm text-danger-soft-fg sm:px-8"
+            >
+              <strong className="font-semibold">Email non configurata:</strong> nessun server SMTP
+              impostato, quindi <strong className="font-semibold">nessuna email parte davvero</strong>{" "}
+              — conferme d&apos;ordine, prenotazioni e soprattutto i link per{" "}
+              <strong className="font-semibold">reimpostare la password</strong> restano in coda
+              nell&apos;<a href="/admin/outbox" className="underline">outbox</a>. Finché resta così, un
+              cliente che dimentica la password non può rientrare da solo. Imposta{" "}
+              <code>SMTP_HOST</code> e le variabili collegate (vedi <code>.env.example</code>).
             </div>
           )}
           <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">

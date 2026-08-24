@@ -42,6 +42,12 @@ async function makePaidOrder(opts: { qty: number; unitCents: number; discountCod
       status: "paid",
       paymentStatus: "paid",
       paidAt: new Date(),
+      // Stamped for the same reason the coupon is counted below: an order that
+      // reached `paid` has ALWAYS had its goods taken out of stock, and the
+      // stamp is what says so. `restockOrderItems` releases that claim to decide
+      // what to give back, so an order without one models a state the app cannot
+      // produce — and would quietly test a refund that restocks nothing.
+      stockAppliedAt: new Date(),
       discountCode: opts.discountCode ?? null,
     })
     .returning({ id: orders.id });
