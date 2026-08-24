@@ -75,7 +75,7 @@ export function DensityToggle({
         <Link
           key={d.value}
           href={filterHref(basePath, params, { densita: d.value, page: undefined })}
-          className={`tap rounded-full px-3 py-1.5 text-[11px] font-bold tracking-widest uppercase ${
+          className={`tap rounded-full px-3 py-1.5 text-[12px] font-bold tracking-widest uppercase ${
             density === d.value
               ? "bg-brown-950 text-cream"
               : "bg-brown-900/10 text-brown-800 hover:bg-brown-900/15"
@@ -166,7 +166,7 @@ export function DataTable<T>({
        */}
       <table className="w-full border-separate border-spacing-0 text-sm">
         <thead>
-          <tr className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+          <tr className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
             {columns.map((c) => (
               <th
                 key={c.key}

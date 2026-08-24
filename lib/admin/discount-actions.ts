@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { discountCodes } from "@/lib/db/schema";
+import { discountCodes, discountRedemptions } from "@/lib/db/schema";
 import { requireRole } from "@/lib/auth/session";
 import { logAudit } from "@/lib/audit";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
@@ -88,12 +88,46 @@ export async function toggleDiscountActive(_prev: ActionState, fd: FormData): Pr
   });
 }
 
+/**
+ * Delete a discount code.
+ *
+ * `discount_redemptions` snapshots the code as text rather than pointing at
+ * this row, so the money history survives the delete — but the page that reads
+ * it is this code's own detail page, so deleting a code that has been used
+ * hides its ledger with no way back to it. A used code is history; deactivating
+ * takes it out of circulation and keeps the trail.
+ */
 export async function deleteDiscount(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireRole("admin");
     const id = (fd.get("id") ?? "").toString();
+    // Read first: this used to delete blind, so a stale id reported success and
+    // logged a deletion that never happened.
+    const [row] = await db
+      .select({ code: discountCodes.code })
+      .from(discountCodes)
+      .where(eq(discountCodes.id, id))
+      .limit(1);
+    if (!row) throw new ActionError("Codice non trovato.");
+
+    const [{ used }] = await db
+      .select({ used: sql<number>`count(*)` })
+      .from(discountRedemptions)
+      .where(eq(discountRedemptions.discountCode, row.code));
+    if (Number(used) > 0) {
+      throw new ActionError(
+        `Il codice ${row.code} è stato usato ${used} volte: eliminarlo nasconderebbe lo storico dei suoi utilizzi. Disattivalo invece.`,
+      );
+    }
+
     await db.delete(discountCodes).where(eq(discountCodes.id, id));
-    await logAudit({ actor, action: "discount.delete", entity: "discount", entityId: id, summary: `Codice sconto eliminato (${id})` });
+    await logAudit({
+      actor,
+      action: "discount.delete",
+      entity: "discount",
+      entityId: id,
+      summary: `Codice sconto eliminato: ${row.code}`,
+    });
     revalidatePath("/admin/discounts");
     return ok("Codice eliminato.");
   });

@@ -153,7 +153,7 @@ export default async function SecurityPage() {
                 </p>
               </div>
               {s.isCurrent && (
-                <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-ok-soft-fg uppercase">
+                <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-ok-soft-fg uppercase">
                   Attuale
                 </span>
               )}

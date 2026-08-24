@@ -411,10 +411,24 @@ export function rewardFilters(p: ParamBag): RewardFilters {
   return { stato: facet(p, "stato"), q: read(p, "q") };
 }
 
-export function rewardsWhere(f: RewardFilters): SQL | undefined {
+export function rewardsWhere(f: RewardFilters, now: Date = new Date()): SQL | undefined {
   const conds: SQL[] = [];
   if (f.stato === "attivi") conds.push(eq(rewards.active, true));
   if (f.stato === "disattivati") conds.push(eq(rewards.active, false));
+  // The two states an operator actually has to act on, and which the list used
+  // to render identically to a healthy reward: nothing left to hand over, and
+  // a seasonal window that has closed.
+  if (f.stato === "esauriti") {
+    conds.push(and(eq(rewards.active, true), sql`${rewards.stock} is not null and ${rewards.stock} <= 0`)!);
+  }
+  if (f.stato === "scaduti") {
+    conds.push(
+      and(
+        eq(rewards.active, true),
+        sql`${rewards.availableUntil} is not null and ${rewards.availableUntil} < ${now.getTime()}`,
+      )!,
+    );
+  }
   if (f.q) {
     conds.push(or(like(sql`${rewards.name}`, term(f.q)), like(sql`${rewards.slug}`, term(f.q)))!);
   }

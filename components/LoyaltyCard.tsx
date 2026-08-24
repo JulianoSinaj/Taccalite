@@ -22,7 +22,7 @@ export default function LoyaltyCard({
       <div className="bg-noise absolute inset-0 opacity-30" />
 
       <div className="relative z-10 flex items-start justify-between">
-        <span className="text-[10px] font-bold tracking-[0.4em] text-brown-950/70 uppercase">
+        <span className="text-[11px] font-bold tracking-[0.4em] text-brown-950/70 uppercase">
           Scheda Fedeltà
         </span>
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brown-950/5 sm:h-12 sm:w-12">
@@ -34,13 +34,13 @@ export default function LoyaltyCard({
         <h3 className="font-display text-2xl font-bold tracking-[-0.028em] text-brown-950 uppercase sm:text-3xl">
           Taccalite
         </h3>
-        <p className="text-[10px] font-bold tracking-[0.2em] text-brown-950/70 uppercase">
+        <p className="text-[11px] font-bold tracking-[0.2em] text-brown-950/70 uppercase">
           Cliente · Norcineria dal 1946
         </p>
       </div>
 
       <div className="relative z-10 space-y-1">
-        <p className="text-[10px] font-bold tracking-widest text-brown-950/75 uppercase">
+        <p className="text-[11px] font-bold tracking-widest text-brown-950/75 uppercase">
           Punti accumulati
         </p>
         <p className="font-display text-4xl font-bold tracking-tight text-brown-950 sm:text-6xl">
@@ -56,8 +56,8 @@ export default function LoyaltyCard({
 
       <div className="relative z-10 flex items-end justify-between">
         <div className="space-y-1">
-          <p className="text-[10px] font-bold text-brown-950 uppercase">{name}</p>
-          <p className="font-mono text-[10px] text-brown-950/65">#{cardNumber}</p>
+          <p className="text-[11px] font-bold text-brown-950 uppercase">{name}</p>
+          <p className="font-mono text-[11px] text-brown-950/65">#{cardNumber}</p>
         </div>
         {qrSvg ? (
           <div className="flex flex-col items-center gap-1">
@@ -66,7 +66,7 @@ export default function LoyaltyCard({
               // Server-generated inline SVG (see app/(site)/account/page.tsx); no user HTML.
               dangerouslySetInnerHTML={{ __html: qrSvg }}
             />
-            <p className="font-mono text-[10px] sm:text-[9px] tracking-tight text-brown-950/65">{cardNumber}</p>
+            <p className="font-mono text-[11px] sm:text-[10px] tracking-tight text-brown-950/65">{cardNumber}</p>
           </div>
         ) : (
           <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brown-950/20">

@@ -22,7 +22,7 @@ export default async function AdminLoginPage() {
           <p className="font-display text-3xl font-bold tracking-tighter text-cream uppercase">
             Taccalite
           </p>
-          <p className="text-[10px] font-bold tracking-[0.4em] text-gold uppercase">Gestionale</p>
+          <p className="text-[11px] font-bold tracking-[0.4em] text-gold uppercase">Gestionale</p>
         </div>
         <AdminLoginForm wrongRole={wrongRole} />
       </div>

@@ -1,7 +1,7 @@
 import { AdminHeader, BackLink } from "@/components/admin/ui";
 import { ManualOrderForm } from "@/components/admin/ManualOrderForm";
 import { adminGetProducts, adminGetShops } from "@/lib/admin/queries";
-import { getDeliveryZones, getPickupSlots, getPickupSlotCounts } from "@/lib/db/queries";
+import { getDeliveryZones, getPickupSlots, getPickupSlotCounts, getClosures } from "@/lib/db/queries";
 import { pickupSlotOptions } from "@/lib/pickup-slots";
 import { adminGetReservation } from "@/lib/admin/queries";
 import { assertShopScope } from "@/lib/admin/scope";
@@ -39,7 +39,11 @@ export default async function NewManualOrder({ searchParams }: SP) {
     sortOrder: z.sortOrder,
     active: z.active,
   }));
-  const slotOptions = pickupSlotOptions(slots, { bookedCounts: booked, days: 14 }).map((o) => ({
+  const slotOptions = pickupSlotOptions(slots, {
+    bookedCounts: booked,
+    days: 14,
+    closures: await getClosures(),
+  }).map((o) => ({
     value: o.value,
     shopSlug: o.shopSlug,
     label: o.label,

@@ -303,7 +303,7 @@ export default async function NegoziPage() {
                           <dt className="flex items-center gap-3 text-sm font-semibold text-brown-950">
                             {row.label}
                             {isToday && (
-                              <span className="rounded-full bg-brown-950 px-2 py-0.5 text-[10px] sm:text-[9px] font-bold tracking-widest text-cream uppercase">
+                              <span className="rounded-full bg-brown-950 px-2 py-0.5 text-[11px] sm:text-[10px] font-bold tracking-widest text-cream uppercase">
                                 Oggi
                               </span>
                             )}
@@ -386,7 +386,7 @@ export default async function NegoziPage() {
                         { icon: Bus, label: "Mezzi pubblici", text: d.transit },
                       ].map(({ icon: Icon, label, text }) => (
                         <div key={label} className="space-y-3">
-                          <dt className="flex items-center gap-2 text-[11px] font-bold tracking-widest text-brown-950 uppercase">
+                          <dt className="flex items-center gap-2 text-[12px] font-bold tracking-widest text-brown-950 uppercase">
                             <Icon className="size-4 text-gold-deep" />
                             {label}
                           </dt>

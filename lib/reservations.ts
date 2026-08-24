@@ -3,7 +3,9 @@ import { customAlphabet } from "nanoid";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { reservations } from "@/lib/db/schema";
-import { getShopBySlug, getShops, getSetting } from "@/lib/db/queries";
+import { getShopBySlug, getShops, getSetting, getClosures } from "@/lib/db/queries";
+import { closureFor, closureMessage } from "@/lib/closures";
+import { dateInRome } from "@/lib/time";
 import { sendMail } from "@/lib/mail/mailer";
 import {
   reservationCustomerEmail,
@@ -262,7 +264,25 @@ export type CreateReservationOptions = {
    *  the *public* forms; a shop that has closed online bookings still takes them
    *  by phone, so the back-office books regardless. The shop must still exist. */
   allowDisabledShop?: boolean;
+  /**
+   * Refuse a booking that overbooks the room, is in the past, or falls on a
+   * closed day. True for the public form, false for the back office — an
+   * operator taking a booking on the phone is deciding to accept it, and gets
+   * `capacityWarning()` instead. It is the same split the porchetta cap already
+   * uses via `waitlistOnOverflow`.
+   */
+  enforceAvailability?: boolean;
 };
+
+/** ISO `yyyy-mm-dd`, and a real calendar date rather than "2026-02-31". */
+function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const probe = new Date(Date.UTC(y, m - 1, d));
+  return (
+    probe.getUTCFullYear() === y && probe.getUTCMonth() === m - 1 && probe.getUTCDate() === d
+  );
+}
 
 /**
  * Persist a reservation and fire the notification + confirmation emails.
@@ -279,6 +299,7 @@ export async function createReservation(
     notifyCustomer = true,
     waitlistOnOverflow = true,
     allowDisabledShop = false,
+    enforceAvailability = true,
   } = meta ?? {};
   const shop = await getShopBySlug(input.shop);
   if (!shop) {
@@ -294,7 +315,44 @@ export async function createReservation(
   }
   const shopName = shop.name;
   const reference = generateReference();
-  const date = input.date ?? new Date().toISOString().slice(0, 10);
+  const date = input.date ?? dateInRome();
+
+  // The date column is documented as ISO and every reader keys on that — the
+  // agenda, the calendar, the capacity sums, the cron sweeps. The admin schema
+  // has always enforced the format; this endpoint took `z.string().optional()`,
+  // so a direct POST could store "domani" in a row nothing could ever render.
+  if (!isValidIsoDate(date)) {
+    throw new ReservationNotAllowedError("Data non valida. Usa il calendario per sceglierla.");
+  }
+
+  if (enforceAvailability) {
+    // A booking for a day already gone is never a real intention — it is a
+    // stale tab, a clock skew, or someone poking the endpoint.
+    if (date < dateInRome()) {
+      throw new ReservationNotAllowedError("Quella data è già passata. Scegline un'altra.");
+    }
+
+    // Closed days. The weekly schedule cannot express them, so without this the
+    // form happily books Ferragosto.
+    const closure = closureFor(await getClosures(), input.shop, date, "reservations");
+    if (closure) throw new ReservationNotAllowedError(closureMessage(closure, date));
+
+    // Seats. The kilos of porchetta have been capped since the beginning and
+    // the room never was, so the one thing the shop actually runs on a
+    // calendar — Saturday dinner — could be double-booked from the website
+    // without a word. The back office still only warns (see `capacityWarning`).
+    if (input.type === "table") {
+      const seats = await checkSeatsCapacity(input.shop, date, input.time, input.guests);
+      if (seats.exceeded) {
+        const free = Math.max(0, seats.capacity - seats.booked);
+        throw new ReservationNotAllowedError(
+          free > 0
+            ? `Per le ${input.time} ${free === 1 ? "resta 1 coperto" : `restano ${free} coperti`}. Scegli un altro orario o riduci gli ospiti.`
+            : `Le ${input.time} sono al completo. Scegli un altro orario — o chiamaci, troviamo una soluzione.`,
+        );
+      }
+    }
+  }
 
   // Porchetta capacity: when a weekly cap is configured and this order would push
   // the day over it, the booking goes on the waitlist instead of the normal

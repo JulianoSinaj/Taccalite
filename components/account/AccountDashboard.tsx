@@ -9,7 +9,21 @@ import LoyaltyCard from "@/components/LoyaltyCard";
 import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
 import { FULFILMENT_SHORT, type FulfilmentMode } from "@/lib/fulfilment";
 
-type Reward = { id: string; name: string; description: string; points: number; image: string | null };
+type Reward = {
+  id: string;
+  name: string;
+  description: string;
+  points: number;
+  image: string | null;
+  /** Set when the reward can't be claimed at all — sold out, or out of window. */
+  unavailable: "not_yet" | "expired" | "out_of_stock" | null;
+};
+
+const REWARD_UNAVAILABLE_LABEL: Record<NonNullable<Reward["unavailable"]>, string> = {
+  not_yet: "Non ancora disponibile",
+  expired: "Non più disponibile",
+  out_of_stock: "Esaurito",
+};
 type Tx = { id: string; delta: number; reason: string; balanceAfter: number; createdAt: string | Date };
 type Order = {
   id: string;
@@ -267,7 +281,7 @@ export default function AccountDashboard({
                           </div>
                           <div className="flex items-center gap-3 sm:shrink-0">
                             <span
-                              className={`rounded-full px-3 py-1 text-[10px] font-bold tracking-widest uppercase ${st.cls}`}
+                              className={`rounded-full px-3 py-1 text-[11px] font-bold tracking-widest uppercase ${st.cls}`}
                             >
                               {st.label}
                             </span>
@@ -328,7 +342,7 @@ export default function AccountDashboard({
                           </div>
                           <div className="flex items-center gap-3 sm:shrink-0">
                             <span
-                              className={`rounded-full px-3 py-1 text-[10px] font-bold tracking-widest uppercase ${st.cls}`}
+                              className={`rounded-full px-3 py-1 text-[11px] font-bold tracking-widest uppercase ${st.cls}`}
                             >
                               {st.label}
                             </span>
@@ -365,7 +379,7 @@ export default function AccountDashboard({
                         </div>
                         <div className="flex items-center gap-3 sm:shrink-0">
                           <span
-                            className={`rounded-full px-3 py-1 text-[10px] font-bold tracking-widest uppercase ${st.cls}`}
+                            className={`rounded-full px-3 py-1 text-[11px] font-bold tracking-widest uppercase ${st.cls}`}
                           >
                             {st.label}
                           </span>
@@ -385,7 +399,7 @@ export default function AccountDashboard({
             <Reveal delay={0.1} className="card-shadow-soft border border-rule bg-paper p-6 sm:p-8">
               <div className="mb-6 flex items-center gap-3">
                 <TrendingUp className="size-5 text-gold-dark" />
-                <h5 className="text-[11px] font-bold tracking-[0.3em] text-brown-950 uppercase">
+                <h5 className="text-[12px] font-bold tracking-[0.3em] text-brown-950 uppercase">
                   Il tuo saldo punti
                 </h5>
               </div>
@@ -409,7 +423,7 @@ export default function AccountDashboard({
               </div>
               {nextReward && (
                 <div className="mt-6 border-t border-rule pt-5">
-                  <div className="mb-2 flex items-baseline justify-between gap-4 text-[10px] font-bold tracking-widest text-brown-700 uppercase">
+                  <div className="mb-2 flex items-baseline justify-between gap-4 text-[11px] font-bold tracking-widest text-brown-700 uppercase">
                     <p className="truncate">{nextReward.name}</p>
                     <p className="shrink-0">{missing} pt mancanti</p>
                   </div>
@@ -421,7 +435,7 @@ export default function AccountDashboard({
             </Reveal>
 
             <Reveal delay={0.2} className="cinematic-shadow space-y-4 bg-brown-950 p-6 text-cream sm:p-8">
-              <h5 className="text-[11px] font-bold tracking-[0.3em] text-gold uppercase">
+              <h5 className="text-[12px] font-bold tracking-[0.3em] text-gold uppercase">
                 Vuoi accumulare più punti?
               </h5>
               <p className="text-sm leading-relaxed text-cream/75">
@@ -466,10 +480,18 @@ export default function AccountDashboard({
 
           <RevealStagger className="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-3">
             {rewards.map((reward) => {
-              const canRedeem = points >= reward.points;
+              // Two different "no": not enough points (keep saving) and not
+              // available at all (nothing you can do). They used to be one —
+              // a sold-out reward showed "Riscatta" and failed on click.
+              const blocked = reward.unavailable;
+              const canRedeem = !blocked && points >= reward.points;
               return (
                 <RevealStaggerItem key={reward.id} className="group flex flex-col">
-                  <div className="cinematic-shadow relative mb-8 aspect-[4/3] overflow-hidden bg-brown-900">
+                  <div
+                    className={`cinematic-shadow relative mb-8 aspect-[4/3] overflow-hidden bg-brown-900 ${
+                      blocked ? "opacity-50 grayscale" : ""
+                    }`}
+                  >
                     {reward.image ? (
                       <Image
                         src={reward.image}
@@ -490,6 +512,11 @@ export default function AccountDashboard({
                         <span className="font-sans text-xs tracking-widest uppercase">punti</span>
                       </p>
                     </div>
+                    {blocked && (
+                      <span className="absolute top-4 right-4 rounded-full bg-brown-950/85 px-3 py-1.5 text-[11px] font-bold tracking-widest text-cream uppercase">
+                        {REWARD_UNAVAILABLE_LABEL[blocked]}
+                      </span>
+                    )}
                   </div>
                   <h4 className="font-display mb-2 text-2xl text-cream">{reward.name}</h4>
                   <p className="mb-6 flex-1 text-sm leading-relaxed text-cream/70">{reward.description}</p>
@@ -505,9 +532,11 @@ export default function AccountDashboard({
                   >
                     {busyId === reward.id
                       ? "Attendere…"
-                      : canRedeem
-                        ? "Riscatta"
-                        : `Ti mancano ${reward.points - points} punti`}
+                      : blocked
+                        ? REWARD_UNAVAILABLE_LABEL[blocked]
+                        : canRedeem
+                          ? "Riscatta"
+                          : `Ti mancano ${reward.points - points} punti`}
                   </button>
                 </RevealStaggerItem>
               );

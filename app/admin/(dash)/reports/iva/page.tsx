@@ -30,7 +30,7 @@ function VatTable({
     <div className="scroll-x">
       <table className="w-full text-sm">
       <thead>
-        <tr className="border-b border-brown-900/10 text-left text-[11px] tracking-widest text-brown-800/60 uppercase">
+        <tr className="border-b border-brown-900/10 text-left text-[12px] tracking-widest text-brown-800/60 uppercase">
           <th className="pb-2 font-bold">Aliquota</th>
           <th className="pb-2 text-right font-bold">Imponibile</th>
           <th className="pb-2 text-right font-bold">Imposta</th>
@@ -155,7 +155,7 @@ export default async function VatReport({ searchParams }: SP) {
               {/* Drill-down: the orders behind the numbers, same window. */}
               <Link
                 href={`/admin/orders?stato=paid&da=${period.fromISO}&a=${period.toISO}`}
-                className="text-[11px] font-bold tracking-widest text-gold-deep uppercase hover:underline"
+                className="text-[12px] font-bold tracking-widest text-gold-deep uppercase hover:underline"
               >
                 Vedi gli ordini →
               </Link>
@@ -174,7 +174,7 @@ export default async function VatReport({ searchParams }: SP) {
               <div className="space-y-6">
                 {report.byShop.map((s) => (
                   <div key={s.shopSlug ?? "spedizioni"}>
-                    <p className="mb-2 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+                    <p className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
                       {s.shopSlug ? (shopName.get(s.shopSlug) ?? s.shopSlug) : "Spedizioni / senza sede"}
                       {" · "}
                       {euro(totalImposta(s.buckets))} di imposta

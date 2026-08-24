@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 function ServiceTag({ on, label }: { on: boolean; label: string }) {
   return (
     <span
-      className={`rounded-full px-2.5 py-1 text-[10px] font-bold tracking-widest uppercase ${
+      className={`rounded-full px-2.5 py-1 text-[11px] font-bold tracking-widest uppercase ${
         on ? "bg-ok-soft text-ok-soft-fg" : "bg-brown-900/10 text-brown-800/50"
       }`}
     >

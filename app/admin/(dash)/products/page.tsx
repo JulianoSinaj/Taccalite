@@ -123,12 +123,12 @@ export default async function AdminProducts({ searchParams }: SP) {
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
             {!p.active && <StatusBadge status="cancelled" />}
             {p.purchasable && (
-              <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[10px] font-bold tracking-widest text-ok-soft-fg uppercase">
+              <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[11px] font-bold tracking-widest text-ok-soft-fg uppercase">
                 Shop
               </span>
             )}
             {p.featured && (
-              <span className="rounded-full bg-gold/25 px-2 py-0.5 text-[10px] font-bold tracking-widest text-brown-950 uppercase">
+              <span className="rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-bold tracking-widest text-brown-950 uppercase">
                 ★
               </span>
             )}
@@ -238,13 +238,26 @@ export default async function AdminProducts({ searchParams }: SP) {
               Scadenze{expiringSoon > 0 ? ` · ${expiringSoon}` : ""}
             </Link>
             {admin ? (
-              <a
-                href={`/api/admin/export/products${filterQuery({ ...filters })}`}
-                download
-                className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-              >
-                Esporta CSV
-              </a>
+              <>
+                {/* The movement ledger is what a stocktake gets reconciled
+                    against, and it was readable twenty rows at a time on a
+                    product page with no way to take it anywhere. */}
+                <a
+                  href="/api/admin/export/stock-movements"
+                  download
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                  title="Tutti i movimenti di giacenza, con motivo e operatore"
+                >
+                  Movimenti CSV
+                </a>
+                <a
+                  href={`/api/admin/export/products${filterQuery({ ...filters })}`}
+                  download
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                >
+                  Esporta CSV
+                </a>
+              </>
             ) : null}
             <NewButton href="/admin/products/new">+ Nuovo prodotto</NewButton>
           </div>
@@ -296,7 +309,7 @@ export default async function AdminProducts({ searchParams }: SP) {
           admins only, matching the action's own guard. */}
       {admin && (
         <details className="mb-4">
-          <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+          <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
             Importa listino da CSV
           </summary>
           <Panel className="mt-3">

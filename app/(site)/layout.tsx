@@ -26,9 +26,15 @@ export const dynamic = "force-dynamic";
  * `<Intro />` is a full-screen veil, which this layout used to have and lost on
  * purpose — the old one ran 2.6s and blocked the first word of every visit, the
  * most expensive thing a shop's homepage can do. The one here is a different
- * animal and the differences are the whole point: it plays once per session, on
- * a hard load of the homepage only, and it lifts on a hard cap whatever is still
- * in flight. Keep those three properties or take it out again.
+ * animal and the differences are the whole point: it plays on a hard load of the
+ * homepage only, it holds the page still while it is up, and it lifts on a hard
+ * cap whatever is still in flight. Keep those three properties or take it out
+ * again.
+ *
+ * It used to add a fourth — once per session — and that one is gone on purpose:
+ * a veil nobody can see twice is a veil nobody can judge, and it made the thing
+ * invisible to every reload of every hand that worked on it. The cap is the lever
+ * for "this is too long", not a flag that hides it after the first visit.
  *
  * The cap is 1.8s rather than the 1.2s it started at, because the veil now also
  * waits on the hero's WebGL seal so the mark is already gold when the paper

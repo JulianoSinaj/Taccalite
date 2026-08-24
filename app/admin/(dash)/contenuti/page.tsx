@@ -44,7 +44,7 @@ function Editor({ def, stored }: { def: ContentDef; stored?: string }) {
         <label className={labelCls} htmlFor={`c-${def.key}`}>
           {def.label}
         </label>
-        <span className="text-[10px] font-bold tracking-widest text-brown-800/50 uppercase">
+        <span className="text-[11px] font-bold tracking-widest text-brown-800/50 uppercase">
           {edited ? "Modificato" : "Testo originale"}
         </span>
       </div>
@@ -58,7 +58,7 @@ function Editor({ def, stored }: { def: ContentDef; stored?: string }) {
           rows={ROWS[def.type]}
           defaultValue={value}
           spellCheck
-          className={`${inputCls} font-mono text-[13px] leading-relaxed`}
+          className={`${inputCls} font-mono text-[14px] leading-relaxed`}
         />
       )}
 
@@ -125,7 +125,7 @@ export default async function AdminContenuti() {
                   href={PREVIEW[group]}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[11px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
+                  className="text-[12px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
                 >
                   Vedi la pagina ↗
                 </Link>

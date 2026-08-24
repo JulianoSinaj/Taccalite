@@ -59,13 +59,26 @@ export default async function AdminLoyalty({ searchParams }: SP) {
         }`}
         action={
           admin ? (
-            <a
-              href={`/api/admin/export/customers${filterQuery(filters)}`}
-              download
-              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-            >
-              Esporta CSV
-            </a>
+            <div className="flex flex-wrap gap-2">
+              {/* Points are money-equivalent, so the ledger behind the balances
+                  deserves the same "take it away and check it" treatment the
+                  orders list has. */}
+              <a
+                href="/api/admin/export/loyalty"
+                download
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                title="Ogni accredito e addebito di punti, con il motivo"
+              >
+                Movimenti punti CSV
+              </a>
+              <a
+                href={`/api/admin/export/customers${filterQuery(filters)}`}
+                download
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              >
+                Esporta CSV
+              </a>
+            </div>
           ) : null
         }
       />
@@ -109,7 +122,7 @@ export default async function AdminLoyalty({ searchParams }: SP) {
                 <p className="font-display text-lg text-brown-950">
                   {c.name || "—"}{" "}
                   {c.role !== "customer" && (
-                    <span className="ml-1 rounded-full bg-brown-900/10 px-2 py-0.5 text-[10px] font-bold uppercase">
+                    <span className="ml-1 rounded-full bg-brown-900/10 px-2 py-0.5 text-[11px] font-bold uppercase">
                       {c.role}
                     </span>
                   )}
@@ -121,7 +134,7 @@ export default async function AdminLoyalty({ searchParams }: SP) {
                 </p>
                 <Link
                   href={`/admin/loyalty/${c.id}`}
-                  className="mt-1 inline-block text-[11px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
+                  className="mt-1 inline-block text-[12px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
                 >
                   Scheda cliente →
                 </Link>
@@ -129,7 +142,7 @@ export default async function AdminLoyalty({ searchParams }: SP) {
               <div className="flex items-center gap-4">
                 <div className="text-right">
                   <p className="font-display text-2xl font-bold text-brown-950">{c.points ?? 0}</p>
-                  <p className="text-[10px] font-bold tracking-widest text-brown-800/60 uppercase">Punti</p>
+                  <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Punti</p>
                 </div>
                 {admin && (
                   <ActionForm action={adjustPoints} className="flex flex-wrap items-center gap-2">

@@ -81,19 +81,19 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
           <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Marginalità</h2>
           <Panel className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
-              <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Prezzo ivato</p>
+              <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Prezzo ivato</p>
               <p className="font-display mt-1 text-xl text-brown-950">{euro(product.priceCents)}</p>
             </div>
             <div>
-              <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Netto (imponibile)</p>
+              <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Netto (imponibile)</p>
               <p className="font-display mt-1 text-xl text-brown-950">{euro(productMargin.netCents)}</p>
             </div>
             <div>
-              <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Costo</p>
+              <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Costo</p>
               <p className="font-display mt-1 text-xl text-brown-950">{euro(product.costCents)}</p>
             </div>
             <div>
-              <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Margine</p>
+              <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Margine</p>
               <p
                 className={`font-display mt-1 text-xl font-bold ${
                   productMargin.marginCents >= 0 ? "text-ok" : "text-danger"
@@ -131,7 +131,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
           </p>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div>
-              <h3 className="mb-2 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+              <h3 className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
                 Rettifica
               </h3>
               <ActionForm action={adjustStock} className="flex flex-wrap items-end gap-3">
@@ -172,7 +172,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                 subtract by hand — against a number that can move while they
                 count — was an invitation to get it wrong. */}
             <div className="border-t border-brown-900/10 pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
-              <h3 className="mb-2 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+              <h3 className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
                 Conteggio inventario
               </h3>
               <ActionForm action={adjustStock} className="flex flex-wrap items-end gap-3">
@@ -215,7 +215,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
             <div className="scroll-x mt-8">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-brown-900/10 text-left text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+                  <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
                     <th className="py-2">Data</th>
                     <th className="py-2">Motivo</th>
                     <th className="py-2 text-right">Variazione</th>

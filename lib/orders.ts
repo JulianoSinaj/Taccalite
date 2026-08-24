@@ -4,7 +4,14 @@ import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { orders, orderItems, products } from "@/lib/db/schema";
 import { applyStockChange, consumeBatchesFefo, restoreBatches } from "@/lib/stock";
-import { getShopBySlug, getSetting, getDeliveryZones, getPickupSlots, getPickupSlotCounts } from "@/lib/db/queries";
+import {
+  getShopBySlug,
+  getSetting,
+  getDeliveryZones,
+  getPickupSlots,
+  getPickupSlotCounts,
+  getClosures,
+} from "@/lib/db/queries";
 import { quoteFulfilment, billableWeightKg, needsAddress, type ZoneLike } from "@/lib/fulfilment";
 import { resolvePickupSlot, formatSlotLabel } from "@/lib/pickup-slots";
 import { validateDiscount, recordDiscountUseByCode, releaseDiscountUseByCode } from "@/lib/discounts";
@@ -149,6 +156,10 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
     const slots = await getPickupSlots(input.shopSlug);
     const resolved = resolvePickupSlot(slots, input.shopSlug, input.pickupSlot, {
       bookedCounts: await getPickupSlotCounts(Date.now()),
+      // The weekly schedule has no idea about the calendar, so without this a
+      // window generated from Thursday's hours is bookable on the Thursday of
+      // the August shutdown.
+      closures: await getClosures(),
     });
     if (!resolved.ok) throw new Error(resolved.error);
     pickupSlotAt = resolved.atMs == null ? null : new Date(resolved.atMs);

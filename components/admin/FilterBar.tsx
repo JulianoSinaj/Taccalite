@@ -256,10 +256,23 @@ export function ActiveFilters({
           </Link>
         );
       })}
+      {/* Deliberately not another `bg-brown-900/8` pill: sitting at the end of a
+          row of them, a fourth filled pill reads as a fifth facet rather than as
+          the thing that undoes them. A dashed hairline says "not a filter", and
+          filling in on hover gives it the affordance the bare text link never
+          had. `.tap` rather than `min-h-11` so the 44px target arrives without
+          the control being drawn taller than the pills it sits beside. */}
       <Link
         href={basePath}
-        className="rounded-full px-3 py-1.5 font-bold tracking-widest text-brown-800/70 uppercase underline-offset-2 hover:text-brown-950 hover:underline"
+        aria-label="Azzera tutti i filtri"
+        className="tap group/reset ml-1 inline-flex items-center gap-1.5 rounded-full border border-dashed border-brown-900/25 px-3 py-1.5 font-bold tracking-widest text-brown-800/70 uppercase transition-[color,background-color,border-color,transform] duration-200 hover:border-solid hover:border-brown-950 hover:bg-brown-950 hover:text-cream focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none active:scale-[0.97]"
       >
+        <span
+          aria-hidden
+          className="text-sm leading-none transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover/reset:-rotate-180"
+        >
+          ↺
+        </span>
         Azzera tutto
       </Link>
     </div>

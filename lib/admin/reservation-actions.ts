@@ -5,10 +5,12 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { reservations } from "@/lib/db/schema";
 import { requireAdmin } from "@/lib/auth/session";
-import { getShopBySlug } from "@/lib/db/queries";
+import { getShopBySlug, getClosures } from "@/lib/db/queries";
+import { closureFor } from "@/lib/closures";
 import { sendMail } from "@/lib/mail/mailer";
 import {
   reservationStatusEmail,
+  reservationCustomerEmail,
   porchettaReadyEmail,
   type ReservationEmailData,
 } from "@/lib/mail/templates";
@@ -115,6 +117,14 @@ async function capacityWarning(
     }
   }
 
+  // The public form refuses a closed day outright; here it is a note, because
+  // the operator may well be taking a booking for the day the shop reopens and
+  // has simply not tidied the closure yet.
+  const closure = closureFor(await getClosures(), input.shopSlug, input.date, "reservations");
+  if (closure) {
+    parts.push(`il ${input.date} risulta chiuso${closure.reason ? ` (${closure.reason})` : ""}`);
+  }
+
   return parts.length > 0 ? ` ⚠ Attenzione: ${parts.join("; ")}.` : "";
 }
 
@@ -151,6 +161,8 @@ export async function createAdminReservation(_prev: ActionState, fd: FormData): 
           notifyCustomer: d.notifyCustomer,
           waitlistOnOverflow: false,
           allowDisabledShop: true,
+          // The back office warns rather than blocks — see `capacityWarning`.
+          enforceAvailability: false,
         },
       );
     } catch (err) {
@@ -386,15 +398,82 @@ export async function setReservationTable(_prev: ActionState, fd: FormData): Pro
   });
 }
 
+/**
+ * Re-send the customer's copy of a booking email.
+ *
+ * Orders have had this for a while and bookings did not, so a lost confirmation
+ * — the one carrying the reference code the customer needs at the counter —
+ * could only be recovered by bouncing the status, which sent the wrong message
+ * and wrote a misleading audit line. Which email goes out follows the booking's
+ * current state, exactly as `resendOrderEmail` does.
+ */
+export async function resendReservationEmail(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const res = await mustFindReservation((fd.get("id") ?? "").toString());
+    if (!res.email) throw new ActionError("Questa prenotazione non ha un indirizzo email.");
+
+    // Which email is the *useful* one depends on where the booking has got to.
+    // A porchetta already marked ready is about the pickup; a confirmed or
+    // cancelled booking has a status notice of its own; anything still open
+    // (pending, completed, no-show) wants the original receipt, because the
+    // thing the customer actually lost is the reference code on it.
+    let what: string;
+    if (res.readyAt && res.type === "porchetta") {
+      const shop = await getShopBySlug(res.shopSlug);
+      await sendMail({
+        to: res.email,
+        ...porchettaReadyEmail(
+          res.name,
+          res.date,
+          res.quantityKg,
+          shop ? { name: shop.name, address: shop.address } : null,
+        ),
+      });
+      what = "avviso di ritiro";
+    } else if (res.status === "confirmed" || res.status === "cancelled") {
+      const data = await emailDataFor(res);
+      await sendMail({ to: res.email, ...reservationStatusEmail(data, res.status) });
+      what = res.status === "confirmed" ? "conferma" : "avviso di annullamento";
+    } else {
+      const data = await emailDataFor(res);
+      await sendMail({ to: res.email, ...reservationCustomerEmail(data) });
+      what = "riepilogo della richiesta";
+    }
+
+    await logAudit({
+      actor,
+      action: "reservation.resend_email",
+      entity: "reservation",
+      entityId: res.id,
+      summary: `Email reinviata per ${res.reference} (${what}) → ${res.email}`,
+      meta: { status: res.status, ready: res.readyAt != null, kind: what },
+    });
+
+    revalidateReservations();
+    revalidatePath(`/admin/reservations/${res.id}`);
+    return ok(`Email reinviata a ${res.email}.`);
+  });
+}
+
 // ── Porchetta workflow ───────────────────────────────────────────────────────
-/** Owner marks a porchetta pre-order ready and emails the customer. Idempotent. */
+/**
+ * Owner marks a porchetta pre-order ready and emails the customer.
+ *
+ * `ripeti` is what makes the notice re-sendable. Without it this was one-shot:
+ * once `readyAt` was stamped the action returned "già inviato" for ever, so a
+ * customer who lost the email had no way to be told again short of an operator
+ * typing it out by hand. The stamp still guards the *default* path, so clicking
+ * twice by accident does not send twice.
+ */
 export async function markPorchettaReady(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireAdmin();
     const res = await mustFindReservation((fd.get("id") ?? "").toString());
+    const repeat = fd.get("ripeti") === "true";
 
     if (res.type !== "porchetta") throw new ActionError("Disponibile solo per la porchetta.");
-    if (res.readyAt) return ok("Avviso di ritiro già inviato.");
+    if (res.readyAt && !repeat) return ok("Avviso di ritiro già inviato.");
     if (!res.email) throw new ActionError("Nessuna email per questa prenotazione.");
 
     const shop = await getShopBySlug(res.shopSlug);
@@ -406,20 +485,25 @@ export async function markPorchettaReady(_prev: ActionState, fd: FormData): Prom
 
     await db
       .update(reservations)
-      .set({ readyAt: new Date(), updatedAt: new Date() })
+      // Preserve the original stamp on a repeat: it records when the porchetta
+      // was actually ready, not when the customer was last reminded.
+      .set({ readyAt: res.readyAt ?? new Date(), updatedAt: new Date() })
       .where(eq(reservations.id, res.id));
 
     await logAudit({
       actor,
-      action: "reservation.ready",
+      action: repeat ? "reservation.ready_resend" : "reservation.ready",
       entity: "reservation",
       entityId: res.id,
-      summary: `Porchetta ${res.reference} segnata pronta — avviso inviato a ${res.email}`,
-      meta: { date: res.date, quantityKg: res.quantityKg },
+      summary: repeat
+        ? `Avviso di ritiro reinviato per ${res.reference} → ${res.email}`
+        : `Porchetta ${res.reference} segnata pronta — avviso inviato a ${res.email}`,
+      meta: { date: res.date, quantityKg: res.quantityKg, repeat },
     });
 
     revalidateReservations();
-    return ok("Avviso di ritiro inviato.");
+    revalidatePath(`/admin/reservations/${res.id}`);
+    return ok(repeat ? "Avviso di ritiro reinviato." : "Avviso di ritiro inviato.");
   });
 }
 

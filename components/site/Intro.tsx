@@ -27,6 +27,12 @@ import SealSvg from "@/components/site/SealSvg";
  * veil that flickers past in 200ms is worse than no veil, so the stamp always
  * gets long enough to read.
  *
+ * It plays on every hard load of the homepage. It used to play once per session
+ * and stamp a sessionStorage key to remember, which meant the thing was invisible
+ * to anyone who reloaded — including whoever was building the page. If the cost
+ * of showing it is ever judged too high, the lever is `CAP`, not a flag that
+ * hides it from the second visit onwards.
+ *
  * On a soft navigation this never runs at all: React does not execute scripts it
  * inserts through a DOM update, so arriving at the homepage from anywhere inside
  * the site simply shows the homepage. That is the intended behaviour, not a
@@ -35,17 +41,17 @@ import SealSvg from "@/components/site/SealSvg";
 const INTRO_SCRIPT = `(function () {
   if (location.pathname !== "/") return;
 
-  var KEY = "taccalite:intro";
-  try {
-    if (sessionStorage.getItem(KEY)) return;
-  } catch (e) {}
-
-  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-  try { sessionStorage.setItem(KEY, "1"); } catch (e) {}
-
   var root = document.documentElement;
-  var MIN = 700;
+
+  // Reduced motion takes the *motion* away, not the veil — globals.css drops the
+  // stamp, the rise and the sweep and leaves a still card. Removing the veil
+  // instead would hand exactly the visitor who asked for calm the one thing it
+  // exists to hide: the hero assembling itself in front of them.
+  var reduced = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  // Nothing has to animate before a still card can leave, so the floor that
+  // stops the veil flickering past is shorter when there is no stamp to read.
+  var MIN = reduced ? 320 : 700;
   var CAP = 1800;
   var start = Date.now();
   var lifted = false;
@@ -58,19 +64,45 @@ const INTRO_SCRIPT = `(function () {
   var seal = new Promise(function (resolve) { releaseSeal = resolve; });
   window.__taccaliteSealReady = function () { releaseSeal(); };
 
+  // The page is scrollable the whole time the veil is over it, and a fixed
+  // element does not stop a wheel — so without this the visitor can scroll
+  // blind behind the paper and have it lift onto the middle of the page.
+  // Lenis (components/SmoothScroll.tsx) reads the same events, so capturing
+  // here is what holds it too.
+  //
+  // Events rather than \`overflow: hidden\` on <html>: that would take the
+  // scrollbar away for the length of the veil and shift the whole layout
+  // sideways by its width at the exact moment the page is revealed.
+  function hold(event) { event.preventDefault(); }
+  var HOLD = { passive: false, capture: true };
+  addEventListener("wheel", hold, HOLD);
+  addEventListener("touchmove", hold, HOLD);
+
   function lift(immediate) {
     if (lifted) return;
     lifted = true;
-    var hold = immediate ? 0 : Math.max(0, MIN - (Date.now() - start));
-    setTimeout(function () { root.setAttribute("data-intro", "done"); }, hold);
+    var hold_ms = immediate ? 0 : Math.max(0, MIN - (Date.now() - start));
+    setTimeout(function () {
+      root.setAttribute("data-intro", "done");
+      removeEventListener("wheel", hold, HOLD);
+      removeEventListener("touchmove", hold, HOLD);
+    }, hold_ms);
   }
 
   function skip() { lift(true); }
 
   root.setAttribute("data-intro", "play");
   setTimeout(function () { lift(false); }, CAP);
-  addEventListener("pointerdown", skip, { once: true });
-  addEventListener("keydown", skip, { once: true });
+
+  // The escape hatch, armed only once the stamp has had its floor. Live from the
+  // first frame it is not an escape hatch but a hazard: a page that has just
+  // loaded collects stray clicks and keystrokes, and any one of them used to
+  // tear the veil off mid-animation — which reads as the intro breaking rather
+  // than as the visitor skipping it.
+  setTimeout(function () {
+    addEventListener("pointerdown", skip, { once: true });
+    addEventListener("keydown", skip, { once: true });
+  }, MIN);
 
   function whenSettled() {
     var waits = [seal];

@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Clock, Flame, MapPin, Phone } from "lucide-react";
 import ReservationForm from "@/components/ReservationForm";
 import Reveal from "@/components/Reveal";
-import { getShops } from "@/lib/db/queries";
+import { getShops, getClosures } from "@/lib/db/queries";
+import { dateInRome } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,20 @@ export const metadata: Metadata = {
 };
 
 export default async function PrenotazioniPage() {
-  const shops = await getShops();
+  const [shops, closures] = await Promise.all([getShops(), getClosures()]);
   const porchettaShop = shops.find((s) => s.porchettaEnabled) ?? shops[0];
+  // The date floor belongs to the shop's timezone, not the visitor's browser.
+  const today = dateInRome();
+  // Only the fields the form actually tests against — a closure's id and
+  // creation time are nobody's business.
+  const closureProps = closures.map((c) => ({
+    shopSlug: c.shopSlug,
+    fromDate: c.fromDate,
+    toDate: c.toDate,
+    reason: c.reason,
+    blocksReservations: c.blocksReservations,
+    blocksPickup: c.blocksPickup,
+  }));
   return (
     <div>
       {/* Hero: big text left, reservation form right */}
@@ -55,7 +68,7 @@ export default async function PrenotazioniPage() {
           </Reveal>
 
           <Reveal delay={0.15} className="lg:col-span-7">
-            <ReservationForm shops={shops} />
+            <ReservationForm shops={shops} closures={closureProps} today={today} />
           </Reveal>
         </div>
       </section>
@@ -86,7 +99,7 @@ export default async function PrenotazioniPage() {
                   <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gold/15 text-gold transition-transform duration-500 group-hover:scale-110">
                     <Flame className="size-6" />
                   </span>
-                  <span className="rounded-full border border-gold/30 px-3 py-1 text-[10px] sm:text-[9px] font-bold tracking-[0.2em] text-gold uppercase">
+                  <span className="rounded-full border border-gold/30 px-3 py-1 text-[11px] sm:text-[10px] font-bold tracking-[0.2em] text-gold uppercase">
                     Ogni sabato
                   </span>
                 </div>
@@ -100,7 +113,7 @@ export default async function PrenotazioniPage() {
                   {porchettaShop ? ` presso ${porchettaShop.name}` : ""}, in quantità limitate.
                   Prenotala entro il venerdì per essere sicuro di trovarla.
                 </p>
-                <p className="mt-8 border-t border-cream/10 pt-6 text-[10px] font-bold tracking-[0.25em] text-gold uppercase">
+                <p className="mt-8 border-t border-cream/10 pt-6 text-[11px] font-bold tracking-[0.25em] text-gold uppercase">
                   Sfornata il sabato · prenota entro venerdì
                 </p>
               </div>
@@ -143,7 +156,7 @@ export default async function PrenotazioniPage() {
                     <Phone className="size-4 shrink-0 text-gold-deep" />
                     {shop.phone}
                   </span>
-                  <span className="text-[10px] sm:text-[9px] font-bold tracking-[0.2em] uppercase opacity-60">
+                  <span className="text-[11px] sm:text-[10px] font-bold tracking-[0.2em] uppercase opacity-60">
                     Chiama
                   </span>
                 </a>

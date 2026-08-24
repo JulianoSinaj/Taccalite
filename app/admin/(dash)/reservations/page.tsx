@@ -206,22 +206,22 @@ export default async function AdminReservations({ searchParams }: SP) {
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="font-mono text-xs font-bold text-brown-800/60">{r.reference}</span>
-                    <span className="rounded-full bg-gold/15 px-2.5 py-1 text-[10px] font-bold tracking-widest text-gold-deep uppercase">
+                    <span className="rounded-full bg-gold/15 px-2.5 py-1 text-[11px] font-bold tracking-widest text-gold-deep uppercase">
                       {reservationTypeLabel(r.type)}
                     </span>
                     <StatusBadge status={r.status} />
                     {r.waitlisted && (
-                      <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-warn uppercase">
+                      <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-warn uppercase">
                         Lista d&apos;attesa
                       </span>
                     )}
                     {r.remindedAt && (
-                      <span className="rounded-full bg-info-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-info-soft-fg uppercase">
+                      <span className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-info-soft-fg uppercase">
                         Promemoria inviato
                       </span>
                     )}
                     {r.readyAt && (
-                      <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-ok uppercase">
+                      <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-ok uppercase">
                         Pronta ✓
                       </span>
                     )}
@@ -361,7 +361,7 @@ export default async function AdminReservations({ searchParams }: SP) {
               {/* Reschedule / correct the booking itself. Collapsed so the row
                   stays scannable — status and deposit stay one click away above. */}
               <details className="mt-4 border-t border-brown-900/10 pt-3">
-                <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
                   Modifica / sposta prenotazione
                 </summary>
                 <div className="mt-4">

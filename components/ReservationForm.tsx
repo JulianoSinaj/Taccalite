@@ -2,7 +2,10 @@
 
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { Calendar, Check, Clock, Flame, Minus, Plus, Users, UtensilsCrossed } from "lucide-react";
+import { Check, Flame, Minus, Plus, Users, UtensilsCrossed } from "lucide-react";
+// Deliberately the same module the server refuses with, so the message shown
+// beside the date field and the one the API would return cannot disagree.
+import { closureFor, closureMessage, type ClosureLike } from "@/lib/closures";
 
 type ShopOption = {
   slug: string;
@@ -53,7 +56,17 @@ function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; 
   );
 }
 
-export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
+export default function ReservationForm({
+  shops,
+  closures = [],
+  today,
+}: {
+  shops: ShopOption[];
+  /** Days the shop is shut. Resolved server-side; the API refuses them anyway. */
+  closures?: ClosureLike[];
+  /** Today in the shop's timezone, so the picker's floor isn't the browser's. */
+  today?: string;
+}) {
   // A shop is available for table/order reservations unless explicitly disabled;
   // porchetta pickup is offered only at shops that make porchetta.
   const reservationShops = shops.filter((s) => s.reservationsEnabled !== false);
@@ -71,8 +84,17 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
   const [guests, setGuests] = useState(2);
   const [quantity, setQuantity] = useState(1);
   const [porchettaShop, setPorchettaShop] = useState(porchettaShops[0]?.slug ?? "");
+  // Watched so a closed day can be named *while* it is being chosen. The API
+  // refuses it regardless — this is so the customer finds out before filling in
+  // the rest of the form rather than after submitting it.
+  const [date, setDate] = useState("");
+  const [tableShop, setTableShop] = useState(reservationShops[0]?.slug ?? "");
 
   const porchettaPickup = porchettaShops.find((s) => s.slug === porchettaShop) ?? porchettaShops[0];
+
+  // Which location the chosen date is being tested against.
+  const activeShop = type === "porchetta" ? porchettaShop : tableShop;
+  const hitClosure = date ? closureFor(closures, activeShop, date, "reservations") : null;
   // Only offer reservation types that at least one location supports.
   const availableTypes = TYPES.filter((t) =>
     t.key === "porchetta" ? porchettaShops.length > 0 : reservationShops.length > 0,
@@ -203,26 +225,37 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
       {type === "table" && (
         <>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {/* Neither field carries a leading icon: the date input draws its
+                own calendar button (styled in `globals.css`) and the select
+                draws its own chevron, so a glyph at the other end was a
+                duplicate on one and a second arrow on the other. */}
             <Field label="Data" htmlFor="date">
-              <div className="relative">
-                <Calendar className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-taupe" />
-                <input id="date" name="date" type="date" required className={`${inputClasses} pl-12`} />
-              </div>
+              <input
+                id="date"
+                name="date"
+                type="date"
+                required
+                // The picker used to accept any date at all, including
+                // yesterday's.
+                min={today}
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                aria-invalid={hitClosure ? true : undefined}
+                aria-describedby={hitClosure ? "date-closed" : undefined}
+                className={inputClasses}
+              />
             </Field>
             <Field label="Ora" htmlFor="time">
-              <div className="relative">
-                <Clock className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-taupe" />
-                <select id="time" name="time" required defaultValue="" className={`${inputClasses} pl-12`}>
-                  <option value="" disabled>
-                    --:--
+              <select id="time" name="time" required defaultValue="" className={inputClasses}>
+                <option value="" disabled>
+                  --:--
+                </option>
+                {timeSlots.map((slot) => (
+                  <option key={slot} value={slot}>
+                    {slot}
                   </option>
-                  {timeSlots.map((slot) => (
-                    <option key={slot} value={slot}>
-                      {slot}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                ))}
+              </select>
             </Field>
           </div>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -250,7 +283,14 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
               </div>
             </Field>
             <Field label="Negozio" htmlFor="shop">
-              <select id="shop" name="shop" required className={inputClasses}>
+              <select
+                id="shop"
+                name="shop"
+                required
+                value={tableShop}
+                onChange={(e) => setTableShop(e.target.value)}
+                className={inputClasses}
+              >
                 {reservationShops.map((shop) => (
                   <option key={shop.slug} value={shop.slug}>
                     {shop.name} — {shop.specialty}
@@ -305,17 +345,18 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
           )}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <Field label="Sabato di ritiro" htmlFor="date">
-              <div className="relative">
-                <Calendar className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-taupe" />
-                <input
-                  id="date"
-                  name="date"
-                  type="date"
-                  required
-                  defaultValue={nextSaturdayIso()}
-                  className={`${inputClasses} pl-12`}
-                />
-              </div>
+              <input
+                id="date"
+                name="date"
+                type="date"
+                required
+                min={today}
+                value={date || nextSaturdayIso()}
+                onChange={(e) => setDate(e.target.value)}
+                aria-invalid={hitClosure ? true : undefined}
+                aria-describedby={hitClosure ? "date-closed" : undefined}
+                className={inputClasses}
+              />
             </Field>
             <Field label="Quantità (kg)">
               <div className="flex w-full items-center gap-4 rounded-full border border-rule bg-paper-warm/50 p-2 md:w-56">
@@ -383,15 +424,28 @@ export default function ReservationForm({ shops }: { shops: ShopOption[] }) {
         <input id="company" name="company" tabIndex={-1} autoComplete="off" />
       </div>
 
+      {/* A closed day is refused by the API either way; saying so here means
+          the customer finds out at the date field instead of after filling in
+          the whole form and pressing send. */}
+      {hitClosure && (
+        <p id="date-closed" role="status" className="text-sm font-medium text-red-700">
+          {closureMessage(hitClosure, date)}
+        </p>
+      )}
+
       {error && <p className="text-sm font-medium text-red-700">{error}</p>}
 
       <button
         type="submit"
-        disabled={status === "submitting"}
+        disabled={status === "submitting" || !!hitClosure}
         data-magnetic
         className="w-full rounded-full bg-gold px-8 py-4 text-xs font-bold tracking-widest text-brown-950 uppercase shadow-[0_10px_20px_-5px_rgba(225,190,100,0.3)] transition-all duration-500 hover:-translate-y-1 hover:bg-gold-dark hover:shadow-[0_20px_30px_-10px_rgba(225,190,100,0.4)] disabled:pointer-events-none disabled:opacity-60"
       >
-        {status === "submitting" ? "Invio in corso…" : "Conferma prenotazione"}
+        {status === "submitting"
+          ? "Invio in corso…"
+          : hitClosure
+            ? "Siamo chiusi in questa data"
+            : "Conferma prenotazione"}
       </button>
     </form>
   );

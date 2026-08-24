@@ -151,7 +151,7 @@ export default async function ReservationCalendar({ searchParams }: SP) {
                 className="mb-2 flex items-baseline justify-between rounded-lg border-b border-brown-900/10 pb-1.5 hover:bg-brown-900/5"
                 title={`Agenda del ${fmtDayNum(dayISO)}`}
               >
-                <span className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
+                <span className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
                   {WEEKDAYS[i]}
                 </span>
                 <span className={`font-display text-lg ${isToday ? "text-gold-deep" : "text-brown-950"}`}>
@@ -180,7 +180,7 @@ export default async function ReservationCalendar({ searchParams }: SP) {
                       >
                         <div className="flex items-center gap-1 font-semibold">
                           {r.time && <span className="tabular-nums">{r.time}</span>}
-                          <span className="rounded bg-black/5 px-1 text-[9px] font-bold tracking-wider uppercase">
+                          <span className="rounded bg-black/5 px-1 text-[10px] font-bold tracking-wider uppercase">
                             {reservationTypeLabel(r.type)}
                           </span>
                         </div>

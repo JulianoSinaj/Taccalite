@@ -2,7 +2,12 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, labelCls, BackLink } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
-import { adminGetOrder, adminGetShops, adminGetProducts } from "@/lib/admin/queries";
+import {
+  adminGetOrder,
+  adminGetShops,
+  adminGetProducts,
+  getReservationForOrder,
+} from "@/lib/admin/queries";
 import { OrderDetailsForm, OrderItemsForm, OrderFiscalForm } from "@/components/admin/OrderEditor";
 import {
   updateOrderStatus,
@@ -16,7 +21,7 @@ import { orderVatBuckets, vatRateLabel } from "@/lib/fiscal";
 import { getCarriers, trackingUrl } from "@/lib/carriers";
 import { FULFILMENT_LABEL } from "@/lib/fulfilment";
 import { formatSlotLabel } from "@/lib/pickup-slots";
-import { getDeliveryZones, getPickupSlots, getPickupSlotCounts } from "@/lib/db/queries";
+import { getDeliveryZones, getPickupSlots, getPickupSlotCounts, getClosures } from "@/lib/db/queries";
 import { pickupSlotOptions } from "@/lib/pickup-slots";
 import { assertShopScope } from "@/lib/admin/scope";
 
@@ -27,6 +32,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   const [data, shops, admin, shippingVatPct, products, carriers, zones, slots, booked] =
     await Promise.all([
     adminGetOrder(id),
+
     adminGetShops(),
     isAdmin(),
     getSetting<number>("store.shippingVatRate", 22),
@@ -44,12 +50,20 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   // Only active zones are listed, so an order priced by a since-suspended zone
   // simply shows no zone rather than a stale name.
   const zone = zones.find((z) => z.id === data.order.deliveryZoneId) ?? null;
-  const slotOptions = pickupSlotOptions(slots, { bookedCounts: booked, days: 14 }).map((o) => ({
+  const slotOptions = pickupSlotOptions(slots, {
+    bookedCounts: booked,
+    days: 14,
+    // Rescheduling a pickup from here must not offer a day the shop is shut,
+    // for the same reason checkout must not.
+    closures: await getClosures(),
+  }).map((o) => ({
     value: o.value,
     shopSlug: o.shopSlug,
     label: o.label,
   }));
   const { order, items } = data;
+  // The booking this sale came from, when it came from one.
+  const fromReservation = await getReservationForOrder(order.reservationId);
   // An order's lines and totals are frozen once the money is settled — the
   // customer was charged a specific amount. Corrections then go through a refund.
   const editable = order.paymentStatus === "unpaid" && order.status !== "cancelled";
@@ -105,7 +119,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                       {i.weightKg != null ? "/kg" : ""}
                     </span>
                     {i.priceOverridden && (
-                      <span className="ml-1.5 rounded-full bg-warn-soft px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-warn-soft-fg uppercase">
+                      <span className="ml-1.5 rounded-full bg-warn-soft px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-warn-soft-fg uppercase">
                         prezzo concordato
                       </span>
                     )}
@@ -148,7 +162,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             </div>
             {vat.length > 0 && (
               <div className="mt-4 border-t border-brown-900/10 pt-3">
-                <p className="mb-2 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+                <p className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
                   Riepilogo IVA (prezzi ivati)
                   {order.refundedCents > 0 ? " · al netto del rimborso" : ""}
                 </p>
@@ -238,6 +252,21 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 </Link>
               </p>
             )}
+            {/* The booking links forward to the order it became; this is the
+                way back, which was missing — so an order converted from a
+                phone booking looked like any counter sale, and the notes the
+                customer actually gave were unreachable from here. */}
+            {fromReservation && (
+              <p className="mt-3 text-sm">
+                <Link
+                  href={`/admin/reservations/${fromReservation.id}`}
+                  className="font-bold text-brown-800 underline decoration-gold-dark/60 underline-offset-2 hover:text-brown-950"
+                >
+                  Nato dalla prenotazione {fromReservation.reference} ({fromReservation.date}
+                  {fromReservation.time ? ` ${fromReservation.time}` : ""}) →
+                </Link>
+              </p>
+            )}
             {order.notes && (
               <p className="mt-3 text-sm text-brown-800/70">
                 <span aria-hidden="true">📝</span> <span className="sr-only">Note: </span>
@@ -246,7 +275,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             )}
             {order.internalNotes && (
               <p className="mt-3 rounded-lg bg-gold/10 px-3 py-2 text-sm text-brown-900">
-                <span className="text-[10px] font-bold tracking-widest text-brown-800/60 uppercase">
+                <span className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
                   Nota interna
                 </span>
                 <br />
@@ -256,7 +285,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
 
             {editable ? (
               <details className="mt-4 border-t border-brown-900/10 pt-3">
-                <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
                   Modifica dati e consegna
                 </summary>
                 <div className="mt-4">
@@ -420,7 +449,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 </p>
 
                 <details className="mt-4" open={!order.customerTaxCode && !order.customerVatNumber}>
-                  <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                  <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
                     Dati di fatturazione
                   </summary>
                   <div className="mt-3">

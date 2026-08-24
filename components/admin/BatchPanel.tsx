@@ -99,7 +99,7 @@ export function BatchPanel({
         <div className="scroll-x mt-6">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-brown-900/10 text-left text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+              <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
                 <th className="py-2">Lotto</th>
                 <th className="py-2">Scadenza</th>
                 <th className="py-2 text-right">Residuo</th>
@@ -172,7 +172,7 @@ export function BatchPanel({
 
       {spent.length > 0 && (
         <details className="mt-4">
-          <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+          <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
             Lotti esauriti ({spent.length})
           </summary>
           <ul className="mt-2 space-y-1 text-xs text-brown-800/60">

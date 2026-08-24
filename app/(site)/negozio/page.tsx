@@ -5,6 +5,7 @@ import { getPurchasableProducts, getProductCategories, getSetting } from "@/lib/
 import PageHero from "@/components/site/PageHero";
 import ProductTile from "@/components/site/ProductTile";
 import { categoryAccent } from "@/lib/categories";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,45 @@ function buildHref(current: { q?: string; cat?: string; sort?: string }, overrid
   if (merged.sort) params.set("sort", merged.sort);
   const qs = params.toString();
   return qs ? `/negozio?${qs}` : "/negozio";
+}
+
+/**
+ * The undo for the filter bar — square and hairlined like the rest of the shop's
+ * chrome, never a pill.
+ *
+ * Dashed where the category filters are solid: it appears directly under that
+ * row, and a solid hairline would read as one more category rather than as the
+ * thing that clears them. Flooding brown on hover is the `outline` CTA's own
+ * gesture, so the recovery action still speaks the site's language without
+ * pulling the magnetic commercial button into a piece of filter chrome. It was
+ * an underlined word inside a sentence before, which is the weakest possible
+ * form for the only control that gets an empty grid back to a full one.
+ */
+function ResetFilters({ className }: { className?: string }) {
+  return (
+    <Link
+      href="/negozio"
+      aria-label="Rimuovi tutti i filtri"
+      className={cn(
+        // `.tap` and not taller padding: the control is drawn to match the
+        // category filters beside it, and the 44px target arrives underneath.
+        "tap group/reset inline-flex items-center gap-2.5 border border-dashed border-rule-strong",
+        "px-5 py-3.5 text-[0.625rem] font-bold tracking-[0.18em] whitespace-nowrap text-brown-700 uppercase sm:py-2",
+        "transition-[color,background-color,border-color,transform] duration-300",
+        "hover:border-solid hover:border-brown-950 hover:bg-brown-950 hover:text-cream active:scale-[0.97]",
+        "focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:ring-offset-paper focus-visible:outline-none",
+        className
+      )}
+    >
+      <span
+        aria-hidden
+        className="text-sm leading-none transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover/reset:-rotate-180"
+      >
+        ↺
+      </span>
+      Rimuovi i filtri
+    </Link>
+  );
 }
 
 export default async function StorePage({ searchParams }: SearchParams) {
@@ -200,13 +240,11 @@ export default async function StorePage({ searchParams }: SearchParams) {
               {filtered.length === 0 ? (
                 <div className="border border-rule bg-paper-warm p-8 text-center sm:p-12">
                   <h2 className="font-display display-md text-brown-950">Nessun risultato</h2>
-                  <p className="mt-3 text-brown-700">
-                    Nessun prodotto corrisponde alla tua ricerca.{" "}
-                    <Link href="/negozio" className="font-semibold text-gold-deep underline">
-                      Rimuovi i filtri
-                    </Link>
-                    .
-                  </p>
+                  <p className="mt-3 text-brown-700">Nessun prodotto corrisponde alla tua ricerca.</p>
+                  {/* Out of the sentence and onto its own line: in an empty state
+                      the way back is the whole point of the card, not an aside
+                      trailing an orphaned full stop. */}
+                  <ResetFilters className="mt-6 focus-visible:ring-offset-paper-warm" />
                 </div>
               ) : (
                 // Tighter gutters on a phone. At 375px a 24px gutter left each
@@ -235,12 +273,15 @@ export default async function StorePage({ searchParams }: SearchParams) {
               )}
 
               {hasFilters && filtered.length > 0 && (
-                <p className="mt-10 border-t border-rule pt-8 text-center text-sm text-taupe">
-                  {filtered.length} {filtered.length === 1 ? "prodotto" : "prodotti"} ·{" "}
-                  <Link href="/negozio" className="font-semibold text-gold-deep underline">
-                    Rimuovi i filtri
-                  </Link>
-                </p>
+                // The count and the reset are two different things — a caption and
+                // a control — and the "·" that used to join them made the control
+                // look like the second half of a sentence.
+                <div className="mt-10 flex flex-col items-center border-t border-rule pt-8">
+                  <p className="text-sm text-taupe">
+                    {filtered.length} {filtered.length === 1 ? "prodotto" : "prodotti"}
+                  </p>
+                  <ResetFilters className="mt-4" />
+                </div>
               )}
             </>
           )}

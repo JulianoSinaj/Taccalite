@@ -1,5 +1,6 @@
 import "server-only";
 import { instantInRome, dateInRome, BUSINESS_TZ } from "@/lib/time";
+import { isClosed, type ClosureLike } from "@/lib/closures";
 
 /**
  * Turning the weekly pickup schedule into the concrete windows a customer can
@@ -74,11 +75,18 @@ export function slotKey(shopSlug: string, atMs: number): string {
  */
 export function pickupSlotOptions(
   slots: SlotLike[],
-  opts: { now?: Date; days?: number; bookedCounts?: Map<string, number> } = {},
+  opts: {
+    now?: Date;
+    days?: number;
+    bookedCounts?: Map<string, number>;
+    /** Days the shop is shut. A window on a closed day is not offered at all. */
+    closures?: ClosureLike[];
+  } = {},
 ): SlotOption[] {
   const now = opts.now ?? new Date();
   const days = opts.days ?? 14;
   const booked = opts.bookedCounts ?? new Map<string, number>();
+  const closures = opts.closures ?? [];
   const today = dateInRome(now);
   const out: SlotOption[] = [];
 
@@ -87,6 +95,10 @@ export function pickupSlotOptions(
     const weekday = isoWeekday(date);
     for (const s of slots) {
       if (!s.active || s.weekday !== weekday) continue;
+      // The schedule recurs weekly and so cannot know about the calendar; a
+      // window generated from Thursday's opening hours would otherwise be
+      // offered on the Thursday of the August shutdown.
+      if (isClosed(closures, s.shopSlug, date, "pickup")) continue;
       const at = instantInRome(date, s.startTime);
       const atMs = at.getTime();
       // The cut-off is measured from the moment the window opens, not from the
@@ -126,7 +138,7 @@ export function resolvePickupSlot(
   slots: SlotLike[],
   shopSlug: string,
   raw: string | null | undefined,
-  opts: { now?: Date; bookedCounts?: Map<string, number> } = {},
+  opts: { now?: Date; bookedCounts?: Map<string, number>; closures?: ClosureLike[] } = {},
 ): SlotResolution {
   const forShop = slots.filter((s) => s.active && s.shopSlug === shopSlug);
   const options = pickupSlotOptions(forShop, { ...opts, days: 21 });

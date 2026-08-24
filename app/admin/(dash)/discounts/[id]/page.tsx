@@ -46,7 +46,7 @@ export default async function EditDiscount({ params }: { params: Promise<{ id: s
         <Panel className="scroll-x p-0">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-brown-900/10 text-left text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+              <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
                 <th className="px-5 py-3">Data</th>
                 <th className="px-5 py-3">Ordine</th>
                 <th className="px-5 py-3">Cliente</th>

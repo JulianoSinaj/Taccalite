@@ -341,6 +341,39 @@ export const pickupSlotInput = z
     }
   });
 
+/** ISO `yyyy-mm-dd`. The DB CHECK enforces the shape; this gives a sentence. */
+const isoDate = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Data non valida");
+
+export const shopClosureInput = z
+  .object({
+    id: optionalText(40),
+    /** Blank = every location. */
+    shopSlug: optionalText(80),
+    fromDate: isoDate,
+    /** Blank means a single day, which is the common case — see the action. */
+    toDate: z.union([isoDate, z.literal("")]).optional(),
+    reason: optionalText(200),
+    blocksReservations: checkbox,
+    blocksPickup: checkbox,
+  })
+  .superRefine((d, ctx) => {
+    if (d.toDate && d.toDate < d.fromDate) {
+      ctx.addIssue({ code: "custom", message: "La fine deve venire dopo l'inizio.", path: ["toDate"] });
+    }
+    // A closure that stops nothing is a note to self, and would sit in the list
+    // looking as though it were doing something.
+    if (!d.blocksReservations && !d.blocksPickup) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Scegli almeno una cosa da sospendere.",
+        path: ["blocksReservations"],
+      });
+    }
+  });
+
 export const reservationDepositInput = z.object({
   id: z.string().trim().min(1),
   depositEuros: z

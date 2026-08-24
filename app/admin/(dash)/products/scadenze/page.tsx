@@ -61,7 +61,21 @@ export default async function ExpiringBatches({ searchParams }: SP) {
       <AdminHeader
         title="Scadenze"
         subtitle={`${visible.length} lotti in giacenza con scadenza entro il ${fmtDate(through)}`}
-        action={<PrintButton>Stampa elenco</PrintButton>}
+        action={
+          <div className="flex flex-wrap gap-2">
+            {/* The lot register is the HACCP traceability record — which lot,
+                from whom, expiring when — and it could only be read one product
+                at a time in the batch panel. */}
+            <a
+              href="/api/admin/export/batches"
+              download
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15 print:hidden"
+            >
+              Registro lotti CSV
+            </a>
+            <PrintButton>Stampa elenco</PrintButton>
+          </div>
+        }
       />
 
       <div className="mb-6 flex flex-wrap gap-2 print:hidden">
@@ -130,7 +144,7 @@ export default async function ExpiringBatches({ searchParams }: SP) {
                     >
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <span
-                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-widest uppercase ${
+                          className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-widest uppercase ${
                             b.expiryDate! < today
                               ? "bg-danger-solid/15 text-danger-soft-fg"
                               : "bg-warn-soft text-warn-soft-fg"

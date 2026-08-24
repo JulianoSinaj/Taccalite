@@ -27,6 +27,7 @@ import {
   promoteFromWaitlist,
   markPorchettaReady,
   setReservationTable,
+  resendReservationEmail,
 } from "@/lib/admin/reservation-actions";
 import { assertShopScope } from "@/lib/admin/scope";
 
@@ -95,10 +96,17 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
                   </Link>
                 )
               ))}
-            {r.type === "porchetta" && !r.readyAt && r.email && (
+            {r.type === "porchetta" && r.email && (
               <ActionForm action={markPorchettaReady} className="inline-flex">
                 <input type="hidden" name="id" value={r.id} />
-                <PendingButton tone="gold">Segna pronta</PendingButton>
+                {/* Marking it ready was one-shot: once sent, a customer who
+                    lost the email could not be told again. The repeat is a
+                    separate, explicit click, so double-tapping the first one
+                    still can't send twice. */}
+                {r.readyAt && <input type="hidden" name="ripeti" value="true" />}
+                <PendingButton tone="gold">
+                  {r.readyAt ? "Reinvia avviso di ritiro" : "Segna pronta"}
+                </PendingButton>
               </ActionForm>
             )}
             <Link
@@ -117,17 +125,17 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <StatusBadge status={r.status} />
               {r.waitlisted && (
-                <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-warn uppercase">
+                <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-warn uppercase">
                   Lista d&apos;attesa
                 </span>
               )}
               {r.readyAt && (
-                <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-ok uppercase">
+                <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-ok uppercase">
                   Pronta ✓
                 </span>
               )}
               {r.remindedAt && (
-                <span className="rounded-full bg-info-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-info-soft-fg uppercase">
+                <span className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-info-soft-fg uppercase">
                   Promemoria inviato
                 </span>
               )}
@@ -189,7 +197,7 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
 
             {r.notes && (
               <p className="mt-4 border-t border-brown-900/10 pt-3 text-sm text-brown-800/80">
-                <span className="text-[10px] font-bold tracking-widest text-brown-800/60 uppercase">
+                <span className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
                   Note del cliente
                 </span>
                 <br />
@@ -198,7 +206,7 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
             )}
             {r.adminNotes && (
               <p className="mt-3 rounded-lg bg-gold/10 px-3 py-2 text-sm text-brown-900">
-                <span className="text-[10px] font-bold tracking-widest text-brown-800/60 uppercase">
+                <span className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
                   Nota interna
                 </span>
                 <br />
@@ -231,7 +239,7 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
                       <span className="w-12 shrink-0 font-display font-bold text-brown-950">
                         {o.time ?? "—"}
                       </span>
-                      <span className="shrink-0 text-[10px] font-bold tracking-widest text-brown-800/60 uppercase">
+                      <span className="shrink-0 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
                         {reservationTypeLabel(o.type)}
                       </span>
                       <span className="flex-1 truncate text-brown-950">{o.name}</span>
@@ -283,6 +291,23 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
               </div>
               <PendingButton tone="dark">Aggiorna</PendingButton>
             </ActionForm>
+
+            {/* Orders have had "reinvia email" for a while and bookings did
+                not, so a lost confirmation — the one carrying the reference the
+                customer reads out at the counter — could only be recovered by
+                bouncing the status, which sent the wrong message. */}
+            {r.email && (
+              <div className="mt-4 border-t border-brown-900/10 pt-4">
+                <ActionForm action={resendReservationEmail}>
+                  <input type="hidden" name="id" value={r.id} />
+                  <PendingButton tone="dark">Reinvia email al cliente</PendingButton>
+                </ActionForm>
+                <p className="mt-2 text-xs text-brown-800/60">
+                  Rimanda l&apos;ultima comunicazione utile (
+                  {r.readyAt ? "avviso di ritiro" : "riepilogo della prenotazione"}) a {r.email}.
+                </p>
+              </div>
+            )}
           </Panel>
 
           {/* Capacity in context: what this booking uses of what the day has. */}

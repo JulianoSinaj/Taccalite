@@ -76,7 +76,7 @@ export default async function CustomerDetail({ params }: Params) {
         <div>
           <p className="font-display text-2xl text-brown-950">
             {displayName}{" "}
-            <span className="ml-1 rounded-full bg-brown-900/10 px-2 py-0.5 text-[10px] font-bold uppercase">
+            <span className="ml-1 rounded-full bg-brown-900/10 px-2 py-0.5 text-[11px] font-bold uppercase">
               {roleLabel(user.role)}
             </span>
           </p>
@@ -87,22 +87,22 @@ export default async function CustomerDetail({ params }: Params) {
           <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-brown-800/60">
             Iscritto il {fmtDate(user.createdAt)}
             {!user.active && (
-              <span className="rounded-full bg-danger-solid/15 px-2 py-0.5 text-[10px] font-bold text-danger uppercase">
+              <span className="rounded-full bg-danger-solid/15 px-2 py-0.5 text-[11px] font-bold text-danger uppercase">
                 Disattivato
               </span>
             )}
             {user.email && !user.emailVerifiedAt && (
-              <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-bold text-warn-soft-fg uppercase">
+              <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-bold text-warn-soft-fg uppercase">
                 Email da verificare
               </span>
             )}
             {user.totpEnabled && (
-              <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[10px] font-bold text-ok uppercase">
+              <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[11px] font-bold text-ok uppercase">
                 2FA
               </span>
             )}
             {user.marketingConsent && (
-              <span className="rounded-full bg-brown-900/10 px-2 py-0.5 text-[10px] font-bold uppercase">
+              <span className="rounded-full bg-brown-900/10 px-2 py-0.5 text-[11px] font-bold uppercase">
                 Consenso marketing
               </span>
             )}
@@ -111,11 +111,11 @@ export default async function CustomerDetail({ params }: Params) {
         <div className="flex items-center gap-8">
           <div className="text-right">
             <p className="font-display text-3xl font-bold text-brown-950">{loyalty?.points ?? 0}</p>
-            <p className="text-[10px] font-bold tracking-widest text-brown-800/60 uppercase">Punti</p>
+            <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Punti</p>
           </div>
           <div className="text-right">
             <p className="font-display text-lg text-brown-950">{loyalty?.cardNumber ? `#${loyalty.cardNumber}` : "—"}</p>
-            <p className="text-[10px] font-bold tracking-widest text-brown-800/60 uppercase">Tessera</p>
+            <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Tessera</p>
           </div>
         </div>
       </Panel>
@@ -125,20 +125,20 @@ export default async function CustomerDetail({ params }: Params) {
           up by eye. Refunds are netted out. */}
       <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Panel>
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Speso finora</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Speso finora</p>
           <p className="font-display mt-1 text-2xl font-bold text-brown-950">{euro(stats.spentCents)}</p>
           <p className="mt-0.5 text-xs text-brown-800/50">al netto dei rimborsi</p>
         </Panel>
         <Panel>
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Ordini</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Ordini</p>
           <p className="font-display mt-1 text-2xl font-bold text-brown-950">{stats.orders}</p>
         </Panel>
         <Panel>
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Scontrino medio</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Scontrino medio</p>
           <p className="font-display mt-1 text-2xl font-bold text-brown-950">{euro(stats.aovCents)}</p>
         </Panel>
         <Panel>
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Ultimo ordine</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Ultimo ordine</p>
           <p className="font-display mt-1 text-xl text-brown-950">
             {stats.lastOrderAt ? fmtDate(stats.lastOrderAt) : "—"}
           </p>
@@ -252,7 +252,7 @@ export default async function CustomerDetail({ params }: Params) {
         <Panel className="scroll-x p-0">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-brown-900/10 text-left text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+              <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
                 <th className="px-5 py-3">Data</th>
                 <th className="px-5 py-3">Motivo</th>
                 <th className="px-5 py-3 text-right">Variazione</th>

@@ -126,7 +126,7 @@ export default async function AdminOrders({ searchParams }: SP) {
         title="Ordini"
         subtitle={`${total} ordini`}
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link
               href="/admin/orders/new"
               className="inline-flex min-h-11 items-center justify-center rounded-full bg-gold px-4 py-2 text-xs font-bold tracking-widest text-on-gold uppercase hover:bg-gold-dark"
@@ -134,13 +134,26 @@ export default async function AdminOrders({ searchParams }: SP) {
               + Nuovo ordine
             </Link>
             {admin ? (
+              <>
+                {/* Two downloads because they answer different questions: the
+                    order-level one is takings, the line-level one is what was
+                    actually sold. Same filters feed both. */}
                 <a
-                href={`/api/admin/export/orders${filterQuery(filters)}`}
-                download
-                className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-              >
-                Esporta CSV
-              </a>
+                  href={`/api/admin/export/order-items${filterQuery(filters)}`}
+                  download
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                  title="Una riga per articolo venduto, con gli stessi filtri"
+                >
+                  CSV righe
+                </a>
+                <a
+                  href={`/api/admin/export/orders${filterQuery(filters)}`}
+                  download
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                >
+                  Esporta CSV
+                </a>
+              </>
             ) : null}
           </div>
         }

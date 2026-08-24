@@ -419,7 +419,7 @@ export default async function AdminSettings() {
                 <p className="font-semibold text-brown-950">
                   {job.label}{" "}
                   {last && !last.ok && (
-                    <span className="ml-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700 uppercase">
+                    <span className="ml-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700 uppercase">
                       Errore
                     </span>
                   )}
@@ -461,7 +461,7 @@ export default async function AdminSettings() {
                 <input type="hidden" name="key" value={def.key} />
                 <div className="flex-1">
                   <label className={labelCls}>{def.label}</label>
-                  <div className="mb-2 font-mono text-[10px] tracking-wide text-brown-800/40">{def.key}</div>
+                  <div className="mb-2 font-mono text-[11px] tracking-wide text-brown-800/40">{def.key}</div>
                   <SettingField def={def} value={value} />
                   <p className="mt-2 text-xs text-brown-800/60">{def.help}</p>
                 </div>

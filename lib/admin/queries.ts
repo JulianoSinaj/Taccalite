@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, sql, type SQL } from "drizzle-orm";
 
 export const PAGE_SIZE = 25;
 import { db } from "@/lib/db/client";
@@ -11,7 +11,8 @@ import {
   aggregateVatBuckets,
   type VatBucket,
 } from "@/lib/fiscal";
-import { dateInRome, startOfTodayRome } from "@/lib/time";
+import { dateInRome, startOfTodayRome, instantInRome, expiryWindow } from "@/lib/time";
+import { OUTBOX_MAX_ATTEMPTS } from "@/lib/mail/mailer";
 import {
   ordersWhere,
   reservationsWhere,
@@ -61,9 +62,12 @@ import {
   savedViews,
   deliveryZones,
   pickupSlots,
+  shopClosures,
+  discountRedemptions,
   type CategoryRow,
   type DeliveryZoneRow,
   type PickupSlotRow,
+  type ShopClosureRow,
 } from "@/lib/db/schema";
 
 /**
@@ -124,6 +128,17 @@ export async function getDashboardStats() {
     .from(emailOutbox)
     .where(eq(emailOutbox.status, "failed"));
 
+  // Inventory. The dashboard is the screen the shop opens in the morning and it
+  // had nothing about stock on it at all — both of these already existed
+  // (`productsWhere`'s low-stock facet, `countExpiringSoon`) and were reachable
+  // only by navigating to the catalogue and remembering to look.
+  const lowStockThreshold = await getSetting<number>("store.lowStockThreshold", 5);
+  const [lowStock] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(products)
+    .where(productsWhere({ stato: "attivi", scorte: "basse" }, lowStockThreshold));
+  const expiringSoon = await countExpiringSoon(expiryWindow(7));
+
   // Net revenue over rolling windows, by settlement date (integer cents).
   const now = Date.now();
   const day = 24 * 60 * 60 * 1000;
@@ -151,6 +166,8 @@ export async function getDashboardStats() {
     customers: customers?.n ?? 0,
     subscribers: subs?.n ?? 0,
     pendingRedemptions: pendingRedemptions?.n ?? 0,
+    lowStock: lowStock?.n ?? 0,
+    expiringSoon,
     revenueTodayCents: revenueToday,
     revenue7dCents: revenue7d,
     revenue30dCents: revenue30d,
@@ -552,9 +569,10 @@ export async function getBlogPage(opts: BlogFilters & { page?: number }) {
 }
 
 /** Paginated rewards catalogue. */
-export async function getRewardsPage(opts: RewardFilters & { page?: number }) {
+export async function getRewardsPage(opts: RewardFilters & { page?: number; now?: Date }) {
   const page = Math.max(1, opts.page ?? 1);
-  const where = rewardsWhere(opts);
+  const now = opts.now ?? new Date();
+  const where = rewardsWhere(opts, now);
   const [rows, [{ total }]] = await Promise.all([
     db
       .select()
@@ -565,7 +583,24 @@ export async function getRewardsPage(opts: RewardFilters & { page?: number }) {
       .offset((page - 1) * PAGE_SIZE),
     db.select({ total: sql<number>`count(*)` }).from(rewards).where(where),
   ]);
-  return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+  // Counted across the whole catalogue, not the current page: these are the
+  // numbers the filter chips carry, and a chip that says "0" while the next
+  // page holds three sold-out rewards is worse than no chip.
+  const [attention] = await db
+    .select({
+      outOfStock: sql<number>`sum(case when ${rewards.active} and ${rewards.stock} is not null and ${rewards.stock} <= 0 then 1 else 0 end)`,
+      expired: sql<number>`sum(case when ${rewards.active} and ${rewards.availableUntil} is not null and ${rewards.availableUntil} < ${now.getTime()} then 1 else 0 end)`,
+    })
+    .from(rewards);
+
+  return {
+    rows,
+    total,
+    page,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    outOfStock: Number(attention?.outOfStock ?? 0),
+    expired: Number(attention?.expired ?? 0),
+  };
 }
 
 /** Paginated discount codes, newest first. */
@@ -816,7 +851,7 @@ export const getOutbox = () => db.select().from(emailOutbox).orderBy(desc(emailO
 export async function getOutboxPage(opts: OutboxFilters & { page?: number }) {
   const page = Math.max(1, opts.page ?? 1);
   const where = outboxWhere(opts);
-  const [rows, [{ total }], [{ failed }]] = await Promise.all([
+  const [rows, [{ total }], [{ failed, exhausted }]] = await Promise.all([
     db
       .select()
       .from(emailOutbox)
@@ -825,9 +860,26 @@ export async function getOutboxPage(opts: OutboxFilters & { page?: number }) {
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
     db.select({ total: sql<number>`count(*)` }).from(emailOutbox).where(where),
-    db.select({ failed: sql<number>`count(*)` }).from(emailOutbox).where(eq(emailOutbox.status, "failed")),
+    // `exhausted` is the subset past the retry cap — the ones an ordinary
+    // "riprova tutte" deliberately skips, and therefore the only ones that need
+    // the counter reset. Counted here so the page can say how many rather than
+    // offering a blind "force everything".
+    db
+      .select({
+        failed: sql<number>`count(*)`,
+        exhausted: sql<number>`sum(case when ${emailOutbox.attempts} >= ${OUTBOX_MAX_ATTEMPTS} then 1 else 0 end)`,
+      })
+      .from(emailOutbox)
+      .where(eq(emailOutbox.status, "failed")),
   ]);
-  return { rows, total, failed, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+  return {
+    rows,
+    total,
+    failed,
+    exhausted: Number(exhausted ?? 0),
+    page,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+  };
 }
 
 // ── Filtered exports ─────────────────────────────────────────────────────────
@@ -847,6 +899,131 @@ export const getOrdersForExport = (f: OrderFilters, limit: number, offset: numbe
     .from(orders)
     .where(ordersWhere(f))
     .orderBy(desc(orders.createdAt), orders.id)
+    .limit(limit)
+    .offset(offset);
+
+/**
+ * Order **lines**, for the item-level export.
+ *
+ * The orders CSV has always been one row per order, which answers "how much did
+ * we take" and nothing about what was actually sold — so a commercialista
+ * wanting the detail, or anyone asking which products moved in a period, had to
+ * go product by product through the UI. Joined rather than a second download so
+ * each line carries its order's date, customer and status and the file stands
+ * on its own.
+ *
+ * Ordered by the order's key first so a large export batches deterministically
+ * (see `streamCsv`), with the line id as the unique tiebreaker.
+ */
+export const getOrderItemsForExport = (f: OrderFilters, limit: number, offset: number) =>
+  db
+    .select({
+      orderNumber: orders.orderNumber,
+      createdAt: orders.createdAt,
+      paidAt: orders.paidAt,
+      customer: orders.name,
+      status: orders.status,
+      paymentStatus: orders.paymentStatus,
+      shopSlug: orders.shopSlug,
+      productName: orderItems.name,
+      productId: orderItems.productId,
+      quantity: orderItems.quantity,
+      weightKg: orderItems.weightKg,
+      unitPriceCents: orderItems.unitPriceCents,
+      lineTotalCents: orderItems.lineTotalCents,
+      vatRateBps: orderItems.vatRateBps,
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(ordersWhere(f))
+    .orderBy(desc(orders.createdAt), orders.id, orderItems.id)
+    .limit(limit)
+    .offset(offset);
+
+/**
+ * The inventory ledger. Every movement with the product it moved and who
+ * caused it — the record a stocktake is reconciled against, and the only one
+ * that could explain a discrepancy. It was readable twenty rows at a time on a
+ * product page and could not be taken anywhere.
+ */
+export const getStockMovementsForExport = (limit: number, offset: number) =>
+  db
+    .select({
+      createdAt: stockMovements.createdAt,
+      productName: products.name,
+      sku: products.sku,
+      shopSlug: products.shopSlug,
+      delta: stockMovements.delta,
+      stockAfter: stockMovements.stockAfter,
+      reason: stockMovements.reason,
+      actor: users.name,
+    })
+    .from(stockMovements)
+    .innerJoin(products, eq(stockMovements.productId, products.id))
+    .leftJoin(users, eq(stockMovements.createdByUserId, users.id))
+    .orderBy(desc(stockMovements.createdAt), stockMovements.id)
+    .limit(limit)
+    .offset(offset);
+
+/**
+ * Lots and their expiry dates — the HACCP traceability record.
+ *
+ * Which lot of which supplier's product was on the counter on a given day is
+ * the question an inspection or a recall asks, and the answer lived only in the
+ * batch panel of one product at a time.
+ */
+export const getBatchesForExport = (limit: number, offset: number) =>
+  db
+    .select({
+      productName: products.name,
+      sku: products.sku,
+      lotCode: productBatches.lotCode,
+      expiryDate: productBatches.expiryDate,
+      quantity: productBatches.quantity,
+      remaining: productBatches.remaining,
+      supplier: productBatches.supplier,
+      unitCostCents: productBatches.unitCostCents,
+      receivedAt: productBatches.receivedAt,
+      note: productBatches.note,
+    })
+    .from(productBatches)
+    .innerJoin(products, eq(productBatches.productId, products.id))
+    .orderBy(desc(productBatches.receivedAt), productBatches.id)
+    .limit(limit)
+    .offset(offset);
+
+/** The points ledger: every accrual and debit, with the customer it belongs to. */
+export const getLoyaltyForExport = (limit: number, offset: number) =>
+  db
+    .select({
+      createdAt: loyaltyTransactions.createdAt,
+      customer: users.name,
+      username: users.username,
+      cardNumber: loyaltyAccounts.cardNumber,
+      delta: loyaltyTransactions.delta,
+      balanceAfter: loyaltyTransactions.balanceAfter,
+      reason: loyaltyTransactions.reason,
+    })
+    .from(loyaltyTransactions)
+    .innerJoin(users, eq(loyaltyTransactions.userId, users.id))
+    .leftJoin(loyaltyAccounts, eq(loyaltyAccounts.userId, users.id))
+    .orderBy(desc(loyaltyTransactions.createdAt), loyaltyTransactions.id)
+    .limit(limit)
+    .offset(offset);
+
+/** Coupon usage: which code, on which order, for how much. */
+export const getDiscountUsageForExport = (limit: number, offset: number) =>
+  db
+    .select({
+      createdAt: discountRedemptions.createdAt,
+      code: discountRedemptions.discountCode,
+      orderNumber: orders.orderNumber,
+      email: discountRedemptions.email,
+      amountCents: discountRedemptions.amountCents,
+    })
+    .from(discountRedemptions)
+    .leftJoin(orders, eq(discountRedemptions.orderId, orders.id))
+    .orderBy(desc(discountRedemptions.createdAt), discountRedemptions.id)
     .limit(limit)
     .offset(offset);
 
@@ -1209,6 +1386,75 @@ export async function adminGetDeliveryZones(): Promise<ZoneWithUsage[]> {
   return rows.map((z) => ({ ...z, orderCount: byId.get(z.id) ?? 0 }));
 }
 
+export type ClosureWithBookings = ShopClosureRow & {
+  /** Live bookings whose date falls inside the range. */
+  reservationCount: number;
+  /** Paid pickups whose window falls inside the range. */
+  pickupCount: number;
+};
+
+/**
+ * Closures, soonest first, each with what is already booked inside it.
+ *
+ * Declaring a closure deliberately does **not** cancel anything: a shop that
+ * marks Ferragosto in July must not silently drop the four bookings already
+ * taken for it, and the customers are expecting the shop to keep them. So the
+ * count is the whole point of this query — it is the difference between "the
+ * day is now closed" and "the day is now closed and here are the four people
+ * you need to ring".
+ *
+ * `past` rows are kept out: the table only grows, and last year's shutdown is
+ * not something anyone is going to edit.
+ */
+export async function adminGetClosures(today?: string): Promise<ClosureWithBookings[]> {
+  const from = today ?? dateInRome();
+  const rows = await db
+    .select()
+    .from(shopClosures)
+    .where(gte(shopClosures.toDate, from))
+    .orderBy(asc(shopClosures.fromDate), asc(shopClosures.shopSlug));
+  if (rows.length === 0) return [];
+
+  return Promise.all(
+    rows.map(async (c) => {
+      const [res] = await db
+        .select({ n: sql<number>`count(*)` })
+        .from(reservations)
+        .where(
+          and(
+            gte(reservations.date, c.fromDate),
+            lte(reservations.date, c.toDate),
+            sql`${reservations.status} not in ('cancelled', 'no_show')`,
+            // A null `shopSlug` on the closure means every location — the same
+            // rule `closureFor` applies when it refuses a date.
+            c.shopSlug ? eq(reservations.shopSlug, c.shopSlug) : undefined,
+          ),
+        );
+
+      // Pickups are stored as an instant, so the range is compared as one:
+      // from midnight on the first day to midnight after the last.
+      const [pick] = await db
+        .select({ n: sql<number>`count(*)` })
+        .from(orders)
+        .where(
+          and(
+            isNotNull(orders.pickupSlotAt),
+            gte(orders.pickupSlotAt, instantInRome(c.fromDate, "00:00")),
+            lte(orders.pickupSlotAt, instantInRome(c.toDate, "23:59")),
+            sql`${orders.status} not in ('cancelled', 'refunded')`,
+            c.shopSlug ? eq(orders.shopSlug, c.shopSlug) : undefined,
+          ),
+        );
+
+      return {
+        ...c,
+        reservationCount: Number(res?.n ?? 0),
+        pickupCount: Number(pick?.n ?? 0),
+      };
+    }),
+  );
+}
+
 /** Every pickup window, active or not, in schedule order. */
 export async function adminGetPickupSlots(): Promise<PickupSlotRow[]> {
   return db
@@ -1296,6 +1542,30 @@ export async function getFulfilmentDay(
  * books; this is how the booking knows it has been, so the button becomes a link
  * instead of offering to do it twice.
  */
+/**
+ * The booking an order was converted from, if any.
+ *
+ * The forward link (booking → "Ordine 1042 →") has existed since the conversion
+ * did; the way back did not, so an order created from a phone booking looked
+ * like any counter sale and the notes the customer actually gave were one page
+ * away with no route to it.
+ */
+export async function getReservationForOrder(reservationId: string | null) {
+  if (!reservationId) return null;
+  const [row] = await db
+    .select({
+      id: reservations.id,
+      reference: reservations.reference,
+      date: reservations.date,
+      time: reservations.time,
+      type: reservations.type,
+    })
+    .from(reservations)
+    .where(eq(reservations.id, reservationId))
+    .limit(1);
+  return row ?? null;
+}
+
 export async function getOrderForReservation(reservationId: string) {
   const [row] = await db
     .select({ id: orders.id, orderNumber: orders.orderNumber, totalCents: orders.totalCents })
@@ -1303,4 +1573,137 @@ export async function getOrderForReservation(reservationId: string) {
     .where(eq(orders.reservationId, reservationId))
     .limit(1);
   return row ?? null;
+}
+
+// ── Global search (⌘K) ───────────────────────────────────────────────────────
+
+export type QuickHit = {
+  kind: "order" | "reservation" | "customer" | "product";
+  id: string;
+  href: string;
+  /** The line the operator scans for — an order number, a person's name. */
+  title: string;
+  /** Everything else worth seeing without opening the record. */
+  subtitle: string;
+};
+
+/**
+ * One search across the four things an operator arrives looking for.
+ *
+ * The ⌘K palette was a static list of forty links: it could take you to the
+ * orders *page* but not to an order, which is the opposite of what someone
+ * typing a customer's name on the phone wants. Everything needed was already
+ * here — trigram FTS indexes over orders, reservations and users since
+ * migration 0024 — so this is the query that was missing, not the machinery.
+ *
+ * Deliberately shallow: four or five hits per kind. It is a jump-to, not a
+ * report; the list pages do filtering, sorting and pagination, and each group
+ * links to them for the full set.
+ */
+export async function quickSearch(rawTerm: string, opts: { scope?: string | null } = {}) {
+  const q = rawTerm.trim();
+  if (q.length < 2) return [] as QuickHit[];
+  const PER_KIND = 5;
+  // A shop-scoped operator searches their own location, exactly as their lists
+  // are locked — otherwise the palette would be the way around the scope.
+  const scope = opts.scope ?? null;
+
+  const [orderRows, reservationRows, customerRows, productRows] = await Promise.all([
+    db
+      .select({
+        id: orders.id,
+        orderNumber: orders.orderNumber,
+        name: orders.name,
+        totalCents: orders.totalCents,
+        status: orders.status,
+        createdAt: orders.createdAt,
+      })
+      .from(orders)
+      .where(and(ordersWhere({ q }), scope ? eq(orders.shopSlug, scope) : undefined))
+      .orderBy(desc(orders.createdAt))
+      .limit(PER_KIND),
+    db
+      .select({
+        id: reservations.id,
+        reference: reservations.reference,
+        name: reservations.name,
+        date: reservations.date,
+        time: reservations.time,
+        type: reservations.type,
+        status: reservations.status,
+      })
+      .from(reservations)
+      .where(and(reservationsWhere({ q }), scope ? eq(reservations.shopSlug, scope) : undefined))
+      .orderBy(desc(reservations.date))
+      .limit(PER_KIND),
+    db
+      .select({
+        id: users.id,
+        name: users.name,
+        username: users.username,
+        email: users.email,
+        phone: users.phone,
+        points: loyaltyAccounts.points,
+      })
+      .from(users)
+      .leftJoin(loyaltyAccounts, eq(loyaltyAccounts.userId, users.id))
+      // `customersWhere` already OR-s in the loyalty card number, which the
+      // users index cannot cover because it lives on the joined table.
+      .where(customersWhere({ q, ruolo: "all" }))
+      .orderBy(desc(users.createdAt))
+      .limit(PER_KIND),
+    db
+      .select({
+        id: products.id,
+        name: products.name,
+        category: products.category,
+        stock: products.stock,
+        priceCents: products.priceCents,
+      })
+      .from(products)
+      // Archived products stay searchable: "where did that product go" is one
+      // of the reasons to search for it.
+      .where(and(productsWhere({ q }, 5), scope ? eq(products.shopSlug, scope) : undefined))
+      .orderBy(asc(products.name))
+      .limit(PER_KIND),
+  ]);
+
+  const eur = (c: number | null) => (c == null ? "" : `${(c / 100).toFixed(2)} €`);
+
+  return [
+    ...orderRows.map<QuickHit>((o) => ({
+      kind: "order",
+      id: o.id,
+      href: `/admin/orders/${o.id}`,
+      title: `#${o.orderNumber} · ${o.name}`,
+      subtitle: [eur(o.totalCents), o.status, o.createdAt ? dateInRome(o.createdAt) : ""]
+        .filter(Boolean)
+        .join(" · "),
+    })),
+    ...reservationRows.map<QuickHit>((r) => ({
+      kind: "reservation",
+      id: r.id,
+      href: `/admin/reservations/${r.id}`,
+      title: `${r.name} · ${r.reference}`,
+      subtitle: [r.date, r.time, r.type, r.status].filter(Boolean).join(" · "),
+    })),
+    ...customerRows.map<QuickHit>((c) => ({
+      kind: "customer",
+      id: c.id,
+      href: `/admin/loyalty/${c.id}`,
+      title: c.name || c.username,
+      subtitle: [c.email, c.phone, c.points != null ? `${c.points} punti` : ""]
+        .filter(Boolean)
+        .join(" · "),
+    })),
+    ...productRows.map<QuickHit>((p) => ({
+      kind: "product",
+      id: p.id,
+      href: `/admin/products/${p.id}`,
+      title: p.name,
+      subtitle: [p.category, eur(p.priceCents), p.stock != null ? `${p.stock} in giacenza` : ""]
+        .filter(Boolean)
+        .join(" · "),
+    })),
+  ];
 }

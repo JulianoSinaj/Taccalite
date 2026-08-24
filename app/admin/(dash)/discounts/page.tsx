@@ -50,7 +50,21 @@ export default async function AdminDiscounts({ searchParams }: SP) {
       <AdminHeader
         title="Codici sconto"
         subtitle={`${total} codici · percentuali, importi fissi o spedizione gratuita`}
-        action={<NewButton href="/admin/discounts/new">+ Nuovo codice</NewButton>}
+        action={
+          <div className="flex flex-wrap gap-2">
+            {/* Which code cost how much, on which order. The per-code detail
+                page has always shown its own ledger; this is the whole of it,
+                which is what "what did the campaign cost us" needs. */}
+            <a
+              href="/api/admin/export/discount-usage"
+              download
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+            >
+              Utilizzi CSV
+            </a>
+            <NewButton href="/admin/discounts/new">+ Nuovo codice</NewButton>
+          </div>
+        }
       />
 
       <SegmentedFilter

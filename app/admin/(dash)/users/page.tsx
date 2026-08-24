@@ -53,7 +53,7 @@ function Tag({ tone, children }: { tone: "ok" | "warn" | "bad" | "mute"; childre
     mute: "bg-brown-900/10 text-brown-800",
   };
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${tones[tone]}`}>
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${tones[tone]}`}>
       {children}
     </span>
   );
@@ -148,7 +148,7 @@ export default async function AdminUsers({ searchParams }: SP) {
                   </p>
                   <Link
                     href={`/admin/loyalty/${u.id}`}
-                    className="mt-1 inline-block text-[11px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
+                    className="mt-1 inline-block text-[12px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
                   >
                     Scheda cliente →
                   </Link>
@@ -219,7 +219,7 @@ export default async function AdminUsers({ searchParams }: SP) {
               {/* Recovery actions: the ones an operator reaches for when someone
                   can't get in. Collapsed so the row stays scannable. */}
               <details className="mt-3 border-t border-brown-900/10 pt-3">
-                <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
                   Anagrafica e accesso
                 </summary>
 

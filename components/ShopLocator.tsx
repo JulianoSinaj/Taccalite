@@ -50,7 +50,7 @@ export function OpenPill({ state, className }: { state: OpenState | null; classN
   return state.open ? (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full bg-green-700/12 px-3 py-1 text-[10px] font-bold tracking-widest text-green-800 uppercase",
+        "inline-flex items-center gap-1.5 rounded-full bg-green-700/12 px-3 py-1 text-[11px] font-bold tracking-widest text-green-800 uppercase",
         className
       )}
     >
@@ -60,7 +60,7 @@ export function OpenPill({ state, className }: { state: OpenState | null; classN
   ) : (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full bg-brown-900/8 px-3 py-1 text-[10px] font-bold tracking-widest text-taupe uppercase",
+        "inline-flex items-center gap-1.5 rounded-full bg-brown-900/8 px-3 py-1 text-[11px] font-bold tracking-widest text-taupe uppercase",
         className
       )}
     >
@@ -345,7 +345,7 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
                     Mostra la mappa
                     <ArrowUpRight className="size-4" />
                   </motion.button>
-                  <p className="max-w-sm text-[11px] leading-relaxed text-cream/55">
+                  <p className="max-w-sm text-[12px] leading-relaxed text-cream/55">
                     La mappa è fornita da Google: caricandola, il tuo indirizzo IP viene inviato a
                     Google.{" "}
                     <Link href="/cookie" className="underline hover:text-cream">

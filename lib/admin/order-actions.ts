@@ -13,7 +13,13 @@ import {
   orderDetailsInput,
   orderFiscalInput,
 } from "@/lib/validation/admin";
-import { getShopBySlug, getSetting, getPickupSlots, getPickupSlotCounts } from "@/lib/db/queries";
+import {
+  getShopBySlug,
+  getSetting,
+  getPickupSlots,
+  getPickupSlotCounts,
+  getClosures,
+} from "@/lib/db/queries";
 import { orderStatusEmail, orderCustomerEmail } from "@/lib/mail/templates";
 import { sendMail } from "@/lib/mail/mailer";
 import { getStripe } from "@/lib/payments/stripe";
@@ -236,6 +242,7 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
       // the customer is standing there. Only a window that was chosen is checked.
       if (d.pickupSlot) {
         const resolved = resolvePickupSlot(await getPickupSlots(d.shopSlug), d.shopSlug, d.pickupSlot, {
+          closures: await getClosures(),
           bookedCounts: await getPickupSlotCounts(Date.now()),
         });
         if (!resolved.ok) throw new ActionError(resolved.error);
@@ -463,6 +470,7 @@ export async function updateOrderDetails(_prev: ActionState, fd: FormData): Prom
       if (!(await getShopBySlug(d.shopSlug))) throw new ActionError("Negozio di ritiro non valido.");
       if (d.pickupSlot) {
         const resolved = resolvePickupSlot(await getPickupSlots(d.shopSlug), d.shopSlug, d.pickupSlot, {
+          closures: await getClosures(),
           bookedCounts: await getPickupSlotCounts(Date.now()),
         });
         if (!resolved.ok) throw new ActionError(resolved.error);
@@ -774,21 +782,45 @@ const BULK_ORDER_STATUSES = ["fulfilled", "cancelled", "pending"] as const;
  */
 export async function setOrderTracking(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireAdmin();
+    const actor = await requireAdmin();
     const id = String(fd.get("id") ?? "").trim();
     if (!id) throw new ActionError("Ordine non valido.");
     const carrier = String(fd.get("carrier") ?? "").trim() || null;
     const trackingNumber = String(fd.get("trackingNumber") ?? "").trim() || null;
 
     const order = await mustFindOrder(id);
+    const changed = order.carrier !== carrier || order.trackingNumber !== trackingNumber;
 
     await db
       .update(orders)
       .set({ carrier, trackingNumber, updatedAt: new Date() })
       .where(eq(orders.id, id));
 
-    if (order.status === "fulfilled" && order.fulfilment === "shipping") {
+    const emailed = order.status === "fulfilled" && order.fulfilment === "shipping";
+    if (emailed) {
       await notifyOrderStatus({ ...order, carrier, trackingNumber }, "fulfilled");
+    }
+
+    // This writes shipping data and can re-send a customer email, and was the
+    // one order action that left no trace — so "why did the customer get a
+    // second dispatch notice?" had no answer in the log.
+    if (changed || emailed) {
+      await logAudit({
+        actor,
+        action: "order.tracking",
+        entity: "order",
+        entityId: order.id,
+        summary: `Ordine ${order.orderNumber}: tracking ${
+          trackingNumber ? `${carrier ?? "corriere"} ${trackingNumber}` : "rimosso"
+        }${emailed ? " — email di spedizione inviata" : ""}`,
+        meta: {
+          carrier,
+          trackingNumber,
+          previousCarrier: order.carrier,
+          previousTrackingNumber: order.trackingNumber,
+          emailed,
+        },
+      });
     }
 
     revalidatePath(`/admin/orders/${id}`);

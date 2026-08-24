@@ -154,15 +154,15 @@ export function CampaignComposer({
         </div>
 
         <details className="rounded-lg border border-brown-900/10 bg-cream/40 p-3">
-          <summary className="cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
+          <summary className="cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
             Anteprima messaggio
           </summary>
           <div className="mt-3 rounded-lg bg-surface p-4">
             {paragraphs.length === 0 ? (
-              <p className="text-[13px] text-brown-800/60">L&apos;anteprima comparirà qui.</p>
+              <p className="text-[14px] text-brown-800/60">L&apos;anteprima comparirà qui.</p>
             ) : (
               paragraphs.map((p, i) => (
-                <p key={i} className="mb-3.5 text-[15px] leading-relaxed text-brown-900 last:mb-0">
+                <p key={i} className="mb-3.5 text-[16px] leading-relaxed text-brown-900 last:mb-0">
                   {p.split("\n").map((line, j, all) => (
                     <span key={j}>
                       {line}

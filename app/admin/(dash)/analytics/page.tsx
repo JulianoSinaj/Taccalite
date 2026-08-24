@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <Panel>
-      <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">{label}</p>
+      <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">{label}</p>
       <p className="font-display mt-1 text-3xl text-brown-950">{value.toLocaleString("it-IT")}</p>
     </Panel>
   );
@@ -72,7 +72,7 @@ export default async function AdminAnalytics({ searchParams }: SP) {
           except the headline numbers. */}
       <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Panel>
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
             Visite · {range} giorni
           </p>
           <div className="mt-1 flex items-baseline gap-2">
@@ -90,14 +90,14 @@ export default async function AdminAnalytics({ searchParams }: SP) {
         {/* Commerce context. Page views were counted and never once related to
             money, so the page couldn't answer "did any of this sell anything". */}
         <Panel>
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
             Ordini · {range} giorni
           </p>
           <p className="font-display mt-1 text-3xl text-brown-950">{s.orders.toLocaleString("it-IT")}</p>
           <p className="mt-1 text-xs text-brown-800/50">{s.ordersPerThousandViews} ogni 1.000 visite</p>
         </Panel>
         <Panel>
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
             Incasso · {range} giorni
           </p>
           <p className="font-display mt-1 text-3xl text-brown-950">{euro(s.revenueCents)}</p>
@@ -122,7 +122,7 @@ export default async function AdminAnalytics({ searchParams }: SP) {
                   className="w-full rounded-t bg-gold"
                   style={{ height: `${Math.round((d.n / maxDaily) * 100)}%`, minHeight: d.n > 0 ? "4px" : "0" }}
                 />
-                {showDayLabels && <span className="text-[9px] text-brown-800/50">{d.day.slice(8)}</span>}
+                {showDayLabels && <span className="text-[10px] text-brown-800/50">{d.day.slice(8)}</span>}
               </div>
             ))}
           </div>

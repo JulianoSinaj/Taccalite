@@ -140,13 +140,13 @@ export default async function PorchettaPage() {
             <div className="grid grid-cols-2 gap-8 py-6">
               <div className="space-y-2">
                 <p className="font-display text-4xl font-bold wonk text-gold">Cottura lenta</p>
-                <p className="text-[10px] font-bold tracking-widest text-cream/65 uppercase">
+                <p className="text-[11px] font-bold tracking-widest text-cream/65 uppercase">
                   Nel forno, per ore
                 </p>
               </div>
               <div className="space-y-2">
                 <p className="font-display text-4xl font-bold wonk text-gold">100% locale</p>
-                <p className="text-[10px] font-bold tracking-widest text-cream/65 uppercase">
+                <p className="text-[11px] font-bold tracking-widest text-cream/65 uppercase">
                   Erbe marchigiane
                 </p>
               </div>

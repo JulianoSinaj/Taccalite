@@ -11,6 +11,11 @@ import {
   getSubscribersForExport,
   getAuditForExport,
   getVatReport,
+  getOrderItemsForExport,
+  getStockMovementsForExport,
+  getBatchesForExport,
+  getLoyaltyForExport,
+  getDiscountUsageForExport,
 } from "@/lib/admin/queries";
 import {
   orderFilters,
@@ -61,6 +66,80 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
           o.paymentStatus, o.fulfilment, o.shopSlug,
           o.pickupSlotAt ? o.pickupSlotAt.toISOString() : "",
           (o.totalCents / 100).toFixed(2),
+        ],
+      );
+      break;
+    }
+    case "order-items": {
+      // The order-level export answers "how much did we take" and nothing about
+      // what was sold. Same filters, one row per line.
+      const f = orderFilters(params);
+      body = streamCsv(
+        [
+          "orderNumber", "date", "paidAt", "customer", "status", "paymentStatus", "shop",
+          "prodotto", "productId", "quantita", "pesoKg", "prezzoUnitarioEuros",
+          "totaleRigaEuros", "ivaPercento",
+        ],
+        (limit, offset) => getOrderItemsForExport(f, limit, offset),
+        (i) => [
+          i.orderNumber, iso(i.createdAt), iso(i.paidAt), i.customer, i.status,
+          i.paymentStatus, i.shopSlug, i.productName, i.productId,
+          i.weightKg != null ? "" : i.quantity,
+          i.weightKg ?? "",
+          (i.unitPriceCents / 100).toFixed(2),
+          (i.lineTotalCents / 100).toFixed(2),
+          i.vatRateBps / 100,
+        ],
+      );
+      break;
+    }
+    case "stock-movements": {
+      // The ledger a stocktake is reconciled against.
+      body = streamCsv(
+        ["timestamp", "prodotto", "sku", "sede", "delta", "giacenzaDopo", "motivo", "operatore"],
+        (limit, offset) => getStockMovementsForExport(limit, offset),
+        (m) => [
+          iso(m.createdAt), m.productName, m.sku ?? "", m.shopSlug ?? "",
+          m.delta, m.stockAfter, m.reason, m.actor ?? "",
+        ],
+      );
+      break;
+    }
+    case "batches": {
+      // HACCP traceability: which lot, from whom, expiring when.
+      body = streamCsv(
+        [
+          "prodotto", "sku", "lotto", "scadenza", "quantita", "residuo",
+          "fornitore", "costoUnitarioEuros", "ricevutoIl", "nota",
+        ],
+        (limit, offset) => getBatchesForExport(limit, offset),
+        (b) => [
+          b.productName, b.sku ?? "", b.lotCode, b.expiryDate ?? "", b.quantity, b.remaining,
+          b.supplier ?? "",
+          b.unitCostCents != null ? (b.unitCostCents / 100).toFixed(2) : "",
+          iso(b.receivedAt), b.note ?? "",
+        ],
+      );
+      break;
+    }
+    case "loyalty": {
+      body = streamCsv(
+        ["timestamp", "cliente", "username", "tessera", "delta", "saldoDopo", "motivo"],
+        (limit, offset) => getLoyaltyForExport(limit, offset),
+        (t) => [
+          iso(t.createdAt), t.customer, t.username, t.cardNumber ?? "",
+          t.delta, t.balanceAfter, t.reason,
+        ],
+      );
+      break;
+    }
+    case "discount-usage": {
+      body = streamCsv(
+        ["timestamp", "codice", "ordine", "email", "scontoEuros"],
+        (limit, offset) => getDiscountUsageForExport(limit, offset),
+        (d) => [
+          iso(d.createdAt), d.code, d.orderNumber ?? "", d.email ?? "",
+          (d.amountCents / 100).toFixed(2),
         ],
       );
       break;

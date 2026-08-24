@@ -669,6 +669,52 @@ export const pickupSlots = sqliteTable(
   ],
 );
 
+/**
+ * Days the shop is shut — Ferragosto, Christmas, a funeral, a refit.
+ *
+ * Everything else that decides "can this day be booked" was weekly and
+ * therefore blind to the calendar: `shops.hoursStructured` says which weekdays
+ * are open, `pickup_slots` recurs by weekday, and the reservation form accepted
+ * any date at all. The only lever for a closure was the global on/off switch,
+ * which also stops the days either side of it.
+ *
+ * One row covers a range (`fromDate`..`toDate` inclusive, equal for a single
+ * day). `shopSlug` null means every location — an August shutdown is one row,
+ * not one per shop. The two flags exist because the cases genuinely differ: a
+ * kitchen refit stops table bookings while the counter still hands over
+ * pre-paid orders, and a delivery-van breakdown is the reverse.
+ */
+export const shopClosures = sqliteTable(
+  "shop_closures",
+  {
+    id: id(),
+    // Null = every location.
+    shopSlug: text("shop_slug").references(() => shops.slug, {
+      onDelete: "cascade",
+      onUpdate: "cascade",
+    }),
+    fromDate: text("from_date").notNull(), // ISO yyyy-mm-dd, inclusive
+    toDate: text("to_date").notNull(), // ISO yyyy-mm-dd, inclusive
+    /** Shown to the customer when a date is refused, so "chiuso" has a reason. */
+    reason: text("reason").notNull().default(""),
+    /** Refuse table/porchetta/order bookings on these days. */
+    blocksReservations: integer("blocks_reservations", { mode: "boolean" }).notNull().default(true),
+    /** Offer no pickup or delivery window on these days. */
+    blocksPickup: integer("blocks_pickup", { mode: "boolean" }).notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    // Every read is "does any closure cover this date", so the range bounds lead.
+    index("shop_closures_range_idx").on(t.fromDate, t.toDate),
+    index("shop_closures_shop_idx").on(t.shopSlug, t.fromDate),
+    check("shop_closures_range_ck", sql`${t.toDate} >= ${t.fromDate}`),
+    check(
+      "shop_closures_date_ck",
+      sql`${t.fromDate} like '____-__-__' and ${t.toDate} like '____-__-__'`,
+    ),
+  ],
+);
+
 // ── Orders (e-commerce) ──────────────────────────────────────────────────────
 export const orders = sqliteTable(
   "orders",
@@ -1114,6 +1160,7 @@ export type ReservationRow = typeof reservations.$inferSelect;
 export type RewardRow = typeof rewards.$inferSelect;
 export type DeliveryZoneRow = typeof deliveryZones.$inferSelect;
 export type PickupSlotRow = typeof pickupSlots.$inferSelect;
+export type ShopClosureRow = typeof shopClosures.$inferSelect;
 export type OrderRow = typeof orders.$inferSelect;
 export type FulfilmentMode = OrderRow["fulfilment"];
 export type OrderItemRow = typeof orderItems.$inferSelect;

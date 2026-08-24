@@ -213,7 +213,7 @@ function ZoneList({ zones, shops, mode }: { zones: ZoneWithUsage[]; shops: ShopR
               <h3 className="font-display text-lg text-brown-950">
                 {z.name}
                 {!z.active && (
-                  <span className="ml-2 rounded-full bg-brown-900/10 px-2.5 py-0.5 text-[10px] font-bold tracking-widest text-brown-800/70 uppercase">
+                  <span className="ml-2 rounded-full bg-brown-900/10 px-2.5 py-0.5 text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
                     sospesa
                   </span>
                 )}
@@ -247,7 +247,7 @@ function ZoneList({ zones, shops, mode }: { zones: ZoneWithUsage[]; shops: ShopR
           </div>
 
           <details className="mt-3 border-t border-brown-900/10 pt-3">
-            <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+            <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
               Modifica
             </summary>
             <div className="mt-3">
@@ -259,7 +259,7 @@ function ZoneList({ zones, shops, mode }: { zones: ZoneWithUsage[]; shops: ShopR
 
       <Panel>
         <details>
-          <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+          <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
             + Nuova zona
           </summary>
           <div className="mt-4">
@@ -414,7 +414,7 @@ export default async function AdminFulfilment({ searchParams }: SP) {
                 )}
 
                 <details className="mt-4 border-t border-brown-900/10 pt-3">
-                  <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                  <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
                     + Aggiungi una fascia
                   </summary>
                   <ActionForm action={savePickupSlot} className="mt-3 flex flex-wrap items-end gap-3">
@@ -471,7 +471,7 @@ export default async function AdminFulfilment({ searchParams }: SP) {
                     stays unconfigured. The opening hours are already structured
                     data, so the schedule can come from them. */}
                 <details className="mt-3 border-t border-brown-900/10 pt-3">
-                  <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                  <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
                     Genera dagli orari di apertura
                   </summary>
                   <ActionForm

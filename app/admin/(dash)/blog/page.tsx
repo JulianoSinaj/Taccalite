@@ -93,15 +93,15 @@ export default async function AdminBlog({ searchParams }: SP) {
                     the one place scheduling is managed was the one place it
                     was invisible. */}
                 {!p.published ? (
-                  <span className="rounded-full bg-brown-900/10 px-2.5 py-1 text-[10px] font-bold tracking-widest text-brown-800 uppercase">
+                  <span className="rounded-full bg-brown-900/10 px-2.5 py-1 text-[11px] font-bold tracking-widest text-brown-800 uppercase">
                     Bozza
                   </span>
                 ) : p.date > today ? (
-                  <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-warn-soft-fg uppercase">
+                  <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-warn-soft-fg uppercase">
                     Programmato · {fmtDate(p.date)}
                   </span>
                 ) : (
-                  <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[10px] font-bold tracking-widest text-ok-soft-fg uppercase">
+                  <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-ok-soft-fg uppercase">
                     Online
                   </span>
                 )}

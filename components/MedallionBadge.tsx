@@ -19,7 +19,7 @@ export default function MedallionBadge({ className = "", icon }: MedallionBadgeP
             d="M 50, 50 m -37, 0 a 37,37 0 1,1 74,0 a 37,37 0 1,1 -74,0"
             fill="transparent"
           />
-          <text className="fill-current text-[8px] font-bold uppercase tracking-[0.2em]">
+          <text className="fill-current text-[9px] font-bold uppercase tracking-[0.2em]">
             <textPath href="#medallion-circle-path">
               • DAL 1946 • TRADIZIONE MARCHIGIANA • ECCELLENZA •
             </textPath>

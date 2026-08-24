@@ -313,8 +313,10 @@ body:has(.site-shell) {
  * component owned them. React only renders the markup.
  *
  * `display: none` is the default state, so with the attribute absent — script
- * blocked, JavaScript off, a repeat visit in the same session, a client-side
- * navigation back to the homepage — there is simply no veil at all.
+ * blocked, JavaScript off, any route but the homepage, a client-side navigation
+ * back to the homepage — there is simply no veil at all. That default is the
+ * only lock the veil needs against showing with nothing to lift it, which is why
+ * the reduced-motion block at the end of this section no longer adds a second.
  */
 .intro-veil {
   position: fixed;
@@ -437,13 +439,32 @@ html[data-intro="play"] .intro-rule::after {
   }
 }
 
-/* The script already refuses to play the intro under reduced motion. This is the
- * second lock on the same door: a veil is worthless if it ever shows without the
- * script that lifts it. */
+/* Reduced motion keeps the veil and loses the motion.
+ *
+ * This block used to hide the veil outright, on the reasoning that a veil is
+ * worthless if it ever shows without the script that lifts it — but that door is
+ * already locked by `display: none` being the *default* state above, which is
+ * what covers script-blocked and no-JS. All this one ever did was give the
+ * visitor who asked for calm the single thing the veil exists to prevent: the
+ * hero assembling itself in front of them, seal cross-fading to gold, fonts
+ * swapping under the headline.
+ *
+ * So the paper still comes down. The stamp does not fall, the name does not
+ * rise, and the rule does not sweep — the whole card is simply there and then
+ * gone. The lift stays a fade, and stays shorter: cross-fading opacity is not
+ * the kind of movement this query is asking about, but there is no reason to
+ * hold someone who was never shown an animation. */
 @media (prefers-reduced-motion: reduce) {
-  html[data-intro="play"] .intro-veil,
+  html[data-intro="play"] .intro-seal,
+  html[data-intro="play"] .intro-name,
+  html[data-intro="play"] .intro-rule::after {
+    animation: none;
+  }
+
   html[data-intro="done"] .intro-veil {
-    display: none;
+    transition:
+      opacity 200ms linear,
+      visibility 0s linear 200ms;
   }
 }
 
@@ -769,7 +790,7 @@ html[data-intro="play"] .intro-rule::after {
 
 /* — Superdesign language — */
 .eyebrow {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.3em;
   font-weight: 600;
@@ -1146,23 +1167,28 @@ html[data-intro="play"] .intro-rule::after {
     /*
      * Global type/spacing scale. Tailwind sizes text, padding, gaps and
      * containers in rem, so the root font-size is the single dial for the
-     * whole UI density. Mobile stays at the browser default (16px) for
-     * legibility, tap targets and to keep iOS from zooming inputs < 16px;
-     * tablet and desktop step down so the interface reads as a tighter,
-     * more editorial layout instead of "zoomed in". Prefer this over CSS
-     * `zoom`, which breaks sticky/fixed math, 100vh sections and the
-     * Framer Motion / Lenis measurements used across the site.
+     * whole UI density: raising it grows body copy, button labels, control
+     * padding and tap targets together, which is the only way to do that
+     * without editing the several hundred call sites that each spell their
+     * own `text-sm px-5 py-2.5` out longhand.
+     *
+     * Phones sit a notch over the browser default for legibility, for tap
+     * targets and to keep iOS from zooming inputs < 16px; tablet and desktop
+     * still step down from there, so the interface reads as a tighter, more
+     * editorial layout instead of "zoomed in". Prefer this over CSS `zoom`,
+     * which breaks sticky/fixed math, 100vh sections and the Framer Motion /
+     * Lenis measurements used across the site.
      */
-    font-size: 100%;
+    font-size: 103.125%; /* 16.5px */
   }
   @media (min-width: 640px) {
     html {
-      font-size: 93.75%; /* 15px */
+      font-size: 100%; /* 16px */
     }
   }
   @media (min-width: 1024px) {
     html {
-      font-size: 87.5%; /* 14px */
+      font-size: 93.75%; /* 15px */
     }
   }
 }
@@ -1394,12 +1420,17 @@ html {
 
 /* ── Density ─────────────────────────────────────────────────────────────────
  *
- * `@layer base` above steps the root font-size down to 93.75% at 640px and
- * 87.5% at 1024px. That is a storefront art-direction decision — an editorial
- * page reads tighter than the browser default — and it was landing on the
- * gestionale too, where it made body copy 12.25px, button labels 10.5px and
- * every `py-2.5` control ~34px tall: under the 44px a finger needs, and under
- * what anyone wants to read a day of order numbers in.
+ * `@layer base` above steps the root font-size down at 640px and again at
+ * 1024px. That is a storefront art-direction decision — an editorial page
+ * reads tighter than the browser default — and it was landing on the
+ * gestionale too, where at the old 87.5% it made body copy 12.25px, button
+ * labels 10.5px and every `py-2.5` control ~34px tall: under the 44px a finger
+ * needs, and under what anyone wants to read a day of order numbers in.
+ *
+ * 106.25% rather than a bare 100%: the back office is read at arm's length for
+ * a whole shift, and one step up on the root grows every label, field and pill
+ * in the same proportion instead of leaving the type large and the controls
+ * where they were.
  *
  * Unlayered, so it beats all three `@layer base` steps without a specificity
  * argument. `:has()` on <html> because only the root layout renders that
@@ -1412,7 +1443,7 @@ html {
  * there. Same pattern as `--consent-h` on the storefront.
  */
 html:has(.admin-shell) {
-  font-size: 100%;
+  font-size: 106.25%; /* 17px */
   --admin-top: 4rem;
   /* 6rem of scroll-padding exists for the storefront's fixed header; the admin
    * has its own, shorter one. */
@@ -1548,5 +1579,183 @@ html:has(.admin-shell) {
   .scroll-x {
     overflow-x: visible;
     background-image: none;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Date & time fields
+ *
+ * A dozen screens of the gestionale are filtered by day — ordini, prenotazioni,
+ * agenda, chiusure, IVA, audit, lotti, sconti, campagne — and the storefront
+ * books a table and a porchetta the same way. Every one of them goes through a
+ * native `<input type="date | time | datetime-local">`.
+ *
+ * The field itself was already dressed by `inputCls`. The *button that opens
+ * the picker* was not, and could not be: it is a shadow-DOM pseudo-element, so
+ * no Tailwind class reaches it. It stayed the UA's own ~12px grey glyph on all
+ * of them, which is three real problems rather than one cosmetic one.
+ *
+ *   1. It is painted from `color-scheme`, not from our ramp, so in the dark
+ *      theme it sat as a low-contrast smudge on the field it belongs to.
+ *   2. At 12px square it is a mis-tap on a phone, in rows where the control
+ *      beside it is another date and the wrong one changes the query.
+ *   3. It reads as chrome borrowed from another program: a platform-grey icon
+ *      in a brown-and-gold interface that draws every other icon from Lucide.
+ *
+ * A mask rather than the usual `filter: invert()`: the glyph becomes an alpha
+ * stencil and the paint is ours, so the icon follows `currentColor` — and
+ * therefore the theme — instead of being flipped by a hard-coded amount that is
+ * only correct on one of the two grounds.
+ *
+ * The popup itself is drawn by the browser and takes no CSS at all. It follows
+ * `color-scheme`, which `[data-theme]` already sets (see above), so the picker
+ * that opens over a dark gestionale is a dark picker without anything further.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Lucide `calendar` and `clock` — the same two the app draws beside these
+   * fields in JSX, so the button now matches its own label. Stroke colour is
+   * irrelevant (a mask reads alpha, not colour) but kept black for anyone who
+   * opens the data URI on its own. */
+  --picker-calendar: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4'/%3E%3Cpath d='M16 2v4'/%3E%3Crect width='18' height='18' x='3' y='4' rx='2'/%3E%3Cpath d='M3 10h18'/%3E%3C/svg%3E");
+  --picker-clock: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E");
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="week"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  /* The box is the tap target; the glyph inside it stays icon-sized. This is
+   * why `mask-size` is stated rather than left at `contain`: padding on the
+   * indicator would grow the input's content box and drag the layout with it,
+   * whereas a larger box with a small stencil centred in it does not. */
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  /* Pulled back into the field's own `px-3`, so the icon lands ~0.4rem from the
+   * border instead of floating a whole gutter inside it. */
+  margin-inline: 0.25rem -0.35rem;
+
+  background-color: color-mix(in oklab, currentColor 55%, transparent);
+  -webkit-mask-image: var(--picker-calendar);
+  mask-image: var(--picker-calendar);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: 1.05rem 1.05rem;
+  mask-size: 1.05rem 1.05rem;
+
+  cursor: pointer;
+  opacity: 1;
+  transition:
+    background-color 150ms ease,
+    transform 150ms ease;
+}
+
+/* A time field is not a calendar. Same button, different stencil. */
+input[type="time"]::-webkit-calendar-picker-indicator {
+  -webkit-mask-image: var(--picker-clock);
+  mask-image: var(--picker-clock);
+}
+
+/* Two states, because the control answers two different questions: hovering it
+ * asks "is this a button?", and focusing the *field* has to answer "can I open
+ * the picker without the mouse?" — which you can, with Alt+Down, and which
+ * nothing on screen said before. */
+input[type="date"]:hover::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator,
+input[type="month"]:hover::-webkit-calendar-picker-indicator,
+input[type="week"]:hover::-webkit-calendar-picker-indicator,
+input[type="time"]:hover::-webkit-calendar-picker-indicator,
+input[type="date"]:focus::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]:focus::-webkit-calendar-picker-indicator,
+input[type="month"]:focus::-webkit-calendar-picker-indicator,
+input[type="week"]:focus::-webkit-calendar-picker-indicator,
+input[type="time"]:focus::-webkit-calendar-picker-indicator {
+  /* `--color-gold-dark` and not `--color-gold`: gold is deliberately *not*
+   * inverted by the dark theme, and the lighter of the two is thin against a
+   * cream field. The darker one carries on both grounds. */
+  background-color: var(--color-gold-dark);
+}
+
+input::-webkit-calendar-picker-indicator:active {
+  transform: scale(0.88);
+}
+
+input:disabled::-webkit-calendar-picker-indicator {
+  background-color: color-mix(in oklab, currentColor 30%, transparent);
+  cursor: not-allowed;
+}
+
+/* A finger needs more room than a mouse does, and these sit in filter bars
+ * where the next control along is half a rem away. */
+@media (hover: none) and (pointer: coarse) {
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  input[type="month"]::-webkit-calendar-picker-indicator,
+  input[type="week"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    width: 2.4rem;
+    height: 2.4rem;
+    -webkit-mask-size: 1.15rem 1.15rem;
+    mask-size: 1.15rem 1.15rem;
+  }
+}
+
+/* ── The value itself ────────────────────────────────────────────────────────
+ *
+ * The other half of a date field is the little segment editor to the left of
+ * the button, and it ships with one un-brandable detail that is impossible to
+ * miss: the segment being edited is highlighted in the platform's selection
+ * blue — the single blue in an interface that has no blues in it.
+ */
+input::-webkit-datetime-edit-year-field:focus,
+input::-webkit-datetime-edit-month-field:focus,
+input::-webkit-datetime-edit-day-field:focus,
+input::-webkit-datetime-edit-hour-field:focus,
+input::-webkit-datetime-edit-minute-field:focus,
+input::-webkit-datetime-edit-second-field:focus,
+input::-webkit-datetime-edit-millisecond-field:focus,
+input::-webkit-datetime-edit-ampm-field:focus {
+  /* Solid gold with `--on-gold` on top, rather than a tint of the field: gold
+   * is constant across themes and `--on-gold` is the ink that exists precisely
+   * for sitting on it, so this one pair stays legible on cream and on brown
+   * without a second declaration under `[data-theme]`. */
+  background-color: var(--color-gold);
+  color: var(--on-gold);
+  border-radius: 0.25rem;
+  outline: none;
+}
+
+/* The `/` and `:` between the segments are punctuation, not data. */
+input::-webkit-datetime-edit-text {
+  color: color-mix(in oklab, currentColor 45%, transparent);
+  padding: 0 0.08em;
+}
+
+/* The UA pads the editor to leave room for a spin control these fields do not
+ * show; left in, the value sits off the vertical centre of a `min-h-11` field. */
+input::-webkit-datetime-edit {
+  padding: 0;
+}
+
+input[type="date"]::-webkit-inner-spin-button,
+input[type="datetime-local"]::-webkit-inner-spin-button,
+input[type="month"]::-webkit-inner-spin-button,
+input[type="week"]::-webkit-inner-spin-button,
+input[type="time"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+/* Nothing on paper opens a picker — and both the packing slip and the IVA
+ * report print from a page that carries these fields. */
+@media print {
+  input::-webkit-calendar-picker-indicator {
+    display: none;
   }
 }

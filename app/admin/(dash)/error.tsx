@@ -21,7 +21,7 @@ export default function AdminError({
       </p>
       <button
         onClick={reset}
-        className="mt-6 inline-flex items-center gap-2 rounded-full bg-brown-950 px-6 py-2.5 text-[11px] font-bold tracking-widest text-cream uppercase transition-colors hover:bg-brown-900"
+        className="mt-6 inline-flex items-center gap-2 rounded-full bg-brown-950 px-6 py-2.5 text-[12px] font-bold tracking-widest text-cream uppercase transition-colors hover:bg-brown-900"
       >
         Riprova
       </button>

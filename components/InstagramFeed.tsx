@@ -136,7 +136,7 @@ function PostTile({ post, index }: { post: InstagramPost; index: number }) {
         {/* Media-type badge */}
         {kindLabel && (
           <span
-            className="absolute top-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-brown-950/55 px-2.5 py-1 text-[10px] sm:text-[9px] font-bold tracking-[0.2em] text-cream uppercase backdrop-blur-md sm:top-4 sm:right-4 sm:text-[10px]"
+            className="absolute top-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-brown-950/55 px-2.5 py-1 text-[11px] sm:text-[10px] font-bold tracking-[0.2em] text-cream uppercase backdrop-blur-md sm:top-4 sm:right-4 sm:text-[11px]"
           >
             {post.mediaType === "VIDEO" ? <Play className="size-3 fill-current" /> : <Layers className="size-3" />}
             {kindLabel}
@@ -150,7 +150,7 @@ function PostTile({ post, index }: { post: InstagramPost; index: number }) {
           {excerpt && (
             <p className="line-clamp-2 text-xs leading-snug font-medium text-cream sm:text-sm">{excerpt}</p>
           )}
-          <div className="flex items-center gap-2.5 overflow-hidden text-[10px] font-bold tracking-[0.12em] whitespace-nowrap text-cream/80 uppercase sm:gap-3 sm:tracking-[0.2em]">
+          <div className="flex items-center gap-2.5 overflow-hidden text-[11px] font-bold tracking-[0.12em] whitespace-nowrap text-cream/80 uppercase sm:gap-3 sm:tracking-[0.2em]">
             {likes && (
               <span className="inline-flex items-center gap-1">
                 <Heart className="size-3.5 fill-current text-gold" />
@@ -206,7 +206,7 @@ function ProfileChip({ profile, handle, url }: { profile: InstagramProfile | nul
       </span>
       <span className="flex flex-col leading-tight">
         <span className="text-sm font-bold text-brown-950">@{profile?.username ?? handle}</span>
-        <span className="text-[10px] font-bold tracking-[0.2em] text-taupe uppercase">
+        <span className="text-[11px] font-bold tracking-[0.2em] text-taupe uppercase">
           {stats.length ? stats.join(" · ") : "Ancona · dal 1946"}
         </span>
       </span>
@@ -297,7 +297,7 @@ export default function InstagramFeed({ posts, profile, handle, url }: Props) {
                 <InstagramIcon className="size-6" />
               </span>
               <div className="space-y-2">
-                <p className="text-[10px] font-bold tracking-[0.25em] text-gold uppercase">@{handle}</p>
+                <p className="text-[11px] font-bold tracking-[0.25em] text-gold uppercase">@{handle}</p>
                 <h3 className="font-display max-w-md text-2xl leading-tight text-cream sm:text-3xl">
                   Le foto dal banco, la porchetta del sabato, le novità della bottega.
                 </h3>
@@ -310,7 +310,7 @@ export default function InstagramFeed({ posts, profile, handle, url }: Props) {
           </motion.a>
         )}
 
-        <p className="mt-6 text-[10px] font-bold tracking-[0.25em] text-taupe uppercase sm:mt-8">
+        <p className="mt-6 text-[11px] font-bold tracking-[0.25em] text-taupe uppercase sm:mt-8">
           Foto e video pubblicati su Instagram · si aprono in una nuova scheda
         </p>
       </div>

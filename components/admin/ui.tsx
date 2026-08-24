@@ -120,7 +120,7 @@ export function roleLabel(role: string): string {
 export function StatusBadge({ status }: { status: string }) {
   return (
     <span
-      className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-bold tracking-widest uppercase ${
+      className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-bold tracking-widest uppercase ${
         badgeStyles[status] ?? "bg-brown-900/10 text-brown-800"
       }`}
     >
@@ -138,7 +138,7 @@ export function StatusBadge({ status }: { status: string }) {
 export const inputCls =
   "w-full min-h-11 rounded-lg border border-brown-900/15 bg-cream/40 px-3 py-2.5 text-sm text-brown-950 focus:border-gold-dark focus:outline-none";
 
-export const labelCls = "mb-1.5 block text-[11px] font-bold tracking-widest text-brown-800/70 uppercase";
+export const labelCls = "mb-1.5 block text-[12px] font-bold tracking-widest text-brown-800/70 uppercase";
 
 export function SubmitButton({ children, tone = "gold" }: { children: ReactNode; tone?: "gold" | "dark" | "danger" }) {
   const tones = {

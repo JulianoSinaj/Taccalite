@@ -143,12 +143,21 @@ export async function getLoyaltySummary(userId: string) {
     db.select().from(rewards).where(eq(rewards.active, true)).orderBy(rewards.sortOrder),
   ]);
 
+  // Annotated rather than filtered out. A reward that vanishes reads as a bug
+  // to the customer who was saving for it — "Esaurito" is information, and the
+  // seasonal ones ("dal 1° dicembre") are worth seeing before they open. What
+  // must not happen is the old behaviour: a live button that fails on click.
+  const now = new Date();
+  const annotated = allRewards.map((r) => ({ ...r, unavailable: rewardAvailability(r, now) }));
+
+  // "Il prossimo premio" is a goal to save towards, so an expired or sold-out
+  // one is the wrong thing to point at.
   const nextReward =
-    allRewards
-      .filter((r) => r.points > account.points)
+    annotated
+      .filter((r) => r.points > account.points && r.unavailable == null)
       .sort((a, b) => a.points - b.points)[0] ?? null;
 
-  return { account, transactions, rewards: allRewards, nextReward };
+  return { account, transactions, rewards: annotated, nextReward };
 }
 
 /**
@@ -236,6 +245,41 @@ export type RedeemResult =
   | { ok: true; pointsLeft: number; reference: string }
   | { ok: false; error: string };
 
+/** Why a reward cannot be claimed right now, or null when it can. */
+export type RewardUnavailable = "not_yet" | "expired" | "out_of_stock";
+
+export const REWARD_UNAVAILABLE_LABEL: Record<RewardUnavailable, string> = {
+  not_yet: "Non ancora disponibile",
+  expired: "Non più disponibile",
+  out_of_stock: "Esaurito",
+};
+
+/**
+ * Whether a reward is claimable at `now`, ignoring the customer's balance and
+ * their per-customer cap (both of which need a user).
+ *
+ * This exists because the two halves disagreed. `redeemReward` has always
+ * checked the window and claimed stock atomically — correctly — while the
+ * account page listed *every* active reward, so a sold-out hamper rendered with
+ * a live "Riscatta" button that failed on click, and the admin's reward list
+ * showed name and points only, so nobody could see it had run out. One function,
+ * read by the catalogue, the customer's page and the back office.
+ */
+export function rewardAvailability(
+  reward: {
+    stock: number | null;
+    availableFrom: Date | null;
+    availableUntil: Date | null;
+  },
+  now: Date = new Date(),
+): RewardUnavailable | null {
+  if (reward.availableFrom && now < reward.availableFrom) return "not_yet";
+  if (reward.availableUntil && now > reward.availableUntil) return "expired";
+  // Null stock is unlimited; 0 is genuinely none left.
+  if (reward.stock != null && reward.stock <= 0) return "out_of_stock";
+  return null;
+}
+
 /**
  * Redeem a reward for a customer if they have enough points.
  *
@@ -251,14 +295,24 @@ export async function redeemReward(userId: string, rewardId: string): Promise<Re
     .limit(1);
   if (!reward) return { ok: false, error: "Premio non disponibile" };
 
-  // Availability window. `active` is the on/off switch; these bound *when* an
-  // active reward can be claimed (a Christmas hamper, a summer promotion).
+  // Availability window and stock. `active` is the on/off switch; these bound
+  // *when* an active reward can be claimed (a Christmas hamper, a summer
+  // promotion) and whether any are left. Shared with the surfaces that display
+  // it, so a reward can't look claimable and then refuse. The stock claim below
+  // is still the authority — this is the early, friendlier failure; the
+  // transaction is what stops two customers taking the last one.
   const now = new Date();
-  if (reward.availableFrom && now < reward.availableFrom) {
-    return { ok: false, error: "Questo premio non è ancora disponibile" };
-  }
-  if (reward.availableUntil && now > reward.availableUntil) {
-    return { ok: false, error: "Questo premio non è più disponibile" };
+  const unavailable = rewardAvailability(reward, now);
+  if (unavailable) {
+    return {
+      ok: false,
+      error:
+        unavailable === "out_of_stock"
+          ? "Questo premio è esaurito"
+          : unavailable === "not_yet"
+            ? "Questo premio non è ancora disponibile"
+            : "Questo premio non è più disponibile",
+    };
   }
 
   // Per-customer cap, counted from the redemptions that still stand.

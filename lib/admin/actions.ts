@@ -27,6 +27,7 @@ import { logAudit } from "@/lib/audit";
 import { parseStructuredHours } from "@/lib/hours";
 import { planProductImport, applyProductImport } from "@/lib/admin/product-import";
 import { notifyBackInStock } from "@/lib/stock-notify";
+import { subscribeNewsletter } from "@/lib/newsletter";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import {
   parseForm,
@@ -825,12 +826,43 @@ export async function toggleRewardActive(_prev: ActionState, fd: FormData): Prom
   });
 }
 
+/**
+ * Delete a reward from the catalogue.
+ *
+ * `redemptions.rewardId` is deliberately not a foreign key and `rewardName` is
+ * a snapshot, so past redemptions survive this — which is right, they are the
+ * customer's history. What must not survive it is an *outstanding* one: a
+ * customer has already paid points for something they haven't collected, and
+ * deleting the record is how the shop forgets to hand it over. Deactivating
+ * takes it off the catalogue without that.
+ */
 export async function deleteReward(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireAdmin();
     const id = (fd.get("id") ?? "").toString();
+    // Read first: this used to delete blind, so a stale id reported success and
+    // wrote an audit line for a deletion that never happened.
+    const [row] = await db.select({ name: rewards.name }).from(rewards).where(eq(rewards.id, id)).limit(1);
+    if (!row) throw new ActionError("Premio non trovato.");
+
+    const [{ pending }] = await db
+      .select({ pending: sql<number>`count(*)` })
+      .from(redemptions)
+      .where(and(eq(redemptions.rewardId, id), eq(redemptions.status, "pending")));
+    if (Number(pending) > 0) {
+      throw new ActionError(
+        `Ci sono ${pending} riscatti ancora da consegnare per "${row.name}". Consegnali o annullali (i punti tornano al cliente), oppure disattiva il premio invece di eliminarlo.`,
+      );
+    }
+
     await db.delete(rewards).where(eq(rewards.id, id));
-    await logAudit({ actor, action: "reward.delete", entity: "reward", entityId: id, summary: `Premio eliminato (${id})` });
+    await logAudit({
+      actor,
+      action: "reward.delete",
+      entity: "reward",
+      entityId: id,
+      summary: `Premio eliminato: ${row.name}`,
+    });
     revalidatePath("/admin/rewards");
     return ok("Premio eliminato.");
   });
@@ -934,6 +966,154 @@ export async function removeSubscriber(_prev: ActionState, fd: FormData): Promis
     });
     revalidatePath("/admin/newsletter");
     return ok("Iscritto rimosso.");
+  });
+}
+
+/**
+ * Add someone to the list from the back office.
+ *
+ * The list was write-only in the wrong direction: subscribers could be removed
+ * here but never added, so an address written on the pad at the counter had no
+ * way in at all short of asking the customer to go and fill in the website form.
+ *
+ * The default is still double opt-in — the same `subscribeNewsletter` the
+ * footer form calls, so the confirmation email and the token are identical.
+ * `consensoRaccolto` skips it, and is for the case where consent already exists
+ * on paper; it is a deliberate, separately-worded, audited choice rather than a
+ * convenience, because the audit trail is the shop's evidence that it had it.
+ */
+export async function addSubscriber(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const email = (fd.get("email") ?? "").toString().trim().toLowerCase();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      throw new ActionError("Inserisci un indirizzo email valido.");
+    }
+    const alreadyConsented = fd.get("consensoRaccolto") === "true";
+    const source = (fd.get("source") ?? "").toString().trim().slice(0, 60) || "banco";
+
+    const [existing] = await db
+      .select({ status: newsletterSubscribers.status })
+      .from(newsletterSubscribers)
+      .where(eq(newsletterSubscribers.email, email))
+      .limit(1);
+    if (existing?.status === "confirmed") {
+      return ok(`${email} è già iscritto e confermato.`);
+    }
+
+    const res = await subscribeNewsletter(email, source);
+    if (!res.ok) throw new ActionError(res.error);
+
+    if (alreadyConsented) {
+      await db
+        .update(newsletterSubscribers)
+        .set({ status: "confirmed", confirmedAt: new Date() })
+        .where(eq(newsletterSubscribers.email, email));
+    }
+
+    await logAudit({
+      actor,
+      action: alreadyConsented ? "newsletter.add_consented" : "newsletter.add",
+      entity: "campaign",
+      entityId: email,
+      summary: alreadyConsented
+        ? `Iscritto aggiunto e confermato a mano (consenso raccolto): ${email}`
+        : `Invito alla newsletter inviato a ${email}`,
+      meta: { email, source, consentRecordedOffline: alreadyConsented },
+    });
+
+    revalidatePath("/admin/newsletter");
+    return ok(
+      alreadyConsented
+        ? `${email} aggiunto e confermato.`
+        : `Email di conferma inviata a ${email}. Comparirà fra i confermati quando avrà cliccato.`,
+    );
+  });
+}
+
+/**
+ * Re-send the confirmation link to someone stuck on `pending`.
+ *
+ * A subscriber who never clicked was a permanent dead end: excluded from every
+ * campaign, with no control on the row to do anything about it. This mints a
+ * fresh token via the same path the public form uses, so the old link stops
+ * working — which is right, an unclicked invite is not a credential to keep
+ * alive for ever.
+ */
+export async function resendSubscriberConfirmation(
+  _prev: ActionState,
+  fd: FormData,
+): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const id = (fd.get("id") ?? "").toString();
+    const [row] = await db
+      .select()
+      .from(newsletterSubscribers)
+      .where(eq(newsletterSubscribers.id, id))
+      .limit(1);
+    if (!row) throw new ActionError("Iscritto non trovato.");
+    if (row.status === "confirmed") return ok("Questo indirizzo è già confermato.");
+    if (row.status === "unsubscribed") {
+      throw new ActionError(
+        "Questo indirizzo si è cancellato: non possiamo riscrivergli senza un nuovo consenso.",
+      );
+    }
+
+    const res = await subscribeNewsletter(row.email, row.source ?? "footer");
+    if (!res.ok) throw new ActionError(res.error);
+
+    await logAudit({
+      actor,
+      action: "newsletter.resend_confirmation",
+      entity: "campaign",
+      entityId: id,
+      summary: `Conferma newsletter reinviata a ${row.email}`,
+    });
+
+    revalidatePath("/admin/newsletter");
+    return ok(`Email di conferma reinviata a ${row.email}.`);
+  });
+}
+
+/**
+ * Mark a pending subscriber confirmed because consent exists off-line.
+ *
+ * The counterpart to the flag on `addSubscriber`, for the row that is already
+ * in the list. Same reasoning: it is the audit line, not the button, that makes
+ * this defensible, so it is written even though the row change is trivial.
+ */
+export async function confirmSubscriber(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const id = (fd.get("id") ?? "").toString();
+    const [row] = await db
+      .select()
+      .from(newsletterSubscribers)
+      .where(eq(newsletterSubscribers.id, id))
+      .limit(1);
+    if (!row) throw new ActionError("Iscritto non trovato.");
+    if (row.status === "confirmed") return ok("Già confermato.");
+    if (row.status === "unsubscribed") {
+      throw new ActionError("Questo indirizzo si è cancellato: serve un nuovo consenso esplicito.");
+    }
+
+    await db
+      .update(newsletterSubscribers)
+      .set({ status: "confirmed", confirmedAt: new Date() })
+      .where(eq(newsletterSubscribers.id, id));
+
+    await logAudit({
+      actor,
+      action: "newsletter.confirm_manual",
+      entity: "campaign",
+      entityId: id,
+      summary: `Iscrizione confermata a mano (consenso raccolto fuori dal sito): ${row.email}`,
+      meta: { email: row.email, previousStatus: row.status },
+    });
+
+    revalidatePath("/admin/newsletter");
+    return ok(`${row.email} confermato.`);
   });
 }
 

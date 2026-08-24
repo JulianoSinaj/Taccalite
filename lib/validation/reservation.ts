@@ -21,7 +21,17 @@ export const reservationSchema = z
       .optional()
       .transform((v) => (v ? v : undefined)),
     shop: z.string().trim().min(1, "Seleziona un negozio"),
-    date: z.string().trim().optional(),
+    // ISO `yyyy-mm-dd`, the format every reader of `reservations.date` assumes
+    // (agenda, calendar, capacity sums, cron sweeps). This was a bare
+    // `z.string()`, so a direct POST could store prose in a column nothing
+    // could render. `createReservation` re-checks — including that the day
+    // exists, is not past, and is not a closure — since this schema only
+    // guards the one endpoint.
+    date: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data non valida")
+      .optional(),
     time: z.string().trim().optional(),
     guests: z.coerce.number().int().min(1).max(30).optional(),
     quantityKg: z.coerce.number().min(0.5).max(50).optional(),

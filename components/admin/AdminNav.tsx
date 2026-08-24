@@ -7,6 +7,7 @@ import { useScrollLock } from "@/lib/use-scroll-lock";
 import {
   BarChart3,
   CalendarCheck,
+  CalendarX,
   Croissant,
   Gift,
   LayoutDashboard,
@@ -58,6 +59,9 @@ const GROUPS: Group[] = [
       // "Configura" button on the day sheet above and the ⌘K palette.
       // `exact`, so it doesn't also light up on /admin/fulfilment/oggi.
       { href: "/admin/fulfilment", label: "Zone e fasce", icon: MapPin, exact: true, adminOnly: true },
+      // Sits beside the schedules it overrides: the weekly hours say which days
+      // are open, this says which of those the shop is shut anyway.
+      { href: "/admin/chiusure", label: "Chiusure", icon: CalendarX, adminOnly: true },
       { href: "/admin/products", label: "Prodotti", icon: Package },
       { href: "/admin/categories", label: "Categorie", icon: Tags, adminOnly: true },
       { href: "/admin/discounts", label: "Codici sconto", icon: TicketPercent, adminOnly: true },
@@ -155,7 +159,7 @@ export default function AdminNav({
       {groups.map((group, gi) => (
         <div key={group.title ?? `g${gi}`}>
           {group.title && (
-            <p className="px-4 pb-1.5 text-[10px] font-bold tracking-[0.2em] text-brown-800/45 uppercase">
+            <p className="px-4 pb-1.5 text-[11px] font-bold tracking-[0.2em] text-brown-800/45 uppercase">
               {group.title}
             </p>
           )}
@@ -204,7 +208,7 @@ export default function AdminNav({
   const brand = (
     <Link href="/admin" className="block">
       <p className="font-display text-xl font-bold tracking-tighter text-brown-950 uppercase">Taccalite</p>
-      <p className="text-[10px] font-bold tracking-[0.3em] text-gold-deep uppercase">Gestionale</p>
+      <p className="text-[11px] font-bold tracking-[0.3em] text-gold-deep uppercase">Gestionale</p>
     </Link>
   );
 

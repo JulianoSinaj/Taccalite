@@ -3,6 +3,7 @@ import { cache } from "react";
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "./client";
 import * as schema from "./schema";
+import { dateInRome } from "@/lib/time";
 
 /**
  * Read-side data access for content pages. Wrapped in React `cache()` for
@@ -266,6 +267,22 @@ export const getPickupSlots = cache(async (shopSlug?: string) => {
     .from(schema.pickupSlots)
     .where(where)
     .orderBy(asc(schema.pickupSlots.weekday), asc(schema.pickupSlots.startTime));
+});
+
+/**
+ * Closures that could still matter — anything not already wholly in the past.
+ *
+ * Filtered on `toDate` rather than loaded whole because the table only ever
+ * grows: last year's Ferragosto can never gate a future date, and both readers
+ * (the booking gate and the window generator) look forward only.
+ */
+export const getClosures = cache(async (fromDate?: string) => {
+  const from = fromDate ?? dateInRome();
+  return db
+    .select()
+    .from(schema.shopClosures)
+    .where(gte(schema.shopClosures.toDate, from))
+    .orderBy(asc(schema.shopClosures.fromDate));
 });
 
 /**

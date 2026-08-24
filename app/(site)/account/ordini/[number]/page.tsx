@@ -86,12 +86,12 @@ export default async function OrderDetailPage({ params }: PageProps) {
           </h1>
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <span
-              className={`inline-flex rounded-full px-4 py-1.5 text-[11px] font-bold uppercase tracking-widest ${statusStyle}`}
+              className={`inline-flex rounded-full px-4 py-1.5 text-[12px] font-bold uppercase tracking-widest ${statusStyle}`}
             >
               {statusLabel}
             </span>
             <span
-              className={`inline-flex rounded-full px-4 py-1.5 text-[11px] font-bold uppercase tracking-widest ${paymentStyle}`}
+              className={`inline-flex rounded-full px-4 py-1.5 text-[12px] font-bold uppercase tracking-widest ${paymentStyle}`}
             >
               {paymentLabel}
             </span>

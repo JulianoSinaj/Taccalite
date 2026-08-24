@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
+import { logAudit } from "@/lib/audit";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import {
   clearInstagramToken,
@@ -21,7 +22,7 @@ function revalidate() {
 /** Validate a pasted long-lived token against the Graph API, then store it. */
 export async function connectInstagram(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireRole("admin");
+    const actor = await requireRole("admin");
     const token = (fd.get("token") ?? "").toString().trim();
     if (!token) throw new ActionError("Incolla il token di accesso Instagram.");
     // Tokens are long opaque strings; a sanity bound keeps junk out of the DB.
@@ -38,6 +39,17 @@ export async function connectInstagram(_prev: ActionState, fd: FormData): Promis
     await saveInstagramToken(token);
     // Warm the cache now so the homepage shows posts on the very next request.
     await getInstagramFeed();
+    // Connecting writes a long-lived credential into `settings`, and every
+    // other write to that table is audited. The token itself is never logged —
+    // the account it belongs to is the useful half and the safe one.
+    await logAudit({
+      actor,
+      action: "instagram.connect",
+      entity: "setting",
+      entityId: "instagram.accessToken",
+      summary: `Instagram collegato come @${username}`,
+      meta: { username },
+    });
     revalidate();
     return ok(`Collegato come @${username}. La homepage mostra ora gli ultimi post.`);
   });
@@ -46,8 +58,15 @@ export async function connectInstagram(_prev: ActionState, fd: FormData): Promis
 /** Forget the admin-saved token (falls back to INSTAGRAM_ACCESS_TOKEN, if set). */
 export async function disconnectInstagram(): Promise<ActionState> {
   return runAction(async () => {
-    await requireRole("admin");
+    const actor = await requireRole("admin");
     await clearInstagramToken();
+    await logAudit({
+      actor,
+      action: "instagram.disconnect",
+      entity: "setting",
+      entityId: "instagram.accessToken",
+      summary: "Instagram scollegato (token rimosso)",
+    });
     revalidate();
     return ok("Token rimosso.");
   });

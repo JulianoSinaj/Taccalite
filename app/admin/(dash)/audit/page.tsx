@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminHeader, Panel, Pagination, fmtDateTime, inputCls, labelCls } from "@/components/admin/ui";
 import { FilterToolbar, ActiveFilters, labelFrom } from "@/components/admin/FilterBar";
@@ -25,6 +26,41 @@ const ENTITY_LABELS: Record<string, string> = {
   email: "Email",
   batch: "Lotti",
   segment: "Segmenti",
+  category: "Categorie",
+  closure: "Chiusure",
+  pickup_slot: "Fasce di ritiro",
+  delivery_zone: "Zone di consegna",
+};
+
+/**
+ * Where a logged entity actually lives, so the id can be a link.
+ *
+ * The log recorded which record every action touched and then printed the id as
+ * plain text, so the one question it exists to answer — "what happened to this
+ * order?" — ended at a string you had to copy into a search box. Entities with
+ * no detail page of their own (a setting, an email, a segment) map to the page
+ * that governs them; those with nothing sensible to point at return null and
+ * keep rendering as text.
+ */
+const ENTITY_HREF: Record<string, (id: string) => string | null> = {
+  order: (id) => `/admin/orders/${id}`,
+  reservation: (id) => `/admin/reservations/${id}`,
+  // Customer 360 — the same destination the users list links to.
+  user: (id) => `/admin/loyalty/${id}`,
+  product: (id) => `/admin/products/${id}`,
+  discount: (id) => `/admin/discounts/${id}`,
+  reward: (id) => `/admin/rewards/${id}`,
+  blog_post: (id) => `/admin/blog/${id}`,
+  shop: (id) => `/admin/shops/${id}`,
+  // Batch rows log the *product* id, since a lot is only ever read in context.
+  batch: (id) => `/admin/products/${id}`,
+  category: (id) => `/admin/categories/${id}`,
+  closure: () => "/admin/chiusure",
+  setting: () => "/admin/settings",
+  email: () => "/admin/outbox",
+  campaign: () => "/admin/newsletter",
+  segment: () => "/admin/newsletter",
+  redemption: () => "/admin/loyalty",
 };
 
 /** Render a logged `meta` payload as readable key/value pairs. */
@@ -162,7 +198,24 @@ export default async function AuditPage({ searchParams }: SP) {
                   <p className="mt-0.5 text-xs text-brown-800/60">
                     <span className="font-mono">{r.action}</span>
                     {r.actorName ? ` · ${r.actorName}` : ""}
-                    {r.entityId ? ` · ${r.entityId}` : ""}
+                    {r.entityId && (
+                      <>
+                        {" · "}
+                        {(() => {
+                          const href = ENTITY_HREF[r.entity]?.(r.entityId!) ?? null;
+                          return href ? (
+                            <Link
+                              href={href}
+                              className="font-mono font-semibold text-gold-deep underline decoration-gold-dark/50 underline-offset-2 hover:text-brown-950"
+                            >
+                              {r.entityId}
+                            </Link>
+                          ) : (
+                            <span className="font-mono">{r.entityId}</span>
+                          );
+                        })()}
+                      </>
+                    )}
                   </p>
                 </div>
                 <span className="shrink-0 text-xs text-brown-800/50">{fmtDateTime(r.createdAt)}</span>

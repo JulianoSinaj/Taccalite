@@ -38,7 +38,7 @@ function Unit({ value, label }: { value: number; label: string }) {
           half a step left of its number; the negative margin gives it back.
           Looser tracking on a phone would also push "Minuti" wider than its own
           column and force the three units apart, so it tightens there. */}
-      <p className="-mr-[0.2em] mt-1 text-[10px] font-bold tracking-[0.2em] text-cream/65 uppercase sm:-mr-[0.3em] sm:tracking-[0.3em]">
+      <p className="-mr-[0.2em] mt-1 text-[11px] font-bold tracking-[0.2em] text-cream/65 uppercase sm:-mr-[0.3em] sm:tracking-[0.3em]">
         {label}
       </p>
     </div>

@@ -409,7 +409,7 @@ export function ManualOrderForm({
                     <p className="text-sm font-semibold text-brown-950">
                       {l.product.name}
                       {l.byWeight && (
-                        <span className="ml-1.5 rounded-full bg-gold/25 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-brown-950 uppercase">
+                        <span className="ml-1.5 rounded-full bg-gold/25 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-brown-950 uppercase">
                           a peso
                         </span>
                       )}

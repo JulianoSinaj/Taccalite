@@ -5,6 +5,7 @@ import {
   ListChecks,
   Gift,
   MailWarning,
+  PackageSearch,
   Users,
   Croissant,
   Mail,
@@ -92,6 +93,24 @@ export default async function AdminDashboard() {
       href: "/admin/loyalty",
       icon: Gift,
     },
+    // Inventory belongs in the morning list as much as the bookings do: both of
+    // these were computed somewhere already (the catalogue's low-stock facet,
+    // the expiry report's count) and reachable only by remembering to go and
+    // look at the page that shows them.
+    {
+      label: "Scorte basse",
+      value: s.lowStock,
+      href: "/admin/products?scorte=basse&stato=attivi",
+      icon: PackageSearch,
+      warn: true as const,
+    },
+    {
+      label: "Lotti in scadenza",
+      value: s.expiringSoon,
+      href: "/admin/products/scadenze",
+      icon: CalendarClock,
+      warn: true as const,
+    },
     {
       label: "Email fallite",
       value: s.failedEmails,
@@ -118,7 +137,7 @@ export default async function AdminDashboard() {
           <Panel key={m.label} className={i === 0 ? "border-gold/40 bg-gold/5" : ""}>
             <div className="flex items-center gap-2 text-brown-800/70">
               <TrendingUp className="size-4 text-gold-deep" />
-              <p className="text-[11px] font-bold tracking-widest uppercase">{m.label}</p>
+              <p className="text-[12px] font-bold tracking-widest uppercase">{m.label}</p>
             </div>
             <p className="mt-3 font-display text-3xl font-bold text-brown-950">{euro(m.value)}</p>
           </Panel>
@@ -128,7 +147,7 @@ export default async function AdminDashboard() {
       {/* KPI strip — 30-day performance with period-over-period deltas */}
       <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Panel>
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Incasso 30 giorni</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Incasso 30 giorni</p>
           <div className="mt-2 flex flex-wrap items-baseline gap-2">
             <p className="font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{euro(insights.revenue30dCents)}</p>
             <DeltaBadge d={revDelta} />
@@ -136,17 +155,17 @@ export default async function AdminDashboard() {
           <p className="mt-1 text-xs text-brown-800/50">vs. 30 giorni precedenti</p>
         </Panel>
         <Panel>
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Scontrino medio</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Scontrino medio</p>
           <p className="mt-2 font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{euro(insights.aovCents)}</p>
           <p className="mt-1 text-xs text-brown-800/50">{insights.orders30d} ordini pagati (30 gg)</p>
         </Panel>
         <Panel>
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Ordini 30 giorni</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Ordini 30 giorni</p>
           <p className="mt-2 font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{insights.orders30d}</p>
           <p className="mt-1 text-xs text-brown-800/50">pagati</p>
         </Panel>
         <Panel>
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Nuovi clienti</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Nuovi clienti</p>
           <div className="mt-2 flex flex-wrap items-baseline gap-2">
             <p className="font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{insights.newCustomers30d}</p>
             <DeltaBadge d={custDelta} />
@@ -178,7 +197,7 @@ export default async function AdminDashboard() {
                   </div>
                 ))}
               </div>
-              <div className="mt-2 flex justify-between text-[10px] text-brown-800/50">
+              <div className="mt-2 flex justify-between text-[11px] text-brown-800/50">
                 <span>{series[0]?.day.slice(5)}</span>
                 <span>{series[series.length - 1]?.day.slice(5)}</span>
               </div>
@@ -220,7 +239,10 @@ export default async function AdminDashboard() {
           <ListChecks className="size-5 text-gold-deep" />
           Da fare
         </h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {/* Seven tiles now the two inventory ones are here, so the row wraps at
+            four rather than five — five would leave two orphans on a wide
+            screen. */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {queue.map((c) => {
             const Icon = c.icon;
             const active = c.value > 0;
@@ -280,7 +302,7 @@ export default async function AdminDashboard() {
                     <span className="w-12 shrink-0 font-display text-sm font-bold text-brown-950">
                       {r.time ?? "—"}
                     </span>
-                    <span className="shrink-0 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+                    <span className="shrink-0 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
                       {reservationTypeLabel(r.type)}
                     </span>
                     <span className="flex-1 truncate text-sm text-brown-950">{r.name}</span>

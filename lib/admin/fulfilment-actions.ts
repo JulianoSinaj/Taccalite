@@ -3,11 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { deliveryZones, pickupSlots, orders, shops } from "@/lib/db/schema";
+import { deliveryZones, pickupSlots, orders, shops, shopClosures } from "@/lib/db/schema";
 import { requireRole } from "@/lib/auth/session";
 import { logAudit } from "@/lib/audit";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
-import { parseForm, deliveryZoneInput, pickupSlotInput } from "@/lib/validation/admin";
+import { parseForm, deliveryZoneInput, pickupSlotInput, shopClosureInput } from "@/lib/validation/admin";
 import { FULFILMENT_LABEL, WEEKDAY_NAME } from "@/lib/fulfilment";
 
 /**
@@ -23,6 +23,19 @@ import { FULFILMENT_LABEL, WEEKDAY_NAME } from "@/lib/fulfilment";
 
 const REVALIDATE = ["/admin/fulfilment", "/admin/fulfilment/oggi", "/checkout"];
 const revalidateAll = () => REVALIDATE.forEach((p) => revalidatePath(p));
+
+/**
+ * A closure reaches further than a zone or a window: it also decides which
+ * dates the public booking form will accept, and which bookings the back office
+ * shows a warning against.
+ */
+const revalidateClosures = () => {
+  revalidateAll();
+  revalidatePath("/admin/chiusure");
+  revalidatePath("/admin/reservations");
+  revalidatePath("/admin/reservations/calendar");
+  revalidatePath("/prenotazioni");
+};
 
 export async function saveDeliveryZone(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
@@ -300,5 +313,101 @@ export async function generatePickupSlots(_prev: ActionState, fd: FormData): Pro
     });
     revalidateAll();
     return ok(`${rows.length} fasce generate dagli orari di apertura di ${shop.name}.`);
+  });
+}
+
+// ── Closures (chiusure) ──────────────────────────────────────────────────────
+/**
+ * Days the shop is shut.
+ *
+ * Unlike a zone or a window, a closure is not configuration that prices
+ * something — it is a fact about the calendar, and the only reason it lives in
+ * this module is that its two consumers (the booking gate and the pickup
+ * window generator) are the two things this module already governs.
+ *
+ * Deleting one is always safe: nothing references it, and the bookings taken
+ * before it existed keep their dates. That is deliberate — a closure declared
+ * after the fact must not silently cancel appointments people are expecting the
+ * shop to keep. The page lists what is already booked inside the range instead,
+ * so the operator can call them.
+ */
+export async function saveClosure(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const d = parseForm(shopClosureInput, fd);
+
+    if (d.shopSlug) {
+      const [shop] = await db.select().from(shops).where(eq(shops.slug, d.shopSlug)).limit(1);
+      if (!shop) throw new ActionError("Sede non valida.");
+    }
+
+    const values = {
+      shopSlug: d.shopSlug ?? null,
+      fromDate: d.fromDate,
+      // One day is the common case and typing the same date twice is friction,
+      // so an empty end means "just that day".
+      toDate: d.toDate || d.fromDate,
+      reason: d.reason ?? "",
+      blocksReservations: d.blocksReservations,
+      blocksPickup: d.blocksPickup,
+    };
+
+    const scope = d.shopSlug ? d.shopSlug : "tutte le sedi";
+    const when =
+      values.fromDate === values.toDate
+        ? `il ${values.fromDate}`
+        : `dal ${values.fromDate} al ${values.toDate}`;
+
+    if (d.id) {
+      const [prev] = await db.select().from(shopClosures).where(eq(shopClosures.id, d.id)).limit(1);
+      if (!prev) throw new ActionError("Chiusura non trovata.");
+      await db.update(shopClosures).set(values).where(eq(shopClosures.id, d.id));
+      await logAudit({
+        actor,
+        action: "closure.update",
+        entity: "closure",
+        entityId: d.id,
+        summary: `Chiusura aggiornata: ${scope}, ${when}`,
+        meta: { from: { fromDate: prev.fromDate, toDate: prev.toDate }, to: values },
+      });
+    } else {
+      const [created] = await db.insert(shopClosures).values(values).returning({ id: shopClosures.id });
+      await logAudit({
+        actor,
+        action: "closure.create",
+        entity: "closure",
+        entityId: created.id,
+        summary: `Chiusura registrata: ${scope}, ${when}${values.reason ? ` — ${values.reason}` : ""}`,
+        meta: values,
+      });
+    }
+
+    revalidateClosures();
+    return ok(d.id ? "Chiusura aggiornata." : "Chiusura registrata.");
+  });
+}
+
+/** Remove a closure — the day reopens immediately, everywhere. */
+export async function deleteClosure(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const id = String(fd.get("id") ?? "").trim();
+    const [row] = await db.select().from(shopClosures).where(eq(shopClosures.id, id)).limit(1);
+    if (!row) throw new ActionError("Chiusura non trovata.");
+
+    await db.delete(shopClosures).where(eq(shopClosures.id, id));
+    await logAudit({
+      actor,
+      action: "closure.delete",
+      entity: "closure",
+      entityId: id,
+      summary: `Chiusura rimossa: ${row.shopSlug ?? "tutte le sedi"}, ${
+        row.fromDate === row.toDate ? `il ${row.fromDate}` : `dal ${row.fromDate} al ${row.toDate}`
+      }`,
+      meta: { fromDate: row.fromDate, toDate: row.toDate, shopSlug: row.shopSlug },
+    });
+
+    revalidateClosures();
+    return ok("Chiusura rimossa. Le date tornano prenotabili.");
   });
 }

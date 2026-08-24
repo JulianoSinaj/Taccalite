@@ -70,6 +70,10 @@ export default async function AccountPage() {
         description: r.description,
         points: r.points,
         image: r.image,
+        // Computed server-side by `rewardAvailability`, the same function
+        // `redeemReward` refuses with — so the button and the endpoint cannot
+        // disagree about whether a reward is claimable.
+        unavailable: r.unavailable,
       }))}
       transactions={transactions.map((t) => ({
         id: t.id,

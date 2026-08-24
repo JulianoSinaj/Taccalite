@@ -42,7 +42,7 @@ export default async function AdminOutbox({ searchParams }: SP) {
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
   const filters = outboxFilters(sp);
-  const { rows, total, failed, pageCount } = await getOutboxPage({ ...filters, page });
+  const { rows, total, failed, exhausted, pageCount } = await getOutboxPage({ ...filters, page });
 
   return (
     <div>
@@ -51,9 +51,26 @@ export default async function AdminOutbox({ searchParams }: SP) {
         subtitle={`${total} email registrate dalla piattaforma`}
         action={
           failed > 0 ? (
-            <ActionForm action={retryAllFailed}>
-              <PendingButton tone="dark">Riprova tutte le fallite</PendingButton>
-            </ActionForm>
+            <div className="flex flex-wrap gap-2">
+              <ActionForm action={retryAllFailed}>
+                <PendingButton tone="dark">Riprova tutte le fallite</PendingButton>
+              </ActionForm>
+              {/* `retryAllFailed` has always accepted this flag; nothing sent
+                  it, so after fixing SMTP the only way through a backlog of
+                  exhausted messages was to click "Forza reinvio" on each one —
+                  which is what the banner below was telling people to do. */}
+              {exhausted > 0 && (
+                <ActionForm action={retryAllFailed}>
+                  <input type="hidden" name="azzera" value="true" />
+                  <PendingButton
+                    tone="gold"
+                    confirm={`Azzerare il contatore di ${exhausted} email e riprovare tutte? Fallo solo dopo aver corretto la causa (SMTP, indirizzo, DNS).`}
+                  >
+                    Forza tutte ({exhausted})
+                  </PendingButton>
+                </ActionForm>
+              )}
+            </div>
           ) : undefined
         }
       />
@@ -71,6 +88,13 @@ export default async function AdminOutbox({ searchParams }: SP) {
             ? "1 email non è stata inviata."
             : `${failed} email non sono state inviate.`}{" "}
           Puoi rimetterle in coda con <strong>Riprova</strong>.
+          {exhausted > 0 && (
+            <>
+              {" "}
+              {exhausted === 1 ? "Una di queste ha" : `${exhausted} hanno`} esaurito i tentativi:
+              dopo aver corretto la causa usa <strong>Forza tutte</strong> qui sopra.
+            </>
+          )}
         </div>
       )}
 
@@ -111,7 +135,7 @@ export default async function AdminOutbox({ searchParams }: SP) {
                   <span className="font-semibold text-brown-950">{e.subject}</span>
                   <span className="text-xs text-brown-800/60">→ {e.toAddress}</span>
                   {e.attempts > 1 && (
-                    <span className="text-[10px] font-bold tracking-widest text-brown-800/50 uppercase">
+                    <span className="text-[11px] font-bold tracking-widest text-brown-800/50 uppercase">
                       {e.attempts} tentativi
                     </span>
                   )}
@@ -125,7 +149,7 @@ export default async function AdminOutbox({ searchParams }: SP) {
                     {e.text}
                   </pre>
                 ) : (
-                  <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-cream/60 p-4 text-[11px] text-brown-800/70">
+                  <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-cream/60 p-4 text-[12px] text-brown-800/70">
                     {stripHtml(e.html) || "(nessun contenuto)"}
                   </pre>
                 )}

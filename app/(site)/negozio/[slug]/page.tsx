@@ -92,7 +92,7 @@ export default async function ProductDetailPage({ params }: Params) {
           className="mx-auto max-w-[88rem]"
           style={{ "--acc": categoryAccent(product.category) } as React.CSSProperties}
         >
-          <nav className="mb-5 text-[10px] font-bold tracking-[0.3em] text-taupe uppercase sm:mb-8">
+          <nav className="mb-5 text-[11px] font-bold tracking-[0.3em] text-taupe uppercase sm:mb-8">
             <Link
               href="/negozio"
               className="inline-flex items-center gap-1.5 py-2 transition-colors hover:text-gold-deep"

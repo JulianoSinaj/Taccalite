@@ -27,12 +27,12 @@ export const dynamic = "force-dynamic";
 function OpenBadge({ state }: { state: OpenState | null }) {
   if (!state) return null;
   return state.open ? (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/15 px-3 py-1 text-[10px] font-bold tracking-widest text-green-300 uppercase">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/15 px-3 py-1 text-[11px] font-bold tracking-widest text-green-300 uppercase">
       <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
       Aperto ora
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-paper-warm px-3 py-1 text-[10px] font-bold tracking-widest text-cream/60 uppercase">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-paper-warm px-3 py-1 text-[11px] font-bold tracking-widest text-cream/60 uppercase">
       <span className="h-1.5 w-1.5 rounded-full bg-cream/40" />
       Chiuso
     </span>
@@ -151,7 +151,7 @@ export default async function ShopDetailPage({ params }: Params) {
           <div className="absolute inset-0 bg-gradient-to-t from-brown-950 via-brown-950/30 to-transparent" />
         </div>
         <Reveal className="relative z-10 mx-auto w-full max-w-[88rem]">
-          <nav className="mb-6 text-[10px] font-bold tracking-[0.4em] text-gold/70 uppercase">
+          <nav className="mb-6 text-[11px] font-bold tracking-[0.4em] text-gold/70 uppercase">
             <Link href="/" className="hover:text-gold">
               Home
             </Link>{" "}
@@ -254,11 +254,11 @@ export default async function ShopDetailPage({ params }: Params) {
             <div className="flex gap-12 pt-4">
               <div className="text-center">
                 <p className="font-display text-4xl font-bold wonk text-gold-deep">1946</p>
-                <p className="text-[10px] font-bold tracking-widest uppercase opacity-70">Dal</p>
+                <p className="text-[11px] font-bold tracking-widest uppercase opacity-70">Dal</p>
               </div>
               <div className="text-center">
                 <p className="font-display text-4xl font-bold wonk text-gold-deep">3</p>
-                <p className="text-[10px] font-bold tracking-widest uppercase opacity-70">
+                <p className="text-[11px] font-bold tracking-widest uppercase opacity-70">
                   Generazioni
                 </p>
               </div>

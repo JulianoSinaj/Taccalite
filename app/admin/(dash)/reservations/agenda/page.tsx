@@ -37,6 +37,8 @@ export default async function ReservationAgenda({ searchParams }: SP) {
   // shared number compared against a mixed total.
   const capacities = new Map<string, number>();
   for (const s of shops) capacities.set(s.slug, await porchettaCapacityFor(s.slug));
+  // Seats are a plain column on the shop; 0/null means no limit configured.
+  const seatsByShop = new Map(shops.map((s) => [s.slug, s.seatsCapacity ?? 0]));
 
   // Rows arrive ordered by date then time — collapse into consecutive day groups.
   const groups: { date: string; items: Row[] }[] = [];
@@ -162,12 +164,39 @@ export default async function ReservationAgenda({ searchParams }: SP) {
             for (const r of porchetta) {
               kgByShop.set(r.shopSlug, (kgByShop.get(r.shopSlug) ?? 0) + (r.quantityKg ?? 0));
             }
+
+            // Seats per (shop, time). The kilos of porchetta have been totalled
+            // here since the sheet existed and the room never was — so a slot
+            // that had been overbooked from the counter, where the check only
+            // warns, showed nothing at all and the first signal was the door.
+            const seatsBySlot = new Map<string, number>();
+            for (const r of g.items) {
+              if (r.type !== "table" || !r.time || r.status === "cancelled") continue;
+              const key = `${r.shopSlug}|${r.time}`;
+              seatsBySlot.set(key, (seatsBySlot.get(key) ?? 0) + (r.guests ?? 0));
+            }
+            const overbooked = [...seatsBySlot.entries()]
+              .map(([key, guests]) => {
+                const [slug, time] = key.split("|");
+                return { slug, time, guests, capacity: seatsByShop.get(slug) ?? 0 };
+              })
+              .filter((s) => s.capacity > 0 && s.guests > s.capacity)
+              .sort((a, b) => a.time.localeCompare(b.time));
+
             return (
               <section key={g.date} className="break-inside-avoid">
                 <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-brown-900/10 pb-2">
                   <h2 className="font-display text-xl text-brown-950 capitalize">{formatDay(g.date)}</h2>
                   <div className="flex flex-wrap items-center gap-2 text-xs font-bold tracking-widest text-brown-800/60 uppercase">
                     <span>{g.items.length} prenotazioni</span>
+                    {overbooked.map((s) => (
+                      <span
+                        key={`${s.slug}-${s.time}`}
+                        className="rounded-full bg-danger-solid/15 px-3 py-1 text-danger-soft-fg"
+                      >
+                        {shopName.get(s.slug) ?? s.slug} {s.time}: {s.guests} / {s.capacity} coperti
+                      </span>
+                    ))}
                     {[...kgByShop.entries()].map(([slug, kg]) => {
                       const cap = capacities.get(slug) ?? 0;
                       const over = cap > 0 && kg > cap;
@@ -190,7 +219,7 @@ export default async function ReservationAgenda({ searchParams }: SP) {
                   {g.items.map((r) => (
                     <Panel key={r.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <span className="rounded-full bg-brown-900/10 px-2.5 py-0.5 text-[10px] font-bold tracking-widest uppercase">
+                        <span className="rounded-full bg-brown-900/10 px-2.5 py-0.5 text-[11px] font-bold tracking-widest uppercase">
                           {reservationTypeLabel(r.type)}
                         </span>
                         <Link

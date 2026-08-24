@@ -21,7 +21,12 @@ import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/Action
 import { CampaignComposer, type SegmentOption } from "@/components/admin/CampaignComposer";
 import { getSubscribersPage, adminGetShops, SUBSCRIBER_SORTS } from "@/lib/admin/queries";
 import { subscriberFilters, sortFilters, filterQuery } from "@/lib/admin/filters";
-import { removeSubscriber } from "@/lib/admin/actions";
+import {
+  removeSubscriber,
+  addSubscriber,
+  resendSubscriberConfirmation,
+  confirmSubscriber,
+} from "@/lib/admin/actions";
 import {
   duplicateCampaign,
   deleteCampaign,
@@ -60,7 +65,7 @@ function CampaignStatus({ campaign }: { campaign: NewsletterCampaignRow }) {
   };
   const s = map[campaign.status] ?? map.draft;
   return (
-    <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold tracking-widest uppercase ${s.cls}`}>
+    <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold tracking-widest uppercase ${s.cls}`}>
       {s.label}
     </span>
   );
@@ -347,7 +352,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
                       const d = delivery.get(c.id);
                       if (!d) return null;
                       return (
-                        <p className="mt-1 flex flex-wrap gap-2 text-[11px] font-bold tracking-widest uppercase">
+                        <p className="mt-1 flex flex-wrap gap-2 text-[12px] font-bold tracking-widest uppercase">
                           <span className="rounded-full bg-ok-soft px-2 py-0.5 text-ok-soft-fg">
                             {d.sent} consegnate
                           </span>
@@ -401,7 +406,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
           sei mesi" — most of what a shop wants to say something to. */}
       {admin && (
         <details className="mb-8" open={segments.length === 0}>
-          <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+          <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
             Segmenti ({segments.length})
           </summary>
           <div className="mt-3 space-y-3">
@@ -413,7 +418,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
                       {s.name}{" "}
                       {/* A translucent wash, not solid gold — so the ink here is
                           the inverting one, not the constant `on-gold`. */}
-                      <span className="ml-1 rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-bold text-brown-950 uppercase">
+                      <span className="ml-1 rounded-full bg-gold/20 px-2 py-0.5 text-[11px] font-bold text-brown-950 uppercase">
                         {segmentSize.get(s.id) ?? 0} iscritti
                       </span>
                     </p>
@@ -432,7 +437,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
                     building it again, which orphaned every campaign pointing
                     at it. Same form as "nuovo", carrying the id. */}
                 <details className="mt-3 border-t border-brown-900/10 pt-3">
-                  <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                  <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
                     Modifica
                   </summary>
                   <div className="mt-3">
@@ -452,6 +457,65 @@ export default async function AdminNewsletter({ searchParams }: SP) {
               </p>
             </Panel>
           </div>
+        </details>
+      )}
+
+      <h2 className="font-display mt-8 mb-3 text-xl text-brown-950">Iscritti</h2>
+
+      {/* The list could remove people and never add one, so an address written
+          on the pad at the counter had no way in. Behind a disclosure because
+          it is an occasional act, not something to trip over while browsing. */}
+      {admin && (
+        <details className="mb-4">
+          <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+            + Aggiungi un iscritto
+          </summary>
+          <Panel className="mt-3">
+            <ActionForm action={addSubscriber} className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[16rem] flex-1">
+                <label className={labelCls} htmlFor="new-subscriber">
+                  Email
+                </label>
+                <input
+                  id="new-subscriber"
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="nome@esempio.it"
+                  className={inputCls}
+                />
+              </div>
+              <div className="w-40">
+                <label className={labelCls} htmlFor="new-subscriber-source">
+                  Origine
+                </label>
+                <input
+                  id="new-subscriber-source"
+                  name="source"
+                  defaultValue="banco"
+                  maxLength={60}
+                  className={inputCls}
+                />
+              </div>
+              <label className="flex items-center gap-2 pb-2.5 text-xs font-medium text-brown-900">
+                <input type="hidden" name="consensoRaccolto" value="false" />
+                <input
+                  type="checkbox"
+                  name="consensoRaccolto"
+                  value="true"
+                  className="h-4 w-4 rounded accent-brown-950"
+                />
+                Consenso già raccolto (modulo cartaceo)
+              </label>
+              <PendingButton tone="dark">Aggiungi</PendingButton>
+            </ActionForm>
+            <p className="mt-3 text-xs text-brown-800/60">
+              Senza la spunta parte la <strong>conferma via email</strong>, esattamente come
+              dall&apos;iscrizione sul sito: l&apos;indirizzo resta «in attesa» finché il cliente non
+              clicca. Spunta la casella solo se hai un consenso scritto — la scelta finisce nel
+              registro attività, ed è quella la prova che il negozio lo aveva.
+            </p>
+          </Panel>
         </details>
       )}
 
@@ -536,13 +600,35 @@ export default async function AdminNewsletter({ searchParams }: SP) {
             align: "right",
             cell: (s) =>
               s.status !== "unsubscribed" ? (
-                <DeleteForm
-                  action={removeSubscriber}
-                  id={s.id}
-                  confirm={`Rimuovere ${s.email} dalla newsletter?`}
-                >
-                  Rimuovi
-                </DeleteForm>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {/* Someone who never clicked the link was a permanent dead
+                      end: excluded from every campaign, with nothing on the row
+                      to do about it. */}
+                  {s.status === "pending" && (
+                    <>
+                      <ActionForm action={resendSubscriberConfirmation} className="inline-flex">
+                        <input type="hidden" name="id" value={s.id} />
+                        <PendingButton tone="dark">Reinvia conferma</PendingButton>
+                      </ActionForm>
+                      <ActionForm action={confirmSubscriber} className="inline-flex">
+                        <input type="hidden" name="id" value={s.id} />
+                        <PendingButton
+                          tone="gold"
+                          confirm={`Confermare ${s.email} a mano? Fallo solo se hai il consenso scritto: la scelta resta nel registro attività.`}
+                        >
+                          Conferma
+                        </PendingButton>
+                      </ActionForm>
+                    </>
+                  )}
+                  <DeleteForm
+                    action={removeSubscriber}
+                    id={s.id}
+                    confirm={`Rimuovere ${s.email} dalla newsletter?`}
+                  >
+                    Rimuovi
+                  </DeleteForm>
+                </div>
               ) : null,
           },
         ]}

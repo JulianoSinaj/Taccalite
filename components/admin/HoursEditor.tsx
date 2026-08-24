@@ -171,7 +171,7 @@ export function HoursEditor({ shop }: { shop?: ShopRow | null }) {
                       onClick={() =>
                         update(d.day, (x) => ({ ...x, ranges: [...x.ranges, { open: "16:00", close: "20:00" }] }))
                       }
-                      className="inline-flex items-center gap-1 rounded-full bg-brown-900/10 px-2.5 py-1 text-[11px] font-bold tracking-wide text-brown-950 uppercase hover:bg-brown-900/15"
+                      className="inline-flex items-center gap-1 rounded-full bg-brown-900/10 px-2.5 py-1 text-[12px] font-bold tracking-wide text-brown-950 uppercase hover:bg-brown-900/15"
                     >
                       <Plus className="size-3" /> Fascia
                     </button>
@@ -183,7 +183,7 @@ export function HoursEditor({ shop }: { shop?: ShopRow | null }) {
             <button
               type="button"
               onClick={copyMondayToWeekdays}
-              className="mt-1 rounded-full bg-brown-900/10 px-3 py-1.5 text-[11px] font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              className="mt-1 rounded-full bg-brown-900/10 px-3 py-1.5 text-[12px] font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
             >
               Copia lunedì su mar–ven
             </button>

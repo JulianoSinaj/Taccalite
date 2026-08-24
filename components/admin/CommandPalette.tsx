@@ -14,6 +14,7 @@ const COMMANDS: Cmd[] = [
   { label: "Ordini", href: "/admin/orders", group: "Vai a" },
   { label: "Ritiri e consegne di oggi", href: "/admin/fulfilment/oggi", group: "Vai a", keywords: "asporto consegna spedizione fasce oggi" },
   { label: "Zone e fasce di ritiro", href: "/admin/fulfilment", group: "Vai a", adminOnly: true, keywords: "cap tariffe spedizione consegna slot" },
+  { label: "Chiusure", href: "/admin/chiusure", group: "Vai a", adminOnly: true, keywords: "ferie festivi chiuso vacanze ferragosto natale" },
   { label: "Prodotti", href: "/admin/products", group: "Vai a", keywords: "catalogo giacenza" },
   { label: "Scadenze lotti", href: "/admin/products/scadenze", group: "Vai a", keywords: "lotti haccp scaduti magazzino" },
   { label: "Categorie", href: "/admin/categories", group: "Vai a", adminOnly: true, keywords: "categoria tassonomia reparto" },
@@ -44,6 +45,22 @@ const COMMANDS: Cmd[] = [
   { label: "Nuovo utente", href: "/admin/users/new", group: "Azioni", adminOnly: true, keywords: "account staff" },
 ];
 
+/** A record found by `/api/admin/search`, as opposed to a static destination. */
+type Hit = {
+  kind: "order" | "reservation" | "customer" | "product";
+  id: string;
+  href: string;
+  title: string;
+  subtitle: string;
+};
+
+const HIT_GROUP: Record<Hit["kind"], string> = {
+  order: "Ordine",
+  reservation: "Prenotazione",
+  customer: "Cliente",
+  product: "Prodotto",
+};
+
 export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -51,12 +68,81 @@ export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  /**
+   * The last completed lookup, tagged with the term it answered.
+   *
+   * Stored together so "are we still waiting" is derived rather than a second
+   * piece of state — which also keeps every `setState` inside the async
+   * callback, where the React Compiler wants it, instead of running
+   * synchronously in the effect body on every keystroke.
+   */
+  const [result, setResult] = useState<{ q: string; hits: Hit[] }>({ q: "", hits: [] });
+
+  const trimmed = query.trim();
+  const wantsSearch = trimmed.length >= 2;
+  // Results for a slightly older prefix stay on screen while the next request
+  // is in flight: the alternative is the list blanking on every keystroke.
+  // Memoised so the empty case is a stable reference — otherwise it is a fresh
+  // array each render and every downstream `useMemo` recomputes.
+  const hits = useMemo(() => (wantsSearch ? result.hits : []), [wantsSearch, result.hits]);
+  const searching = wantsSearch && result.q !== trimmed;
+
   const available = useMemo(() => COMMANDS.filter((c) => !c.adminOnly || isAdmin), [isAdmin]);
-  const results = useMemo(() => {
+  const commandResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return available;
     return available.filter((c) => `${c.label} ${c.group} ${c.keywords ?? ""}`.toLowerCase().includes(q));
   }, [query, available]);
+
+  /**
+   * Records first, destinations after.
+   *
+   * The palette used to be a list of forty links and nothing else: it could
+   * take you to the orders *page* but never to an order — the opposite of what
+   * someone typing a customer's name with the phone against their ear wants.
+   * Hits lead because when they exist they are almost always the answer.
+   */
+  const results = useMemo(
+    () => [
+      ...hits.map((h) => ({
+        label: h.title,
+        href: h.href,
+        group: HIT_GROUP[h.kind],
+        detail: h.subtitle,
+      })),
+      ...commandResults.map((c) => ({ label: c.label, href: c.href, group: c.group, detail: "" })),
+    ],
+    [hits, commandResults],
+  );
+
+  /**
+   * Debounced record lookup. 200 ms is long enough that typing a name is one
+   * request rather than eight, short enough not to feel like waiting.
+   *
+   * The abort controller is what stops a slow early response landing after a
+   * fast later one and repopulating the list with results for a prefix the
+   * operator has already typed past.
+   */
+  useEffect(() => {
+    if (!open || !wantsSearch) return;
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/admin/search?q=${encodeURIComponent(trimmed)}`, {
+          signal: ctrl.signal,
+        });
+        const json = await res.json();
+        setResult({ q: trimmed, hits: res.ok && json.ok ? (json.hits as Hit[]) : [] });
+      } catch {
+        // An aborted request is the normal case here, not a failure worth
+        // showing: the static commands are still listed either way.
+      }
+    }, 200);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [trimmed, wantsSearch, open]);
 
   // Global ⌘K / Ctrl+K toggle.
   useEffect(() => {
@@ -124,12 +210,14 @@ export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {
               go(results[active].href);
             }
           }}
-          placeholder="Cerca una sezione o un'azione…"
+          placeholder="Cerca un ordine, un cliente, un prodotto o una sezione…"
           className="w-full border-b border-brown-900/10 px-5 py-4 text-sm text-brown-950 placeholder:text-brown-800/40 focus:outline-none"
         />
         <ul className="max-h-[min(20rem,50dvh)] overflow-y-auto py-2">
           {results.length === 0 ? (
-            <li className="px-5 py-6 text-center text-sm text-brown-800/50">Nessun risultato.</li>
+            <li className="px-5 py-6 text-center text-sm text-brown-800/50">
+              {searching ? "Ricerca…" : "Nessun risultato."}
+            </li>
           ) : (
             results.map((c, i) => (
               <li key={`${c.href}-${c.label}`}>
@@ -137,18 +225,27 @@ export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {
                   type="button"
                   onMouseEnter={() => setActive(i)}
                   onClick={() => go(c.href)}
-                  className={`flex w-full items-center justify-between px-5 py-2.5 text-left text-sm ${
+                  className={`flex w-full items-center justify-between gap-3 px-5 py-2.5 text-left text-sm ${
                     i === active ? "bg-gold/15 text-brown-950" : "text-brown-800/80 hover:bg-brown-900/[0.03]"
                   }`}
                 >
-                  <span>{c.label}</span>
-                  <span className="text-[10px] font-bold tracking-widest text-brown-800/40 uppercase">{c.group}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate">{c.label}</span>
+                    {/* The subtitle is what makes two customers with the same
+                        surname distinguishable without opening either. */}
+                    {c.detail && (
+                      <span className="block truncate text-xs text-brown-800/50">{c.detail}</span>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-[11px] font-bold tracking-widest text-brown-800/40 uppercase">
+                    {c.group}
+                  </span>
                 </button>
               </li>
             ))
           )}
         </ul>
-        <div className="border-t border-brown-900/10 px-5 py-2 text-[11px] text-brown-800/50">
+        <div className="border-t border-brown-900/10 px-5 py-2 text-[12px] text-brown-800/50">
           ↑↓ per navigare · ↵ per aprire · Esc per chiudere
         </div>
       </div>

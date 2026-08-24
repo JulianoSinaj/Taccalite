@@ -102,6 +102,9 @@ export async function receiveBatch(_prev: ActionState, fd: FormData): Promise<Ac
 
     revalidatePath(`/admin/products/${d.productId}`);
     revalidatePath("/admin/products");
+    // A received lot with a near expiry belongs on the expiry report straight
+    // away; this path was the one that didn't refresh it.
+    revalidatePath("/admin/products/scadenze");
     return ok(`Lotto registrato: +${d.quantity} unità.`);
   });
 }
@@ -171,10 +174,21 @@ export async function correctBatchRemaining(_prev: ActionState, fd: FormData): P
     if (remaining === batch.remaining) return ok("Nessuna modifica.");
 
     const delta = remaining - batch.remaining;
-    await db
+    // The guard is what stops two operators correcting the same lot from both
+    // applying their delta. Its *result* was being ignored, so the loser of the
+    // race left the lot untouched and still moved the on-hand figure — the one
+    // outcome this whole module exists to prevent. Nothing has changed yet at
+    // this point, so bailing out is clean.
+    const [updated] = await db
       .update(productBatches)
       .set({ remaining })
-      .where(and(eq(productBatches.id, id), sql`${productBatches.remaining} = ${batch.remaining}`));
+      .where(and(eq(productBatches.id, id), sql`${productBatches.remaining} = ${batch.remaining}`))
+      .returning({ id: productBatches.id });
+    if (!updated) {
+      throw new ActionError(
+        "Il lotto è stato modificato da qualcun altro nel frattempo. Ricarica la pagina e riprova.",
+      );
+    }
     await applyStockChange({
       productId: batch.productId,
       delta,
@@ -192,6 +206,7 @@ export async function correctBatchRemaining(_prev: ActionState, fd: FormData): P
     });
 
     revalidatePath(`/admin/products/${batch.productId}`);
+    revalidatePath("/admin/products/scadenze");
     return ok("Lotto aggiornato.");
   });
 }

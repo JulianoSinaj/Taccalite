@@ -275,7 +275,7 @@ export function OrderItemsForm({
 
       {others.length > 0 && (
         <details className="mt-4 border-t border-brown-900/10 pt-3">
-          <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+          <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
             Aggiungi un prodotto ({others.length})
           </summary>
           <div className="mt-2 max-h-80 divide-y divide-brown-900/10 overflow-y-auto">
