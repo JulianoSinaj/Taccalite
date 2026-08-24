@@ -22,6 +22,7 @@ import { requireAdmin, requireRole } from "@/lib/auth/session";
 import { getSetting } from "@/lib/db/queries";
 import { addPoints } from "@/lib/loyalty";
 import { sendMail } from "@/lib/mail/mailer";
+import { smtpConfigured } from "@/lib/env";
 import { saveUploadedImage } from "@/lib/media";
 import { logAudit } from "@/lib/audit";
 import { parseStructuredHours } from "@/lib/hours";
@@ -1126,22 +1127,43 @@ export async function sendTestEmail(_prev: ActionState, fd: FormData): Promise<A
     const actor = await requireAdmin();
     const to = (fd.get("to") ?? "").toString().trim();
     if (!to) throw new ActionError("Inserisci un indirizzo email");
+
+    // This is the one tool an operator has for answering "does SMTP work?", so
+    // it has to answer honestly. It used to `.catch(() => {})` the send and
+    // report success either way, telling you to go and read the outbox — which
+    // meant a wrong password looked exactly like a delivered message. The
+    // result is now surfaced, with the provider's own error text: "535
+    // authentication failed" is the whole diagnosis, and hiding it costs an
+    // afternoon.
+    if (!smtpConfigured) {
+      throw new ActionError(
+        "SMTP non configurato: il messaggio resterebbe in coda nell'outbox. Imposta SMTP_HOST e le variabili collegate.",
+      );
+    }
+
+    const result = await sendMail({
+      to,
+      subject: "Email di prova — Norcineria Taccalite",
+      html: "<p>Questa è un'email di prova dalla piattaforma Taccalite. Se la ricevi, l'invio funziona.</p>",
+      text: "Questa è un'email di prova dalla piattaforma Taccalite. Se la ricevi, l'invio funziona.",
+    });
+
     await logAudit({
       actor,
       action: "mail.test",
       entity: "email",
       entityId: "smtp",
-      summary: `Email di prova inviata a ${to}`,
+      summary: `Email di prova a ${to}: ${result.delivered ? "consegnata" : `fallita (${result.error ?? "errore sconosciuto"})`}`,
+      meta: { to, delivered: result.delivered, error: result.error ?? null },
     });
-    await sendMail({
-      to,
-      subject: "Email di prova — Norcineria Taccalite",
-      html: "<p>Questa è un'email di prova dalla piattaforma Taccalite. Se la ricevi, l'invio funziona.</p>",
-      text: "Questa è un'email di prova dalla piattaforma Taccalite. Se la ricevi, l'invio funziona.",
-    }).catch(() => {});
+
     revalidatePath("/admin/outbox");
     revalidatePath("/admin/settings");
-    return ok("Email di prova inviata (controlla l'outbox).");
+
+    if (!result.delivered) {
+      throw new ActionError(`Invio fallito: ${result.error ?? "errore sconosciuto"}`);
+    }
+    return ok(`Email di prova consegnata a ${to}.`);
   });
 }
 

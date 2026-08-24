@@ -6,7 +6,8 @@ import { saveSetting, sendTestEmail } from "@/lib/admin/actions";
 import { runAutomationNow } from "@/lib/admin/automation-actions";
 import { CRON_JOBS, getCronStatus } from "@/lib/automation";
 import { isAdmin } from "@/lib/auth/session";
-import { smtpConfigured, stripeConfigured, env } from "@/lib/env";
+import { stripeConfigured, env } from "@/lib/env";
+import { checkMailer } from "@/lib/mail/mailer";
 import { simulatedPayments } from "@/lib/payments/config";
 import { absoluteUrl } from "@/lib/site";
 import { VAT_RATES_BPS, vatRateLabel } from "@/lib/fiscal";
@@ -387,7 +388,14 @@ function SettingField({
 export default async function AdminSettings() {
   // Settings are admin-only (staff are redirected away; nav also hides the link).
   if (!(await isAdmin())) redirect("/admin");
-  const [settings, cronStatus] = await Promise.all([getAllSettings(), getCronStatus()]);
+  // `checkMailer` opens a real SMTP connection, so it belongs in the same
+  // parallel fetch rather than blocking after it. It never throws — a dead mail
+  // server must not take the settings page down with it.
+  const [settings, cronStatus, mailer] = await Promise.all([
+    getAllSettings(),
+    getCronStatus(),
+    checkMailer(),
+  ]);
 
   const stored = new Map(settings.map((s) => [s.key, s.value]));
   // Superseded keys count as known too, so a renamed setting doesn't reappear in
@@ -411,16 +419,37 @@ export default async function AdminSettings() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel>
           <h3 className="font-display text-lg text-brown-950">Email (SMTP)</h3>
+          {/* The status used to read "configurato" whenever SMTP_HOST was
+              non-empty, which says nothing about whether the credentials work —
+              a mistyped password showed green while every message silently
+              failed. `checkMailer()` actually opens the connection and
+              authenticates, so this now reports what the server says. */}
           <p className="mt-2 text-sm text-brown-800/70">
             Stato:{" "}
-            <span className={smtpConfigured ? "font-semibold text-ok" : "font-semibold text-warn"}>
-              {smtpConfigured ? "configurato" : "modalità outbox (test)"}
-            </span>
+            {!mailer.configured ? (
+              <span className="font-semibold text-warn">modalità outbox (non configurato)</span>
+            ) : mailer.ok ? (
+              <span className="font-semibold text-ok">connesso e autenticato</span>
+            ) : (
+              <span className="font-semibold text-danger">configurato ma non funzionante</span>
+            )}
           </p>
+          {mailer.configured && !mailer.ok && (
+            <p className="mt-2 border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger-soft-fg">
+              Il server di posta ha risposto: <code className="break-all">{mailer.error}</code>
+            </p>
+          )}
+          {!mailer.configured && (
+            <p className="mt-2 border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-warn-soft-fg">
+              Nessuna email parte davvero: conferme d&apos;ordine, prenotazioni e i link per
+              reimpostare la password restano in coda nell&apos;outbox. Finché resta così, un
+              cliente che dimentica la password non può rientrare da solo.
+            </p>
+          )}
           <p className="mt-2 text-xs text-brown-800/60">
             Le credenziali SMTP si impostano nelle variabili d&apos;ambiente (<code>.env</code>):
-            <code> SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM</code>. Per un test con
-            Gmail usa una &laquo;password per le app&raquo;.
+            <code> SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, MAIL_FROM</code>.
+            Dopo averle cambiate riavvia l&apos;applicazione: vengono lette all&apos;avvio.
           </p>
           <ActionForm action={sendTestEmail} className="mt-4 flex items-end gap-2">
             <div className="flex-1">

@@ -17,6 +17,31 @@ import { env, smtpConfigured } from "@/lib/env";
 
 let transporter: Transporter | null = null;
 
+/**
+ * Timeouts, in milliseconds.
+ *
+ * Nodemailer's defaults are effectively "wait for the OS socket timeout", which
+ * is minutes. That is fatal here because mail is sent from inside request
+ * handlers: an SMTP host that accepts the TCP connection and then goes quiet —
+ * a firewall black-holing port 587, a relay under load, a host configured but
+ * not yet credentialed — hangs the request rather than failing it. The admin
+ * settings page reproduced exactly this and took over two minutes to not load.
+ *
+ * Ten seconds is far longer than a healthy relay needs and far shorter than a
+ * user will wait. Exceeding it surfaces as a normal send failure: the message is
+ * already in the outbox, so the cron drain retries it later.
+ */
+const CONNECTION_TIMEOUT_MS = 10_000;
+const GREETING_TIMEOUT_MS = 10_000;
+const SOCKET_TIMEOUT_MS = 20_000;
+/**
+ * Shorter budget for the interactive check, which blocks a page render rather
+ * than a background send. Someone fixing their SMTP settings reloads this page
+ * repeatedly, so a broken config should fail fast; a healthy relay answers in
+ * well under a second, so nothing correct is ever cut off by this.
+ */
+const CHECK_TIMEOUT_MS = 5_000;
+
 function getTransport(): Transporter | null {
   if (!smtpConfigured) return null;
   if (transporter) return transporter;
@@ -25,6 +50,9 @@ function getTransport(): Transporter | null {
     port: env.smtp.port,
     secure: env.smtp.secure,
     auth: env.smtp.user ? { user: env.smtp.user, pass: env.smtp.pass } : undefined,
+    connectionTimeout: CONNECTION_TIMEOUT_MS,
+    greetingTimeout: GREETING_TIMEOUT_MS,
+    socketTimeout: SOCKET_TIMEOUT_MS,
   });
   return transporter;
 }
@@ -207,7 +235,19 @@ export async function checkMailer(): Promise<{ ok: boolean; configured: boolean;
   const transport = getTransport();
   if (!transport) return { ok: false, configured: false };
   try {
-    await transport.verify();
+    // Belt and braces over the transport's own timeouts: this runs during a page
+    // render, and a settings page that hangs is worse than one reporting a
+    // failed check. `verify()` keeps running in the background if it loses the
+    // race; it holds no lock and its result is simply discarded.
+    await Promise.race([
+      transport.verify(),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Timeout: il server di posta non ha risposto entro 5 secondi.")),
+          CHECK_TIMEOUT_MS,
+        ),
+      ),
+    ]);
     return { ok: true, configured: true };
   } catch (err) {
     return { ok: false, configured: true, error: err instanceof Error ? err.message : String(err) };
