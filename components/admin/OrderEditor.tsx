@@ -119,16 +119,10 @@ export function OrderDetailsForm({
         <label className={labelCls}>Note del cliente</label>
         <textarea name="notes" rows={2} defaultValue={order.notes ?? ""} className={inputCls} />
       </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls}>Note interne (non visibili al cliente)</label>
-        <textarea
-          name="internalNotes"
-          rows={2}
-          defaultValue={order.internalNotes ?? ""}
-          placeholder="Promemoria per il banco, accordi telefonici…"
-          className={inputCls}
-        />
-      </div>
+      {/* Internal notes moved out of this form: they are the one field that
+          stays editable after the money settles (see `setOrderInternalNotes`),
+          and this form is blocked from that point. Two inputs for one column
+          would have meant whichever was saved last silently won. */}
 
       <div className="sm:col-span-2">
         <PendingButton tone="dark">Salva dati ordine</PendingButton>

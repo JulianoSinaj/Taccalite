@@ -1,6 +1,24 @@
 import "server-only";
-import { and, asc, desc, eq, gt, gte, like, lte, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  like,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+  type AnyColumn,
+  type SQL,
+} from "drizzle-orm";
 import { ftsMatch, type FtsTable } from "@/lib/admin/search";
+import { instantInRome } from "@/lib/time";
 import {
   orders,
   reservations,
@@ -14,6 +32,10 @@ import {
   discountCodes,
   auditLog,
 } from "@/lib/db/schema";
+
+/** The fiscal date an order settled on — identical to `queries.ts`'s `settledAt`
+ *  and to the expression `drizzle/0033` indexes. Keep the three in step. */
+const ORDER_SETTLED_AT = sql`coalesce(${orders.paidAt}, ${orders.createdAt})`;
 
 /**
  * Shared list filters for the admin.
@@ -125,6 +147,30 @@ export function filterQuery(f: Record<string, string | undefined>): string {
   return qs ? `?${qs}` : "";
 }
 
+// ── Date bounds ──────────────────────────────────────────────────────────────
+/**
+ * A `da`/`a` range is a range of **Rome** days.
+ *
+ * These used to be `new Date("2026-08-01T00:00:00")`, which is midnight wherever
+ * the server happens to live — 02:00 Rome on a UTC host in summer. So a filtered
+ * month quietly contained two hours of the previous one and was missing two
+ * hours of its own first day, and could never be reconciled against the IVA
+ * report, which resolves its period through `lib/time` and is correct.
+ *
+ * The upper bound is **exclusive** (the start of the day after), for the same
+ * reason `vatPeriod` returns one: an order settled at 23:59:59.4 on the last day
+ * belongs to the period.
+ */
+const romeDayStart = (iso: string): Date => instantInRome(iso, "00:00");
+
+const romeDayAfter = (iso: string): Date => {
+  const [y, m, d] = iso.split("-").map(Number);
+  // UTC arithmetic to roll the calendar date, so a DST boundary can't drop or
+  // duplicate a day before `instantInRome` resolves it in the business zone.
+  const next = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+  return instantInRome(next, "00:00");
+};
+
 // ── Orders ───────────────────────────────────────────────────────────────────
 /** Facets are optional so an internal caller can build a partial filter (an
  *  absent facet means "all", exactly like the query-string default). */
@@ -133,9 +179,21 @@ export type OrderFilters = {
   stato?: string;
   tipo?: string;
   q?: string;
-  /** Inclusive date bounds on when the order was placed (yyyy-mm-dd). */
+  /** Inclusive date bounds (yyyy-mm-dd), on the column `data` selects. */
   da?: string;
   a?: string;
+  /**
+   * Which date the range applies to: when the order was **placed** (default) or
+   * when it was **settled**.
+   *
+   * The IVA report is defined on the settlement date — `coalesce(paid_at,
+   * created_at)`, the same expression `queries.ts` calls `settledAt` — and its
+   * "Vedi gli ordini →" link used to land on a list filtered by `created_at`.
+   * An order taken on the 31st and paid on the 1st therefore appeared in one and
+   * not the other, which is the precise disagreement the fiscal-date work exists
+   * to prevent.
+   */
+  data?: string;
 };
 
 export function orderFilters(p: ParamBag): OrderFilters {
@@ -146,6 +204,7 @@ export function orderFilters(p: ParamBag): OrderFilters {
     q: read(p, "q"),
     da: read(p, "da"),
     a: read(p, "a"),
+    data: facet(p, "data"),
   };
 }
 
@@ -162,13 +221,28 @@ export function ordersWhere(f: OrderFilters): SQL | undefined {
       // Manual drafts and abandoned checkouts. There was no chip for these at
       // all, on the very page that creates them.
       conds.push(eq(orders.paymentStatus, "unpaid"));
+    } else if (f.stato === "incassati") {
+      // "Money actually taken", which is what the IVA report counts — and which
+      // no chip could express. `stato=paid` means `status = 'paid'`, so an order
+      // since marked Evaso dropped out of it: the report's drill-down showed a
+      // fraction of the orders behind its own totals. A refunded order stays in,
+      // because it was still a sale in the period it settled.
+      conds.push(inArray(orders.paymentStatus, ["paid", "refunded"]));
     } else {
       conds.push(eq(orders.status, f.stato as "paid"));
     }
   }
   if (isSet(f.tipo)) conds.push(eq(orders.fulfilment, f.tipo as "pickup"));
-  if (f.da) conds.push(gte(orders.createdAt, new Date(`${f.da}T00:00:00`)));
-  if (f.a) conds.push(lte(orders.createdAt, new Date(`${f.a}T23:59:59.999`)));
+  if (f.data === "incasso") {
+    // Compared as raw milliseconds, like `getVatReport` does: the left-hand side
+    // is an expression, not a column, so there is no driver mapper to turn a
+    // Date into the integer the column actually stores.
+    if (f.da) conds.push(sql`${ORDER_SETTLED_AT} >= ${romeDayStart(f.da).getTime()}`);
+    if (f.a) conds.push(sql`${ORDER_SETTLED_AT} < ${romeDayAfter(f.a).getTime()}`);
+  } else {
+    if (f.da) conds.push(gte(orders.createdAt, romeDayStart(f.da)));
+    if (f.a) conds.push(lt(orders.createdAt, romeDayAfter(f.a)));
+  }
   if (f.q) {
     conds.push(
       searchWhere("orders", f.q, () => [
@@ -346,7 +420,14 @@ export function productsWhere(f: ProductFilters, lowStockThreshold: number): SQL
     conds.push(sql`${products.archivedAt} is null`);
   }
   if (isSet(f.negozio)) conds.push(eq(products.shopSlug, f.negozio));
-  if (isSet(f.categoria)) conds.push(eq(products.category, f.categoria));
+  if (f.categoria === "non-assegnata") {
+    // The rows /admin/categories counts and could not show you: a free-text
+    // category that matches no entry in the taxonomy. It printed the number and
+    // sent you to an unfiltered catalogue to find them by eye.
+    conds.push(and(isNull(products.categoryId), ne(products.category, ""))!);
+  } else if (isSet(f.categoria)) {
+    conds.push(eq(products.category, f.categoria));
+  }
   if (f.stato === "attivi") conds.push(eq(products.active, true));
   if (f.stato === "disattivati") conds.push(eq(products.active, false));
   if (f.stato === "shop") conds.push(eq(products.purchasable, true));
@@ -462,6 +543,16 @@ export type AuditFilters = {
   entity?: string;
   /** Actor id, so two staff with the same display name stay distinct. */
   attore?: string;
+  /**
+   * One record's whole history.
+   *
+   * The log could always link *out* to the order, product or booking an entry
+   * touched, and there was no way back: nothing pointed from a record to what
+   * had been done to it, and no filter could express it, so the only route was
+   * pasting an id into the free-text box. This is the facet the "Cronologia"
+   * link on every detail page uses.
+   */
+  record?: string;
   q?: string;
   da?: string;
   a?: string;
@@ -471,6 +562,7 @@ export function auditFilters(p: ParamBag): AuditFilters {
   return {
     entity: facet(p, "entity"),
     attore: facet(p, "attore"),
+    record: read(p, "record"),
     q: read(p, "q"),
     da: read(p, "da"),
     a: read(p, "a"),
@@ -481,9 +573,10 @@ export function auditWhere(f: AuditFilters): SQL | undefined {
   const conds: SQL[] = [];
   if (isSet(f.entity)) conds.push(eq(auditLog.entity, f.entity));
   if (isSet(f.attore)) conds.push(eq(auditLog.actorId, f.attore));
+  if (f.record) conds.push(eq(auditLog.entityId, f.record));
   // Date bounds are whole days in the operator's calendar: `a` is inclusive.
-  if (f.da) conds.push(gte(auditLog.createdAt, new Date(`${f.da}T00:00:00`)));
-  if (f.a) conds.push(lte(auditLog.createdAt, new Date(`${f.a}T23:59:59.999`)));
+  if (f.da) conds.push(gte(auditLog.createdAt, romeDayStart(f.da)));
+  if (f.a) conds.push(lt(auditLog.createdAt, romeDayAfter(f.a)));
   if (f.q) {
     conds.push(
       searchWhere("audit_log", f.q, () => [

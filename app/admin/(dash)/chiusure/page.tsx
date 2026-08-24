@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminHeader, Panel, inputCls, labelCls } from "@/components/admin/ui";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { adminGetClosures, adminGetShops } from "@/lib/admin/queries";
-import { saveClosure, deleteClosure } from "@/lib/admin/fulfilment-actions";
+import { saveClosure, deleteClosure, notifyClosureBookings } from "@/lib/admin/fulfilment-actions";
 import { isAdmin } from "@/lib/auth/session";
 import { dateInRome } from "@/lib/time";
 import type { ShopRow } from "@/lib/db/schema";
@@ -254,7 +254,18 @@ export default async function AdminClosures() {
                             {c.pickupCount === 1 ? "1 ritiro" : `${c.pickupCount} ritiri`}
                           </Link>
                         )}
-                        . Non sono state annullate: avvisa i clienti prima.
+                        . Non sono state annullate.
+                        {c.reservationCount > 0 && (
+                          <ActionForm action={notifyClosureBookings} className="mt-2 block">
+                            <input type="hidden" name="id" value={c.id} />
+                            <PendingButton
+                              tone="dark"
+                              confirm={`Avvisare via email i clienti prenotati dal ${c.fromDate} al ${c.toDate}? Le prenotazioni non vengono annullate: l'email dice che siamo chiusi e invita a risentirci.`}
+                            >
+                              Avvisa i clienti via email
+                            </PendingButton>
+                          </ActionForm>
+                        )}
                       </div>
                     )}
                   </div>

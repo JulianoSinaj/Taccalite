@@ -44,6 +44,24 @@ export function lockShop(requested: string | undefined, scope: string | null): s
   return scope ?? requested;
 }
 
+/**
+ * Shop facet options for a viewer.
+ *
+ * A scoped operator was offered a chip per location and a "Tutte le sedi" —
+ * none of which their list would honour, since `lockShop` had already decided
+ * the answer. Clicking one moved the highlight and changed nothing. Give them
+ * the one option that is true instead.
+ */
+export function shopChips(
+  shops: { slug: string; name: string }[],
+  scope: string | null,
+): { value: string; label: string }[] {
+  const each = shops
+    .filter((s) => !scope || s.slug === scope)
+    .map((s) => ({ value: s.slug, label: s.name }));
+  return scope ? each : [{ value: "all", label: "Tutte le sedi" }, ...each];
+}
+
 /** True when a row belonging to `rowShopSlug` is inside `scope`. */
 export function inScope(rowShopSlug: string | null | undefined, scope: string | null): boolean {
   if (!scope) return true;

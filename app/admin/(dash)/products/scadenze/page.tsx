@@ -4,6 +4,7 @@ import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { PrintButton } from "@/components/admin/PrintButton";
 import { getExpiringBatches, adminGetShops } from "@/lib/admin/queries";
 import { writeOffBatch } from "@/lib/admin/batch-actions";
+import { shopScope, lockShop } from "@/lib/admin/scope";
 import { dateInRome } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -34,13 +35,21 @@ type SP = { searchParams: Promise<{ giorni?: string; negozio?: string }> };
 export default async function ExpiringBatches({ searchParams }: SP) {
   const sp = await searchParams;
   const days = WINDOWS.some((w) => String(w.days) === sp.giorni) ? Number(sp.giorni) : 7;
-  const shopFilter = sp.negozio ?? "all";
+  // The chips are a filter; the scope is a boundary. This page both listed the
+  // other location's lots and offered the write-off button on them — a
+  // cross-location inventory write, one click from a URL nobody had to guess.
+  const scope = await shopScope();
+  const shopFilter = lockShop(sp.negozio, scope) ?? "all";
 
   const today = dateInRome();
   const through = isoIn(today, days);
 
-  const [rows, shops] = await Promise.all([getExpiringBatches(through), adminGetShops()]);
-  const shopName = new Map(shops.map((s) => [s.slug, s.name]));
+  const [rows, allShops] = await Promise.all([
+    getExpiringBatches(through, true, scope),
+    adminGetShops(),
+  ]);
+  const shops = scope ? allShops.filter((s) => s.slug === scope) : allShops;
+  const shopName = new Map(allShops.map((s) => [s.slug, s.name]));
   const visible = shopFilter === "all" ? rows : rows.filter((r) => r.shopSlug === shopFilter);
 
   const expired = visible.filter((r) => r.batch.expiryDate! < today);

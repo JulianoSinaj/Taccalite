@@ -436,3 +436,59 @@ export async function anonymizeCustomer(_prev: ActionState, fd: FormData): Promi
     return ok("Dati personali anonimizzati. Gli ordini restano per obblighi fiscali.");
   });
 }
+
+/**
+ * Clear a login lockout, and sign the account out everywhere.
+ *
+ * Ten failed attempts lock an account for fifteen minutes
+ * (`lib/auth/service`), and the lock expires on its own — which is the right
+ * design and left the operator with nothing to say to somebody standing in
+ * front of them. Two separate needs met here: an admin can lift the lock now
+ * rather than telling a colleague to wait, and — because a lockout usually
+ * means somebody was guessing at the password — can end every live session at
+ * the same time, which is the response that actually matters if the guessing
+ * worked.
+ */
+export async function unlockUser(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const id = String(fd.get("id") ?? "").trim();
+    const signOut = String(fd.get("signOut") ?? "") === "true";
+
+    const [target] = await db
+      .select({
+        username: users.username,
+        failedLoginCount: users.failedLoginCount,
+        lockedUntil: users.lockedUntil,
+      })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+    if (!target) throw new ActionError("Utente non trovato.");
+
+    await db
+      .update(users)
+      .set({ failedLoginCount: 0, lockedUntil: null })
+      .where(eq(users.id, id));
+
+    const ended = signOut ? (await deleteUserSessions(id)).deleted : 0;
+
+    await logAudit({
+      actor,
+      action: "user.unlock",
+      entity: "user",
+      entityId: id,
+      summary: `Blocco accessi rimosso per @${target.username}${
+        signOut ? ` e ${ended} sessioni chiuse` : ""
+      }`,
+      meta: { failedLoginCount: target.failedLoginCount, signOut, sessionsEnded: ended },
+    });
+
+    revalidatePath("/admin/users");
+    return ok(
+      signOut
+        ? `Blocco rimosso e ${ended} ${ended === 1 ? "sessione chiusa" : "sessioni chiuse"}.`
+        : "Blocco rimosso: l'account può riprovare subito.",
+    );
+  });
+}

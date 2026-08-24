@@ -117,6 +117,17 @@ const WEEKDAY_IT: Record<string, string> = {
   saturday: "sabato",
 };
 
+/** The same keys by JS `getDay()` index, for going the other way. */
+const WEEKDAY_KEYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+] as const;
+
 /** The weekday index a setting names; `fallback` when it names nothing. */
 function weekdayIndex(key: unknown, fallback: number): number {
   return WEEKDAY_INDEX[String(key).toLowerCase()] ?? fallback;
@@ -128,6 +139,39 @@ function weekdayIndex(key: unknown, fallback: number): number {
  */
 export function weekdayNameIt(key: unknown, fallback: string): string {
   return WEEKDAY_IT[String(key).toLowerCase()] ?? fallback;
+}
+
+/**
+ * The last day a given porchetta pickup can still be ordered for.
+ *
+ * `porchettaPickupDays` derives the same deadline for the days it *offers*, so
+ * the public page can grey out a batch that has closed. This is the other half:
+ * the check at the write, which nothing performed — `porchetta.cutoffDay` was
+ * editable, seeded, and read by no enforcement path, so a booking posted on
+ * Saturday morning for the same day's roast was accepted for meat that went on
+ * the fire the night before.
+ *
+ * Resolved backwards from the pickup date rather than forwards from today, so a
+ * booking for a *later* week is judged against that week's deadline. A cut-off
+ * on the pickup day itself means "up to the day", not "a week early".
+ */
+export async function porchettaCutoffFor(
+  pickupIso: string,
+): Promise<{ iso: string; label: string }> {
+  const key = String(await getSetting<string>("porchetta.cutoffDay", "friday")).toLowerCase();
+  const [y, m, d] = pickupIso.split("-").map(Number);
+  const pickupWeekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  const cutoffDay = WEEKDAY_INDEX[key];
+  // An unrecognised setting must not silently invent a deadline: fall back to
+  // the pickup day, which forbids nothing that was allowed before.
+  if (cutoffDay == null) {
+    return { iso: pickupIso, label: weekdayNameIt(WEEKDAY_KEYS[pickupWeekday], "") };
+  }
+  const back = (pickupWeekday - cutoffDay + 7) % 7;
+  // UTC arithmetic to roll the calendar date, so a DST boundary can neither drop
+  // nor duplicate a day.
+  const iso = new Date(Date.UTC(y, m - 1, d - back)).toISOString().slice(0, 10);
+  return { iso, label: weekdayNameIt(key, "") };
 }
 
 /**
@@ -412,6 +456,19 @@ export async function createReservation(
     throw new ReservationNotAllowedError("Negozio non valido. Scegli una sede disponibile.");
   }
   if (!allowDisabledShop) {
+    // The two master switches in Impostazioni. Both were editable and read by
+    // nothing: only the per-shop columns below were ever consulted, so turning
+    // "Prenotazioni attive" or "Porchetta del sabato" off changed precisely
+    // nothing on the public site. A global switch that governs no behaviour is
+    // worse than no switch, because somebody will trust it.
+    if (input.type === "porchetta" && !(await getSetting<boolean>("porchetta.enabled", true))) {
+      throw new ReservationNotAllowedError(
+        "Le prenotazioni della porchetta sono sospese al momento.",
+      );
+    }
+    if (!(await getSetting<boolean>("reservations.enabled", true))) {
+      throw new ReservationNotAllowedError("Le prenotazioni sono sospese al momento.");
+    }
     if (input.type === "porchetta" && !shop.porchettaEnabled) {
       throw new ReservationNotAllowedError("Questa sede non prepara la porchetta del sabato.");
     }
@@ -442,6 +499,18 @@ export async function createReservation(
     // form happily books Ferragosto.
     const closure = closureFor(await getClosures(), input.shop, date, "reservations");
     if (closure) throw new ReservationNotAllowedError(closureMessage(closure, date));
+
+    // The ordering deadline for that week's roast. `porchettaPickupDays` greys
+    // out a closed batch on the public page; this is the check at the write, so
+    // a direct POST — or a tab left open past Friday — cannot slip in behind it.
+    if (input.type === "porchetta") {
+      const cutoff = await porchettaCutoffFor(date);
+      if (dateInRome() > cutoff.iso) {
+        throw new ReservationNotAllowedError(
+          `Le prenotazioni per il ${date} si chiudevano ${cutoff.label} ${cutoff.iso}. Scegli il ritiro successivo.`,
+        );
+      }
+    }
 
     // Seats. The kilos of porchetta have been capped since the beginning and
     // the room never was, so the one thing the shop actually runs on a

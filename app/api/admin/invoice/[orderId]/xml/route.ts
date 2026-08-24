@@ -39,7 +39,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ orderId: st
     );
   }
 
-  const [legalName, vatNumber, taxCode, address, zip, city, province, regime, shippingVatPct] =
+  const [legalName, vatNumber, taxCode, address, zip, city, province, regime, rea, shippingVatPct] =
     await Promise.all([
       getSetting<string>("business.legalName", "Norcineria Taccalite"),
       getSetting<string>("business.vatNumber", ""),
@@ -49,6 +49,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ orderId: st
       getSetting<string>("business.city", ""),
       getSetting<string>("business.province", ""),
       getSetting<string>("business.regime", "Ordinario"),
+      // Collected in Impostazioni since the fiscal-identity work and read by
+      // nothing until now — not even here, the one document with a slot for it.
+      getSetting<string>("business.rea", ""),
       getSetting<number>("store.shippingVatRate", 22),
     ]);
 
@@ -59,7 +62,17 @@ export async function GET(request: Request, ctx: { params: Promise<{ orderId: st
     );
   }
 
-  const fiscal: FiscalIdentity = { legalName, vatNumber, taxCode, address, zip, city, province, regime };
+  const fiscal: FiscalIdentity = {
+    legalName,
+    vatNumber,
+    taxCode,
+    address,
+    zip,
+    city,
+    province,
+    regime,
+    rea,
+  };
   const shippingVatBps = Math.round(shippingVatPct * 100);
   const base = data.order.id.replace(/[^A-Za-z0-9]/g, "").slice(0, 10) || "00001";
   // A credit note is a distinct document and must not reuse the invoice's

@@ -1,14 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { deliveryZones, pickupSlots, orders, shops, shopClosures } from "@/lib/db/schema";
+import { deliveryZones, pickupSlots, orders, shops, shopClosures, reservations } from "@/lib/db/schema";
 import { requireRole } from "@/lib/auth/session";
 import { logAudit } from "@/lib/audit";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import { parseForm, deliveryZoneInput, pickupSlotInput, shopClosureInput } from "@/lib/validation/admin";
 import { FULFILMENT_LABEL, WEEKDAY_NAME } from "@/lib/fulfilment";
+import { enqueueMail } from "@/lib/mail/mailer";
+import { closureNoticeEmail } from "@/lib/mail/templates";
 
 /**
  * Delivery zones and pickup windows.
@@ -409,5 +411,79 @@ export async function deleteClosure(_prev: ActionState, fd: FormData): Promise<A
 
     revalidateClosures();
     return ok("Chiusura rimossa. Le date tornano prenotabili.");
+  });
+}
+
+/**
+ * Warn the customers already booked inside a closure.
+ *
+ * The closures page has always counted them and then said "avvisa i clienti
+ * prima" — handing the operator a filtered list and a telephone. Adding a
+ * closure after bookings were taken is the normal case, not the exception, so
+ * the notice belongs here.
+ *
+ * Bookings are **not** cancelled. A closure is the shop's decision about a day;
+ * whether a particular customer is moved, refunded or rung back is a
+ * conversation, and mass-cancelling would destroy the record of what was owed.
+ * The email says the date is unavailable and asks them to get in touch.
+ */
+export async function notifyClosureBookings(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const id = String(fd.get("id") ?? "").trim();
+
+    const [closure] = await db.select().from(shopClosures).where(eq(shopClosures.id, id)).limit(1);
+    if (!closure) throw new ActionError("Chiusura non trovata.");
+
+    const affected = await db
+      .select()
+      .from(reservations)
+      .where(
+        and(
+          gte(reservations.date, closure.fromDate),
+          lte(reservations.date, closure.toDate),
+          sql`${reservations.status} not in ('cancelled', 'no_show')`,
+          isNotNull(reservations.email),
+          closure.shopSlug ? eq(reservations.shopSlug, closure.shopSlug) : undefined,
+        ),
+      );
+
+    if (affected.length === 0) {
+      return ok("Nessuna prenotazione con email in queste date.");
+    }
+
+    const shopNames = new Map((await db.select().from(shops)).map((s) => [s.slug, s.name]));
+    let sent = 0;
+    for (const r of affected) {
+      if (!r.email) continue;
+      const built = closureNoticeEmail({
+        reference: r.reference,
+        name: r.name,
+        date: r.date,
+        time: r.time,
+        shopName: shopNames.get(r.shopSlug) ?? r.shopSlug,
+        reason: closure.reason,
+      });
+      // Queued rather than sent inline: a busy weekend can be dozens of
+      // messages, and one bad address must not abort the rest.
+      await enqueueMail({ to: r.email, ...built });
+      sent += 1;
+    }
+
+    await logAudit({
+      actor,
+      action: "closure.notify",
+      entity: "closure",
+      entityId: closure.id,
+      summary: `Avviso di chiusura (${closure.fromDate}–${closure.toDate}) inviato a ${sent} ${
+        sent === 1 ? "cliente" : "clienti"
+      }`,
+      meta: { sent, fromDate: closure.fromDate, toDate: closure.toDate },
+    });
+
+    revalidatePath("/admin/chiusure");
+    return ok(
+      `Avviso in coda per ${sent} ${sent === 1 ? "cliente" : "clienti"}. Le prenotazioni restano attive: decidi tu se spostarle o annullarle.`,
+    );
   });
 }

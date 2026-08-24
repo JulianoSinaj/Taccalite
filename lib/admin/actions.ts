@@ -17,11 +17,13 @@ import {
   settings,
   stockMovements,
   orderItems,
+  users,
 } from "@/lib/db/schema";
 import { requireAdmin, requireRole } from "@/lib/auth/session";
 import { getSetting } from "@/lib/db/queries";
 import { addPoints } from "@/lib/loyalty";
 import { sendMail } from "@/lib/mail/mailer";
+import { redemptionStatusEmail } from "@/lib/mail/templates";
 import { smtpConfigured } from "@/lib/env";
 import { saveUploadedImage } from "@/lib/media";
 import { logAudit } from "@/lib/audit";
@@ -429,20 +431,10 @@ export async function adjustStock(_prev: ActionState, fd: FormData): Promise<Act
       );
     }
 
-    const threshold = await getSetting<number>("store.lowStockThreshold", 5);
-    const stillLow = isLowStock(
-      { stock: change.stockAfter, reorderPoint: product.reorderPoint },
-      threshold,
-    );
-    // Clear the low-stock alert stamp when back above the reorder point.
-    if (!stillLow) {
-      await db.update(products).set({ lowStockNotifiedAt: null }).where(eq(products.id, d.productId));
-    }
-
-    // Back in stock: if it was out (0) and is now available, notify waitlisters.
-    if (change.stockBefore <= 0 && change.stockAfter > 0) {
-      await notifyBackInStock(product.id, product.name, product.slug);
-    }
+    // The low-stock reset and the back-in-stock mail used to be written out
+    // here. They now live in `applyStockChange`, so every path that raises stock
+    // does them — receiving a lot, correcting one, a cancellation restocking,
+    // a CSV import — instead of only the two that remembered.
 
     await logAudit({
       actor,
@@ -661,6 +653,11 @@ export async function saveShop(_prev: ActionState, fd: FormData): Promise<Action
       // A shop's address, phone and hours are the public face of the business
       // and staff (not only admins) can edit them, so record what moved.
       const [prev] = await db.select().from(shops).where(eq(shops.id, d.id)).limit(1);
+      if (!prev) throw new ActionError("Sede non trovata.");
+      // A shop row *is* a location, so the scope applies to its own slug: a
+      // counter person at one sede was able to rewrite the other's address,
+      // opening hours, porchetta capacity and service toggles.
+      await requireShopScope(prev.slug);
       await db.update(shops).set(values).where(eq(shops.id, d.id));
       const changes = describeChanges(prev, values, [
         { key: "name", label: "nome" },
@@ -926,6 +923,28 @@ export async function updateRedemptionStatus(_prev: ActionState, fd: FormData): 
       .update(redemptions)
       .set({ status: d.status, fulfilledAt: d.status === "fulfilled" ? new Date() : null })
       .where(eq(redemptions.id, d.id));
+
+    // Tell the customer. Both transitions are things that happened *to* them:
+    // a cancellation silently returned their points, which reads as the loyalty
+    // scheme malfunctioning rather than as the shop running out of a prize.
+    if (d.status === "fulfilled" || d.status === "cancelled") {
+      const [customer] = await db
+        .select({ email: users.email, name: users.name, username: users.username })
+        .from(users)
+        .where(eq(users.id, redemption.userId))
+        .limit(1);
+      if (customer?.email) {
+        await sendMail({
+          to: customer.email,
+          ...redemptionStatusEmail(
+            customer.name || customer.username,
+            redemption.rewardName,
+            d.status,
+            redemption.pointsSpent,
+          ),
+        }).catch(() => {});
+      }
+    }
 
     await logAudit({
       actor,

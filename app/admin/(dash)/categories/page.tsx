@@ -87,9 +87,16 @@ export default async function AdminCategories({ searchParams }: SP) {
           <p className="text-sm text-warn-soft-fg">
             <strong className="font-semibold">{unfiled}</strong>{" "}
             {unfiled === 1 ? `${active.noun.slice(0, -1)} ha` : `${active.noun} hanno`} una categoria
-            scritta a mano che non corrisponde a nessuna voce di questo elenco. Aprili da{" "}
-            <Link href={active.href} className="font-semibold underline">
-              {active.label}
+            scritta a mano che non corrisponde a nessuna voce di questo elenco.{" "}
+            <Link
+              href={
+                kind === "product"
+                  ? "/admin/products?categoria=non-assegnata"
+                  : `${active.href}?categoria=non-assegnata`
+              }
+              className="font-semibold underline"
+            >
+              Aprili tutti
             </Link>{" "}
             e riassegnali, oppure crea qui la categoria mancante con lo stesso nome.
           </p>

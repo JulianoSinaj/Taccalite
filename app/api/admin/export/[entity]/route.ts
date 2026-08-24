@@ -59,13 +59,17 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
     case "orders": {
       const f = orderFilters(params);
       body = streamCsv(
-        ["orderNumber", "date", "name", "email", "phone", "status", "paymentStatus", "fulfilment", "shop", "pickupSlot", "totalEuros"],
+        // `paidAt` and `incassatoCon` are what let a spreadsheet reproduce the
+        // chiusura di cassa: without them the export could say how much was
+        // taken but never on what date it settled or through which instrument.
+        ["orderNumber", "date", "paidAt", "name", "email", "phone", "status", "paymentStatus", "paymentMethod", "incassatoCon", "fulfilment", "shop", "pickupSlot", "totalEuros", "refundedEuros"],
         (limit, offset) => getOrdersForExport(f, limit, offset),
         (o) => [
-          o.orderNumber, iso(o.createdAt), o.name, o.email, o.phone, o.status,
-          o.paymentStatus, o.fulfilment, o.shopSlug,
+          o.orderNumber, iso(o.createdAt), iso(o.paidAt), o.name, o.email, o.phone, o.status,
+          o.paymentStatus, o.paymentMethod, o.paidWith ?? "", o.fulfilment, o.shopSlug,
           o.pickupSlotAt ? o.pickupSlotAt.toISOString() : "",
           (o.totalCents / 100).toFixed(2),
+          (o.refundedCents / 100).toFixed(2),
         ],
       );
       break;

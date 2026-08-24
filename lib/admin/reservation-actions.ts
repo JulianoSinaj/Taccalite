@@ -139,6 +139,9 @@ export async function createAdminReservation(_prev: ActionState, fd: FormData): 
   return runAction(async () => {
     const actor = await requireAdmin();
     const d = parseForm(reservationCreateInput, fd);
+    // The shop arrives in a form field, so the picker being filtered is not the
+    // check — a scoped operator could otherwise book into the other location.
+    await requireShopScope(d.shopSlug);
 
     let created;
     try {
@@ -207,6 +210,10 @@ export async function updateReservationDetails(_prev: ActionState, fd: FormData)
     const actor = await requireAdmin();
     const d = parseForm(reservationDetailsInput, fd);
     const res = await mustFindReservation(d.id);
+    // Both ends of the move, like `saveProduct`: `mustFindReservation` checked
+    // where the booking *is*, this checks where it is being sent. Without it a
+    // scoped operator could push a booking into the other location and lose it.
+    await requireShopScope(d.shopSlug);
 
     const shop = await getShopBySlug(d.shopSlug);
     if (!shop) throw new ActionError("Negozio non valido.");

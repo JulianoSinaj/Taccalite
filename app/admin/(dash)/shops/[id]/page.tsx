@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { AdminHeader, Panel } from "@/components/admin/ui";
 import { ShopForm } from "@/components/admin/forms";
 import { adminGetShop } from "@/lib/admin/queries";
+import { assertShopScope } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,9 @@ export default async function EditShop({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const shop = await adminGetShop(id);
   if (!shop) notFound();
+  // A shop row is a location, so its own slug is what the scope is measured
+  // against — otherwise a scoped operator edits the other sede by URL.
+  await assertShopScope(shop.slug);
 
   return (
     <div>

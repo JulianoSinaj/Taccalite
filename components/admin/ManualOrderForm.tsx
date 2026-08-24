@@ -51,6 +51,13 @@ export type BookingPrefill = {
   shopSlug: string;
   date: string;
   notes: string;
+  /** Caparra already taken on the booking, in cents (0 when none). Carried so
+   *  the counter isn't told to collect money the customer has already paid. */
+  depositCents: number;
+  /** Kilos on a porchetta pre-order, so the operator knows what to weigh out.
+   *  Not auto-added as a line: which catalogue product a roast corresponds to is
+   *  the shop's call, and guessing it wrong would misprice the sale. */
+  quantityKg: number | null;
 };
 
 export type PricingSettings = {
@@ -323,8 +330,28 @@ export function ManualOrderForm({
               Salvando, la prenotazione viene chiusa come completata e collegata a questo ordine —
               così la vendita entra finalmente nel riepilogo IVA, nel magazzino e nei punti fedeltà.
             </p>
+            {booking.quantityKg != null && (
+              <p className="mt-2 text-sm font-semibold text-brown-900">
+                Porchetta prenotata: {booking.quantityKg.toLocaleString("it-IT")} kg — aggiungila
+                come riga a peso qui sotto.
+              </p>
+            )}
             {booking.notes && (
               <p className="mt-2 text-sm text-brown-800/70">Note del cliente: “{booking.notes}”</p>
+            )}
+            {/* The deposit is part payment, not a discount: the order total stays
+                the full price (that is what the invoice and the VAT are based
+                on) and this says how much is actually left to collect. Without
+                it the counter charged the whole amount a second time. */}
+            {booking.depositCents > 0 && (
+              <p className="mt-2 text-sm font-semibold text-brown-900">
+                Acconto già incassato:{" "}
+                {(booking.depositCents / 100).toLocaleString("it-IT", {
+                  style: "currency",
+                  currency: "EUR",
+                })}
+                . Il totale dell&apos;ordine resta pieno — al ritiro incassa la differenza.
+              </p>
             )}
           </Panel>
         </>

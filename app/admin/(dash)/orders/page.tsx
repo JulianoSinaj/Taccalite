@@ -28,7 +28,7 @@ import { PAYMENT_METHOD_SHORT, settlesOnHandover } from "@/lib/payments/methods"
 import { isAdmin, getCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { orderItems } from "@/lib/db/schema";
-import { shopScope, lockShop } from "@/lib/admin/scope";
+import { shopScope, lockShop, shopChips } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +43,7 @@ type SP = {
     tipo?: string;
     da?: string;
     a?: string;
+    data?: string;
     page?: string;
     colonna?: string;
     verso?: string;
@@ -53,9 +54,18 @@ const STATUS_CHIPS: { value: string; label: string }[] = [
   { value: "all", label: "Tutti" },
   { value: "to-fulfil", label: "Da evadere" },
   { value: "unpaid", label: "Da pagare" },
+  // "Money actually taken", regardless of where the order got to afterwards.
+  // This is the set the IVA report counts, and it had no chip.
+  { value: "incassati", label: "Incassati" },
   { value: "fulfilled", label: "Evasi" },
   { value: "cancelled", label: "Annullati" },
   { value: "refunded", label: "Rimborsati" },
+];
+
+/** Which date the range applies to — see `OrderFilters["data"]`. */
+const DATE_CHIPS: { value: string; label: string }[] = [
+  { value: "all", label: "Data ordine" },
+  { value: "incasso", label: "Data incasso" },
 ];
 
 const FULFILMENT_CHIPS: { value: string; label: string }[] = [
@@ -69,7 +79,7 @@ const BASE = "/admin/orders";
 
 export default async function AdminOrders({ searchParams }: SP) {
   const sp = await searchParams;
-  const { negozio = "all", q, stato = "all", tipo = "all", da = "", a = "", page: pageStr } = sp;
+  const { q, stato = "all", tipo = "all", da = "", a = "", page: pageStr } = sp;
   const page = Number(pageStr) || 1;
   // A staff account assigned to a location is *confined* to it: the facet is
   // forced here rather than merely pre-selected, so editing the query string
@@ -112,12 +122,22 @@ export default async function AdminOrders({ searchParams }: SP) {
     return `${p.count} art. · ${shown}${more}`;
   };
 
-  // The active filter bag the shared chrome reads from.
-  const current = { negozio, stato, tipo, da, a, ...(q ? { q } : {}) };
-  const SHOP_CHIPS = [
-    { value: "all", label: "Tutte le sedi" },
-    ...shops.map((s) => ({ value: s.slug, label: s.name })),
-  ];
+  // The active filter bag the shared chrome reads from. It reads the **locked**
+  // shop, not the one in the query string: built from the raw params, a scoped
+  // operator clicking another sede saw the chip highlight move while the results
+  // stayed put — the page advertising a filter it was not honouring. The
+  // products list has always done it this way; these two disagreed.
+  const current = {
+    negozio: filters.negozio ?? "all",
+    stato,
+    tipo,
+    da,
+    a,
+    data: filters.data ?? "all",
+    ...(q ? { q } : {}),
+  };
+  // …and no chips for locations this operator can never open.
+  const SHOP_CHIPS = shopChips(shops, scope);
 
   return (
     <div>
@@ -178,6 +198,7 @@ export default async function AdminOrders({ searchParams }: SP) {
         facets={[
           { name: "negozio", label: "Sede", options: SHOP_CHIPS },
           { name: "tipo", label: "Consegna", options: FULFILMENT_CHIPS },
+          { name: "data", label: "Periodo su", options: DATE_CHIPS },
         ]}
       >
         <div>
@@ -201,6 +222,7 @@ export default async function AdminOrders({ searchParams }: SP) {
           stato: { title: "Stato", format: labelFrom(STATUS_CHIPS) },
           negozio: { title: "Sede", format: labelFrom(SHOP_CHIPS) },
           tipo: { title: "Consegna", format: labelFrom(FULFILMENT_CHIPS) },
+          data: { title: "Periodo su", format: labelFrom(DATE_CHIPS) },
           da: { title: "Dal" },
           a: { title: "Al" },
           q: { title: "Ricerca", format: (v) => `“${v}”` },
@@ -234,7 +256,7 @@ export default async function AdminOrders({ searchParams }: SP) {
         params={linkParams}
         sort={sort}
         empty={
-          q || stato !== "all" || tipo !== "all" || negozio !== "all"
+          q || stato !== "all" || tipo !== "all" || current.negozio !== "all"
             ? "Nessun ordine corrisponde ai filtri."
             : "Nessun ordine ancora. Gli ordini dallo shop online compaiono qui."
         }

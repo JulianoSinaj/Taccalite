@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { shops, products, discountCodes } from "@/lib/db/schema";
-import { getProductsPage, getDiscountsPage } from "@/lib/admin/queries";
-import { productFilters, discountFilters } from "@/lib/admin/filters";
+import { shops, products, discountCodes, orders } from "@/lib/db/schema";
+import { getProductsPage, getDiscountsPage, getOrdersPage } from "@/lib/admin/queries";
+import { productFilters, discountFilters, orderFilters } from "@/lib/admin/filters";
 import { filterHref } from "@/components/admin/FilterBar";
 
 const SHOP = "filt-shop";
@@ -137,5 +137,95 @@ describe("filterHref", () => {
   it("clears a facet set back to 'all'", () => {
     const href = filterHref("/admin/products", { negozio: "centro" }, { negozio: "all" });
     expect(href).toBe("/admin/products");
+  });
+});
+
+/**
+ * The IVA report's drill-down and the orders list have to agree.
+ *
+ * The report counts orders whose money settled in the period —
+ * `payment_status IN ('paid','refunded')`, dated by `coalesce(paid_at,
+ * created_at)`. Its "Vedi gli ordini →" link used to go to
+ * `?stato=paid&da=…&a=…`, which is `status = 'paid'` (so anything since marked
+ * Evaso vanished) over `created_at` (a different window). Two mismatches in one
+ * href, on the one page where the numbers are supposed to reconcile.
+ */
+describe("orderFilters — fiscal drill-down", () => {
+  const SETTLED = "ord-settled";
+
+  beforeAll(async () => {
+    await db
+      .insert(shops)
+      .values({ slug: SETTLED, name: SETTLED, specialty: "Test" })
+      .onConflictDoNothing({ target: shops.slug });
+    await db.delete(orders).where(eq(orders.shopSlug, SETTLED));
+    await db.insert(orders).values([
+      {
+        // Placed on 31 July, paid on 1 August: the case the whole
+        // settled-vs-created distinction exists for.
+        orderNumber: "T-STRADDLE",
+        email: "a@example.com",
+        name: "Straddle",
+        shopSlug: SETTLED,
+        status: "fulfilled",
+        paymentStatus: "paid",
+        totalCents: 1000,
+        createdAt: new Date("2026-07-31T20:00:00Z"),
+        paidAt: new Date("2026-08-01T09:00:00Z"),
+      },
+      {
+        // Settled in August and since marked Evaso — in the report, and dropped
+        // by the old `stato=paid` link.
+        orderNumber: "T-FULFILLED",
+        email: "b@example.com",
+        name: "Evaso",
+        shopSlug: SETTLED,
+        status: "fulfilled",
+        paymentStatus: "paid",
+        totalCents: 2000,
+        createdAt: new Date("2026-08-10T09:00:00Z"),
+        paidAt: new Date("2026-08-10T09:00:00Z"),
+      },
+      {
+        // Never paid: in neither.
+        orderNumber: "T-UNPAID",
+        email: "c@example.com",
+        name: "Mai pagato",
+        shopSlug: SETTLED,
+        status: "pending",
+        paymentStatus: "unpaid",
+        totalCents: 3000,
+        createdAt: new Date("2026-08-11T09:00:00Z"),
+      },
+    ]);
+  });
+
+  const august = (extra: Record<string, string>) =>
+    getOrdersPage({
+      ...orderFilters({ negozio: SETTLED, da: "2026-08-01", a: "2026-08-31", ...extra }),
+      page: 1,
+    });
+
+  it("counts money taken in the period, whatever the order did next", async () => {
+    const { rows } = await august({ stato: "incassati", data: "incasso" });
+    expect(rows.map((r) => r.orderNumber).sort()).toEqual(["T-FULFILLED", "T-STRADDLE"]);
+  });
+
+  it("drops the straddling order when dated by when it was placed", async () => {
+    const { rows } = await august({ stato: "incassati" });
+    // Placed 31 July, so it is not an August order — but it IS August's VAT.
+    expect(rows.map((r) => r.orderNumber)).toEqual(["T-FULFILLED"]);
+  });
+
+  it("is not the same set as the old stato=paid link", async () => {
+    const { rows } = await august({ stato: "paid", data: "incasso" });
+    // Both settled orders are `status: 'fulfilled'`, so the old link showed none
+    // of the two the report had just counted.
+    expect(rows).toHaveLength(0);
+  });
+
+  it("never counts an unpaid order", async () => {
+    const { rows } = await august({ stato: "incassati", data: "incasso" });
+    expect(rows.some((r) => r.orderNumber === "T-UNPAID")).toBe(false);
   });
 });

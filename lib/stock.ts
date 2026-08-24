@@ -2,6 +2,9 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { products, productBatches, stockMovements } from "@/lib/db/schema";
+import { getSetting } from "@/lib/db/queries";
+import { isLowStock } from "@/lib/inventory";
+import { notifyBackInStock } from "@/lib/stock-notify";
 
 /**
  * The single way inventory moves.
@@ -21,6 +24,25 @@ import { products, productBatches, stockMovements } from "@/lib/db/schema";
  *     transaction in write mode (BEGIN IMMEDIATE) by default, so the row is
  *     locked from the first read and nothing interleaves.
  */
+
+/**
+ * How many units of on-hand stock one order line represents.
+ *
+ * A product priced per kg has no meaningful unit count, and `products.stock` is
+ * an integer, so a 0,350 kg sale cannot be expressed as a decrement. Rather than
+ * invent a number, weight lines move no stock automatically — the operator
+ * adjusts the shelf by hand.
+ *
+ * The rule has to be identical on the way out and the way back, and it was not:
+ * the counter sale skipped weight lines while `restockOrderItems` handed back
+ * the line's `quantity`, which is 1 for a weighed line. Cancelling a counter
+ * sale of 0,350 kg therefore *created* a unit of stock and ledgered it as a real
+ * movement. Both directions now ask this one function.
+ */
+export const stockUnitsForLine = (line: {
+  quantity: number;
+  weightKg?: number | null;
+}): number => (line.weightKg != null ? 0 : line.quantity);
 
 export type StockChange = {
   /** The delta actually applied (differs from the request only at the floor). */
@@ -46,6 +68,75 @@ export async function applyStockChange(opts: {
   reason: string;
   byUserId?: string | null;
   /** Set to write an absolute figure instead of a delta (a stocktake). */
+  setTo?: number;
+  /**
+   * Skip the restock side-effects below. Only for a caller that has already
+   * done them itself — `saveProduct` writes `products.stock` directly and mails
+   * its own waitlist, so routing through here would send twice.
+   */
+  skipRestockEffects?: boolean;
+}): Promise<StockChange | null> {
+  const change = await applyStockChangeCore(opts);
+  if (change && !opts.skipRestockEffects) await afterRestock(opts.productId, change);
+  return change;
+}
+
+/**
+ * What has to happen when stock goes **up**.
+ *
+ * Both of these used to live in `saveProduct` and `adjustStock` — two of the
+ * five paths that raise stock. Receiving a supplier lot (the most natural
+ * restock there is), correcting a lot upward, a cancellation putting goods back
+ * and a CSV import all moved the number silently: the customers waiting for that
+ * product were never told, and `lowStockNotifiedAt` stayed latched so the alert
+ * could not fire again on the next dip.
+ *
+ * The rule belongs next to the write it depends on, not in whichever callers
+ * happened to remember it. Runs after the transaction commits — it sends email,
+ * which has no business inside a write lock — and never throws: inventory
+ * bookkeeping must not fail because a notification did.
+ */
+async function afterRestock(productId: string, change: StockChange): Promise<void> {
+  if (change.applied <= 0) return;
+  try {
+    const [p] = await db
+      .select({
+        name: products.name,
+        slug: products.slug,
+        reorderPoint: products.reorderPoint,
+        lowStockNotifiedAt: products.lowStockNotifiedAt,
+      })
+      .from(products)
+      .where(eq(products.id, productId))
+      .limit(1);
+    if (!p) return;
+
+    // Back above the reorder point: re-arm the low-stock alert.
+    if (p.lowStockNotifiedAt) {
+      const threshold = await getSetting<number>("store.lowStockThreshold", 5);
+      if (!isLowStock({ stock: change.stockAfter, reorderPoint: p.reorderPoint }, threshold)) {
+        await db
+          .update(products)
+          .set({ lowStockNotifiedAt: null })
+          .where(eq(products.id, productId));
+      }
+    }
+
+    // Out of stock and now available again: tell whoever asked to be told.
+    if (change.stockBefore <= 0 && change.stockAfter > 0) {
+      await notifyBackInStock(productId, p.name, p.slug);
+    }
+  } catch (err) {
+    console.error("[stock] restock side-effects failed for", productId, err);
+  }
+}
+
+/** The atomic part: read, compute and write one product's stock in one lock. */
+async function applyStockChangeCore(opts: {
+  productId: string;
+  delta: number;
+  reason: string;
+  byUserId?: string | null;
   setTo?: number;
 }): Promise<StockChange | null> {
   return db.transaction(async (tx) => {

@@ -38,7 +38,7 @@ import {
   toggleProductFeatured,
 } from "@/lib/admin/actions";
 import type { ProductRow } from "@/lib/db/schema";
-import { shopScope, lockShop } from "@/lib/admin/scope";
+import { shopScope, lockShop, shopChips } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +92,7 @@ export default async function AdminProducts({ searchParams }: SP) {
     await Promise.all([
       getProductsPage({ ...filters, page, sort, lowStockThreshold }),
       adminGetShops(),
-      countExpiringSoon(expiryHorizon),
+      countExpiringSoon(expiryHorizon, scope),
       viewer ? getSavedViews(viewer.id, BASE) : Promise.resolve([]),
       isAdmin(),
     ]);
@@ -101,11 +101,14 @@ export default async function AdminProducts({ searchParams }: SP) {
   // Carried on every sort/page link so the view survives navigation.
   const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso };
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
-  const SHOP_CHIPS = [
-    { value: "all", label: "Tutte le sedi" },
-    ...shops.map((s) => ({ value: s.slug, label: s.name })),
+  const SHOP_CHIPS = shopChips(shops, scope);
+  const CATEGORY_CHIPS = [
+    ...chipsFrom(categories, "Tutte le categorie"),
+    // The rows the Categorie page counts as "scritte a mano": a free-text
+    // category matching no taxonomy entry. It had the number and no way to list
+    // them.
+    { value: "non-assegnata", label: "Senza categoria valida" },
   ];
-  const CATEGORY_CHIPS = chipsFrom(categories, "Tutte le categorie");
 
   const columns: Column<ProductRow>[] = [
     {

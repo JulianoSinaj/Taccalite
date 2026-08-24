@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AdminHeader, Panel, BackLink, inputCls, labelCls, fmtDate, euro } from "@/components/admin/ui";
+import { AdminHeader, Panel, BackLink, HistoryLink, inputCls, labelCls, fmtDate, euro } from "@/components/admin/ui";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { ProductForm } from "@/components/admin/forms";
 import {
@@ -9,22 +9,26 @@ import {
   adminGetCategories,
   getProductBatches,
   getProductHistoryCounts,
+  getProductSales,
 } from "@/lib/admin/queries";
 import { BatchPanel } from "@/components/admin/BatchPanel";
 import { dateInRome } from "@/lib/time";
 import { adjustStock, archiveProduct, deleteProduct } from "@/lib/admin/actions";
-import { pendingStockNotificationCount } from "@/lib/stock-notify";
+import { listPendingStockNotifications } from "@/lib/stock-notify";
+import { notifyStockWaitlist } from "@/lib/admin/batch-actions";
 import { margin } from "@/lib/inventory";
 import { assertShopScope } from "@/lib/admin/scope";
+import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditProduct({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [product, shops, categories] = await Promise.all([
+  const [product, shops, categories, admin] = await Promise.all([
     adminGetProduct(id),
     adminGetShops(),
     adminGetCategories("product"),
+    isAdmin(),
   ]);
   if (!product) notFound();
   // A filtered list is not access control: without this, another location
@@ -34,19 +38,24 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
 
   const productMargin = margin(product);
 
-  const [movements, waiting, batches] =
+  const [movements, waitlist, batches] =
     product.stock != null
       ? await Promise.all([
           getStockMovements(product.id),
-          pendingStockNotificationCount(product.id),
+          listPendingStockNotifications(product.id),
           getProductBatches(product.id),
         ])
-      : [[], 0, []];
+      : [[], [], []];
+  const waiting = waitlist.length;
   const today = dateInRome();
   // Deleting cascades the ledger away and blanks the name on past order lines,
   // so the action refuses once either exists. Asking here means the button is
   // only offered where it can succeed, and the reason is on screen otherwise.
   const history = await getProductHistoryCounts(product.id);
+  // Velocity, which nothing on this page could show: the only sales figure in
+  // the gestionale was the dashboard's top five, and a reorder decision is made
+  // one product at a time.
+  const sales30 = await getProductSales(product.id, 30);
   const deletable = history.sold === 0 && history.movements === 0;
   // The public page 404s on anything not active *and* purchasable, so the link
   // is only shown where it leads somewhere.
@@ -59,16 +68,21 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
         title={product.name}
         subtitle="Modifica prodotto"
         action={
-          liveOnSite ? (
-            <a
-              href={`/negozio/${product.slug}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-            >
-              Vedi sul sito ↗
-            </a>
-          ) : undefined
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Who changed this price, and when — the question the audit log
+                exists for, and which the product page could not ask. */}
+            {admin && <HistoryLink id={product.id} />}
+            {liveOnSite && (
+              <a
+                href={`/negozio/${product.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              >
+                Vedi sul sito ↗
+              </a>
+            )}
+          </div>
         }
       />
       <Panel>
@@ -110,6 +124,42 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
         </>
       )}
 
+      {/* Velocity — the question a reorder is decided on. */}
+      <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Venduto · ultimi 30 giorni</h2>
+      <Panel className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Quantità</p>
+          <p className="font-display mt-1 text-xl text-brown-950">
+            {sales30.weightKg > 0
+              ? `${sales30.weightKg.toLocaleString("it-IT", { maximumFractionDigits: 3 })} kg`
+              : sales30.units}
+            {sales30.weightKg > 0 && sales30.units > 0 && (
+              <span className="text-sm font-normal text-brown-800/60"> + {sales30.units} pz</span>
+            )}
+          </p>
+        </div>
+        <div>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Incasso</p>
+          <p className="font-display mt-1 text-xl text-brown-950">{euro(sales30.cents)}</p>
+        </div>
+        <div>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Ordini</p>
+          <p className="font-display mt-1 text-xl text-brown-950">{sales30.orders}</p>
+        </div>
+        <div>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+            Copertura
+          </p>
+          <p className="font-display mt-1 text-xl text-brown-950">
+            {/* Days of stock left at the last 30 days' rate — the figure that
+                turns "we have 12" into "that is four days". */}
+            {product.stock == null || sales30.units + sales30.weightKg === 0
+              ? "—"
+              : `${Math.round((product.stock / ((sales30.units + sales30.weightKg) / 30)) * 10) / 10} gg`}
+          </p>
+        </div>
+      </Panel>
+
       {/* Inventory: quick stock adjustment + movement ledger */}
       <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Giacenza e movimenti</h2>
       {product.stock == null ? (
@@ -129,6 +179,41 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
               </span>
             )}
           </p>
+
+          {/* This count used to be the end of the road: a number with nobody
+              behind it and no button under it. The automatic notice fires on the
+              transition out of zero, which misses a waitlist that built up while
+              stock sat at one unit — so the operator needs a way to send it. */}
+          {waiting > 0 && (
+            <details className="mb-4 rounded-lg border border-gold/40 bg-gold/5 px-4 py-3">
+              <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950">
+                Chi è in attesa ({waiting})
+              </summary>
+              <ul className="mt-3 space-y-1 text-sm text-brown-800/80">
+                {waitlist.map((w) => (
+                  <li key={w.id} className="flex flex-wrap justify-between gap-2">
+                    <span>{w.email}</span>
+                    <span className="text-xs text-brown-800/50">dal {fmtDate(w.createdAt)}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-3">
+                <ActionForm action={notifyStockWaitlist}>
+                  <input type="hidden" name="productId" value={product.id} />
+                  <PendingButton
+                    tone="gold"
+                    confirm={`Avvisare ${waiting} ${waiting === 1 ? "cliente" : "clienti"} che "${product.name}" è di nuovo disponibile?`}
+                  >
+                    Avvisa che è tornato disponibile
+                  </PendingButton>
+                </ActionForm>
+                <p className="mt-2 text-xs text-brown-800/60">
+                  L&apos;avviso parte da solo quando la giacenza risale da zero. Usa questo
+                  pulsante se il prodotto è tornato disponibile senza passare per lo zero.
+                </p>
+              </div>
+            </details>
+          )}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div>
               <h3 className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
@@ -212,7 +297,22 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
           </div>
 
           {movements.length > 0 && (
-            <div className="scroll-x mt-8">
+            <div className="mt-8">
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+                  Ultimi {movements.length} movimenti
+                </p>
+                {/* The ledger is capped and said so nowhere, and the only full
+                    view is a global download. At least point at it. */}
+                <a
+                  href="/api/admin/export/stock-movements"
+                  download
+                  className="text-[12px] font-bold tracking-widest text-gold-deep uppercase hover:underline"
+                >
+                  Storico completo CSV
+                </a>
+              </div>
+            <div className="scroll-x">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
@@ -235,6 +335,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                   ))}
                 </tbody>
               </table>
+            </div>
             </div>
           )}
         </Panel>

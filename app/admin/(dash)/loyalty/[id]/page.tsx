@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   AdminHeader,
+  HistoryLink,
   Panel,
   StatusBadge,
   inputCls,
@@ -69,7 +70,11 @@ export default async function CustomerDetail({ params }: Params) {
         </Link>
       </div>
 
-      <AdminHeader title={displayName} subtitle="Scheda cliente" />
+      <AdminHeader
+        title={displayName}
+        subtitle="Scheda cliente"
+        action={admin ? <HistoryLink id={user.id} /> : undefined}
+      />
 
       {/* Header card: identity + loyalty summary */}
       <Panel className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AdminHeader, Panel, reservationTypeLabel } from "@/components/admin/ui";
 import { getReservationsPage } from "@/lib/admin/queries";
+import { shopScope, lockShop } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -56,10 +57,14 @@ type Row = Awaited<ReturnType<typeof getReservationsPage>>["rows"][number];
 
 const MAX_PAGES = 20; // safety cap: up to 500 reservations for one week
 
-type SP = { searchParams: Promise<{ start?: string }> };
+type SP = { searchParams: Promise<{ start?: string; negozio?: string }> };
 
 export default async function ReservationCalendar({ searchParams }: SP) {
-  const { start } = await searchParams;
+  const { start, negozio } = await searchParams;
+  // Every other reservation surface locks the shop facet; the week grid did not,
+  // so it showed both locations to an operator confined to one.
+  const scope = await shopScope();
+  const shopFilter = lockShop(negozio, scope);
   const valid = start && /^\d{4}-\d{2}-\d{2}$/.test(start);
   const weekStart = mondayOf(valid ? start! : todayISO());
   const weekEnd = isoAddDays(weekStart, 6);
@@ -71,7 +76,12 @@ export default async function ReservationCalendar({ searchParams }: SP) {
   let capped = false;
   let page = 1;
   while (true) {
-    const { rows, pageCount } = await getReservationsPage({ da: weekStart, a: weekEnd, page });
+    const { rows, pageCount } = await getReservationsPage({
+      da: weekStart,
+      a: weekEnd,
+      negozio: shopFilter,
+      page,
+    });
     collected.push(...rows);
     if (page >= pageCount) break;
     if (page >= MAX_PAGES) {

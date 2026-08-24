@@ -23,7 +23,7 @@ import {
   remainingRecoveryCodes,
   toStored,
 } from "@/lib/auth/recovery-codes";
-import { buildFatturaXml, type FiscalIdentity } from "@/lib/fattura";
+import { buildFatturaXml, parseRea, type FiscalIdentity } from "@/lib/fattura";
 import { getVatReport } from "@/lib/admin/queries";
 import { hashPassword } from "@/lib/auth/password";
 import { loginUser } from "@/lib/auth/service";
@@ -262,5 +262,80 @@ describe("getVatReport periods", () => {
 
     const may = await getVatReport(new Date("2026-05-01"), new Date("2026-05-31T23:59:59"));
     expect(may.buckets.reduce((s, b) => s + b.grossCents, 0)).toBe(2200);
+  });
+});
+
+/**
+ * `business.rea` was editable in Impostazioni and read by nothing — not even by
+ * the FatturaPA builder, which is the one document that has an element for it.
+ * The shop types it in whatever shape their visura shows, so the parser has to
+ * cope with the common ones and stay silent when there is nothing usable.
+ */
+describe("parseRea", () => {
+  it("reads the office code and the number, in either order", () => {
+    expect(parseRea("AN-123456", "XX")).toEqual({ ufficio: "AN", numero: "123456" });
+    expect(parseRea("AN 123456", "XX")).toEqual({ ufficio: "AN", numero: "123456" });
+    expect(parseRea("123456 AN", "XX")).toEqual({ ufficio: "AN", numero: "123456" });
+  });
+
+  it("is not fooled by the word REA", () => {
+    expect(parseRea("REA AN-123456", "XX")).toEqual({ ufficio: "AN", numero: "123456" });
+  });
+
+  it("strips thousands separators from the number", () => {
+    expect(parseRea("AN 123.456", "XX")).toEqual({ ufficio: "AN", numero: "123456" });
+  });
+
+  it("falls back to the registered province when no office is given", () => {
+    expect(parseRea("123456", "AN")).toEqual({ ufficio: "AN", numero: "123456" });
+  });
+
+  it("returns null rather than emitting an invalid element", () => {
+    expect(parseRea("", "AN")).toBeNull();
+    expect(parseRea(undefined, "AN")).toBeNull();
+    expect(parseRea("in corso di iscrizione", "AN")).toBeNull(); // no number
+    expect(parseRea("123456", "")).toBeNull(); // no province to fall back on
+  });
+});
+
+describe("FatturaPA IscrizioneREA", () => {
+  const order = {
+    orderNumber: "REA-1",
+    createdAt: new Date("2026-08-01T10:00:00Z"),
+    paidAt: new Date("2026-08-01T10:00:00Z"),
+    name: "Cliente",
+    email: "c@example.com",
+    customerTaxCode: "RSSMRA80A01H501U",
+    customerVatNumber: null,
+    customerSdiCode: null,
+    customerPec: null,
+    shippingAddress: null,
+    discountCents: 0,
+    shippingCents: 0,
+    totalCents: 1000,
+    paymentMethod: "counter" as const,
+    paidWith: "cash" as const,
+  };
+  const items = [{ name: "Ciauscolo", quantity: 1, lineTotalCents: 1000, vatRateBps: 1000 }];
+
+  it("emits the element, in the position the schema requires", () => {
+    const xml = buildFatturaXml(
+      order as never,
+      items as never,
+      { ...FISCAL, rea: "AN-123456" },
+      "0000000001",
+      2200,
+    );
+    expect(xml).toContain("<NumeroREA>123456</NumeroREA>");
+    expect(xml).toContain("<Ufficio>AN</Ufficio>");
+    expect(xml).toContain("<StatoLiquidazione>LN</StatoLiquidazione>");
+    // CedentePrestatore's child order is fixed: Sede, then IscrizioneREA.
+    expect(xml.indexOf("</Sede>")).toBeLessThan(xml.indexOf("<IscrizioneREA>"));
+    expect(xml.indexOf("<IscrizioneREA>")).toBeLessThan(xml.indexOf("</CedentePrestatore>"));
+  });
+
+  it("omits it entirely when the setting is blank", () => {
+    const xml = buildFatturaXml(order as never, items as never, FISCAL, "0000000001", 2200);
+    expect(xml).not.toContain("IscrizioneREA");
   });
 });

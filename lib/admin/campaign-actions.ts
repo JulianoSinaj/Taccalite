@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { newsletterCampaigns, customerSegments } from "@/lib/db/schema";
 import { countSegment, describeRule } from "@/lib/segments";
-import { requireAdmin } from "@/lib/auth/session";
+import { requireRole } from "@/lib/auth/session";
 import { sendMail } from "@/lib/mail/mailer";
 import { newsletterBroadcast } from "@/lib/mail/templates";
 import { env } from "@/lib/env";
@@ -14,6 +14,15 @@ import { logAudit } from "@/lib/audit";
 import { campaignBodyHtml, deliverCampaign, getCampaign } from "@/lib/newsletter-campaigns";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import { parseForm } from "@/lib/validation/admin";
+
+/**
+ * Newsletter campaigns and audiences — full admins only.
+ *
+ * These used to run under `requireAdmin()`, which admits staff, while the
+ * subscriber CSV on the same page was `requireRole("admin")`. So downloading the
+ * mailing list was a full-admin act and writing to all of it in the shop's name
+ * was not. Sending is the less reversible of the two.
+ */
 
 const campaignInput = z.object({
   id: z.string().trim().max(40).optional(),
@@ -55,7 +64,7 @@ async function mustBeEditable(id: string) {
 /** Create or update a draft. Never sends. */
 export async function saveCampaign(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    const actor = await requireAdmin();
+    const actor = await requireRole("admin");
     const d = parseForm(campaignInput, fd);
     if (d.id) await mustBeEditable(d.id);
 
@@ -113,7 +122,7 @@ export async function saveCampaign(_prev: ActionState, fd: FormData): Promise<Ac
 /** Send a campaign right now. */
 export async function sendCampaignNow(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    const actor = await requireAdmin();
+    const actor = await requireRole("admin");
     const id = String(fd.get("id") ?? "").trim();
     const campaign = await mustBeEditable(id);
 
@@ -140,7 +149,7 @@ export async function sendCampaignNow(_prev: ActionState, fd: FormData): Promise
 /** Email the composed campaign to the owner alone, before the real send. */
 export async function sendCampaignTest(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireAdmin();
+    await requireRole("admin");
     const id = String(fd.get("id") ?? "").trim();
     const campaign = await getCampaign(id);
     if (!campaign) throw new ActionError("Campagna non trovata.");
@@ -158,7 +167,7 @@ export async function sendCampaignTest(_prev: ActionState, fd: FormData): Promis
 /** Copy a campaign back into a fresh draft — the way to resend a sent one. */
 export async function duplicateCampaign(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    const actor = await requireAdmin();
+    const actor = await requireRole("admin");
     const campaign = await getCampaign(String(fd.get("id") ?? "").trim());
     if (!campaign) throw new ActionError("Campagna non trovata.");
 
@@ -209,7 +218,7 @@ const segmentInput = z.object({
 /** Create or update a named segment. */
 export async function saveSegment(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    const actor = await requireAdmin();
+    const actor = await requireRole("admin");
     const d = parseForm(segmentInput, fd);
 
     const rule = {
@@ -251,7 +260,7 @@ export async function saveSegment(_prev: ActionState, fd: FormData): Promise<Act
 
 export async function deleteSegment(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    const actor = await requireAdmin();
+    const actor = await requireRole("admin");
     const id = String(fd.get("id") ?? "").trim();
     const [row] = await db
       .select({ name: customerSegments.name })
@@ -283,7 +292,7 @@ export async function deleteSegment(_prev: ActionState, fd: FormData): Promise<A
 /** Delete a draft or scheduled campaign. A sent one is history and stays. */
 export async function deleteCampaign(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    const actor = await requireAdmin();
+    const actor = await requireRole("admin");
     const id = String(fd.get("id") ?? "").trim();
     const campaign = await mustBeEditable(id);
     await db.delete(newsletterCampaigns).where(eq(newsletterCampaigns.id, id));

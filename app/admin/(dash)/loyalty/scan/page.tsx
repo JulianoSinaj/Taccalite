@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminHeader, Panel, inputCls, labelCls } from "@/components/admin/ui";
 import { ScanForm } from "@/components/admin/ScanForm";
@@ -25,6 +26,21 @@ export default async function AdminLoyaltyScan() {
         subtitle="Accredita i punti fedeltà per un acquisto al banco"
       />
       <ScanForm pointsPerEuro={pointsPerEuro || 1} />
+
+      {/* This screen takes an amount in euros and credits points — and creates
+          no order, no stock movement, no VAT and no revenue. That is a
+          legitimate shortcut for a sale already rung into the till, but nothing
+          said so, and a €45 typed here was invisible to every report in the
+          system. Two counter workflows exist; this says which one this is. */}
+      <p className="mt-4 max-w-2xl text-sm text-brown-800/70">
+        Questa schermata accredita <strong className="font-semibold">solo i punti</strong>: la
+        vendita non entra negli incassi, nel magazzino né nel riepilogo IVA. Usala quando lo
+        scontrino è già stato battuto alla cassa. Se invece la vendita va registrata qui, apri{" "}
+        <Link href="/admin/orders/new" className="font-semibold text-gold-deep underline">
+          Nuovo ordine
+        </Link>{" "}
+        — accredita gli stessi punti e mette in conto anche merce e incasso.
+      </p>
 
       {/* The other half of the counter workflow. Crediting points needs a card,
           and until now nobody at the till could make one — account creation was

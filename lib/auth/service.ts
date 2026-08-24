@@ -305,13 +305,21 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
     .where(eq(users.id, user.id));
   await createSession(user.id);
 
-  await logAudit({
-    actor: actorOf(user),
-    action: "auth.login",
-    entity: "user",
-    entityId: user.id,
-    summary: `Accesso di ${user.username}`,
-  });
+  // Back-office sign-ins only. The activity log exists to answer "who did which
+  // sensitive back-office action", and a row per *customer* login buried that
+  // under routine traffic — kept for two years, and the single biggest category
+  // in the log on any site with real customers. Failed attempts and lockouts are
+  // still recorded for everyone (see `registerFailedAttempt`): those are rare and
+  // are exactly the security signal this log should carry.
+  if (user.role === "admin" || user.role === "staff") {
+    await logAudit({
+      actor: actorOf(user),
+      action: "auth.login",
+      entity: "user",
+      entityId: user.id,
+      summary: `Accesso di ${user.username} (${user.role})`,
+    });
+  }
 
   return { ok: true, userId: user.id };
 }

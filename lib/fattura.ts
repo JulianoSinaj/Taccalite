@@ -23,7 +23,60 @@ export type FiscalIdentity = {
   city: string;
   province: string;
   regime: string; // e.g. "RF01"
+  /** REA registration, free text as typed in Impostazioni — "AN-123456",
+   *  "AN 123456", or just the number. Optional: omitted from the XML when
+   *  blank, which is valid (IscrizioneREA is not a required element). */
+  rea?: string;
 };
+
+/**
+ * Parse the free-text REA setting into the two fields FatturaPA wants.
+ *
+ * `business.rea` was collected on the settings page and read by nothing at all —
+ * not even by this file, which is the one document that has a slot for it. The
+ * shop types it in whatever shape it appears on their visura, so accept the
+ * common ones: a two-letter chamber-of-commerce office code and a number, in
+ * either order, with any separator.
+ *
+ * Returns null when there is no usable number, so a half-filled setting is
+ * omitted rather than emitted as an invalid element.
+ */
+export function parseRea(
+  raw: string | undefined,
+  fallbackProvince: string,
+): { ufficio: string; numero: string } | null {
+  const value = (raw ?? "").trim();
+  if (!value) return null;
+  const number = value.match(/\d[\d.]*/);
+  if (!number) return null;
+  // A standalone two-letter token, so "REA AN-123456" resolves to AN rather
+  // than to the first two letters of the word "REA".
+  const office = value.match(/(?:^|[^A-Za-z])([A-Za-z]{2})(?![A-Za-z])/);
+  const ufficio = (office?.[1] ?? fallbackProvince).toUpperCase();
+  // The office code is a province code; without one on either the setting or
+  // the registered address there is nothing valid to emit.
+  if (!/^[A-Z]{2}$/.test(ufficio)) return null;
+  return { ufficio, numero: number[0].replace(/\./g, "") };
+}
+
+/**
+ * The `IscrizioneREA` element, or nothing.
+ *
+ * Sits between `Sede` and `Contatti` — the sequence in `CedentePrestatore` is
+ * fixed by the schema, so the position is not cosmetic. `StatoLiquidazione` is
+ * mandatory once the element is present; "LN" (non in liquidazione) is the only
+ * state this platform can honestly assert about a trading shop.
+ */
+function reaBlock(fiscal: FiscalIdentity): string {
+  const rea = parseRea(fiscal.rea, fiscal.province);
+  if (!rea) return "";
+  return `
+      <IscrizioneREA>
+        <Ufficio>${xml(rea.ufficio)}</Ufficio>
+        <NumeroREA>${xml(rea.numero)}</NumeroREA>
+        <StatoLiquidazione>LN</StatoLiquidazione>
+      </IscrizioneREA>`;
+}
 
 /** Map a free-text regime to a FatturaPA RegimeFiscale code (best effort). */
 function regimeCode(regime: string): string {
@@ -309,7 +362,7 @@ function renderDocument(p: {
         <Comune>${xml(fiscal.city)}</Comune>
         <Provincia>${xml(fiscal.province)}</Provincia>
         <Nazione>${idPaese}</Nazione>
-      </Sede>
+      </Sede>${reaBlock(fiscal)}
     </CedentePrestatore>
     <CessionarioCommittente>
       <DatiAnagrafici>${

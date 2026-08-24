@@ -3,6 +3,7 @@ import { AdminHeader, Panel, NewButton } from "@/components/admin/ui";
 import { DeleteForm } from "@/components/admin/ActionForm";
 import { adminGetShops } from "@/lib/admin/queries";
 import { isAdmin } from "@/lib/auth/session";
+import { shopScope } from "@/lib/admin/scope";
 import { deleteShop } from "@/lib/admin/actions";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,10 @@ function ServiceTag({ on, label }: { on: boolean; label: string }) {
 }
 
 export default async function AdminShops() {
-  const [shops, admin] = await Promise.all([adminGetShops(), isAdmin()]);
+  const [all, admin, scope] = await Promise.all([adminGetShops(), isAdmin(), shopScope()]);
+  // Only the sede the operator works at — the editor now refuses the others, so
+  // listing them would only offer a link to a `notFound()`.
+  const shops = scope ? all.filter((s) => s.slug === scope) : all;
 
   return (
     <div>

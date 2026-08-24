@@ -212,6 +212,28 @@ const KNOWN: {
     control: "boolean",
     default: true,
   },
+  {
+    // Read by `runMaintenance` since audit retention shipped, and absent from
+    // this list — so the one control over how long the activity log survives
+    // was reachable only through the raw JSON editor at the bottom of the page.
+    key: "audit.retentionDays",
+    label: "Conservazione registro attività (giorni)",
+    help: "Dopo quanti giorni le voci del registro attività vengono eliminate dalla manutenzione automatica. 730 giorni (due anni) coprono le domande fiscali a cui il registro serve a rispondere. Imposta 0 per non eliminare mai nulla.",
+    control: "number",
+    default: 730,
+    min: 0,
+    step: 30,
+  },
+  {
+    // Same story: read by `runMaintenance`, never editable here.
+    key: "analytics.retentionDays",
+    label: "Conservazione statistiche visite (giorni)",
+    help: "Dopo quanti giorni le visite registrate vengono eliminate. Sono dati senza cookie e senza informazioni personali, ma la tabella cresce all'infinito se non si pota. Imposta 0 per conservarle per sempre.",
+    control: "number",
+    default: 365,
+    min: 0,
+    step: 30,
+  },
   // ── Sito pubblico ──
   {
     key: "home.today",

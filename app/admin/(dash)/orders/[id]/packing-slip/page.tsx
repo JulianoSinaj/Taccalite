@@ -3,6 +3,7 @@ import { BackLink, euro, fmtDate } from "@/components/admin/ui";
 import { PrintButton } from "@/components/admin/PrintButton";
 import { adminGetOrder, adminGetShops } from "@/lib/admin/queries";
 import { getSetting } from "@/lib/db/queries";
+import { assertShopScope } from "@/lib/admin/scope";
 import { orderVatBuckets, vatRateLabel, totalImposta } from "@/lib/fiscal";
 
 import { FULFILMENT_LABEL } from "@/lib/fulfilment";
@@ -32,6 +33,10 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
     ]),
   ]);
   if (!data) notFound();
+  // The order detail page has always refused another location's record; this one
+  // did not, so the same customer's name, address, phone and total were one URL
+  // segment further along. Both ends of the same door.
+  await assertShopScope(data.order.shopSlug);
 
   const { order, items } = data;
   const [legalName, vatNumber, address, zip, city, province, shippingVatPct] = business;

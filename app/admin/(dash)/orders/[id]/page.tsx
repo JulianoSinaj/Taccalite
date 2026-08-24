@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, labelCls, BackLink } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, labelCls, BackLink, HistoryLink } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import {
   adminGetOrder,
@@ -15,6 +15,7 @@ import {
   refundOrder,
   resendOrderEmail,
   settleOrderPayment,
+  setOrderInternalNotes,
 } from "@/lib/admin/order-actions";
 import { isAdmin } from "@/lib/auth/session";
 import { getSetting } from "@/lib/db/queries";
@@ -80,6 +81,16 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   // Money still owed on an order that was never charged online. Staff can take
   // it, not just admins — collecting at the counter is the job.
   const canSettle = order.paymentStatus === "unpaid" && order.status !== "cancelled";
+  // Only an order nobody has paid for can be cancelled outright. Once the money
+  // is in, cancelling would restock the goods and leave the takings untouched,
+  // so the way back is a refund — `updateOrderStatus` refuses it server-side and
+  // this stops the option being offered in the first place.
+  const canCancel = order.paymentStatus === "unpaid";
+  // A caparra taken on the booking this order came from is part payment against
+  // it. The total stays whole (that is what the invoice and the VAT are built
+  // on); what it changes is the number the counter has to ask for.
+  const depositCents = fromReservation?.depositPaidAt ? fromReservation.depositCents : 0;
+  const dueCents = Math.max(0, order.totalCents - order.refundedCents - depositCents);
   const canRefund =
     admin && order.paymentStatus === "paid" && order.status !== "refunded" && refundableCents > 0;
   // IVA breakdown reconciled with the money actually kept: line grosses net of
@@ -100,12 +111,17 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
         title={`Ordine ${order.orderNumber}`}
         subtitle={fmtDate(order.createdAt)}
         action={
-          <Link
-            href={`/admin/orders/${order.id}/packing-slip`}
-            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
-          >
-            Documento di consegna
-          </Link>
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Everything the log recorded about this order — the way back the
+                audit page's outward links never had. */}
+            {admin && <HistoryLink id={order.id} />}
+            <Link
+              href={`/admin/orders/${order.id}/packing-slip`}
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+            >
+              Documento di consegna
+            </Link>
+          </div>
         }
       />
       <BackLink href="/admin/orders">Ordini</BackLink>
@@ -282,15 +298,30 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 {order.notes}
               </p>
             )}
-            {order.internalNotes && (
-              <p className="mt-3 rounded-lg bg-gold/10 px-3 py-2 text-sm text-brown-900">
-                <span className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
-                  Nota interna
-                </span>
-                <br />
-                {order.internalNotes}
-              </p>
-            )}
+            {/* Always editable, whatever the money has done. A note changes no
+                amount — the same reasoning that keeps the fiscal identity open
+                after payment — and this is the field an operator reaches for
+                *after* the sale, which is precisely when it used to lock. */}
+            <details className="mt-3 rounded-lg bg-gold/10 px-3 py-2" open={!!order.internalNotes}>
+              <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                Nota interna
+              </summary>
+              <ActionForm action={setOrderInternalNotes} className="mt-2 space-y-2">
+                <input type="hidden" name="id" value={order.id} />
+                <textarea
+                  name="internalNotes"
+                  rows={3}
+                  maxLength={2000}
+                  defaultValue={order.internalNotes ?? ""}
+                  placeholder="Es. il cliente ha chiamato, ritira venerdì"
+                  className={inputCls}
+                />
+                <p className="text-xs text-brown-800/60">
+                  Non viene mai mostrata al cliente né stampata sul documento di consegna.
+                </p>
+                <PendingButton tone="dark">Salva nota</PendingButton>
+              </ActionForm>
+            </details>
 
             {editable ? (
               <details className="mt-4 border-t border-brown-900/10 pt-3">
@@ -331,7 +362,9 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   <option value="pending">In attesa</option>
                   {!canSettle && <option value="paid">Pagato</option>}
                   <option value="fulfilled">Evaso</option>
-                  <option value="cancelled">Annullato</option>
+                  {(canCancel || order.status === "cancelled") && (
+                    <option value="cancelled">Annullato</option>
+                  )}
                   {order.status === "refunded" && <option value="refunded">Rimborsato</option>}
                 </select>
               </div>
@@ -427,8 +460,15 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             {canSettle && (
               <div className="mb-4 border border-gold-dark/40 bg-gold/10 p-4">
                 <p className="font-display text-base text-brown-950">
-                  Da incassare: {euro(order.totalCents - order.refundedCents)}
+                  Da incassare: {euro(dueCents)}
                 </p>
+                {depositCents > 0 && (
+                  <p className="mt-1 text-xs font-semibold text-brown-900">
+                    Totale {euro(order.totalCents - order.refundedCents)} meno l&apos;acconto di{" "}
+                    {euro(depositCents)} già versato con la prenotazione{" "}
+                    {fromReservation?.reference}.
+                  </p>
+                )}
                 <p className="mt-1 mb-3 text-xs text-brown-800/60">
                   {PAYMENT_METHOD_LABEL[order.paymentMethod]}
                   {order.paymentMethod === "card"

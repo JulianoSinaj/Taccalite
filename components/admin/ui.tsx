@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ScrollText } from "lucide-react";
 
 /** "← Back to <section>" link above a detail/create page's header. */
 export function BackLink({ href, children }: { href: string; children: ReactNode }) {
@@ -11,6 +11,26 @@ export function BackLink({ href, children }: { href: string; children: ReactNode
     >
       <ArrowLeft className="size-4" />
       {children}
+    </Link>
+  );
+}
+
+/**
+ * "Cronologia" — everything the activity log recorded about one record.
+ *
+ * The log has always been able to link *out* to an order, product or booking.
+ * Nothing pointed back, and no filter could express "this record", so answering
+ * "who changed this price?" meant copying an id into a search box. Admin-only,
+ * like the log itself, so the caller decides whether to render it.
+ */
+export function HistoryLink({ id, className = "" }: { id: string; className?: string }) {
+  return (
+    <Link
+      href={`/admin/audit?record=${encodeURIComponent(id)}`}
+      className={`inline-flex items-center gap-1.5 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950 print:hidden ${className}`}
+    >
+      <ScrollText className="size-3.5" />
+      Cronologia
     </Link>
   );
 }

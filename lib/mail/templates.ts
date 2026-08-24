@@ -397,6 +397,49 @@ export function reservationStatusEmail(
 }
 
 /** Sent when a customer's balance first crosses one or more reward thresholds. */
+/**
+ * Sent when the shop marks a redemption handed over, or cancels it.
+ *
+ * `updateRedemptionStatus` moved the points and the reward stock and told the
+ * customer nothing — so somebody who redeemed 200 points saw them come back one
+ * day with no explanation, which reads as a bug in the loyalty scheme rather
+ * than as a shop that ran out.
+ */
+export function redemptionStatusEmail(
+  name: string,
+  rewardName: string,
+  status: "fulfilled" | "cancelled",
+  points: number,
+): Built {
+  const done = status === "fulfilled";
+  const body = done
+    ? `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(name)}, il tuo premio <strong>${esc(rewardName)}</strong> è stato consegnato.
+      Grazie per la fedeltà — e buon appetito!
+    </p>`
+    : `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(name)}, purtroppo non siamo riusciti a consegnarti il premio
+      <strong>${esc(rewardName)}</strong>. Ti abbiamo riaccreditato i
+      <strong>${points} punti</strong>: puoi usarli subito per un altro premio.
+    </p>
+    <p style="margin:22px 0 0;">
+      <a href="${absoluteUrl("/account")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Vedi i premi disponibili</a>
+    </p>`;
+  return {
+    subject: done ? "Il tuo premio è stato consegnato" : "Premio non disponibile — punti riaccreditati",
+    html: layout({
+      heading: done ? "Premio consegnato" : "Punti riaccreditati",
+      body,
+      preheader: done ? esc(rewardName) : `${points} punti tornati sulla tua tessera`,
+    }),
+    text: done
+      ? `Ciao ${name}, il tuo premio ${rewardName} è stato consegnato. Grazie!`
+      : `Ciao ${name}, non siamo riusciti a consegnarti il premio ${rewardName}. Ti abbiamo riaccreditato ${points} punti.`,
+  };
+}
+
 export function rewardUnlockedEmail(
   name: string,
   unlocked: { name: string; points: number }[],
@@ -490,6 +533,83 @@ export function porchettaReadyEmail(
     subject: "La tua porchetta è pronta per il ritiro",
     html: layout({ heading: "La porchetta è pronta! 🔥", body, preheader: "Passa a ritirarla in bottega" }),
     text: `Ciao ${name}, la tua porchetta${qty} del ${date} è pronta per il ritiro${whereText}. Ti aspettiamo!`,
+  };
+}
+
+/**
+ * Sent from the closures screen when a day the shop is shutting already has
+ * bookings on it.
+ *
+ * Deliberately does NOT announce a cancellation. The booking stays live: what
+ * happens to it — moved, refunded, or the customer simply comes another day — is
+ * a conversation, and a mass email is the wrong place to decide it. So this says
+ * the date is not available and asks them to get in touch.
+ */
+export function closureNoticeEmail(d: {
+  reference: string;
+  name: string;
+  date: string;
+  time: string | null;
+  shopName: string;
+  reason: string | null;
+}): Built {
+  const when = `${d.date}${d.time ? ` alle ${d.time}` : ""}`;
+  const why = d.reason ? ` (${d.reason})` : "";
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(d.name)}, ci dispiace: il <strong>${esc(when)}</strong> resteremo chiusi${esc(why)},
+      quindi non potremo accoglierti come previsto da ${esc(d.shopName)}.
+    </p>
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      La tua prenotazione <strong>${esc(d.reference)}</strong> è ancora registrata: scrivici o
+      chiamaci e troviamo insieme un’altra data. Se avevi versato un acconto, te lo
+      riconosciamo per intero sulla nuova prenotazione.
+    </p>`;
+  return {
+    subject: `Siamo chiusi il ${d.date} — spostiamo la tua prenotazione?`,
+    html: layout({
+      heading: "Cambio di programma",
+      body,
+      preheader: `La bottega è chiusa il ${d.date}`,
+    }),
+    text: `Ciao ${d.name}, il ${when} resteremo chiusi${why}, quindi non potremo accoglierti da ${d.shopName}.
+
+La tua prenotazione ${d.reference} è ancora registrata: contattaci e troviamo un'altra data. Un eventuale acconto ti viene riconosciuto per intero.`,
+  };
+}
+
+/**
+ * "A domani" for a table booked tomorrow.
+ *
+ * Porchetta pre-orders have had a reminder since the beginning; table bookings
+ * had none, which is the wrong way round — a forgotten porchetta is meat the
+ * shop still sells to somebody else, a forgotten table is an empty table for the
+ * whole service. Includes the cancellation ask, because the point of the message
+ * is to recover the covers when the answer is no.
+ */
+export function tableReminderEmail(d: {
+  reference: string;
+  name: string;
+  date: string;
+  time: string | null;
+  guests: number | null;
+  shopName: string;
+}): Built {
+  const when = `${d.date}${d.time ? ` alle ${d.time}` : ""}`;
+  const party = d.guests ? ` per ${d.guests} ${d.guests === 1 ? "persona" : "persone"}` : "";
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(d.name)}, ti aspettiamo <strong>${esc(when)}</strong>${esc(party)} da
+      ${esc(d.shopName)}. Il riferimento della prenotazione è
+      <strong>${esc(d.reference)}</strong>.
+    </p>
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Se non riesci a venire, faccelo sapere: liberiamo il tavolo per qualcun altro.
+    </p>`;
+  return {
+    subject: `A domani${d.time ? ` alle ${d.time}` : ""} — ${d.shopName}`,
+    html: layout({ heading: "Ci vediamo domani", body, preheader: esc(when) }),
+    text: `Ciao ${d.name}, ti aspettiamo ${when}${party} da ${d.shopName} (rif. ${d.reference}). Se non riesci a venire, faccelo sapere: liberiamo il tavolo.`,
   };
 }
 

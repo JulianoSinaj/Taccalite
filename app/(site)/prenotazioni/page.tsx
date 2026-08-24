@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Clock, Flame, MapPin, Phone } from "lucide-react";
 import ReservationForm from "@/components/ReservationForm";
 import Reveal from "@/components/Reveal";
-import { getShops, getClosures } from "@/lib/db/queries";
+import { getShops, getClosures, getSetting } from "@/lib/db/queries";
+import { weekdayNameIt } from "@/lib/reservations";
 import { dateInRome } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,18 @@ export const metadata: Metadata = {
 };
 
 export default async function PrenotazioniPage() {
-  const [shops, closures] = await Promise.all([getShops(), getClosures()]);
+  // The roast day and its deadline are settings (`porchetta.day`,
+  // `porchetta.cutoffDay`), and this page asserted them as prose — so an admin
+  // who moved either changed the rule everywhere except the page that states it.
+  // `/porchetta` already derives them; these are the sentences it left behind.
+  const [shops, closures, dayKey, cutoffKey] = await Promise.all([
+    getShops(),
+    getClosures(),
+    getSetting<string>("porchetta.day", "saturday"),
+    getSetting<string>("porchetta.cutoffDay", "friday"),
+  ]);
+  const roastDay = weekdayNameIt(dayKey, "sabato");
+  const cutoffDay = weekdayNameIt(cutoffKey, "venerdì");
   const porchettaShop = shops.find((s) => s.porchettaEnabled) ?? shops[0];
   // The date floor belongs to the shop's timezone, not the visitor's browser.
   const today = dateInRome();
@@ -61,7 +73,7 @@ export default async function PrenotazioniPage() {
                   <Flame className="size-4" />
                 </span>
                 <p className="text-[0.9375rem] text-brown-700">
-                  La porchetta del sabato si prenota entro il venerdì.
+                  La porchetta del {roastDay} si prenota entro il {cutoffDay}.
                 </p>
               </div>
             </div>
@@ -109,12 +121,12 @@ export default async function PrenotazioniPage() {
                   del sabato
                 </h3>
                 <p className="mt-4 flex-1 leading-relaxed text-cream/70">
-                  Esce calda dal forno ogni sabato mattina
+                  Esce calda dal forno ogni {roastDay} mattina
                   {porchettaShop ? ` presso ${porchettaShop.name}` : ""}, in quantità limitate.
-                  Prenotala entro il venerdì per essere sicuro di trovarla.
+                  Prenotala entro il {cutoffDay} per essere sicuro di trovarla.
                 </p>
                 <p className="mt-8 border-t border-cream/10 pt-6 text-[11px] font-bold tracking-[0.25em] text-gold uppercase">
-                  Sfornata il sabato · prenota entro venerdì
+                  Sfornata il {roastDay} · prenota entro {cutoffDay}
                 </p>
               </div>
             </Reveal>

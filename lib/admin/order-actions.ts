@@ -13,6 +13,7 @@ import {
   manualOrderInput,
   orderDetailsInput,
   orderFiscalInput,
+  orderNotesInput,
 } from "@/lib/validation/admin";
 import {
   getShopBySlug,
@@ -35,7 +36,7 @@ import {
 import { needsAddress, FULFILMENT_LABEL } from "@/lib/fulfilment";
 import { PAYMENT_INSTRUMENT_LABEL, settlesOnHandover } from "@/lib/payments/methods";
 import { resolvePickupSlot, formatSlotLabel } from "@/lib/pickup-slots";
-import { applyStockChange, consumeBatchesFefo } from "@/lib/stock";
+import { applyStockChange, consumeBatchesFefo, stockUnitsForLine } from "@/lib/stock";
 import { validateDiscount, recordDiscountUse, releaseDiscountUseByCode } from "@/lib/discounts";
 import { addPoints } from "@/lib/loyalty";
 import { logAudit } from "@/lib/audit";
@@ -208,14 +209,10 @@ const lineValues = (orderId: string, lines: ManualLine[]) =>
   }));
 
 /**
- * Stock to remove for a line.
- *
- * A product priced per kg has no meaningful unit count, and `products.stock` is
- * an integer, so a 0,35 kg sale can't be represented as a decrement. Rather than
- * invent a number, weight lines don't move stock automatically — the operator
- * adjusts the whole form's remaining weight by hand. Returns 0 for those.
+ * Stock to remove for a line — the shared rule, so the sale and any later
+ * cancellation of it move the same number of units. See `stockUnitsForLine`.
  */
-const stockUnitsFor = (l: ManualLine) => (l.weightKg != null ? 0 : l.quantity);
+const stockUnitsFor = (l: ManualLine) => stockUnitsForLine(l);
 
 /**
  * Create an order by hand from the back-office (counter / phone sale). Prices,
@@ -513,7 +510,9 @@ export async function updateOrderDetails(_prev: ActionState, fd: FormData): Prom
           ? { address: d.address ?? "", city: d.city ?? "", zip: d.zip ?? "" }
           : null,
         notes: d.notes ?? null,
-        internalNotes: d.internalNotes ?? null,
+        // `internalNotes` deliberately absent: it has its own action, which
+        // works after settlement too. Writing it here as well would wipe the
+        // note whenever this form is saved without the (now removed) field.
         updatedAt: new Date(),
       })
       .where(eq(orders.id, d.id));
@@ -541,6 +540,47 @@ export async function updateOrderDetails(_prev: ActionState, fd: FormData): Prom
         ? `Ordine aggiornato. Il codice ${recalc.droppedDiscountCode} non è più applicabile ed è stato rimosso.`
         : "Ordine aggiornato.",
     );
+  });
+}
+
+/**
+ * Staff-only annotations, editable for the whole life of the order.
+ *
+ * These used to ride along on `updateOrderDetails`, which `assertEditable`
+ * blocks the moment the money settles — so on every real order, the note an
+ * operator most wants to leave ("il cliente ha chiamato, ritira venerdì") could
+ * be read on the page and not written. The reasoning that freezes amounts does
+ * not reach here: a note changes no total, exactly like the fiscal identity
+ * below, which is left editable after payment for the same reason.
+ */
+export async function setOrderInternalNotes(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const d = parseForm(orderNotesInput, fd);
+    const order = await mustFindOrder(d.id);
+
+    if ((order.internalNotes ?? null) === d.internalNotes) return ok("Nessuna modifica.");
+
+    await db
+      .update(orders)
+      .set({ internalNotes: d.internalNotes, updatedAt: new Date() })
+      .where(eq(orders.id, d.id));
+
+    await logAudit({
+      actor,
+      action: "order.internal_notes",
+      entity: "order",
+      entityId: order.id,
+      summary: d.internalNotes
+        ? `Ordine ${order.orderNumber}: nota interna aggiornata`
+        : `Ordine ${order.orderNumber}: nota interna rimossa`,
+      // The previous text, not the new one — the log is where you look when a
+      // note reads wrong and you want what it said before.
+      meta: { previous: order.internalNotes ?? "" },
+    });
+
+    revalidatePath(`/admin/orders/${d.id}`);
+    return ok(d.internalNotes ? "Nota interna salvata." : "Nota interna rimossa.");
   });
 }
 
@@ -692,6 +732,21 @@ export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promi
     if ((d.status === "paid" || d.paymentStatus === "paid") && order.paymentStatus !== "paid") {
       throw new ActionError(
         'Per segnare un ordine come pagato usa "Registra incasso": serve sapere se il pagamento è avvenuto in contanti o con il POS, perché finisce sulla fattura.',
+      );
+    }
+
+    // Cancelling a settled order used to be allowed, and it moved the goods
+    // without moving the money: the restock below ran, the coupon was released
+    // and the customer was emailed a cancellation, while `paymentStatus` stayed
+    // "paid" — so the sale kept counting in the takings, in the 30-day KPI and
+    // in the IVA a debito of a period that may already have been declared. The
+    // meat came back and the money did not. Same rule as `refunded` above: money
+    // is returned through the one button that actually returns it.
+    if (d.status === "cancelled" && order.paymentStatus !== "unpaid") {
+      throw new ActionError(
+        order.paymentStatus === "refunded"
+          ? "Questo ordine è già stato rimborsato: non può essere annullato di nuovo."
+          : 'Questo ordine è già stato incassato: annullarlo rimetterebbe la merce a magazzino lasciando i soldi nei conti. Usa "Rimborsa" — restituisce il pagamento, ripristina la giacenza e avvisa il cliente.',
       );
     }
 

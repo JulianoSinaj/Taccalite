@@ -29,7 +29,9 @@ const COMMANDS: Cmd[] = [
   { label: "Email / Outbox", href: "/admin/outbox", group: "Vai a" },
   { label: "Sicurezza (2FA)", href: "/admin/security", group: "Vai a" },
   { label: "Statistiche", href: "/admin/analytics", group: "Vai a", adminOnly: true },
+  { label: "Chiusura di cassa", href: "/admin/reports/cassa", group: "Vai a", keywords: "contanti pos incasso quadratura fondo cassa giornata" },
   { label: "Riepilogo IVA", href: "/admin/reports/iva", group: "Vai a", adminOnly: true, keywords: "fiscale fattura" },
+  { label: "Registro fatture", href: "/admin/reports/fatture", group: "Vai a", adminOnly: true, keywords: "fatturazione elettronica sdi xml nota di credito" },
   { label: "Utenti", href: "/admin/users", group: "Vai a", adminOnly: true },
   { label: "Registro attività", href: "/admin/audit", group: "Vai a", adminOnly: true },
   { label: "Impostazioni", href: "/admin/settings", group: "Vai a", adminOnly: true },
@@ -47,7 +49,7 @@ const COMMANDS: Cmd[] = [
 
 /** A record found by `/api/admin/search`, as opposed to a static destination. */
 type Hit = {
-  kind: "order" | "reservation" | "customer" | "product";
+  kind: "order" | "reservation" | "customer" | "product" | "discount";
   id: string;
   href: string;
   title: string;
@@ -59,6 +61,7 @@ const HIT_GROUP: Record<Hit["kind"], string> = {
   reservation: "Prenotazione",
   customer: "Cliente",
   product: "Prodotto",
+  discount: "Codice sconto",
 };
 
 export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {

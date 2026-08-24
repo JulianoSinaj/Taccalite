@@ -36,6 +36,27 @@ export async function pendingStockNotificationCount(productId: string): Promise<
 }
 
 /**
+ * Who is waiting, oldest request first.
+ *
+ * The product page printed "N in attesa di riassortimento" and stopped there —
+ * a number with no way to see who it stood for and no way to act on it. Worth
+ * something on its own too: an operator about to discontinue a line can see
+ * there are eleven people still asking for it.
+ */
+export async function listPendingStockNotifications(productId: string, limit = 50) {
+  return db
+    .select({
+      id: stockNotifications.id,
+      email: stockNotifications.email,
+      createdAt: stockNotifications.createdAt,
+    })
+    .from(stockNotifications)
+    .where(and(eq(stockNotifications.productId, productId), isNull(stockNotifications.notifiedAt)))
+    .orderBy(stockNotifications.createdAt)
+    .limit(limit);
+}
+
+/**
  * Notify everyone waiting on a product and mark their request done. Best-effort:
  * called after a restock from admin. Never throws into the caller.
  */

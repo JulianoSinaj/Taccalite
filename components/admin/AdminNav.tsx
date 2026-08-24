@@ -18,6 +18,7 @@ import {
   Newspaper,
   Package,
   Receipt,
+  Wallet,
   TicketPercent,
   ScanLine,
   ScrollText,
@@ -87,7 +88,11 @@ const GROUPS: Group[] = [
   {
     title: "Sistema",
     items: [
+      // Not adminOnly: closing the till is a counter job, and the page is
+      // scoped to the operator's own sede like every other list.
+      { href: "/admin/reports/cassa", label: "Chiusura di cassa", icon: Wallet },
       { href: "/admin/reports/iva", label: "Riepilogo IVA", icon: Receipt, adminOnly: true },
+      { href: "/admin/reports/fatture", label: "Registro fatture", icon: FileText, adminOnly: true },
       { href: "/admin/analytics", label: "Statistiche", icon: BarChart3, adminOnly: true },
       { href: "/admin/outbox", label: "Email", icon: Mail },
       { href: "/admin/audit", label: "Registro attività", icon: ScrollText, adminOnly: true },

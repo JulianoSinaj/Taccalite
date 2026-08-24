@@ -20,6 +20,8 @@ import {
   getRecentOrders,
 } from "@/lib/admin/queries";
 import { smtpConfigured, stripeConfigured } from "@/lib/env";
+import { shopScope } from "@/lib/admin/scope";
+import { adminGetShops } from "@/lib/admin/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -40,12 +42,19 @@ function DeltaBadge({ d }: { d: { pct: number; up: boolean } | null }) {
 }
 
 export default async function AdminDashboard() {
-  const [s, insights, todayReservations, recentOrders] = await Promise.all([
-    getDashboardStats(),
-    getDashboardInsights(),
-    getTodayReservations(),
-    getRecentOrders(6),
+  // "La tua giornata" was everybody's: every figure on this page was computed
+  // across the whole business, so an operator confined to one location opened it
+  // to the other shop's takings, bookings and recent orders. The lists already
+  // enforced the boundary; the summary of those same lists did not.
+  const scope = await shopScope();
+  const [s, insights, todayReservations, recentOrders, shops] = await Promise.all([
+    getDashboardStats(scope),
+    getDashboardInsights(scope),
+    getTodayReservations(scope),
+    getRecentOrders(6, scope),
+    scope ? adminGetShops() : Promise.resolve([]),
   ]);
+  const scopedShopName = scope ? (shops.find((sh) => sh.slug === scope)?.name ?? scope) : null;
 
   const series = insights.dailySeries;
   const maxCents = Math.max(1, ...series.map((d) => d.cents));
@@ -129,7 +138,14 @@ export default async function AdminDashboard() {
 
   return (
     <div>
-      <AdminHeader title="Dashboard" subtitle="La tua giornata: incassi, lavoro da fare e attività recente" />
+      <AdminHeader
+        title="Dashboard"
+        subtitle={
+          scopedShopName
+            ? `${scopedShopName}: incassi, lavoro da fare e attività recente`
+            : "La tua giornata: incassi, lavoro da fare e attività recente"
+        }
+      />
 
       {/* Money row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

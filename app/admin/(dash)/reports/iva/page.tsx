@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminHeader, Panel, euro, inputCls, labelCls } from "@/components/admin/ui";
-import { getVatReport, adminGetShops } from "@/lib/admin/queries";
+import { getVatReport, adminGetShops, getDepositMovements } from "@/lib/admin/queries";
 import { getSetting } from "@/lib/db/queries";
 import { isAdmin } from "@/lib/auth/session";
 import { vatRateLabel, totalImposta, type VatBucket } from "@/lib/fiscal";
@@ -68,11 +68,12 @@ export default async function VatReport({ searchParams }: SP) {
   // a plain helper so no `new Date()` runs in the component body.
   const period = vatPeriod({ da, a, periodo });
 
-  const [report, legalName, vatNumber, shops] = await Promise.all([
+  const [report, legalName, vatNumber, shops, deposits] = await Promise.all([
     getVatReport(period.from, period.toExclusive),
     getSetting<string>("business.legalName", "Norcineria Taccalite"),
     getSetting<string>("business.vatNumber", ""),
     adminGetShops(),
+    getDepositMovements(period.from, period.toExclusive),
   ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
 
@@ -153,8 +154,14 @@ export default async function VatReport({ searchParams }: SP) {
             <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="font-display text-lg text-brown-950">Vendite</h2>
               {/* Drill-down: the orders behind the numbers, same window. */}
+              {/* `stato=incassati` + `data=incasso`, so the list applies this
+                  report's own two rules: money actually taken, dated by when it
+                  settled. It used to be `stato=paid&da=…`, which filtered on
+                  `status = 'paid'` (dropping everything since marked Evaso) over
+                  `created_at` (a different window) — a drill-down that showed a
+                  fraction of the orders behind the totals above it. */}
               <Link
-                href={`/admin/orders?stato=paid&da=${period.fromISO}&a=${period.toISO}`}
+                href={`/admin/orders?stato=incassati&data=incasso&da=${period.fromISO}&a=${period.toISO}`}
                 className="text-[12px] font-bold tracking-widest text-gold-deep uppercase hover:underline"
               >
                 Vedi gli ordini →
@@ -183,6 +190,59 @@ export default async function VatReport({ searchParams }: SP) {
                   </div>
                 ))}
               </div>
+            </Panel>
+          )}
+
+          {/* Deposit money moved in the period. Recorded on bookings, and until
+              now visible on no report at all — least of all a forfeited caparra,
+              which is money the business definitively kept. Shown beside the VAT
+              totals and explicitly excluded from them: a caparra confirmatoria
+              is outside the VAT base until it is applied to a price, and a
+              forfeited one is compensation, so assigning either an aliquota here
+              would be a guess dressed as a figure. */}
+          {(deposits.collected.count > 0 || deposits.forfeited.count > 0) && (
+            <Panel>
+              <h2 className="font-display mb-1 text-lg text-brown-950">
+                Acconti sulle prenotazioni
+              </h2>
+              <p className="mb-3 text-xs text-brown-800/60">
+                Fuori dai totali IVA qui sopra. Da valutare col commercialista: la caparra
+                confirmatoria resta fuori campo IVA finché non è imputata al prezzo, mentre quella
+                trattenuta dopo un{" "}
+                <Link
+                  href="/admin/reservations?stato=no_show"
+                  className="font-semibold text-gold-deep underline"
+                >
+                  mancato arrivo
+                </Link>{" "}
+                ha natura risarcitoria.
+              </p>
+              <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-lg bg-cream/60 px-4 py-3">
+                  <dt className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+                    Incassati nel periodo
+                  </dt>
+                  <dd className="font-display mt-1 text-xl font-bold tabular-nums text-brown-950">
+                    {euro(deposits.collected.cents)}
+                    <span className="ml-2 text-xs font-normal text-brown-800/60">
+                      su {deposits.collected.count}{" "}
+                      {deposits.collected.count === 1 ? "prenotazione" : "prenotazioni"}
+                    </span>
+                  </dd>
+                </div>
+                <div className="rounded-lg bg-cream/60 px-4 py-3">
+                  <dt className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+                    Trattenuti (non presentati)
+                  </dt>
+                  <dd className="font-display mt-1 text-xl font-bold tabular-nums text-brown-950">
+                    {euro(deposits.forfeited.cents)}
+                    <span className="ml-2 text-xs font-normal text-brown-800/60">
+                      su {deposits.forfeited.count}{" "}
+                      {deposits.forfeited.count === 1 ? "prenotazione" : "prenotazioni"}
+                    </span>
+                  </dd>
+                </div>
+              </dl>
             </Panel>
           )}
 

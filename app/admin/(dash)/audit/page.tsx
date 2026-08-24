@@ -30,6 +30,10 @@ const ENTITY_LABELS: Record<string, string> = {
   closure: "Chiusure",
   pickup_slot: "Fasce di ritiro",
   delivery_zone: "Zone di consegna",
+  // Written by `content-actions` since the storefront copy became editable, and
+  // the one entity with no label here — so those rows offered a raw slug as
+  // their filter chip.
+  site_content: "Testi del sito",
 };
 
 /**
@@ -61,6 +65,7 @@ const ENTITY_HREF: Record<string, (id: string) => string | null> = {
   campaign: () => "/admin/newsletter",
   segment: () => "/admin/newsletter",
   redemption: () => "/admin/loyalty",
+  site_content: () => "/admin/contenuti",
 };
 
 /** Render a logged `meta` payload as readable key/value pairs. */
@@ -89,6 +94,7 @@ type SP = {
   searchParams: Promise<{
     entity?: string;
     attore?: string;
+    record?: string;
     q?: string;
     da?: string;
     a?: string;
@@ -119,7 +125,11 @@ export default async function AuditPage({ searchParams }: SP) {
     <div>
       <AdminHeader
         title="Registro attività"
-        subtitle={`${total} operazioni registrate${filtered ? " nel filtro attuale" : ""}`}
+        subtitle={
+          filters.record
+            ? `${total} operazioni su un singolo record`
+            : `${total} operazioni registrate${filtered ? " nel filtro attuale" : ""}`
+        }
         action={
           <a
             href={`/api/admin/export/audit${filterQuery(filters)}`}
@@ -139,6 +149,7 @@ export default async function AuditPage({ searchParams }: SP) {
         params={filters}
         searchPlaceholder="Descrizione, azione o id…"
         formId="audit-filters"
+        carry={["record"]}
         facets={[
           { name: "entity", label: "Ambito", options: ENTITY_CHIPS },
           { name: "attore", label: "Autore", options: ACTOR_CHIPS },
@@ -176,6 +187,7 @@ export default async function AuditPage({ searchParams }: SP) {
         labels={{
           entity: { title: "Ambito", format: labelFrom(ENTITY_CHIPS) },
           attore: { title: "Autore", format: labelFrom(ACTOR_CHIPS) },
+          record: { title: "Record", format: (v) => v },
           da: { title: "Dal" },
           a: { title: "Al" },
           q: { title: "Ricerca", format: (v) => `“${v}”` },

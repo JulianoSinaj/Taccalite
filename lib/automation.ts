@@ -11,12 +11,18 @@ import {
   loyaltyAccounts,
   loyaltyTransactions,
   auditLog,
+  pageViews,
 } from "@/lib/db/schema";
 import { deleteExpiredSessions } from "@/lib/auth/session";
 import { deleteExpiredAuthTokens } from "@/lib/auth/tokens";
 import { deleteExpiredRateLimits } from "@/lib/rate-limit";
 import { sendMail, enqueueMail, drainOutbox } from "@/lib/mail/mailer";
-import { porchettaReminderEmail, newsletterBroadcast, ownerDigestEmail } from "@/lib/mail/templates";
+import {
+  porchettaReminderEmail,
+  tableReminderEmail,
+  newsletterBroadcast,
+  ownerDigestEmail,
+} from "@/lib/mail/templates";
 import { getSetting, setSetting } from "@/lib/db/queries";
 import { env } from "@/lib/env";
 import { addPoints } from "@/lib/loyalty";
@@ -37,6 +43,7 @@ import { sweepOrphanedMedia } from "@/lib/media";
  */
 export type CronJobKey =
   | "porchetta-reminders"
+  | "table-reminders"
   | "maintenance"
   | "points-expiry"
   | "owner-digest"
@@ -124,6 +131,67 @@ export async function runPorchettaReminders(today = new Date()): Promise<{ sent:
       // Stamp as reminded unless the send hard-failed (SMTP error) — a queued
       // outbox entry or a real delivery both count as "reminded"; a failure is
       // left NULL to retry next run.
+      if (!res.error) {
+        await db
+          .update(reservations)
+          .set({ remindedAt: new Date() })
+          .where(eq(reservations.id, r.id));
+        sent += 1;
+      }
+    }),
+  );
+  return { sent };
+}
+
+/**
+ * Remind tomorrow's table bookings.
+ *
+ * Porchetta pre-orders have been reminded since the beginning and tables never
+ * were, which is backwards: a forgotten pre-order is meat that gets sold to
+ * someone else, a forgotten table is an empty table for the whole service. Same
+ * idempotence trick as the porchetta job — `remindedAt` is the claim, so a
+ * frequent `job=all` sweep cannot email the same party twice.
+ *
+ * Exactly one day ahead, not "upcoming": a reminder that arrives a week early is
+ * not a reminder.
+ */
+export async function runTableReminders(now = new Date()): Promise<{ sent: number }> {
+  const target = dateInRome(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+  const rows = await db
+    .select()
+    .from(reservations)
+    .where(
+      and(
+        eq(reservations.type, "table"),
+        inArray(reservations.status, ["pending", "confirmed"]),
+        eq(reservations.date, target),
+        isNull(reservations.remindedAt),
+        isNotNull(reservations.email),
+      ),
+    );
+  if (rows.length === 0) return { sent: 0 };
+
+  const shopRows = await db
+    .select()
+    .from(shops)
+    .where(inArray(shops.slug, [...new Set(rows.map((r) => r.shopSlug))]));
+  const shopBySlug = new Map(shopRows.map((s) => [s.slug, s]));
+
+  let sent = 0;
+  await Promise.allSettled(
+    rows.map(async (r) => {
+      const res = await sendMail({
+        to: r.email!,
+        ...tableReminderEmail({
+          reference: r.reference,
+          name: r.name,
+          date: r.date,
+          time: r.time,
+          guests: r.guests,
+          shopName: shopBySlug.get(r.shopSlug)?.name ?? r.shopSlug,
+        }),
+      });
+      // Queued counts as reminded; a hard SMTP failure is left to retry.
       if (!res.error) {
         await db
           .update(reservations)
@@ -321,6 +389,7 @@ export async function runMaintenance(
   outboxDrained: number;
   outboxPruned: number;
   auditPruned: number;
+  pageViewsPruned: number;
   searchIndexesRebuilt: string[];
   mediaDeleted: number;
   mediaBytesFreed: number;
@@ -348,6 +417,19 @@ export async function runMaintenance(
     const res = await db.delete(auditLog).where(lt(auditLog.createdAt, auditCutoff));
     auditPruned = res.rowsAffected;
   }
+  // Page views. This function's own docstring has always said it prunes them,
+  // and it never did — there was no delete, no setting and no return field, so
+  // the one table that grows with traffic rather than with the business grew
+  // without bound. Cookieless and free of personal data, so the retention is
+  // about size rather than privacy; 0 keeps everything.
+  const viewDays = await getSetting<number>("analytics.retentionDays", 365);
+  let pageViewsPruned = 0;
+  if (viewDays > 0) {
+    const viewCutoff = new Date(now.getTime() - viewDays * 24 * 60 * 60 * 1000);
+    const res = await db.delete(pageViews).where(lt(pageViews.createdAt, viewCutoff));
+    pageViewsPruned = res.rowsAffected;
+  }
+
   // Cheap self-heal for the FTS indexes — see lib/admin/search.ts.
   const { rebuilt } = await verifySearchIndexes();
   // Reclaim upload files no record points at any more (replaced product photos,
@@ -361,6 +443,7 @@ export async function runMaintenance(
     outboxDrained: drain.sent,
     outboxPruned: pruned.rowsAffected,
     auditPruned,
+    pageViewsPruned,
     searchIndexesRebuilt: rebuilt,
     mediaDeleted: media.deleted,
     mediaBytesFreed: media.bytesFreed,
@@ -470,6 +553,12 @@ export const CRON_JOBS: CronJob[] = [
     run: (now) => runPorchettaReminders(now),
   },
   {
+    key: "table-reminders",
+    label: "Promemoria tavoli",
+    description: "Ricorda ai clienti il tavolo prenotato per il giorno dopo, così una disdetta arriva in tempo per rivendere il posto.",
+    run: (now) => runTableReminders(now),
+  },
+  {
     key: "owner-digest",
     label: "Riepilogo giornaliero",
     description: "Invia al titolare prenotazioni di oggi, ordini delle ultime 24 h e scorte basse. Una volta al giorno.",
@@ -506,7 +595,7 @@ export const CRON_JOBS: CronJob[] = [
     key: "maintenance",
     label: "Manutenzione",
     description:
-      "Elimina sessioni e link di recupero scaduti, ritenta le email in coda e ripulisce lo storico invii.",
+      "Elimina sessioni e link di recupero scaduti, ritenta le email in coda e pota lo storico invii, il registro attività e le visite oltre la loro conservazione.",
     run: () => runMaintenance(),
   },
 ];

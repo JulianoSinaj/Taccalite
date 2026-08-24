@@ -3,7 +3,7 @@ import { customAlphabet } from "nanoid";
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { orders, orderItems, products } from "@/lib/db/schema";
-import { applyStockChange, consumeBatchesFefo, restoreBatches } from "@/lib/stock";
+import { applyStockChange, consumeBatchesFefo, restoreBatches, stockUnitsForLine } from "@/lib/stock";
 import {
   getShopBySlug,
   getSetting,
@@ -155,6 +155,15 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
       .map((l) => `${l.product.name} (disponibili: ${l.product.stock})`)
       .join(", ");
     throw new Error(`Scorte insufficienti per: ${names}`);
+  }
+
+  // The master switch. "Se disattivo, il negozio è di sola consultazione" is
+  // what Impostazioni promises, and it was true only of the catalogue pages,
+  // which hide the grid: nothing here or in `/api/checkout` ever read the
+  // setting, so a cart already sitting in localStorage checked out perfectly
+  // happily against a shop the owner believed was closed.
+  if (!(await getSetting<boolean>("store.enabled", true))) {
+    throw new Error("Il negozio online non accetta ordini al momento.");
   }
 
   // For pickup, the chosen shop must exist and have the store enabled.
@@ -466,7 +475,9 @@ export async function applyOrderStock(orderId: string, reason: string): Promise<
     const qtyByProduct = new Map<string, number>();
     for (const it of items) {
       if (!it.productId) continue;
-      qtyByProduct.set(it.productId, (qtyByProduct.get(it.productId) ?? 0) + it.quantity);
+      const units = stockUnitsForLine(it);
+      if (units === 0) continue;
+      qtyByProduct.set(it.productId, (qtyByProduct.get(it.productId) ?? 0) + units);
     }
     if (qtyByProduct.size === 0) return true;
 
@@ -789,7 +800,9 @@ export async function restockOrderItems(
     const qtyByProduct = new Map<string, number>();
     for (const it of items) {
       if (!it.productId) continue;
-      qtyByProduct.set(it.productId, (qtyByProduct.get(it.productId) ?? 0) + it.quantity);
+      const units = stockUnitsForLine(it);
+      if (units === 0) continue;
+      qtyByProduct.set(it.productId, (qtyByProduct.get(it.productId) ?? 0) + units);
     }
     for (const [productId, qty] of qtyByProduct) {
       const change = await applyStockChange({ productId, delta: qty, reason, byUserId });

@@ -20,6 +20,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["test/**/*.test.ts"],
+    // Wipes the shared SQLite file before anything opens it — without this the
+    // fixtures accumulate and the suite only passes on its first ever run.
+    globalSetup: ["test/global-setup.ts"],
     env: {
       NODE_ENV: "development",
       DATABASE_URL: "./.vitest-tmp/test.db",

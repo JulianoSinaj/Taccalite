@@ -296,7 +296,11 @@ export default async function AdminNewsletter({ searchParams }: SP) {
         }
       />
 
-      {/* Composer — a new draft, or the campaign named by ?campagna=<id>. */}
+      {/* Composer — a new draft, or the campaign named by ?campagna=<id>.
+          Admin-only, like the subscriber export beside it: writing to the whole
+          mailing list in the shop's name is the least reversible thing on this
+          page, and `campaign-actions` refuses staff server-side. */}
+      {admin && (
       <details className="mb-6" open={!!editing}>
         <summary className="w-fit cursor-pointer inline-flex min-h-11 items-center justify-center rounded-full bg-gold px-5 py-2.5 text-xs font-bold tracking-widest text-on-gold uppercase">
           ✉ {editing ? "Modifica comunicazione" : "Nuova comunicazione"}
@@ -319,9 +323,10 @@ export default async function AdminNewsletter({ searchParams }: SP) {
           )}
         </Panel>
       </details>
+      )}
 
       {/* Campaign history */}
-      {campaigns.length > 0 && (
+      {admin && campaigns.length > 0 && (
         <>
           <h2 className="font-display mt-8 mb-3 text-xl text-brown-950">Comunicazioni</h2>
           <div className="mb-8 space-y-3">

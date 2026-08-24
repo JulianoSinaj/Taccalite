@@ -17,7 +17,13 @@ import {
   ActiveFilters,
   labelFrom,
 } from "@/components/admin/FilterBar";
-import { getReservationsPage, adminGetShops, getSavedViews } from "@/lib/admin/queries";
+import {
+  getReservationsPage,
+  adminGetShops,
+  getSavedViews,
+  getHeldDeposits,
+} from "@/lib/admin/queries";
+import { euro } from "@/components/admin/ui";
 import { reservationFilters, filterQuery } from "@/lib/admin/filters";
 import { BulkBar, BulkCheckbox } from "@/components/admin/BulkBar";
 import { SavedViews } from "@/components/admin/SavedViews";
@@ -28,7 +34,7 @@ import {
   bulkUpdateReservationStatus,
 } from "@/lib/admin/reservation-actions";
 import { isAdmin, getCurrentUser } from "@/lib/auth/session";
-import { shopScope, lockShop } from "@/lib/admin/scope";
+import { shopScope, lockShop, shopChips } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +73,7 @@ type SP = {
 
 export default async function AdminReservations({ searchParams }: SP) {
   const sp = await searchParams;
-  const { stato = "all", negozio = "all", tipo = "all", q = "", da = "", a = "" } = sp;
+  const { stato = "all", tipo = "all", q = "", da = "", a = "" } = sp;
   const page = Number(sp.page) || 1;
   // A staff account assigned to a location is *confined* to it: the facet is
   // forced here rather than merely pre-selected, so editing the query string
@@ -75,26 +81,35 @@ export default async function AdminReservations({ searchParams }: SP) {
   const scope = await shopScope();
   const filters = reservationFilters({ ...sp, negozio: lockShop(sp.negozio, scope) });
   const viewer = await getCurrentUser();
-  const [{ rows, total, pageCount }, shops, admin, views] = await Promise.all([
+  const [{ rows, total, pageCount }, shops, admin, views, deposits] = await Promise.all([
     getReservationsPage({ ...filters, page }),
     adminGetShops(),
     isAdmin(),
     viewer ? getSavedViews(viewer.id, BASE) : Promise.resolve([]),
+    // Caparre were editable per booking and totalled nowhere, so "quanto
+    // abbiamo in acconti?" had no answer short of adding up rows by eye.
+    getHeldDeposits(scope),
   ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
 
   // All active filters, so the filter chrome and pagination preserve one another.
-  const current = { stato, negozio, tipo, q, da, a };
-  const SHOP_CHIPS = [
-    { value: "all", label: "Tutte le sedi" },
-    ...shops.map((s) => ({ value: s.slug, label: s.name })),
-  ];
+  // The locked shop, not the requested one — see the same note on the orders
+  // list. A chip that highlights without changing the results is worse than one
+  // that isn't there.
+  const current = { stato, negozio: filters.negozio ?? "all", tipo, q, da, a };
+  const SHOP_CHIPS = shopChips(shops, scope);
 
   return (
     <div>
       <AdminHeader
         title="Prenotazioni"
-        subtitle={`${total} richieste`}
+        subtitle={
+          deposits.cents > 0
+            ? `${total} richieste · ${euro(deposits.cents)} di acconti trattenuti su ${deposits.count} ${
+                deposits.count === 1 ? "prenotazione" : "prenotazioni"
+              }`
+            : `${total} richieste`
+        }
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Link
@@ -378,7 +393,7 @@ export default async function AdminReservations({ searchParams }: SP) {
         basePath="/admin/reservations"
         page={page}
         pageCount={pageCount}
-        params={{ stato, negozio, tipo, q, da, a }}
+        params={current}
       />
     </div>
   );

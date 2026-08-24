@@ -6,6 +6,7 @@ import { outboxFilters } from "@/lib/admin/filters";
 import { retryOutboxEmail, retryAllFailed } from "@/lib/admin/outbox-actions";
 import { OUTBOX_MAX_ATTEMPTS } from "@/lib/mail/mailer";
 import { smtpConfigured } from "@/lib/env";
+import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,16 @@ export default async function AdminOutbox({ searchParams }: SP) {
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
   const filters = outboxFilters(sp);
-  const { rows, total, failed, exhausted, pageCount } = await getOutboxPage({ ...filters, page });
+  // Message bodies are admin-only. Every password-reset and email-verification
+  // link the platform has ever sent is stored here verbatim (`sendMail` writes
+  // the body before delivering it), so rendering them to staff handed anyone at
+  // the counter a way into the owner's account: request a reset for the owner's
+  // address, open this page, follow the link. Staff keep the list itself —
+  // recipient, subject, status and error are what the retry workflow needs.
+  const [{ rows, total, failed, exhausted, pageCount }, admin] = await Promise.all([
+    getOutboxPage({ ...filters, page }),
+    isAdmin(),
+  ]);
 
   return (
     <div>
@@ -144,7 +154,12 @@ export default async function AdminOutbox({ searchParams }: SP) {
                 {e.error && <p className="mt-3 text-xs text-danger-soft-fg">Errore: {e.error}</p>}
                 {/* Some messages are HTML-only; showing just the text part left
                     an empty box with no hint that anything had been sent. */}
-                {e.text.trim() ? (
+                {!admin ? (
+                  <p className="mt-3 rounded-lg bg-cream/60 px-4 py-3 text-xs text-brown-800/70">
+                    Il testo del messaggio è visibile solo agli amministratori: queste email
+                    contengono i link per reimpostare la password e per confermare gli indirizzi.
+                  </p>
+                ) : e.text.trim() ? (
                   <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-cream/60 p-4 text-xs text-brown-900">
                     {e.text}
                   </pre>

@@ -50,14 +50,17 @@ export default async function NewManualOrder({ searchParams }: SP) {
   }));
 
   // The booking's own fields become the starting values. Silently ignored when
-  // the id is unknown or is not an "ordine speciale" — this is a convenience
+  // the id is unknown or is not a convertible booking — this is a convenience
   // link, and a wrong one should land on an ordinary empty form rather than an
   // error page.
   let booking: BookingPrefill | null = null;
   if (prenotazione) {
     const row = await adminGetReservation(prenotazione);
     const r = row?.reservation;
-    if (r && r.type === "order") {
+    // Both booking kinds that stand for a sale. A porchetta pre-order is 2 kg of
+    // a real product at a real price and could not be converted at all, so it
+    // was rung into the till separately and the platform never learned of it.
+    if (r && (r.type === "order" || r.type === "porchetta")) {
       await assertShopScope(r.shopSlug);
       booking = {
         id: r.id,
@@ -68,6 +71,10 @@ export default async function NewManualOrder({ searchParams }: SP) {
         shopSlug: r.shopSlug,
         date: r.date,
         notes: r.notes ?? "",
+        quantityKg: r.type === "porchetta" ? r.quantityKg : null,
+        // Only a deposit actually received counts: an agreed-but-unpaid caparra
+        // is not money the shop is holding.
+        depositCents: r.depositPaidAt ? r.depositCents : 0,
       };
     }
   }

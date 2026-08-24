@@ -17,6 +17,7 @@ import { getUsersPage, adminGetShops } from "@/lib/admin/queries";
 import { userFilters } from "@/lib/admin/filters";
 import { isAdmin } from "@/lib/auth/session";
 import {
+  unlockUser,
   setUserRole,
   resetUserPassword,
   setUserActive,
@@ -43,6 +44,18 @@ const STATUS_CHIPS = [
   { value: "da-verificare", label: "Email da verificare" },
   { value: "con-2fa", label: "Con 2FA" },
 ];
+
+/**
+ * Whether an account is currently shut out by the failed-attempt lock.
+ *
+ * `lockedUntil` is a timestamp rather than a flag precisely so the lock expires
+ * on its own, which means "is it locked" is a question about *now* and not a
+ * column to read. Resolved per render against one `Date` passed down, so every
+ * row on the page agrees and no `new Date()` runs in a component body.
+ */
+function isLocked(u: { lockedUntil: Date | null }, now: Date): boolean {
+  return !!u.lockedUntil && u.lockedUntil.getTime() > now.getTime();
+}
 
 /** Small state pill. */
 function Tag({ tone, children }: { tone: "ok" | "warn" | "bad" | "mute"; children: React.ReactNode }) {
@@ -73,6 +86,10 @@ export default async function AdminUsers({ searchParams }: SP) {
     adminGetShops(),
   ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
+  // One reading of "now" for the whole page, so two rows can't disagree about
+  // whether a lock has expired mid-render.
+  const now = new Date();
+  const locked = (u: { lockedUntil: Date | null }) => isLocked(u, now);
   const filtered = Object.values(filters).some((v) => v && v !== "all");
 
   return (
@@ -133,6 +150,11 @@ export default async function AdminUsers({ searchParams }: SP) {
                         <Tag tone="warn">Email da verificare</Tag>
                       ))}
                     {u.totpEnabled && <Tag tone="ok">2FA</Tag>}
+                    {/* The access state the page is named after. Written on
+                        every sign-in and every failure, and shown nowhere — so a
+                        locked-out account looked exactly like a forgotten
+                        password, and neither had an answer here. */}
+                    {locked(u) && <Tag tone="bad">Bloccato</Tag>}
                     {/* An unassigned staff account sees both locations, which is
                         the old behaviour and worth saying out loud rather than
                         leaving as an absence. */}
@@ -145,7 +167,20 @@ export default async function AdminUsers({ searchParams }: SP) {
                   <p className="text-xs text-brown-800/60">
                     @{u.username}
                     {u.email ? ` · ${u.email}` : ""} · registrato {fmtDate(u.createdAt)}
+                    {u.lastLoginAt
+                      ? ` · ultimo accesso ${fmtDate(u.lastLoginAt)}`
+                      : " · mai entrato"}
                   </p>
+                  {locked(u) && (
+                    <p className="mt-1 text-xs font-semibold text-danger-soft-fg">
+                      Bloccato dopo {u.failedLoginCount} tentativi falliti, fino alle{" "}
+                      {u.lockedUntil?.toLocaleTimeString("it-IT", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      . Si sblocca da solo, oppure subito qui sotto.
+                    </p>
+                  )}
                   <Link
                     href={`/admin/loyalty/${u.id}`}
                     className="mt-1 inline-block text-[12px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
@@ -275,6 +310,27 @@ export default async function AdminUsers({ searchParams }: SP) {
                         {u.emailVerifiedAt ? "Segna email da verificare" : "Segna email verificata"}
                       </PendingButton>
                     </ActionForm>
+                  )}
+                  {locked(u) && (
+                    <>
+                      <ActionForm action={unlockUser} className="inline-flex">
+                        <input type="hidden" name="id" value={u.id} />
+                        <PendingButton tone="dark">Sblocca ora</PendingButton>
+                      </ActionForm>
+                      {/* A lockout usually means somebody was guessing. If the
+                          guessing worked, ending the sessions is the response
+                          that matters. */}
+                      <ActionForm action={unlockUser} className="inline-flex">
+                        <input type="hidden" name="id" value={u.id} />
+                        <input type="hidden" name="signOut" value="true" />
+                        <PendingButton
+                          tone="danger"
+                          confirm={`Sbloccare @${u.username} e chiudere tutte le sue sessioni? Dovrà accedere di nuovo su ogni dispositivo.`}
+                        >
+                          Sblocca e disconnetti
+                        </PendingButton>
+                      </ActionForm>
+                    </>
                   )}
                   {u.totpEnabled && (
                     <ActionForm action={resetUserTotp} className="inline-flex">

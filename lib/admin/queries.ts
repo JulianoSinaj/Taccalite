@@ -1,5 +1,21 @@
 import "server-only";
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+  type AnyColumn,
+  type SQL,
+} from "drizzle-orm";
 
 export const PAGE_SIZE = 25;
 import { db } from "@/lib/db/client";
@@ -86,19 +102,37 @@ const netRevenue = sql<number>`coalesce(sum(${orders.totalCents} - ${orders.refu
 /** Every order that was ever settled — a refunded one still had a sale. */
 const everSettled = inArray(orders.paymentStatus, ["paid", "refunded"]);
 
-export async function getDashboardStats() {
+/**
+ * Restrict a query to one location, matching `lib/admin/scope.ts`'s row rule.
+ *
+ * `null` means the whole business (an admin, or an unassigned account) and adds
+ * no predicate. A scoped operator sees their own shop **plus rows that belong to
+ * no shop at all** — a courier shipment, a global product — exactly as `inScope`
+ * decides it for a single row. Without this the dashboard was titled "la tua
+ * giornata" and showed somebody else's.
+ */
+const inShop = (col: AnyColumn, scope: string | null): SQL | undefined =>
+  scope ? or(eq(col, scope), isNull(col)) : undefined;
+
+export async function getDashboardStats(scope: string | null = null) {
+  const resShop = inShop(reservations.shopSlug, scope);
+  const ordShop = inShop(orders.shopSlug, scope);
+
   const [pendingRes] = await db
     .select({ n: sql<number>`count(*)` })
     .from(reservations)
-    .where(eq(reservations.status, "pending"));
-  const [totalRes] = await db.select({ n: sql<number>`count(*)` }).from(reservations);
+    .where(and(eq(reservations.status, "pending"), resShop));
+  const [totalRes] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(reservations)
+    .where(resShop);
   // "Ordini pagati" is the lifetime count of settled orders. It used to run the
   // identical query as "da evadere" below, so the dashboard showed the same
   // number twice under two different labels.
   const [paidOrders] = await db
     .select({ n: sql<number>`count(*)` })
     .from(orders)
-    .where(eq(orders.paymentStatus, "paid"));
+    .where(and(eq(orders.paymentStatus, "paid"), ordShop));
   const [customers] = await db
     .select({ n: sql<number>`count(*)` })
     .from(users)
@@ -116,12 +150,14 @@ export async function getDashboardStats() {
   const [toFulfil] = await db
     .select({ n: sql<number>`count(*)` })
     .from(orders)
-    .where(and(eq(orders.paymentStatus, "paid"), eq(orders.status, "paid")));
+    .where(and(eq(orders.paymentStatus, "paid"), eq(orders.status, "paid"), ordShop));
   // Porchetta waitlist awaiting a decision.
   const [waitlisted] = await db
     .select({ n: sql<number>`count(*)` })
     .from(reservations)
-    .where(and(eq(reservations.waitlisted, true), sql`${reservations.status} != 'cancelled'`));
+    .where(
+      and(eq(reservations.waitlisted, true), sql`${reservations.status} != 'cancelled'`, resShop),
+    );
   // Failed emails needing attention.
   const [failedEmails] = await db
     .select({ n: sql<number>`count(*)` })
@@ -136,8 +172,13 @@ export async function getDashboardStats() {
   const [lowStock] = await db
     .select({ n: sql<number>`count(*)` })
     .from(products)
-    .where(productsWhere({ stato: "attivi", scorte: "basse" }, lowStockThreshold));
-  const expiringSoon = await countExpiringSoon(expiryWindow(7));
+    .where(
+      and(
+        productsWhere({ stato: "attivi", scorte: "basse" }, lowStockThreshold),
+        inShop(products.shopSlug, scope),
+      ),
+    );
+  const expiringSoon = await countExpiringSoon(expiryWindow(7), scope);
 
   // Net revenue over rolling windows, by settlement date (integer cents).
   const now = Date.now();
@@ -146,7 +187,7 @@ export async function getDashboardStats() {
     const [r] = await db
       .select({ sum: netRevenue })
       .from(orders)
-      .where(and(everSettled, sql`${settledAt} >= ${sinceMs}`));
+      .where(and(everSettled, sql`${settledAt} >= ${sinceMs}`, ordShop));
     return r?.sum ?? 0;
   };
   const startOfToday = startOfTodayRome();
@@ -179,14 +220,15 @@ export async function getDashboardStats() {
  * period-over-period delta, new-customer counts, the daily revenue trend, and the
  * top products by revenue. All money in integer cents; only PAID orders counted.
  */
-export async function getDashboardInsights() {
+export async function getDashboardInsights(scope: string | null = null) {
   const now = Date.now();
   const day = 24 * 60 * 60 * 1000;
   const p30 = new Date(now - 30 * day);
   const p60 = new Date(now - 60 * day);
+  const ordShop = inShop(orders.shopSlug, scope);
 
   const sumRev = async (from: Date, to?: Date) => {
-    const conds = [everSettled, sql`${settledAt} >= ${from.getTime()}`];
+    const conds: (SQL | undefined)[] = [everSettled, sql`${settledAt} >= ${from.getTime()}`, ordShop];
     if (to) conds.push(sql`${settledAt} < ${to.getTime()}`);
     const [r] = await db
       .select({ sum: netRevenue, n: sql<number>`count(*)` })
@@ -218,7 +260,7 @@ export async function getDashboardInsights() {
         cents: sql<number>`${orders.totalCents} - ${orders.refundedCents}`,
       })
       .from(orders)
-      .where(and(everSettled, sql`${settledAt} >= ${p30.getTime()}`)),
+      .where(and(everSettled, sql`${settledAt} >= ${p30.getTime()}`, ordShop)),
     // Group on the stable product id, not the line's name snapshot: renaming a
     // product used to split its sales history into two rows. Lines with no
     // productId (a since-deleted product) fall back to grouping by name so their
@@ -231,7 +273,7 @@ export async function getDashboardInsights() {
       })
       .from(orderItems)
       .innerJoin(orders, eq(orderItems.orderId, orders.id))
-      .where(and(everSettled, sql`${settledAt} >= ${p30.getTime()}`))
+      .where(and(everSettled, sql`${settledAt} >= ${p30.getTime()}`, ordShop))
       .groupBy(sql`coalesce(${orderItems.productId}, ${orderItems.name})`)
       .orderBy(desc(sql`sum(${orderItems.lineTotalCents})`))
       .limit(5),
@@ -264,19 +306,97 @@ export async function getDashboardInsights() {
 }
 
 /** Today's reservations (not cancelled), for the dashboard work list. */
-export async function getTodayReservations() {
+export async function getTodayReservations(scope: string | null = null) {
   const today = dateInRome();
   return db
     .select()
     .from(reservations)
-    .where(and(eq(reservations.date, today), sql`${reservations.status} != 'cancelled'`))
+    .where(
+      and(
+        eq(reservations.date, today),
+        sql`${reservations.status} != 'cancelled'`,
+        inShop(reservations.shopSlug, scope),
+      ),
+    )
     .orderBy(reservations.time)
     .limit(20);
 }
 
 /** The most recent orders, for the dashboard activity list. */
-export async function getRecentOrders(limit = 6) {
-  return db.select().from(orders).orderBy(desc(orders.createdAt)).limit(limit);
+export async function getRecentOrders(limit = 6, scope: string | null = null) {
+  return db
+    .select()
+    .from(orders)
+    .where(inShop(orders.shopSlug, scope))
+    .orderBy(desc(orders.createdAt))
+    .limit(limit);
+}
+
+// ── Deposits (caparre) ───────────────────────────────────────────────────────
+/**
+ * Deposit money, which the platform recorded and then counted nowhere.
+ *
+ * `reservations.depositCents` was written by `setReservationDeposit` and read by
+ * exactly two screens, both only to print a label. So there was no answer to
+ * "how much caparra are we holding?", and a deposit **forfeited** after a
+ * no-show — money the business definitively kept — appeared in no total on any
+ * page.
+ *
+ * Deliberately kept out of the VAT buckets. A caparra confirmatoria sits outside
+ * the VAT base until it is applied to a price, and a forfeited one is
+ * compensation rather than consideration; inventing an aliquota for either would
+ * be worse than the silence it replaces. The IVA report shows these beside its
+ * totals, labelled as excluded, so the accountant sees the money and decides.
+ */
+export type DepositTotals = { cents: number; count: number };
+
+/** Deposits taken and still held — live bookings the shop owes something for. */
+export async function getHeldDeposits(scope: string | null = null): Promise<DepositTotals> {
+  const [row] = await db
+    .select({
+      cents: sql<number>`coalesce(sum(${reservations.depositCents}), 0)`,
+      count: sql<number>`count(*)`,
+    })
+    .from(reservations)
+    .where(
+      and(
+        isNotNull(reservations.depositPaidAt),
+        isNull(reservations.depositForfeitedAt),
+        inArray(reservations.status, ["pending", "confirmed"]),
+        inShop(reservations.shopSlug, scope),
+      ),
+    );
+  return { cents: row?.cents ?? 0, count: row?.count ?? 0 };
+}
+
+/** Deposits collected and forfeited inside a window, by the date each happened. */
+export async function getDepositMovements(
+  from: Date,
+  toExclusive: Date,
+  scope: string | null = null,
+): Promise<{ collected: DepositTotals; forfeited: DepositTotals }> {
+  const between = (col: AnyColumn) =>
+    and(
+      isNotNull(col),
+      gte(col, from),
+      lt(col, toExclusive),
+      inShop(reservations.shopSlug, scope),
+    );
+  const sum = async (where: SQL | undefined): Promise<DepositTotals> => {
+    const [row] = await db
+      .select({
+        cents: sql<number>`coalesce(sum(${reservations.depositCents}), 0)`,
+        count: sql<number>`count(*)`,
+      })
+      .from(reservations)
+      .where(where);
+    return { cents: row?.cents ?? 0, count: row?.count ?? 0 };
+  };
+  const [collected, forfeited] = await Promise.all([
+    sum(between(reservations.depositPaidAt)),
+    sum(between(reservations.depositForfeitedAt)),
+  ]);
+  return { collected, forfeited };
 }
 
 /** Paginated reservations list for the given filters (see `lib/admin/filters`). */
@@ -338,12 +458,14 @@ export function getReservationsSameDay(shopSlug: string, date: string, excludeId
  * question the page is actually opened to answer.
  */
 export async function getUpcomingReservations(
-  opts: { from?: string; to?: string; shopSlug?: string } = {},
+  opts: { from?: string; to?: string; shopSlug?: string; scope?: string | null } = {},
 ) {
   const from = opts.from ?? dateInRome();
-  const conds = [
+  const conds: (SQL | undefined)[] = [
     gte(reservations.date, from),
     inArray(reservations.status, ["pending", "confirmed"]),
+    // The requested shop is a convenience filter; the scope is a boundary.
+    inShop(reservations.shopSlug, opts.scope ?? null),
   ];
   if (opts.to) conds.push(sql`${reservations.date} <= ${opts.to}`);
   if (opts.shopSlug && opts.shopSlug !== "all") conds.push(eq(reservations.shopSlug, opts.shopSlug));
@@ -662,6 +784,14 @@ const USER_COLUMNS = {
   totpEnabled: users.totpEnabled,
   marketingConsent: users.marketingConsent,
   createdAt: users.createdAt,
+  // Access state. All three were written by `lib/auth/service` and read by
+  // nothing outside it, so the users list — subtitled "ruoli, password e
+  // accessi" — could show a role and a password reset and not whether the
+  // account could actually get in. "Why can't Maria log in?" had no answer
+  // short of the audit log.
+  lastLoginAt: users.lastLoginAt,
+  failedLoginCount: users.failedLoginCount,
+  lockedUntil: users.lockedUntil,
 };
 
 /** Paginated users list with role/status facets and search. */
@@ -1084,7 +1214,11 @@ export const getProductBatches = (productId: string, limit = 50) =>
  * past its date. This is the HACCP-facing question — what has to be sold, moved
  * or thrown — and nothing in the admin could answer it before.
  */
-export async function getExpiringBatches(through: string, includeExpired = true) {
+export async function getExpiringBatches(
+  through: string,
+  includeExpired = true,
+  scope: string | null = null,
+) {
   const rows = await db
     .select({
       batch: productBatches,
@@ -1100,6 +1234,7 @@ export async function getExpiringBatches(through: string, includeExpired = true)
         isNotNull(productBatches.expiryDate),
         sql`${productBatches.expiryDate} <= ${through}`,
         isNull(products.archivedAt),
+        inShop(products.shopSlug, scope),
       ),
     )
     .orderBy(asc(productBatches.expiryDate));
@@ -1107,7 +1242,10 @@ export async function getExpiringBatches(through: string, includeExpired = true)
 }
 
 /** How many lots of a product are expiring within `days`, for a badge. */
-export async function countExpiringSoon(through: string): Promise<number> {
+export async function countExpiringSoon(
+  through: string,
+  scope: string | null = null,
+): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(*)` })
     .from(productBatches)
@@ -1118,6 +1256,7 @@ export async function countExpiringSoon(through: string): Promise<number> {
         isNotNull(productBatches.expiryDate),
         sql`${productBatches.expiryDate} <= ${through}`,
         isNull(products.archivedAt),
+        inShop(products.shopSlug, scope),
       ),
     );
   return row?.n ?? 0;
@@ -1154,6 +1293,43 @@ export async function getProductHistoryCounts(
       .where(eq(stockMovements.productId, productId)),
   ]);
   return { sold: sold?.n ?? 0, movements: movements?.n ?? 0 };
+}
+
+/**
+ * How much of one product actually sold in a window, and for how much.
+ *
+ * The product page could show a margin and a movement ledger and never answer
+ * "does this sell?" — the only velocity figure anywhere was the dashboard's
+ * top-five, which by definition says nothing about the other several hundred
+ * products. That is the number a reorder decision is made on.
+ *
+ * Counted on settled orders and by the settlement date, like every other money
+ * figure here, so it reconciles with the takings rather than with when a basket
+ * happened to be created.
+ */
+export async function getProductSales(
+  productId: string,
+  days = 30,
+): Promise<{ units: number; weightKg: number; cents: number; orders: number }> {
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+  const [row] = await db
+    .select({
+      units: sql<number>`coalesce(sum(case when ${orderItems.weightKg} is null then ${orderItems.quantity} else 0 end), 0)`,
+      weightKg: sql<number>`coalesce(sum(coalesce(${orderItems.weightKg}, 0)), 0)`,
+      cents: sql<number>`coalesce(sum(${orderItems.lineTotalCents}), 0)`,
+      orders: sql<number>`count(distinct ${orderItems.orderId})`,
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(
+      and(eq(orderItems.productId, productId), everSettled, sql`${settledAt} >= ${since}`),
+    );
+  return {
+    units: row?.units ?? 0,
+    weightKg: row?.weightKg ?? 0,
+    cents: row?.cents ?? 0,
+    orders: row?.orders ?? 0,
+  };
 }
 
 /** All discount codes, newest first. */
@@ -1361,6 +1537,206 @@ export async function getVatReport(from: Date, to: Date): Promise<VatReport> {
     reversalCount: refundedRows.length,
   };
 }
+// ── Invoice register (registro fatture) ──────────────────────────────────────
+/**
+ * Which sales have had a document generated, and which have not.
+ *
+ * FatturaPA XML was generated on demand per order and the generation was logged,
+ * but there was no register: no list of documents issued, no way to see which
+ * orders are still waiting for one, and nothing to hand a commercialista asking
+ * "what did you issue in July?". The audit log holds the answer — every
+ * generation writes an `invoice.xml` or `invoice.credit_note_xml` row against
+ * the order id — so the register can be assembled without a new table.
+ *
+ * What this is NOT: a progressive, gap-free numbering register. The document
+ * number is the order number, which is random by design. Changing that is a
+ * schema decision with a migration behind it; the page says so rather than
+ * implying an authority it does not have.
+ */
+export type InvoiceRegisterRow = {
+  orderId: string;
+  orderNumber: string;
+  name: string;
+  settledAt: Date | null;
+  totalCents: number;
+  refundedCents: number;
+  shopSlug: string | null;
+  /** Buyer fiscal identity present — without one the XML is refused. */
+  hasFiscalIdentity: boolean;
+  invoicedAt: Date | null;
+  creditNoteAt: Date | null;
+};
+
+export async function getInvoiceRegister(
+  from: Date,
+  toExclusive: Date,
+  scope: string | null = null,
+): Promise<InvoiceRegisterRow[]> {
+  const rows = await db
+    .select({
+      orderId: orders.id,
+      orderNumber: orders.orderNumber,
+      name: orders.name,
+      paidAt: orders.paidAt,
+      createdAt: orders.createdAt,
+      totalCents: orders.totalCents,
+      refundedCents: orders.refundedCents,
+      shopSlug: orders.shopSlug,
+      customerTaxCode: orders.customerTaxCode,
+      customerVatNumber: orders.customerVatNumber,
+    })
+    .from(orders)
+    .where(
+      and(
+        everSettled,
+        sql`${settledAt} >= ${from.getTime()}`,
+        sql`${settledAt} < ${toExclusive.getTime()}`,
+        inShop(orders.shopSlug, scope),
+      ),
+    )
+    .orderBy(sql`${settledAt}`, orders.id);
+  if (rows.length === 0) return [];
+
+  // When each document was generated, newest wins — a re-download of the same
+  // invoice is not a second document.
+  const issued = await db
+    .select({
+      entityId: auditLog.entityId,
+      action: auditLog.action,
+      createdAt: auditLog.createdAt,
+    })
+    .from(auditLog)
+    .where(
+      and(
+        inArray(auditLog.action, ["invoice.xml", "invoice.credit_note_xml"]),
+        inArray(
+          auditLog.entityId,
+          rows.map((r) => r.orderId),
+        ),
+      ),
+    );
+  const invoiced = new Map<string, Date>();
+  const credited = new Map<string, Date>();
+  for (const e of issued) {
+    if (!e.entityId || !e.createdAt) continue;
+    const target = e.action === "invoice.credit_note_xml" ? credited : invoiced;
+    const seen = target.get(e.entityId);
+    if (!seen || e.createdAt > seen) target.set(e.entityId, e.createdAt);
+  }
+
+  return rows.map((r) => ({
+    orderId: r.orderId,
+    orderNumber: r.orderNumber,
+    name: r.name,
+    settledAt: r.paidAt ?? r.createdAt,
+    totalCents: r.totalCents,
+    refundedCents: r.refundedCents,
+    shopSlug: r.shopSlug,
+    hasFiscalIdentity: !!(r.customerTaxCode || r.customerVatNumber),
+    invoicedAt: invoiced.get(r.orderId) ?? null,
+    creditNoteAt: credited.get(r.orderId) ?? null,
+  }));
+}
+
+// ── Cash-up (chiusura di cassa) ──────────────────────────────────────────────
+/**
+ * What was taken in a day, split by the instrument the money arrived on.
+ *
+ * `orders.paidWith` has been captured on every settlement since the offline
+ * payment cycle shipped, and was read in exactly two places: the invoice's
+ * `ModalitaPagamento` and one label on the order detail. It was in no filter, no
+ * export and no total — so the gestionale could not answer the question a shop
+ * asks at closing time every single day: how much is in the till in cash, and
+ * how much went through the POS. "Incasso oggi" on the dashboard is one
+ * undifferentiated number, which is exactly the number you cannot count against
+ * a drawer.
+ *
+ * Sales and refunds are counted on their own dates, like the IVA report: money
+ * handed back today is today's shortfall even when the sale was last month.
+ * `paidWith` is null on older rows and on anything settled before the column
+ * existed, which is reported as its own bucket rather than folded into cash —
+ * guessing here would put phantom notes in the drawer.
+ */
+export type CashUpRow = {
+  instrument: string | null;
+  takenCents: number;
+  refundedCents: number;
+  orders: number;
+};
+
+export async function getCashUp(
+  fromMs: number,
+  toMs: number,
+  shopSlug?: string,
+  scope: string | null = null,
+): Promise<{ rows: CashUpRow[]; takenCents: number; refundedCents: number; orders: number }> {
+  const atShop = and(
+    shopSlug && shopSlug !== "all" ? eq(orders.shopSlug, shopSlug) : undefined,
+    inShop(orders.shopSlug, scope),
+  );
+
+  const [taken, refunded] = await Promise.all([
+    db
+      .select({
+        instrument: orders.paidWith,
+        cents: sql<number>`coalesce(sum(${orders.totalCents}), 0)`,
+        n: sql<number>`count(*)`,
+      })
+      .from(orders)
+      .where(
+        and(everSettled, sql`${settledAt} >= ${fromMs}`, sql`${settledAt} < ${toMs}`, atShop),
+      )
+      .groupBy(orders.paidWith),
+    db
+      .select({
+        instrument: orders.paidWith,
+        cents: sql<number>`coalesce(sum(${orders.refundedCents}), 0)`,
+      })
+      .from(orders)
+      .where(
+        and(
+          sql`${orders.refundedCents} > 0`,
+          sql`${reversalDate} >= ${fromMs}`,
+          sql`${reversalDate} < ${toMs}`,
+          atShop,
+        ),
+      )
+      .groupBy(orders.paidWith),
+  ]);
+
+  const byInstrument = new Map<string, CashUpRow>();
+  const key = (i: string | null) => i ?? "";
+  for (const t of taken) {
+    byInstrument.set(key(t.instrument), {
+      instrument: t.instrument,
+      takenCents: t.cents,
+      refundedCents: 0,
+      orders: t.n,
+    });
+  }
+  for (const r of refunded) {
+    const existing = byInstrument.get(key(r.instrument));
+    if (existing) existing.refundedCents += r.cents;
+    else
+      byInstrument.set(key(r.instrument), {
+        instrument: r.instrument,
+        takenCents: 0,
+        refundedCents: r.cents,
+        orders: 0,
+      });
+  }
+
+  const rows = [...byInstrument.values()].sort(
+    (a, b) => b.takenCents - a.takenCents || (a.instrument ?? "").localeCompare(b.instrument ?? ""),
+  );
+  return {
+    rows,
+    takenCents: rows.reduce((s, r) => s + r.takenCents, 0),
+    refundedCents: rows.reduce((s, r) => s + r.refundedCents, 0),
+    orders: rows.reduce((s, r) => s + r.orders, 0),
+  };
+}
+
 // ── Fulfilment ───────────────────────────────────────────────────────────────
 
 export type ZoneWithUsage = DeliveryZoneRow & { orderCount: number };
@@ -1472,6 +1848,15 @@ export type FulfilmentDay = {
   deliveries: (typeof orders.$inferSelect)[];
   /** Paid courier orders still to be packed and given a tracking number. */
   shipments: (typeof orders.$inferSelect)[];
+  /**
+   * True when a queue hit its cap and is showing only part of itself.
+   *
+   * The three backlog queues are capped at 100 rows, and the page printed the
+   * returned length as the section count — so past the cap the header stated a
+   * number that was not true, on the one screen whose job is to say what still
+   * has to leave the shop.
+   */
+  truncated: boolean;
 };
 
 /**
@@ -1487,14 +1872,26 @@ export type FulfilmentDay = {
  * gestionale (`stato=to-fulfil` on the orders list), reused here rather than
  * re-invented.
  */
+/** How many rows each standing backlog queue returns before it is truncated. */
+const QUEUE_LIMIT = 100;
+
 export async function getFulfilmentDay(
   fromMs: number,
   toMs: number,
   shopSlug?: string,
+  scope: string | null = null,
 ): Promise<FulfilmentDay> {
   const outstanding = and(eq(orders.paymentStatus, "paid"), eq(orders.status, "paid"))!;
+  // Two different things stacked on the same column: `shopSlug` is what the
+  // operator asked to see, `scope` is what they are allowed to see. The second
+  // was missing, so the day sheet was the way around the boundary the orders
+  // list enforces.
   const atShop = (extra: SQL) =>
-    shopSlug && shopSlug !== "all" ? and(extra, eq(orders.shopSlug, shopSlug))! : extra;
+    and(
+      extra,
+      shopSlug && shopSlug !== "all" ? eq(orders.shopSlug, shopSlug) : undefined,
+      inShop(orders.shopSlug, scope),
+    )!;
 
   const [pickups, unscheduled, deliveries, shipments] = await Promise.all([
     db
@@ -1516,22 +1913,28 @@ export async function getFulfilmentDay(
       .from(orders)
       .where(atShop(and(eq(orders.fulfilment, "pickup"), isNull(orders.pickupSlotAt), outstanding)!))
       .orderBy(asc(orders.createdAt))
-      .limit(100),
+      .limit(QUEUE_LIMIT),
     db
       .select()
       .from(orders)
       .where(atShop(and(eq(orders.fulfilment, "delivery"), outstanding)!))
       .orderBy(asc(orders.createdAt))
-      .limit(100),
+      .limit(QUEUE_LIMIT),
     db
       .select()
       .from(orders)
       .where(atShop(and(eq(orders.fulfilment, "shipping"), outstanding)!))
       .orderBy(asc(orders.createdAt))
-      .limit(100),
+      .limit(QUEUE_LIMIT),
   ]);
 
-  return { pickups, unscheduled, deliveries, shipments };
+  return {
+    pickups,
+    unscheduled,
+    deliveries,
+    shipments,
+    truncated: [unscheduled, deliveries, shipments].some((q) => q.length >= QUEUE_LIMIT),
+  };
 }
 /**
  * The order a booking was converted into, if any.
@@ -1559,6 +1962,11 @@ export async function getReservationForOrder(reservationId: string | null) {
       date: reservations.date,
       time: reservations.time,
       type: reservations.type,
+      // The caparra travels with the booking so the order can say how much is
+      // genuinely left to collect — it is part payment against this sale, and
+      // the counter was being told to take the full amount a second time.
+      depositCents: reservations.depositCents,
+      depositPaidAt: reservations.depositPaidAt,
     })
     .from(reservations)
     .where(eq(reservations.id, reservationId))
@@ -1578,7 +1986,7 @@ export async function getOrderForReservation(reservationId: string) {
 // ── Global search (⌘K) ───────────────────────────────────────────────────────
 
 export type QuickHit = {
-  kind: "order" | "reservation" | "customer" | "product";
+  kind: "order" | "reservation" | "customer" | "product" | "discount";
   id: string;
   href: string;
   /** The line the operator scans for — an order number, a person's name. */
@@ -1608,7 +2016,7 @@ export async function quickSearch(rawTerm: string, opts: { scope?: string | null
   // are locked — otherwise the palette would be the way around the scope.
   const scope = opts.scope ?? null;
 
-  const [orderRows, reservationRows, customerRows, productRows] = await Promise.all([
+  const [orderRows, reservationRows, customerRows, productRows, discountRows] = await Promise.all([
     db
       .select({
         id: orders.id,
@@ -1666,6 +2074,21 @@ export async function quickSearch(rawTerm: string, opts: { scope?: string | null
       .where(and(productsWhere({ q }, 5), scope ? eq(products.shopSlug, scope) : undefined))
       .orderBy(asc(products.name))
       .limit(PER_KIND),
+    // Not shop-scoped: a coupon belongs to the business, like a customer.
+    db
+      .select({
+        id: discountCodes.id,
+        code: discountCodes.code,
+        type: discountCodes.type,
+        value: discountCodes.value,
+        active: discountCodes.active,
+        timesUsed: discountCodes.timesUsed,
+        maxRedemptions: discountCodes.maxRedemptions,
+      })
+      .from(discountCodes)
+      .where(discountsWhere({ q }))
+      .orderBy(desc(discountCodes.createdAt))
+      .limit(PER_KIND),
   ]);
 
   const eur = (c: number | null) => (c == null ? "" : `${(c / 100).toFixed(2)} €`);
@@ -1702,6 +2125,22 @@ export async function quickSearch(rawTerm: string, opts: { scope?: string | null
       href: `/admin/products/${p.id}`,
       title: p.name,
       subtitle: [p.category, eur(p.priceCents), p.stock != null ? `${p.stock} in giacenza` : ""]
+        .filter(Boolean)
+        .join(" · "),
+    })),
+    // Coupons are the one thing an operator searches for by an exact string
+    // they were told over the phone ("il codice è NATALE20"), and the palette —
+    // the search box built for exactly that — had no idea they existed.
+    ...discountRows.map<QuickHit>((d) => ({
+      kind: "discount",
+      id: d.id,
+      href: `/admin/discounts/${d.id}`,
+      title: d.code,
+      subtitle: [
+        d.type === "percent" ? `${d.value}%` : d.type === "fixed" ? eur(d.value) : "spedizione gratis",
+        d.active ? "attivo" : "disattivato",
+        `usato ${d.timesUsed}${d.maxRedemptions != null ? `/${d.maxRedemptions}` : ""}`,
+      ]
         .filter(Boolean)
         .join(" · "),
     })),

@@ -6,7 +6,9 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { productBatches, products } from "@/lib/db/schema";
 import { requireAdmin } from "@/lib/auth/session";
+import { requireShopScope } from "@/lib/admin/scope";
 import { applyStockChange } from "@/lib/stock";
+import { notifyBackInStock, pendingStockNotificationCount } from "@/lib/stock-notify";
 import { logAudit } from "@/lib/audit";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import { parseForm } from "@/lib/validation/admin";
@@ -23,7 +25,25 @@ import { parseForm } from "@/lib/validation/admin";
  * on-hand figure stays the single number the shop and the storefront read, and
  * lots account for how it is made up. Receiving a lot therefore also loads the
  * stock, through the same ledger every other movement uses.
+ *
+ * Every action here resolves the lot's product and calls `requireShopScope` on
+ * it. This module was written after `lib/admin/scope.ts` and missed all three of
+ * its enforcement points, so a scoped operator could open the expiry report,
+ * find another location's lot and write it off — a cross-location inventory
+ * *write*, not merely a read.
  */
+
+/** The product a lot belongs to, refusing it if it is another location's. */
+async function mustFindScopedProduct(productId: string) {
+  const [product] = await db
+    .select({ name: products.name, stock: products.stock, shopSlug: products.shopSlug })
+    .from(products)
+    .where(eq(products.id, productId))
+    .limit(1);
+  if (!product) throw new ActionError("Prodotto non trovato.");
+  await requireShopScope(product.shopSlug);
+  return product;
+}
 
 const batchInput = z.object({
   productId: z.string().trim().min(1),
@@ -50,12 +70,7 @@ export async function receiveBatch(_prev: ActionState, fd: FormData): Promise<Ac
     const actor = await requireAdmin();
     const d = parseForm(batchInput, fd);
 
-    const [product] = await db
-      .select({ name: products.name, stock: products.stock })
-      .from(products)
-      .where(eq(products.id, d.productId))
-      .limit(1);
-    if (!product) throw new ActionError("Prodotto non trovato.");
+    const product = await mustFindScopedProduct(d.productId);
     if (product.stock == null) {
       throw new ActionError(
         "Questo prodotto non traccia le scorte: imposta una giacenza nella scheda prima di registrare un lotto.",
@@ -124,13 +139,8 @@ export async function writeOffBatch(_prev: ActionState, fd: FormData): Promise<A
 
     const [batch] = await db.select().from(productBatches).where(eq(productBatches.id, id)).limit(1);
     if (!batch) throw new ActionError("Lotto non trovato.");
+    const product = await mustFindScopedProduct(batch.productId);
     if (batch.remaining <= 0) return ok("Questo lotto è già esaurito.");
-
-    const [product] = await db
-      .select({ name: products.name })
-      .from(products)
-      .where(eq(products.id, batch.productId))
-      .limit(1);
 
     const removed = batch.remaining;
     await db.update(productBatches).set({ remaining: 0 }).where(eq(productBatches.id, id));
@@ -146,7 +156,7 @@ export async function writeOffBatch(_prev: ActionState, fd: FormData): Promise<A
       action: "batch.write_off",
       entity: "batch",
       entityId: batch.productId,
-      summary: `Lotto ${batch.lotCode || "senza codice"} di ${product?.name ?? batch.productId}: scaricate ${removed} unità (${reason})`,
+      summary: `Lotto ${batch.lotCode || "senza codice"} di ${product.name}: scaricate ${removed} unità (${reason})`,
       meta: { removed, lotCode: batch.lotCode, expiryDate: batch.expiryDate },
     });
 
@@ -168,6 +178,7 @@ export async function correctBatchRemaining(_prev: ActionState, fd: FormData): P
 
     const [batch] = await db.select().from(productBatches).where(eq(productBatches.id, id)).limit(1);
     if (!batch) throw new ActionError("Lotto non trovato.");
+    await mustFindScopedProduct(batch.productId);
     if (remaining > batch.quantity) {
       throw new ActionError(`Il lotto ne conteneva ${batch.quantity}: non può restarne di più.`);
     }
@@ -208,5 +219,53 @@ export async function correctBatchRemaining(_prev: ActionState, fd: FormData): P
     revalidatePath(`/admin/products/${batch.productId}`);
     revalidatePath("/admin/products/scadenze");
     return ok("Lotto aggiornato.");
+  });
+}
+
+/**
+ * Email everyone waiting for a product, on demand.
+ *
+ * The automatic notice fires on the transition from "out of stock" to "available"
+ * — which is the right trigger, and misses the case where the product was never
+ * recorded as reaching zero, or where the waitlist accumulated while stock sat at
+ * one unit nobody could buy. The product page counted these people and offered
+ * nothing to do about them; this is the button under that number.
+ */
+export async function notifyStockWaitlist(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const productId = String(fd.get("productId") ?? "").trim();
+    const product = await mustFindScopedProduct(productId);
+
+    const [row] = await db
+      .select({ slug: products.slug, stock: products.stock })
+      .from(products)
+      .where(eq(products.id, productId))
+      .limit(1);
+    if (!row) throw new ActionError("Prodotto non trovato.");
+    if (row.stock != null && row.stock <= 0) {
+      throw new ActionError(
+        "Il prodotto risulta esaurito: avvisare adesso manderebbe i clienti su una pagina senza disponibilità.",
+      );
+    }
+
+    const waiting = await pendingStockNotificationCount(productId);
+    if (waiting === 0) return ok("Nessuno è in attesa di questo prodotto.");
+
+    await notifyBackInStock(productId, product.name, row.slug);
+
+    await logAudit({
+      actor,
+      action: "stock.notify_waitlist",
+      entity: "product",
+      entityId: productId,
+      summary: `Avviso di riassortimento inviato a ${waiting} ${
+        waiting === 1 ? "cliente" : "clienti"
+      } per ${product.name}`,
+      meta: { waiting },
+    });
+
+    revalidatePath(`/admin/products/${productId}`);
+    return ok(`Avviso inviato a ${waiting} ${waiting === 1 ? "cliente" : "clienti"}.`);
   });
 }

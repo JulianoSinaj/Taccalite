@@ -5,6 +5,7 @@ import {
   Panel,
   StatusBadge,
   BackLink,
+  HistoryLink,
   euro,
   fmtDate,
   fmtDateTime,
@@ -30,6 +31,7 @@ import {
   resendReservationEmail,
 } from "@/lib/admin/reservation-actions";
 import { assertShopScope } from "@/lib/admin/scope";
+import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -51,10 +53,11 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
   await assertShopScope(row.reservation.shopSlug);
 
   const r = row.reservation;
-  const [shops, sameDay, convertedOrder] = await Promise.all([
+  const [shops, sameDay, convertedOrder, admin] = await Promise.all([
     adminGetShops(),
     getReservationsSameDay(r.shopSlug, r.date, r.id),
     getOrderForReservation(r.id),
+    isAdmin(),
   ]);
   const shop = shops.find((s) => s.slug === r.shopSlug);
 
@@ -73,12 +76,16 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
         title={`Prenotazione ${r.reference}`}
         subtitle={`${reservationTypeLabel(r.type)} · ${fmtDate(r.date)}${r.time ? ` · ${r.time}` : ""}`}
         action={
-          <div className="flex flex-wrap gap-2">
-            {/* An "ordine speciale" is the one booking type that represents a
-                sale: a name, a phone, a date and notes, with no line items, no
-                price, no VAT, no stock movement and no loyalty. This is the only
-                path from one to the other. */}
-            {r.type === "order" &&
+          <div className="flex flex-wrap items-center gap-3">
+            {admin && <HistoryLink id={r.id} />}
+            {/* Two booking types represent a sale: an "ordine speciale", and a
+                porchetta pre-order — 2 kg of a real product at a real price,
+                often with a deposit against it. Both carry a name, a phone, a
+                date and notes and nothing else: no line items, no price, no VAT,
+                no stock movement, no loyalty. Only the first could be converted,
+                so every porchetta was rung into the till separately with nothing
+                linking the two. This is the path from either to a real order. */}
+            {(r.type === "order" || r.type === "porchetta") &&
               (convertedOrder ? (
                 <Link
                   href={`/admin/orders/${convertedOrder.id}`}

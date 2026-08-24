@@ -529,6 +529,16 @@ export const orderDetailsInput = z.object({
  * Values are normalised in the XML builder; kept permissive here so a
  * partially-known identity can still be saved.
  */
+/**
+ * Staff-only annotations on an order. Editable at any point in the order's life,
+ * unlike its lines and amounts: notes change no money, and the moment they are
+ * most needed ("il cliente ha chiamato, ritira venerdì") is after the sale.
+ */
+export const orderNotesInput = z.object({
+  id: z.string().trim().min(1),
+  internalNotes: z.string().trim().max(2000).optional().transform((v) => (v ? v : null)),
+});
+
 export const orderFiscalInput = z.object({
   id: z.string().trim().min(1),
   customerTaxCode: optionalText(20),

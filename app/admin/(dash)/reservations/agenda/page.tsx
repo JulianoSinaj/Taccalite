@@ -6,6 +6,7 @@ import { porchettaCapacityFor } from "@/lib/reservations";
 import { markPorchettaReady } from "@/lib/admin/reservation-actions";
 import { PrintButton } from "@/components/admin/PrintButton";
 import { agendaRange } from "@/lib/agenda-range";
+import { shopScope } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -27,11 +28,15 @@ export default async function ReservationAgenda({ searchParams }: SP) {
   // Window resolution lives outside the component (no `new Date()` in render).
   const range = agendaRange({ giorno: sp.giorno, giorni: sp.giorni });
 
-  const [rows, shops] = await Promise.all([
-    getUpcomingReservations({ from: range.from, to: range.to, shopSlug: shopFilter }),
+  // The day sheet answers "what do I prepare today" — for the location the
+  // operator actually works at. It used to answer it for both.
+  const scope = await shopScope();
+  const [rows, allShops] = await Promise.all([
+    getUpcomingReservations({ from: range.from, to: range.to, shopSlug: shopFilter, scope }),
     adminGetShops(),
   ]);
-  const shopName = new Map(shops.map((s) => [s.slug, s.name]));
+  const shops = scope ? allShops.filter((s) => s.slug === scope) : allShops;
+  const shopName = new Map(allShops.map((s) => [s.slug, s.name]));
 
   // Capacity is per location, so the badge needs one figure per shop, not one
   // shared number compared against a mixed total.

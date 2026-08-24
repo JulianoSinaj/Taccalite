@@ -5,6 +5,7 @@ import { PrintButton } from "@/components/admin/PrintButton";
 import { getFulfilmentDay, adminGetShops, adminGetDeliveryZones } from "@/lib/admin/queries";
 import { updateOrderStatus } from "@/lib/admin/order-actions";
 import { isAdmin } from "@/lib/auth/session";
+import { shopScope } from "@/lib/admin/scope";
 import { agendaRange } from "@/lib/agenda-range";
 import { instantInRome, BUSINESS_TZ } from "@/lib/time";
 import { FULFILMENT_LABEL } from "@/lib/fulfilment";
@@ -134,13 +135,19 @@ export default async function FulfilmentToday({ searchParams }: SP) {
   const fromMs = instantInRome(day, "00:00").getTime();
   const toMs = instantInRome(range.next, "00:00").getTime();
 
-  const [work, shops, zones, admin] = await Promise.all([
-    getFulfilmentDay(fromMs, toMs, shopFilter),
+  // The shop chips below are a convenience; this is the boundary. Without it the
+  // day sheet listed the other location's pickups — names, phone numbers and
+  // totals — to an operator whose orders list refuses them.
+  const scope = await shopScope();
+  const [work, allShops, zones, admin] = await Promise.all([
+    getFulfilmentDay(fromMs, toMs, shopFilter, scope),
     adminGetShops(),
     adminGetDeliveryZones(),
     isAdmin(),
   ]);
-  const shopName = new Map(shops.map((s) => [s.slug, s.name]));
+  // A scoped operator gets no chips for locations they cannot open.
+  const shops = scope ? allShops.filter((s) => s.slug === scope) : allShops;
+  const shopName = new Map(allShops.map((s) => [s.slug, s.name]));
   const zoneName = new Map(zones.map((z) => [z.id, z.name]));
 
   // Pickups group by the window they booked; the counter reads the sheet by time.
@@ -179,7 +186,7 @@ export default async function FulfilmentToday({ searchParams }: SP) {
     <div>
       <AdminHeader
         title="Ritiri e consegne"
-        subtitle={`${total} ordini da gestire · ${formatDay(day)}`}
+        subtitle={`${total}${work.truncated ? "+" : ""} ordini da gestire · ${formatDay(day)}`}
         action={
           <div className="flex flex-wrap items-center gap-2 print:hidden">
             {/* The zone/slot editor is admin-only and redirects everyone else,
@@ -196,6 +203,16 @@ export default async function FulfilmentToday({ searchParams }: SP) {
           </div>
         }
       />
+
+      {/* The three backlog queues are capped, and the section counts used to
+          be the returned length — so a shop with more than a hundred parcels
+          waiting was told it had exactly a hundred. */}
+      {work.truncated && (
+        <p className="mb-6 rounded-2xl border border-warn/40 bg-warn-soft px-5 py-3 text-sm text-warn-soft-fg">
+          Sono in arretrato più ordini di quanti ne stia mostrando: qui sotto vedi i primi 100 per
+          coda. Evadine una parte e ricarica per vedere i successivi.
+        </p>
+      )}
 
       <Panel className="mb-6 print:hidden">
         <div className="mb-3 flex flex-wrap gap-2">
