@@ -5,7 +5,7 @@ import ParallaxMedia from "@/components/site/ParallaxMedia";
 
 export default function ChiSiamo() {
   return (
-    <section className="relative overflow-hidden bg-paper-warm px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+    <section className="relative overflow-hidden bg-paper-warm px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
       {/* The founding year as a ghost numeral, cropped by the left edge. It is
           the oldest thing the shop owns, so it gets to be the biggest. */}
       <span
@@ -19,7 +19,6 @@ export default function ChiSiamo() {
       <div className="relative mx-auto grid max-w-[88rem] gap-14 lg:grid-cols-12 lg:items-center lg:gap-16">
         <Reveal className="lg:col-span-5">
           <div className="relative">
-            <span aria-hidden className="absolute -top-3 -left-3 right-3 bottom-3 border border-gold/45" />
             <ParallaxMedia className="aspect-[5/6] bg-paper" distance={64}>
               {/* The counter itself, not another studio still life. It is the
                   only photograph on file with the shop's real colour in it —

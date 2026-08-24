@@ -17,6 +17,7 @@ export type HeaderShop = { slug: string; name: string; phone: string | null };
 const links = [
   { href: "/", label: "Home" },
   { href: "/negozio", label: "Shop" },
+  { href: "/porchetta", label: "Porchetta" },
   { href: "/la-nostra-storia", label: "La nostra storia" },
   { href: "/sedi", label: "Sedi" },
   { href: "/contatti", label: "Contattaci" },
@@ -109,7 +110,7 @@ export default function SiteHeader({ shops = [] }: { shops?: HeaderShop[] }) {
             </span>
           </Link>
 
-          <nav className="hidden flex-1 items-center gap-9 lg:flex xl:gap-11">
+          <nav className="hidden flex-1 items-center gap-7 lg:flex xl:gap-10">
             {links.map((link) => {
               const active = isActive(pathname, link.href);
               return (
@@ -118,7 +119,7 @@ export default function SiteHeader({ shops = [] }: { shops?: HeaderShop[] }) {
                   href={link.href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "relative py-1 text-[0.6875rem] font-semibold tracking-[0.18em] uppercase transition-colors",
+                    "relative py-1 text-[0.6875rem] font-semibold tracking-[0.18em] whitespace-nowrap uppercase transition-colors",
                     active ? "text-brown-950" : "text-brown-700/70 hover:text-brown-950"
                   )}
                 >

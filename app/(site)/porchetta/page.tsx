@@ -1,46 +1,206 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { Bell, ChevronDown, Flame } from "lucide-react";
+import { ArrowRight, ChevronDown, Flame, Phone, ShoppingBag } from "lucide-react";
 import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
-import MedallionBadge from "@/components/MedallionBadge";
+import JsonLd from "@/components/JsonLd";
 import PageHero from "@/components/site/PageHero";
 import CTA from "@/components/site/CTA";
-import { porchettaAvailability } from "@/lib/reservations";
+import ProductPlate from "@/components/site/ProductPlate";
+import AddToCartButton from "@/components/store/AddToCartButton";
+import PorchettaConfigurator, {
+  type ConfiguratorDay,
+  type ConfiguratorShop,
+} from "@/components/site/porchetta/PorchettaConfigurator";
+import { LeaderRow, SectionMark } from "@/components/site/sedi/Ornaments";
+import { porchettaAvailability, porchettaPickupDays, weekdayNameIt } from "@/lib/reservations";
 import { siteRecords } from "@/lib/site-content";
+import { getClosures, getProductBySlug, getSetting, getShops } from "@/lib/db/queries";
+import { closureFor, closureMessage } from "@/lib/closures";
+import { categoryAccent } from "@/lib/categories";
+import { formatEuro, formatKg } from "@/lib/format";
+import { breadcrumbSchema, faqSchema } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "La Porchetta",
+  title: "La Porchetta — prenota la tua per sabato",
   description:
-    "La porchetta artigianale Taccalite: la ricetta di famiglia, cotta lentamente ogni sabato ad Ancona.",
+    "La porchetta artigianale Taccalite: la ricetta di famiglia, cotta lentamente ogni sabato ad Ancona. Scegli quanta, in quale bottega e per quale sabato, e prenotala online.",
 };
 
-/** Trim trailing ".0" from half-kg quantities for display (e.g. 12.0 → "12"). */
-function formatKg(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+/** The e-shop product this page prices from and sells through. */
+const PRODUCT_SLUG = "porchetta-artigianale";
+
+/** "29 ago" — the day chips are too narrow for the month in full. */
+function shortDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", timeZone: "UTC" })
+    .format(new Date(Date.UTC(y, m - 1, d)))
+    .replace(".", "");
+}
+
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function telHref(phone: string) {
+  return `tel:${phone.replace(/[^\d+]/g, "")}`;
 }
 
 export default async function PorchettaPage() {
-  // Live availability for the next porchetta pickup day (configurable; Saturday
-  // by default), resolved **per shop** — each location roasts its own batch
-  // against its own cap, so a single shared figure was wrong for both. All reads
-  // are best-effort: the page still renders if nothing is configured.
-  const [availability, steps, gallery] = await Promise.all([
+  // Everything the sheet needs, in one round: the next pickup day for the strip
+  // at the top, the next four for the chips, the shops that roast, the days
+  // they are shut, the product the price comes from, and the copy the shop can
+  // edit in the gestionale. All reads are best-effort: the page still renders
+  // if nothing is configured.
+  const [
+    availability,
+    pickupDays,
+    shops,
+    closures,
+    product,
+    steps,
+    gallery,
+    pickupDayKey,
+    cutoffDayKey,
+    porchettaEnabled,
+    storeEnabled,
+  ] = await Promise.all([
     porchettaAvailability(),
-    // Editable in the gestionale (`porchetta.steps`, `porchetta.gallery`); the
-    // defaults are the text and the images this page already showed.
+    porchettaPickupDays(4),
+    getShops(),
+    getClosures(),
+    getProductBySlug(PRODUCT_SLUG),
     siteRecords("porchetta.steps"),
     siteRecords("porchetta.gallery"),
+    getSetting<string>("porchetta.day", "saturday"),
+    getSetting<string>("porchetta.cutoffDay", "friday"),
+    getSetting<boolean>("porchetta.enabled", true),
+    getSetting<boolean>("store.enabled", true),
   ]);
+
   const { pickupLabel, shops: shopAvailability, hasCapacity, allFull } = availability;
   // With one roasting shop the strip reads as it always did; with more, each gets
   // its own figure rather than being averaged into a number true of neither.
   const capped = shopAvailability.filter((s) => s.capacityKg > 0);
 
+  const pickupDayName = weekdayNameIt(pickupDayKey, "sabato");
+  const cutoffDayName = weekdayNameIt(cutoffDayKey, "venerdì");
+
+  const roasting = shops.filter((s) => s.porchettaEnabled);
+  const bookingOpen = porchettaEnabled && roasting.length > 0 && pickupDays.length > 0;
+
+  // The product is what makes the price a fact rather than a sentence. When it
+  // is not on sale the sheet simply says "alla pesata" and the e-shop panel is
+  // left out — nothing on this page invents a number.
+  const onSale =
+    !!product && product.active && product.purchasable && product.priceCents != null && storeEnabled;
+  const pricePerKgCents = onSale ? product.priceCents : null;
+
+  const configuratorShops: ConfiguratorShop[] = roasting.map((s) => ({
+    slug: s.slug,
+    name: s.name,
+    specialty: s.specialty,
+    address: s.address,
+    phone: s.phone,
+  }));
+
+  const configuratorDays: ConfiguratorDay[] = pickupDays.map((d) => {
+    const slots: ConfiguratorDay["shops"] = {};
+    for (const s of roasting) {
+      const row = d.shops.find((r) => r.slug === s.slug);
+      const closure = closureFor(closures, s.slug, d.pickupIso, "reservations");
+      slots[s.slug] = {
+        capacityKg: row?.capacityKg ?? 0,
+        remainingKg: row?.remainingKg ?? 0,
+        isFull: row?.isFull ?? false,
+        closed: closure ? closureMessage(closure, d.pickupIso) : null,
+      };
+    }
+    return {
+      iso: d.pickupIso,
+      label: d.pickupLabel,
+      short: shortDate(d.pickupIso),
+      cutoffLabel: d.cutoffLabel,
+      bookable: d.bookable,
+      shops: slots,
+    };
+  });
+
+  // The ledger. Every line is read off data the gestionale controls, so it
+  // cannot say something the booking form would then refuse.
+  const capacityLine = (() => {
+    const withCap = roasting
+      .map((s) => ({ name: s.name, cap: shopAvailability.find((r) => r.slug === s.slug)?.capacityKg ?? 0 }))
+      .filter((s) => s.cap > 0);
+    if (withCap.length === 0) return null;
+    const same = withCap.every((s) => s.cap === withCap[0].cap);
+    return same
+      ? `${formatKg(withCap[0].cap)} kg per bottega, a sfornata`
+      : withCap.map((s) => `${s.name} ${formatKg(s.cap)} kg`).join(" · ");
+  })();
+
+  const facts: { label: string; value: string }[] = [
+    { label: "Quando", value: `${cap(pickupDayName)} mattina, calda dal forno` },
+    { label: "Dove", value: roasting.map((s) => s.name).join(" · ") || "Nelle nostre botteghe" },
+    { label: "Prezzo", value: onSale ? `${formatEuro(product.priceCents!)} al kg, alla pesata` : "Al banco, alla pesata" },
+    { label: "Quantità", value: "Da mezzo chilo, a passi di mezzo chilo" },
+    { label: "Prenotazioni", value: `Online o per telefono, entro ${cutoffDayName}` },
+    ...(capacityLine ? [{ label: "Disponibilità", value: capacityLine }] : []),
+    { label: "Pagamento", value: "Al ritiro, sul peso effettivo" },
+  ];
+
+  const howItWorks = [
+    {
+      title: "Scegli e prenota",
+      text: `Quantità, bottega e ${pickupDayName}: due minuti dal telefono, entro ${cutoffDayName}.`,
+    },
+    {
+      title: "Ti richiamiamo",
+      text: "Confermiamo noi quantità e orario di ritiro. Nessun pagamento anticipato.",
+    },
+    {
+      title: "Ritirala calda",
+      text: `${cap(pickupDayName)} mattina, al banco: la pesiamo davanti a te e paghi quello che porti via.`,
+    },
+  ];
+
+  const faq = [
+    {
+      question: "Quando è pronta la porchetta?",
+      answer: `Ogni ${pickupDayName} mattina, calda dal forno, nelle botteghe Taccalite ad Ancona.`,
+    },
+    {
+      question: "Entro quando devo prenotare?",
+      answer: `Entro ${cutoffDayName}, online da questa pagina o per telefono. Ti richiamiamo per confermare.`,
+    },
+    {
+      question: "Quanta ne posso prenotare?",
+      answer: "Da mezzo chilo in su, a passi di mezzo chilo. Si paga al ritiro, sul peso effettivo.",
+    },
+    ...(onSale
+      ? [
+          {
+            question: "Quanto costa?",
+            answer: `${formatEuro(product.priceCents!)} al chilo. Il prezzo definitivo si fa alla pesata.`,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div>
+      <JsonLd
+        schema={[
+          breadcrumbSchema([
+            { name: "Home", path: "/" },
+            { name: "La porchetta", path: "/porchetta" },
+          ]),
+          faqSchema(faq),
+        ]}
+      />
+
       {/* Hero.
           Was a full-bleed stock photograph of somebody else's roast under a
           near-black wash — the only remaining dark opening on the site, and the
@@ -54,15 +214,31 @@ export default async function PorchettaPage() {
             la ricetta di famiglia
           </span>,
         ]}
-        lede="L'eccellenza dell'arte norcina marchigiana, tramandata dal 1946. Cottura lenta, erbe delle Marche, e il sabato mattina fuori dal forno."
+        lede={`Cottura lenta, erbe delle Marche, e il ${pickupDayName} mattina fuori dal forno. Scegli quanta ne vuoi, in quale bottega e per quale ${pickupDayName}: al resto pensiamo noi.`}
         aside={
           <div className="relative mx-auto hidden max-w-sm lg:block">
-            <div className="relative aspect-square">
-              <MedallionBadge className="h-full w-full" icon={<Flame className="size-1/2" />} />
+            <div className="relative aspect-square overflow-hidden">
+              <Image
+                src="/images/selezione-prosciutto-camino.jpg"
+                alt="Porchetta Taccalite dal 1946"
+                fill
+                className="object-cover"
+              />
             </div>
           </div>
         }
-      />
+      >
+        <div className="mt-8 flex flex-wrap items-center gap-3 sm:mt-10">
+          <CTA href="#prenota" tone="gold">
+            Prenota per {pickupDayName}
+          </CTA>
+          {onSale && (
+            <CTA href={`/negozio/${product.slug}`} tone="outline">
+              Ordina dall&apos;e-shop
+            </CTA>
+          )}
+        </div>
+      </PageHero>
 
       {/* Disponibilità — live availability strip. Real numbers from the day's
           bookings, so it earns the gold border it sits behind. */}
@@ -110,7 +286,7 @@ export default async function PorchettaPage() {
             )}
           </div>
           <Link
-            href="/prenotazioni?tipo=porchetta"
+            href="#prenota"
             className="group/av relative inline-flex shrink-0 items-center gap-3 overflow-hidden rounded-full bg-gold px-8 py-3.5 text-sm font-semibold text-on-gold focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             <span
@@ -125,9 +301,179 @@ export default async function PorchettaPage() {
         </Reveal>
       </section>
 
+      {/* Prenota — the order sheet. The one band on the page that does
+          something; everything under it explains why it is worth doing. */}
+      <section id="prenota" className="scroll-mt-24 bg-paper-warm px-5 py-16 sm:px-8 sm:py-24 lg:px-12">
+        <div className="mx-auto max-w-[88rem]">
+          <Reveal className="mb-12 grid gap-6 sm:mb-16 lg:grid-cols-12 lg:items-end lg:gap-12">
+            <div className="lg:col-span-8">
+              <span className="eyebrow eyebrow-dark mb-5 block">Prenota la porchetta</span>
+              <h2 className="font-display display-lg font-semibold text-brown-950">
+                Componi la tua, <span className="wonk text-gold-deep">la teniamo da parte</span>
+              </h2>
+            </div>
+            <p className="text-[0.9375rem] leading-relaxed text-brown-700 lg:col-span-4 lg:pb-2">
+              Quanta, dove e quale {pickupDayName}. Le quantità sono in mezzi chili, la
+              disponibilità è quella vera di ogni bottega, e il prezzo si fa alla pesata.
+            </p>
+          </Reveal>
+
+          {bookingOpen ? (
+            <Reveal delay={0.1}>
+              <PorchettaConfigurator
+                shops={configuratorShops}
+                days={configuratorDays}
+                pricePerKgCents={pricePerKgCents}
+                pickupDayName={pickupDayName}
+              />
+            </Reveal>
+          ) : (
+            <Reveal className="mx-auto max-w-2xl border border-rule bg-paper p-8 text-center sm:p-12">
+              <h3 className="font-display display-md font-semibold text-brown-950">
+                Prenotazioni momentaneamente sospese
+              </h3>
+              <p className="mt-4 text-brown-700">
+                In questo periodo la porchetta non si prenota online. Chiamaci in bottega: se è in
+                forno, te la teniamo da parte.
+              </p>
+              {shops.filter((s) => s.phone).length > 0 && (
+                <div className="mt-8 flex flex-wrap justify-center gap-3">
+                  {shops
+                    .filter((s) => s.phone)
+                    .map((s) => (
+                      <a
+                        key={s.slug}
+                        href={telHref(s.phone)}
+                        className="inline-flex items-center gap-2.5 rounded-full border border-rule-strong px-6 py-3 text-sm font-semibold text-brown-950 transition-colors hover:bg-brown-950 hover:text-cream"
+                      >
+                        <Phone className="size-4 text-gold-deep" aria-hidden />
+                        {s.name} · {s.phone}
+                      </a>
+                    ))}
+                </div>
+              )}
+            </Reveal>
+          )}
+
+          {/* The other way in: the e-shop sells the same porchetta by the kilo,
+              with pickup or shipping like anything else on the shelf. One strip,
+              so a visitor who wants a cart rather than a callback is not sent
+              off to search for it. */}
+          {onSale && (
+            <Reveal delay={0.15} className="mt-12 sm:mt-16">
+              <div
+                className="grid items-center gap-8 border border-rule bg-paper p-6 sm:p-8 lg:grid-cols-12 lg:gap-10"
+                style={{ "--acc": categoryAccent(product.category) } as React.CSSProperties}
+              >
+              <div className="relative aspect-square overflow-hidden bg-paper-deep lg:col-span-2">
+                {product.image ? (
+                  <Image
+                    src={product.image}
+                    alt={product.imageLabel || product.name}
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 16vw"
+                    className="object-cover"
+                  />
+                ) : (
+                  <ProductPlate name={product.name} category={product.category} seed={product.slug} size="sm" />
+                )}
+              </div>
+              <div className="lg:col-span-6">
+                <p className="flex items-center gap-2 text-[0.625rem] font-semibold tracking-[0.22em] text-[var(--acc)] uppercase">
+                  <span aria-hidden className="size-[5px] rotate-45 bg-[var(--acc)]" />
+                  Dall&apos;e-shop
+                </p>
+                <h3 className="font-display mt-2 text-[1.5rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">
+                  Preferisci il carrello?
+                </h3>
+                <p className="mt-3 text-[0.9375rem] leading-relaxed text-brown-700">
+                  La stessa porchetta, al chilo, con ritiro in bottega o spedizione. Comoda se la
+                  vuoi insieme al resto della spesa.
+                </p>
+                <Link
+                  href={`/negozio/${product.slug}`}
+                  className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-gold-deep underline-draw"
+                >
+                  Scheda prodotto
+                  <ArrowRight className="size-4" />
+                </Link>
+              </div>
+              <div className="lg:col-span-4">
+                <p className="ticket inline-block bg-[color-mix(in_oklab,var(--acc)_11%,var(--paper-warm))] px-3 py-1.5 text-lg font-semibold text-brown-950 tabular-nums">
+                  {formatEuro(product.priceCents!)}
+                  {product.unit && <span className="font-normal text-taupe"> / {product.unit}</span>}
+                </p>
+                <AddToCartButton
+                  product={{
+                    slug: product.slug,
+                    name: product.name,
+                    priceCents: product.priceCents!,
+                    unit: product.unit,
+                    image: product.image,
+                  }}
+                  stock={product.stock}
+                  withQuantity
+                />
+              </div>
+              </div>
+            </Reveal>
+          )}
+        </div>
+      </section>
+
+      {/* In breve — the ledger and the three steps. Replaces the two cards that
+          used to say "every Saturday" and "book by Friday" in prose: the same
+          facts, read off the settings, with the ones the cards left out. */}
+      <section className="bg-paper px-5 py-16 sm:px-8 sm:py-24 lg:px-12">
+        <div className="mx-auto grid max-w-[88rem] gap-14 lg:grid-cols-12 lg:gap-16">
+          <Reveal className="lg:col-span-5">
+            <SectionMark n="I">Le cose da sapere</SectionMark>
+            <h2 className="font-display display-md mt-6 font-semibold text-brown-950">
+              In breve
+            </h2>
+            <div className="mt-8 border-t border-rule">
+              {facts.map((f) => (
+                <LeaderRow key={f.label} label={f.label} value={f.value} className="border-b border-rule" />
+              ))}
+            </div>
+          </Reveal>
+
+          <div className="lg:col-span-7">
+            <Reveal>
+              <SectionMark n="II">Come funziona</SectionMark>
+              <h2 className="font-display display-md mt-6 font-semibold text-brown-950">
+                Tre passaggi, nessun anticipo
+              </h2>
+            </Reveal>
+            <RevealStagger className="mt-8 grid gap-px border border-rule bg-rule sm:grid-cols-3">
+              {howItWorks.map((step, i) => (
+                <RevealStaggerItem key={step.title} className="flex flex-col bg-paper p-6 sm:p-7">
+                  <span className="font-display text-4xl leading-none font-semibold tracking-[-0.03em] text-rule-strong tabular-nums">
+                    0{i + 1}
+                  </span>
+                  <h3 className="font-display mt-6 text-[1.25rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">
+                    {step.title}
+                  </h3>
+                  <p className="mt-3 text-sm leading-relaxed text-brown-700">{step.text}</p>
+                </RevealStaggerItem>
+              ))}
+            </RevealStagger>
+            <Reveal className="mt-8 flex flex-wrap items-center gap-3">
+              <CTA href="#prenota" tone="primary">
+                Prenota ora
+              </CTA>
+              <CTA href="/sedi" tone="outline">
+                Orari e indirizzi
+              </CTA>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
       {/* Eredità */}
-      <section className="relative overflow-hidden bg-brown-900 px-5 py-16 sm:px-8 sm:py-48">
-        <div className="mx-auto grid max-w-[88rem] grid-cols-1 items-center gap-16 lg:grid-cols-2 lg:gap-24">
+      <section className="relative overflow-hidden bg-brown-900 px-5 py-16 sm:px-8 sm:py-24">
+        <div aria-hidden className="ember absolute inset-0" />
+        <div className="relative mx-auto grid max-w-[88rem] grid-cols-1 items-center gap-16 lg:grid-cols-2 lg:gap-24">
           <Reveal className="space-y-10">
             <h2 className="font-display text-5xl leading-[0.95] tracking-[-0.028em] text-cream sm:text-6xl lg:text-8xl">
               L&apos;eredità di una ricetta segreta
@@ -175,9 +521,9 @@ export default async function PorchettaPage() {
       </section>
 
       {/* Processo */}
-      <section id="processo" className="bg-cream px-5 py-16 sm:px-8 sm:py-48">
+      <section id="processo" className="scroll-mt-24 bg-cream px-5 py-16 sm:px-8 sm:py-24">
         <div className="mx-auto max-w-[88rem]">
-          <Reveal className="mb-20 text-center sm:mb-32">
+          <Reveal className="mb-16 text-center sm:mb-24">
             <span className="eyebrow eyebrow-dark mb-6 block">Dalla terra alla tavola</span>
             <h2 className="font-display display-xl font-semibold text-brown-950">
               Come nasce la nostra porchetta
@@ -198,7 +544,9 @@ export default async function PorchettaPage() {
                     {i + 1}
                   </div>
                 </div>
-                <h3 className="font-display mb-4 text-[1.5rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">{step.title}</h3>
+                <h3 className="font-display mb-4 text-[1.5rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">
+                  {step.title}
+                </h3>
                 <p className="leading-relaxed text-brown-700">{step.text}</p>
               </RevealStaggerItem>
             ))}
@@ -207,7 +555,7 @@ export default async function PorchettaPage() {
       </section>
 
       {/* Il sapore perfetto */}
-      <section className="relative overflow-hidden bg-brown-950 px-5 py-16 sm:px-8 sm:py-48">
+      <section className="relative overflow-hidden bg-brown-950 px-5 py-16 sm:px-8 sm:py-24">
         <div className="mx-auto max-w-[88rem]">
           <Reveal>
             <div className="cinematic-shadow group relative h-[480px] overflow-hidden sm:h-[600px]">
@@ -233,52 +581,10 @@ export default async function PorchettaPage() {
         </div>
       </section>
 
-      {/* Quando assaporarla */}
-      <section className="bg-paper-warm px-5 py-16 sm:px-8 sm:py-48">
-        <div className="mx-auto max-w-5xl text-center">
-          <Reveal className="mb-20">
-            <span className="eyebrow eyebrow-dark mb-6 block">Esperienza in negozio</span>
-            <h2 className="font-display display-xl font-semibold text-brown-950">
-              Quando assaporarla
-            </h2>
-          </Reveal>
-          <RevealStagger className="grid grid-cols-1 gap-12 text-left md:grid-cols-2">
-            <RevealStaggerItem className="card-shadow-soft border border-rule bg-paper p-10 sm:p-12">
-              <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-full bg-gold/10">
-                <Flame className="size-7 text-gold-dark" />
-              </div>
-              <h3 className="font-display mb-4 text-[1.5rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">Ogni sabato mattina</h3>
-              <p className="text-lg leading-relaxed text-brown-700">
-                Disponibile calda appena sfornata presso le nostre botteghe ad Ancona.
-              </p>
-            </RevealStaggerItem>
-            <RevealStaggerItem className="card-shadow-soft border border-rule bg-paper p-10 sm:p-12">
-              <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-full bg-gold/10">
-                <Bell className="size-7 text-gold-dark" />
-              </div>
-              <h3 className="font-display mb-4 text-[1.5rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">Su prenotazione</h3>
-              <p className="text-lg leading-relaxed text-brown-700">
-                Per essere sicuro di trovarla, prenota la tua porchetta in negozio o per telefono
-                entro il venerdì.
-              </p>
-            </RevealStaggerItem>
-          </RevealStagger>
-          <Reveal className="mt-20">
-            <Link
-              href="/prenotazioni"
-              data-magnetic
-              className="inline-flex items-center rounded-full bg-gold px-10 py-4 text-base font-semibold text-brown-950 shadow-[0_10px_20px_-5px_rgba(225,190,100,0.3)] transition-all duration-500 hover:-translate-y-1 hover:bg-gold-dark"
-            >
-              Riserva la tua porzione
-            </Link>
-          </Reveal>
-        </div>
-      </section>
-
       {/* Galleria */}
-      <section className="bg-paper px-5 py-16 sm:px-8 sm:py-48">
+      <section className="bg-paper px-5 py-16 sm:px-8 sm:py-24">
         <div className="mx-auto max-w-[88rem]">
-          <Reveal className="mb-16 space-y-6 sm:mb-24">
+          <Reveal className="mb-12 space-y-6 sm:mb-16">
             <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
               <span aria-hidden className="h-px w-10 bg-gold" />
               Galleria fotografica
@@ -307,18 +613,25 @@ export default async function PorchettaPage() {
       </section>
 
       {/* CTA finale */}
-      <section className="bg-paper-warm py-16 sm:py-40">
+      <section className="bg-paper-warm py-16 sm:py-28">
         <Reveal className="mx-auto max-w-4xl px-8 text-center">
           <h2 className="font-display display-lg mb-12 font-semibold text-brown-950">
             Pronto ad <span className="wonk text-gold-deep">assaggiarla?</span>
           </h2>
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <CTA href="/prenotazioni" tone="gold">
-              Prenota ora
+            <CTA href="#prenota" tone="gold">
+              Prenota per {pickupDayName}
             </CTA>
-            <CTA href="/sedi" tone="outline">
-              Visita le botteghe
-            </CTA>
+            {onSale ? (
+              <CTA href={`/negozio/${product.slug}`} tone="outline">
+                <ShoppingBag className="size-4" />
+                Ordina online
+              </CTA>
+            ) : (
+              <CTA href="/sedi" tone="outline">
+                Visita le botteghe
+              </CTA>
+            )}
           </div>
         </Reveal>
       </section>

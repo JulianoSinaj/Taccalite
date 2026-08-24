@@ -467,7 +467,7 @@ export default async function ShopDetailPage({ params }: Params) {
       </section>
 
       {/* ── Chi siamo ──────────────────────────────────────────────────── */}
-      <section className="bg-paper px-5 py-16 text-brown-950 sm:px-8 sm:py-32 lg:px-12">
+      <section className="bg-paper px-5 py-12 text-brown-950 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-12">
             {/* The band's title is a pull-quote, which is not a heading — so
@@ -556,7 +556,7 @@ export default async function ShopDetailPage({ params }: Params) {
       </section>
 
       {/* ── Perché sceglierci — engraved plates ────────────────────────── */}
-      <section className="bg-paper-warm px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+      <section className="bg-paper-warm px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-12 max-w-3xl">
             <SectionMark n="03" className="mb-6">
@@ -601,7 +601,7 @@ export default async function ShopDetailPage({ params }: Params) {
 
       {/* ── Prodotti ───────────────────────────────────────────────────── */}
       {shopProducts.length > 0 && (
-        <section className="bg-paper px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+        <section className="bg-paper px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
           <div className="mx-auto max-w-[88rem]">
             <Reveal className="mb-12 flex flex-col gap-6 border-b border-rule pb-8 md:flex-row md:items-end md:justify-between">
               <div className="max-w-2xl">
@@ -662,7 +662,7 @@ export default async function ShopDetailPage({ params }: Params) {
       )}
 
       {/* ── Vieni a trovarci ───────────────────────────────────────────── */}
-      <section className="bg-paper-warm px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+      <section className="bg-paper-warm px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-12 max-w-3xl">
             <SectionMark n="05" className="mb-6">
@@ -759,7 +759,7 @@ export default async function ShopDetailPage({ params }: Params) {
 
       {/* ── The other bottega ──────────────────────────────────────────── */}
       {otherShop && (
-        <section className="relative overflow-hidden bg-brown-950 px-5 py-16 sm:px-8 sm:py-24 lg:px-12">
+        <section className="relative overflow-hidden bg-brown-950 px-5 py-12 sm:px-8 sm:py-16 lg:px-12">
           <div aria-hidden className="ember absolute inset-0 opacity-70" />
           <div aria-hidden className="bg-noise absolute inset-0 opacity-[0.07]" />
           <Reveal className="relative mx-auto max-w-[88rem]">

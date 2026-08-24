@@ -75,7 +75,7 @@ export default async function CategoryPage({ params }: Params) {
         }
       />
 
-      <section className="px-5 pb-24 sm:px-8 lg:px-12">
+      <section className="px-5 pb-16 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           <Link
             href="/negozio"

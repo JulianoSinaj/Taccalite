@@ -358,7 +358,7 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── Map + locator ──────────────────────────────────────────────── */}
-      <section id="mappa" className="scroll-mt-24 bg-paper px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+      <section id="mappa" className="scroll-mt-24 bg-paper px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-12 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div className="max-w-3xl">
@@ -395,7 +395,7 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── What each counter does ─────────────────────────────────────── */}
-      <section id="servizi" className="scroll-mt-24 bg-paper-warm px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+      <section id="servizi" className="scroll-mt-24 bg-paper-warm px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-12 max-w-3xl">
             <SectionMark n="02" className="mb-6">
@@ -494,7 +494,7 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── Weekly hours, drawn and listed ─────────────────────────────── */}
-      <section id="orari" className="scroll-mt-24 bg-paper px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+      <section id="orari" className="scroll-mt-24 bg-paper px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-12 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
@@ -620,7 +620,7 @@ export default async function NegoziPage() {
       {/* ── How to get there ───────────────────────────────────────────── */}
       <section
         id="come-arrivare"
-        className="scroll-mt-24 bg-paper-warm px-5 py-16 sm:px-8 sm:py-32 lg:px-12"
+        className="scroll-mt-24 bg-paper-warm px-5 py-12 sm:px-8 sm:py-20 lg:px-12"
       >
         <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-12 max-w-3xl">
@@ -704,7 +704,7 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── FAQ ────────────────────────────────────────────────────────── */}
-      <section id="faq" className="scroll-mt-24 bg-paper px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+      <section id="faq" className="scroll-mt-24 bg-paper px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto grid max-w-[88rem] grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-20">
           <Reveal className="lg:col-span-4">
             <SectionMark n="05" className="mb-6">
@@ -763,7 +763,7 @@ export default async function NegoziPage() {
       </section>
 
       {/* ── Reservations funnel ────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-brown-950 px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+      <section className="relative overflow-hidden bg-brown-950 px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
         <div className="ember absolute inset-0 opacity-80" />
         <div className="bg-noise absolute inset-0 opacity-10" />
         <div className="parallax-orb absolute -bottom-52 -left-40 h-[44rem] w-[44rem] opacity-10" />

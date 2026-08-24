@@ -14,7 +14,7 @@ Language: **all UI copy is Italian.** Tone: warm, artisanal, proud family herita
 | --- | --- |
 | Home `/` | Cinematic brand entrance → route to shops, porchetta, booking |
 | Negozi `/negozi`, `/negozi/[slug]` | Find the right shop, address, hours, specialties |
-| Porchetta `/porchetta` | Storytell the signature product, drive Saturday visits/preorders |
+| Porchetta `/porchetta` | The order sheet (kg, bottega, Saturday, cut, contact → `/api/prenotazioni`) plus the story; in the top nav |
 | News `/blog`, `/blog/[slug]` | Announcements: new arrivals, holiday hours, Saturday porchetta |
 | Prenotazioni `/prenotazioni` | Book a table / preorder porchetta via form |
 | Area personale `/account` | Loyalty card: points and rewards (demo login for now) |

@@ -19,7 +19,7 @@ export type Ingrediente = { name: string; note: string };
 
 export default function Porchetta({ ricetta }: { ricetta: Ingrediente[] }) {
   return (
-    <section className="relative overflow-hidden bg-brown-950 px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+    <section className="relative overflow-hidden bg-brown-950 px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
       <div aria-hidden className="ember absolute inset-0" />
       <div aria-hidden className="bg-noise absolute inset-0 opacity-[0.07]" />
 

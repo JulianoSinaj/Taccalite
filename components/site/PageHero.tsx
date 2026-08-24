@@ -44,7 +44,7 @@ export default function PageHero({
     // chrome that is not on the screen. Together with the tighter margins below,
     // this brings the first row of an inner page — the products on /negozio, the
     // shops on /sedi — up above the fold.
-    <section className={cn("px-5 pt-28 pb-10 sm:px-8 sm:pt-40 sm:pb-20 lg:px-12", className)}>
+    <section className={cn("px-5 pt-28 pb-10 sm:px-8 sm:pt-32 sm:pb-16 lg:px-12", className)}>
       <div
         className={cn(
           "mx-auto max-w-[88rem]",
@@ -70,7 +70,7 @@ export default function PageHero({
               )}
             </>
           ) : (
-            <div className="mt-5 grid gap-5 border-b border-rule pb-7 sm:mt-8 sm:gap-8 sm:pb-10 lg:grid-cols-12 lg:items-end lg:gap-12">
+            <div className="mt-5 grid gap-5 pb-7 sm:mt-8 sm:gap-8 sm:pb-10 lg:grid-cols-12 lg:items-end lg:gap-12">
               <h1 className="font-display display-xl font-semibold text-brown-950 lg:col-span-8">
                 <RevealLines immediate lines={title} />
               </h1>

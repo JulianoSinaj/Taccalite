@@ -95,7 +95,8 @@ export type PorchettaAvailability = {
   hasCapacity: boolean;
 };
 
-// English weekday keys (as stored in the `porchetta.day` setting) → JS getDay().
+// English weekday keys (as stored in the `porchetta.day` and
+// `porchetta.cutoffDay` settings) → JS getDay().
 const WEEKDAY_INDEX: Record<string, number> = {
   sunday: 0,
   monday: 1,
@@ -106,37 +107,58 @@ const WEEKDAY_INDEX: Record<string, number> = {
   saturday: 6,
 };
 
-/**
- * Live availability for the next porchetta pickup day, **per shop**.
- *
- * The public page used to compare one shared setting against
- * `getPorchettaKgForDate()`, which sums *every* location — so with two shops it
- * measured a two-shop total against a one-shop cap. It could say "al completo"
- * while a shop still had room, or offer kilos for a shop that was already full
- * and then refuse the booking at submit. Enforcement
- * (`checkPorchettaCapacity`) has always been per location; this makes the
- * display agree with it.
- *
- * `now` is a parameter so the date arithmetic stays out of a component's render
- * body (the React Compiler lint forbids `new Date()` there).
- */
-export async function porchettaAvailability(now: Date = new Date()): Promise<PorchettaAvailability> {
-  const dayKey = await getSetting<string>("porchetta.day", "saturday");
-  const target = WEEKDAY_INDEX[String(dayKey).toLowerCase()] ?? 6; // fall back to Saturday
-  const ahead = (target - now.getDay() + 7) % 7; // 0 = today is the pickup day
-  const pickup = new Date(now.getFullYear(), now.getMonth(), now.getDate() + ahead);
-  const pickupIso = `${pickup.getFullYear()}-${String(pickup.getMonth() + 1).padStart(2, "0")}-${String(pickup.getDate()).padStart(2, "0")}`;
+const WEEKDAY_IT: Record<string, string> = {
+  sunday: "domenica",
+  monday: "lunedì",
+  tuesday: "martedì",
+  wednesday: "mercoledì",
+  thursday: "giovedì",
+  friday: "venerdì",
+  saturday: "sabato",
+};
 
+/** The weekday index a setting names; `fallback` when it names nothing. */
+function weekdayIndex(key: unknown, fallback: number): number {
+  return WEEKDAY_INDEX[String(key).toLowerCase()] ?? fallback;
+}
+
+/**
+ * "sabato" for `"saturday"` — the settings store English keys, the site speaks
+ * Italian. Lower-case, for the middle of a sentence.
+ */
+export function weekdayNameIt(key: unknown, fallback: string): string {
+  return WEEKDAY_IT[String(key).toLowerCase()] ?? fallback;
+}
+
+/**
+ * `yyyy-mm-dd` of a Date read in the server's own frame — the frame the pickup
+ * arithmetic here has always used, and the one the tests fix dates in.
+ */
+function localIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** "Sabato 26 luglio" — derived from the date, so it survives a changed setting. */
+function dayLabel(d: Date, capitalise = true): string {
   const raw = new Intl.DateTimeFormat("it-IT", {
     weekday: "long",
     day: "numeric",
     month: "long",
-  }).format(pickup);
-  const pickupLabel = raw.charAt(0).toUpperCase() + raw.slice(1);
+  }).format(d);
+  return capitalise ? raw.charAt(0).toUpperCase() + raw.slice(1) : raw;
+}
 
-  const allShops = await getShops();
-  const roasting = allShops.filter((s) => s.porchettaEnabled);
+/** The first `target` weekday on or after `now` — today, if today is one. */
+function nextWeekday(now: Date, target: number): Date {
+  const ahead = (target - now.getDay() + 7) % 7;
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + ahead);
+}
 
+/** One availability row per roasting shop, for one pickup day. */
+async function shopAvailabilityFor(
+  pickupIso: string,
+  roasting: { slug: string; name: string }[],
+): Promise<PorchettaShopAvailability[]> {
   const shops: PorchettaShopAvailability[] = [];
   for (const s of roasting) {
     // Reuse the enforcement path rather than re-deriving it — a second copy of
@@ -154,15 +176,99 @@ export async function porchettaAvailability(now: Date = new Date()): Promise<Por
       isFull: capacityKg > 0 && remainingKg <= 0,
     });
   }
+  return shops;
+}
 
+/** The two page-level verdicts, read off the per-shop rows. */
+function summarise(shops: PorchettaShopAvailability[]): Pick<PorchettaAvailability, "hasCapacity" | "allFull"> {
   const capped = shops.filter((s) => s.capacityKg > 0);
   return {
-    pickupIso,
-    pickupLabel,
-    shops,
     hasCapacity: capped.length > 0,
     allFull: capped.length > 0 && capped.every((s) => s.isFull),
   };
+}
+
+/**
+ * Live availability for the next porchetta pickup day, **per shop**.
+ *
+ * The public page used to compare one shared setting against
+ * `getPorchettaKgForDate()`, which sums *every* location — so with two shops it
+ * measured a two-shop total against a one-shop cap. It could say "al completo"
+ * while a shop still had room, or offer kilos for a shop that was already full
+ * and then refuse the booking at submit. Enforcement
+ * (`checkPorchettaCapacity`) has always been per location; this makes the
+ * display agree with it.
+ *
+ * `now` is a parameter so the date arithmetic stays out of a component's render
+ * body (the React Compiler lint forbids `new Date()` there).
+ */
+export async function porchettaAvailability(now: Date = new Date()): Promise<PorchettaAvailability> {
+  const dayKey = await getSetting<string>("porchetta.day", "saturday");
+  const pickup = nextWeekday(now, weekdayIndex(dayKey, 6)); // fall back to Saturday
+  const pickupIso = localIso(pickup);
+
+  const roasting = (await getShops()).filter((s) => s.porchettaEnabled);
+  const shops = await shopAvailabilityFor(pickupIso, roasting);
+
+  return { pickupIso, pickupLabel: dayLabel(pickup), shops, ...summarise(shops) };
+}
+
+export type PorchettaPickupDay = PorchettaAvailability & {
+  /** Last day (ISO) a booking for this pickup is taken online. */
+  cutoffIso: string;
+  /** "venerdì 25 luglio" — for the sentence that names the deadline. */
+  cutoffLabel: string;
+  /** False once the cutoff has passed: that batch is spoken for, or by phone only. */
+  bookable: boolean;
+};
+
+/**
+ * The next `count` pickup days, each with its per-shop availability and the
+ * booking deadline that applies to it.
+ *
+ * The public page offers these as the days a customer can choose between, so
+ * "prenota entro il venerdì" is a fact the page derives rather than a sentence
+ * it asserts: the cutoff is `porchetta.cutoffDay`, read backwards from each
+ * pickup, and a day whose cutoff has passed is still listed — greyed, with the
+ * reason — rather than silently skipped, so a Saturday-morning visitor learns
+ * why the batch they can smell is not the one they can book.
+ */
+export async function porchettaPickupDays(
+  count = 4,
+  now: Date = new Date(),
+): Promise<PorchettaPickupDay[]> {
+  const [dayKey, cutoffKey] = await Promise.all([
+    getSetting<string>("porchetta.day", "saturday"),
+    getSetting<string>("porchetta.cutoffDay", "friday"),
+  ]);
+  const pickupDay = weekdayIndex(dayKey, 6);
+  const cutoffDay = weekdayIndex(cutoffKey, 5);
+  // Days from the cutoff to the pickup. 0 = the same weekday, i.e. bookings
+  // stay open on the pickup day itself.
+  const lead = (pickupDay - cutoffDay + 7) % 7;
+  const todayIso = localIso(now);
+
+  const roasting = (await getShops()).filter((s) => s.porchettaEnabled);
+  const first = nextWeekday(now, pickupDay);
+
+  const days: PorchettaPickupDay[] = [];
+  for (let i = 0; i < count; i++) {
+    const pickup = new Date(first.getFullYear(), first.getMonth(), first.getDate() + i * 7);
+    const cutoff = new Date(pickup.getFullYear(), pickup.getMonth(), pickup.getDate() - lead);
+    const pickupIso = localIso(pickup);
+    const cutoffIso = localIso(cutoff);
+    const shops = await shopAvailabilityFor(pickupIso, roasting);
+    days.push({
+      pickupIso,
+      pickupLabel: dayLabel(pickup),
+      shops,
+      ...summarise(shops),
+      cutoffIso,
+      cutoffLabel: dayLabel(cutoff, false),
+      bookable: todayIso <= cutoffIso,
+    });
+  }
+  return days;
 }
 
 /** Guests already booked in one time slot (excluding cancellations). */

@@ -87,7 +87,7 @@ export default async function ProductDetailPage({ params }: Params) {
 
       {/* `pb-28` on a phone clears the sticky buy bar, which would otherwise sit
           over the last row of the related-products grid. */}
-      <section className="bg-paper px-5 pt-28 pb-28 sm:px-8 sm:pt-40 lg:px-12 lg:pb-24">
+      <section className="bg-paper px-5 pt-28 pb-28 sm:px-8 sm:pt-32 lg:px-12 lg:pb-20">
         <div
           className="mx-auto max-w-[88rem]"
           style={{ "--acc": categoryAccent(product.category) } as React.CSSProperties}
@@ -229,7 +229,7 @@ export default async function ProductDetailPage({ params }: Params) {
 
           {/* Related products */}
           {related.length > 0 && (
-            <div className="mt-16 sm:mt-24">
+            <div className="mt-12 sm:mt-16">
               <h2 className="font-display display-md mb-7 font-semibold text-brown-950 sm:mb-10">
                 Potrebbe interessarti
               </h2>

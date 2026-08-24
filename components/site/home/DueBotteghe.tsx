@@ -19,7 +19,7 @@ function telHref(phone: string) {
 export default function DueBotteghe({ shops }: { shops: Shop[] }) {
   return (
     <section className="bg-paper">
-      <div className="mx-auto max-w-[88rem] px-5 pt-24 pb-10 sm:px-8 sm:pt-32 lg:px-12">
+      <div className="mx-auto max-w-[88rem] px-5 pt-12 pb-10 sm:px-8 sm:pt-20 lg:px-12">
         <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
           <span aria-hidden className="h-px w-10 bg-gold" />
           Le sedi

@@ -20,7 +20,7 @@ export default async function ReimpostaPasswordPage({ searchParams }: SearchPara
   const state = await inspectToken(token, "password_reset");
 
   return (
-    <div className="px-5 pt-28 pb-20 sm:px-8 sm:pt-40 sm:pb-28">
+    <div className="px-5 pt-28 pb-16 sm:px-8 sm:pt-32 sm:pb-20">
       <Reveal className="mx-auto max-w-xl">
         <div className="mb-8 space-y-4 text-center sm:mb-12">
           <p className="inline-flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">

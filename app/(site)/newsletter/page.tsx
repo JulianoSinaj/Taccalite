@@ -16,7 +16,7 @@ export default async function NewsletterStatusPage({ searchParams }: SearchParam
 
   if (unsubscribed) {
     return (
-      <section className="flex min-h-[60svh] items-center justify-center px-5 py-24 text-center sm:py-40">
+      <section className="flex min-h-[60svh] items-center justify-center px-5 py-16 text-center sm:py-24">
         <div className="mx-auto max-w-lg">
           <div className="mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-full bg-gold">
             <Check className="size-8 text-on-gold" />
@@ -40,7 +40,7 @@ export default async function NewsletterStatusPage({ searchParams }: SearchParam
   }
 
   return (
-    <section className="flex min-h-[60svh] items-center justify-center px-5 py-24 text-center sm:py-40">
+    <section className="flex min-h-[60svh] items-center justify-center px-5 py-16 text-center sm:py-24">
       <div className="mx-auto max-w-lg">
         <div
           className={`mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-full ${

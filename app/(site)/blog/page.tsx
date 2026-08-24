@@ -98,7 +98,7 @@ export default async function BlogPage() {
         }
       />
 
-      <section className="mx-auto max-w-[88rem] px-5 pb-24 sm:px-8 sm:pb-32 lg:px-12">
+      <section className="mx-auto max-w-[88rem] px-5 pb-16 sm:px-8 sm:pb-20 lg:px-12">
         <div className="flex items-end justify-between gap-6 border-b border-rule pb-8">
           <h2 className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
             <span aria-hidden className="h-px w-10 bg-gold" />

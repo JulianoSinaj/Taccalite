@@ -31,7 +31,7 @@ export default async function PrenotazioniPage() {
   return (
     <div>
       {/* Hero: big text left, reservation form right */}
-      <section className="px-5 pt-28 pb-14 sm:px-8 sm:pt-32 sm:pb-20 lg:px-12">
+      <section className="px-5 pt-28 pb-14 sm:px-8 sm:pt-32 sm:pb-16 lg:px-12">
         <div className="mx-auto grid max-w-[88rem] grid-cols-1 items-start gap-14 lg:grid-cols-12 lg:gap-16">
           <Reveal className="lg:sticky lg:top-32 lg:col-span-5">
             <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
@@ -74,7 +74,7 @@ export default async function PrenotazioniPage() {
       </section>
 
       {/* Info cards row */}
-      <section className="bg-paper-warm px-5 py-16 sm:px-8 lg:px-12 sm:py-28">
+      <section className="bg-paper-warm px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           <Reveal className="mb-14 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>

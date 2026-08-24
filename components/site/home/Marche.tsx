@@ -24,7 +24,7 @@ export default function Marche({ brands }: { brands: string[] }) {
 
   return (
     <section
-      className="marquee relative overflow-hidden border-y border-brown-950 bg-brown-900 py-16 sm:py-20"
+      className="marquee relative overflow-hidden border-y border-brown-950 bg-brown-900 py-10 sm:py-14"
       aria-labelledby="marche-heading"
     >
       <div aria-hidden className="ember absolute inset-0 opacity-70" />

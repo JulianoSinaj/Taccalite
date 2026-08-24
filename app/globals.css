@@ -40,9 +40,7 @@
   --rule: #e7dccb;         /* hairline between sections and around cards */
   --rule-strong: #d4c4a9;  /* the same hairline when it has to be seen */
 
-  /* The tooth in the stock. A token rather than a literal because the intro
-   * veil paints the same grain over its own ground: were the veil smooth, the
-   * page would visibly gain a texture at the moment the veil lifted. */
+  /* The tooth in the stock. */
   --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.32'/%3E%3C/svg%3E");
 
   /* ── Territory accents ────────────────────────────────────────────────────
@@ -304,168 +302,99 @@ body:has(.site-shell) {
 
 /* ── The intro ───────────────────────────────────────────────────────────────
  *
- * The shop stamping its seal on the page before handing it over.
- *
- * Driven entirely by a `data-intro` attribute that a tiny inline script sets on
- * <html> (see components/site/Intro.tsx) — deliberately not by React. The veil's
- * whole job is to cover the page *before* hydration, and its promise is that it
- * lifts within a fixed budget; both would be hostage to hydration timing if a
- * component owned them. React only renders the markup.
- *
- * `display: none` is the default state, so with the attribute absent — script
- * blocked, JavaScript off, any route but the homepage, a client-side navigation
- * back to the homepage — there is simply no veil at all. That default is the
- * only lock the veil needs against showing with nothing to lift it, which is why
- * the reduced-motion block at the end of this section no longer adds a second.
+ * The brown curtain (components/IntroLoader.tsx). Its markup is in the server
+ * HTML and these keyframes start on first paint, so the ring is already drawing
+ * before a byte of JavaScript has run; the component only schedules the exit.
+ * Timings mirror the original Framer sequence exactly.
  */
-.intro-veil {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: none;
-  place-items: center;
-  background: var(--paper);
-}
-
-.intro-veil::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.45;
-  mix-blend-mode: multiply;
-  background-image: var(--paper-grain);
-}
-
-html[data-intro="play"] .intro-veil {
-  display: grid;
-}
-
-/* The lift. `visibility` is delayed by exactly the fade so the veil stops
- * catching clicks the instant it is invisible rather than the instant it starts
- * leaving. */
-html[data-intro="done"] .intro-veil {
-  display: grid;
+.intro-ring {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
   opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 420ms cubic-bezier(0.4, 0, 1, 1),
-    visibility 0s linear 420ms;
+  animation: intro-draw 1.4s ease-in-out both;
+}
+.intro-ring--inner {
+  animation-delay: 0.15s;
 }
 
-.intro-stack {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  justify-items: center;
-  gap: 1.4rem;
-  padding: 0 1.5rem;
-}
-
-.intro-seal {
-  width: clamp(6rem, 17vw, 9rem);
-  height: auto;
-  filter: drop-shadow(0 14px 26px rgba(42, 26, 16, 0.22));
+.intro-mark {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: intro-mark 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.7s both;
 }
 
 .intro-name {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: var(--color-gold-deep);
+  opacity: 0;
+  animation: intro-rise 0.8s ease-out 0.9s both;
+}
+
+.intro-tagline {
+  opacity: 0;
+  animation: intro-fade 0.8s ease 1.3s both;
 }
 
 .intro-rule {
-  position: relative;
-  display: block;
-  height: 1px;
-  width: 7rem;
-  overflow: hidden;
-  background: var(--rule);
+  opacity: 0;
+  animation: intro-fade 0.4s ease 1.5s both;
+}
+.intro-rule-fill {
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: intro-fill 1.1s cubic-bezier(0.76, 0, 0.24, 1) 1.5s both;
 }
 
-.intro-rule::after {
-  content: "";
-  position: absolute;
-  inset: 0 auto;
-  width: 34%;
-  background: var(--color-gold);
+.intro-skip {
+  opacity: 0;
+  animation: intro-fade 0.6s ease 1s both;
 }
 
-html[data-intro="play"] .intro-seal {
-  animation: intro-stamp 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+@keyframes intro-draw {
+  from { stroke-dashoffset: 1; opacity: 0; }
+  to   { stroke-dashoffset: 0; opacity: 1; }
 }
-
-html[data-intro="play"] .intro-name {
-  animation: intro-rise 380ms cubic-bezier(0.16, 1, 0.3, 1) 240ms both;
+@keyframes intro-mark {
+  from { opacity: 0; transform: scale(0.82); filter: blur(6px); }
+  to   { opacity: 1; transform: scale(1); filter: blur(0); }
 }
-
-html[data-intro="play"] .intro-rule::after {
-  animation: loading-sweep 1.4s ease-in-out 300ms infinite;
-}
-
-/* The press: the seal comes down oversized and off-square, overshoots, and
- * settles — while its shadow tightens from a long throw to a resting one, which
- * is what sells the descent as distance rather than a scale tween. */
-@keyframes intro-stamp {
-  0% {
-    opacity: 0;
-    transform: scale(1.5) rotate(-9deg);
-    filter: drop-shadow(0 44px 40px rgba(42, 26, 16, 0));
-  }
-  50% {
-    opacity: 1;
-  }
-  68% {
-    transform: scale(0.955) rotate(1.6deg);
-    filter: drop-shadow(0 9px 16px rgba(42, 26, 16, 0.3));
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-    filter: drop-shadow(0 14px 26px rgba(42, 26, 16, 0.22));
-  }
-}
-
 @keyframes intro-rise {
-  from {
-    opacity: 0;
-    transform: translateY(7px);
-  }
-  to {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes intro-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes intro-fill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* Reduced motion: the card is simply there, then gone. */
+@media (prefers-reduced-motion: reduce) {
+  .intro-ring,
+  .intro-mark,
+  .intro-name,
+  .intro-tagline,
+  .intro-rule,
+  .intro-rule-fill,
+  .intro-skip {
+    animation: none;
     opacity: 1;
     transform: none;
+    stroke-dashoffset: 0;
   }
 }
 
-/* Reduced motion keeps the veil and loses the motion.
- *
- * This block used to hide the veil outright, on the reasoning that a veil is
- * worthless if it ever shows without the script that lifts it — but that door is
- * already locked by `display: none` being the *default* state above, which is
- * what covers script-blocked and no-JS. All this one ever did was give the
- * visitor who asked for calm the single thing the veil exists to prevent: the
- * hero assembling itself in front of them, seal cross-fading to gold, fonts
- * swapping under the headline.
- *
- * So the paper still comes down. The stamp does not fall, the name does not
- * rise, and the rule does not sweep — the whole card is simply there and then
- * gone. The lift stays a fade, and stays shorter: cross-fading opacity is not
- * the kind of movement this query is asking about, but there is no reason to
- * hold someone who was never shown an animation. */
-@media (prefers-reduced-motion: reduce) {
-  html[data-intro="play"] .intro-seal,
-  html[data-intro="play"] .intro-name,
-  html[data-intro="play"] .intro-rule::after {
-    animation: none;
-  }
-
-  html[data-intro="done"] .intro-veil {
-    transition:
-      opacity 200ms linear,
-      visibility 0s linear 200ms;
-  }
+/* The reload hand-off. Set on <html> by IntroLoader at `beforeunload`: the old
+ * document keeps painting while the server thinks, so it shows the same brown
+ * the new document's first frame will — no cut through the page in between. */
+html[data-intro="leave"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--color-brown-950);
 }
 
 .site-shell .font-display {

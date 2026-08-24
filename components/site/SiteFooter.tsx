@@ -43,13 +43,13 @@ function FacebookIcon({ className }: { className?: string }) {
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/negozio", label: "Shop" },
+  { href: "/porchetta", label: "Porchetta" },
   { href: "/la-nostra-storia", label: "La nostra storia" },
   { href: "/sedi", label: "Sedi" },
   { href: "/contatti", label: "Contattaci" },
 ];
 
 const moreLinks = [
-  { href: "/porchetta", label: "La porchetta" },
   { href: "/prenotazioni", label: "Prenota un tavolo" },
   { href: "/blog", label: "Dal diario" },
   { href: "/account", label: "Area personale" },
@@ -82,7 +82,7 @@ export default async function SiteFooter() {
         Taccalite
       </p>
 
-      <div className="relative mx-auto max-w-[88rem] px-5 pt-16 pb-10 sm:px-8 sm:pt-24 lg:px-12">
+      <div className="relative mx-auto max-w-[88rem] px-5 pt-12 pb-10 sm:px-8 sm:pt-16 lg:px-12">
         <div className="grid gap-11 sm:gap-14 md:grid-cols-2 lg:grid-cols-[1.3fr_0.7fr_1.1fr_1.1fr] lg:gap-12">
           <div className="max-w-sm">
             <span className="font-display block text-[2.25rem] leading-none font-semibold tracking-[-0.045em] text-cream uppercase">

@@ -18,3 +18,11 @@ const euro = new Intl.NumberFormat("it-IT", {
 export function formatEuro(cents: number): string {
   return `€ ${euro.format(cents / 100)}`;
 }
+
+/**
+ * Porchetta is booked in half-kilos: "1", "1,5", "12" — never "1.0" or "1.50".
+ * Italian decimal comma, since it sits next to prices formatted the same way.
+ */
+export function formatKg(kg: number): string {
+  return Number.isInteger(kg) ? String(kg) : kg.toFixed(1).replace(".", ",");
+}

@@ -55,7 +55,7 @@ export default async function BlogPostPage({ params }: Params) {
         ]}
       />
       {/* Editorial header band */}
-      <section className="px-5 pt-32 pb-12 sm:px-8 sm:pt-40 lg:px-12">
+      <section className="px-5 pt-28 pb-12 sm:px-8 sm:pt-32 lg:px-12">
         <Reveal className="mx-auto max-w-[46rem]">
           <Link
             href="/blog"
@@ -83,16 +83,11 @@ export default async function BlogPostPage({ params }: Params) {
       </section>
 
       {/* Body */}
-      <article className="mx-auto max-w-[46rem] px-5 pb-24 sm:px-8 sm:pb-32">
+      <article className="mx-auto max-w-[46rem] px-5 pb-16 sm:px-8 sm:pb-20">
         <Reveal>
-          {/* Mounted, not floated: a hairline offset behind the picture, the
-              same print mount the homepage hero uses. The rounded slab with a
-              cinematic drop shadow belonged to the old dark art direction. */}
+          {/* Flat on the paper: the rounded slab with a cinematic drop shadow
+              belonged to the old dark art direction. */}
           <div className="relative">
-            <span
-              aria-hidden
-              className="absolute -top-3 -right-3 bottom-3 left-3 border border-gold/45"
-            />
             <div className="relative aspect-[16/9] overflow-hidden bg-paper-deep">
               {post.image ? (
                 <Image
@@ -134,7 +129,7 @@ export default async function BlogPostPage({ params }: Params) {
 
       {/* Altre storie */}
       {otherPosts.length > 0 && (
-        <section className="bg-paper-warm px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+        <section className="bg-paper-warm px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
           <div className="mx-auto max-w-[88rem]">
             <Reveal className="mb-14 border-b border-rule pb-10">
               <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">

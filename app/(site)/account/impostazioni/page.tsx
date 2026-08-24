@@ -38,7 +38,7 @@ export default async function AccountSettingsPage() {
   const storedCodes = row.totpRecoveryCodes ?? [];
 
   return (
-    <div className="px-5 pt-28 pb-20 sm:px-8 sm:pt-36 sm:pb-28">
+    <div className="px-5 pt-28 pb-16 sm:px-8 sm:pt-32 sm:pb-20">
       <div className="mx-auto max-w-3xl">
         <Link
           href="/account"

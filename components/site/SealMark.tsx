@@ -38,14 +38,14 @@ if (typeof window !== "undefined" && !window.matchMedia("(prefers-reduced-motion
 const GATE_TIMEOUT = 1100;
 
 /**
- * Tell the intro veil it no longer needs to wait on the seal.
+ * Tell an intro veil, if one is listening, that it no longer needs to wait on
+ * the seal.
  *
- * The hook is a plain function the veil's inline script hangs on `window` (see
- * components/site/Intro.tsx) rather than anything React-shaped, because the
- * script runs before React exists and must not depend on it arriving. It is
- * absent whenever the veil isn't playing — a soft navigation, a second visit in
- * the session, reduced motion — and calling into nothing is the correct
- * behaviour in every one of those cases.
+ * The current intro (components/IntroLoader.tsx) runs on its own clock and hangs
+ * nothing on `window`, so today this is a no-op. It is kept as the seam: a veil
+ * that wants to hold the page until the coin has a frame only has to define
+ * `window.__taccaliteSealReady` before this component hydrates. Calling into
+ * nothing is the correct behaviour in every other case.
  */
 function releaseIntroVeil() {
   (window as Window & { __taccaliteSealReady?: () => void }).__taccaliteSealReady?.();

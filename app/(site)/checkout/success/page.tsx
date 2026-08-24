@@ -66,7 +66,7 @@ export default async function CheckoutSuccess({ searchParams }: SP) {
   const awaitingPayment = !!order && order.paymentStatus === "unpaid" && settlesOnHandover(order.paymentMethod);
 
   return (
-    <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-32 pb-20">
+    <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-28 pb-16">
       <ClearCart />
       <div className="w-full max-w-lg text-center">
         <div className="mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-full bg-gold">

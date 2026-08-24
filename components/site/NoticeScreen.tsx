@@ -31,7 +31,7 @@ export default function NoticeScreen({
   children,
 }: NoticeScreenProps) {
   return (
-    <main className="relative flex flex-1 items-center overflow-hidden px-5 pt-32 pb-24 sm:px-8 sm:pt-40 lg:px-12">
+    <main className="relative flex flex-1 items-center overflow-hidden px-5 pt-28 pb-16 sm:px-8 sm:pt-32 lg:px-12">
       <span
         aria-hidden
         className="font-display pointer-events-none absolute -right-8 bottom-0 text-[30vw] leading-[0.72] font-semibold tracking-[-0.06em] text-transparent select-none sm:-right-12"

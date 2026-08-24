@@ -103,7 +103,7 @@ function LookupForms({
   email?: string;
 }) {
   return (
-    <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-28 pb-20 sm:pt-32">
+    <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-28 pb-16 sm:pt-32">
       <div className="w-full max-w-xl text-center">
         <p className="text-xs font-semibold tracking-[0.16em] text-taupe uppercase sm:tracking-[0.2em]">
           Norcineria Taccalite
@@ -259,7 +259,7 @@ export default async function TracciaPage({ searchParams }: SearchParams) {
     const trackingHref = await trackingUrlFor(order.carrier, order.trackingNumber);
 
     return (
-      <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-28 pb-20 sm:pt-32">
+      <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-28 pb-16 sm:pt-32">
         <div className="w-full max-w-lg">
           <div className="text-center">
             <p className="text-xs font-semibold tracking-[0.16em] text-taupe uppercase sm:tracking-[0.2em]">
@@ -363,7 +363,7 @@ export default async function TracciaPage({ searchParams }: SearchParams) {
   const statusStyle = STATUS_STYLE[reservation.status];
 
   return (
-    <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-28 pb-20 sm:pt-32">
+    <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-28 pb-16 sm:pt-32">
       <div className="w-full max-w-lg">
         <div className="text-center">
           <p className="text-xs font-semibold tracking-[0.16em] text-taupe uppercase sm:tracking-[0.2em]">

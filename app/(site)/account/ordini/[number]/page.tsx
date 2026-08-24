@@ -78,7 +78,7 @@ export default async function OrderDetailPage({ params }: PageProps) {
   const paymentStyle = PAYMENT_STYLE[order.paymentStatus] ?? "bg-brown-900/10 text-brown-800";
 
   return (
-    <section className="min-h-[70svh] bg-cream px-5 pt-32 pb-20 sm:px-8 lg:px-12">
+    <section className="min-h-[70svh] bg-cream px-5 pt-28 pb-16 sm:px-8 lg:px-12">
       <div className="mx-auto w-full max-w-2xl">
         <Link
           href="/account"

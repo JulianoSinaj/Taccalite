@@ -119,7 +119,7 @@ export default async function StorePage({ searchParams }: SearchParams) {
         lede="Ordina online e scegli il ritiro in bottega o la spedizione. Stessa qualità del banco."
       />
 
-      <section className="bg-paper px-5 pb-20 sm:px-8 sm:pb-32 lg:px-12">
+      <section className="bg-paper px-5 pb-16 sm:px-8 sm:pb-20 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           {!storeEnabled || products.length === 0 ? (
             <div className="border border-rule bg-paper-warm p-8 text-center sm:p-12">

@@ -7,7 +7,7 @@ export default function ProdottiMigliori({ products }: { products: ProductTileDa
   if (products.length === 0) return null;
 
   return (
-    <section className="bg-paper px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+    <section className="bg-paper px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
       <div className="mx-auto max-w-[88rem]">
         <div className="flex flex-col justify-between gap-5 border-b border-rule pb-7 sm:gap-7 sm:pb-10 md:flex-row md:items-end">
           <div>

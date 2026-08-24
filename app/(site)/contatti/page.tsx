@@ -28,7 +28,7 @@ export default async function ContattiPage() {
 
   return (
     <>
-      <section className="px-5 pt-32 pb-14 sm:px-8 sm:pt-40 lg:px-12">
+      <section className="px-5 pt-28 pb-14 sm:px-8 sm:pt-32 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
             <span aria-hidden className="h-px w-10 bg-gold" />
@@ -44,7 +44,7 @@ export default async function ContattiPage() {
         </div>
       </section>
 
-      <section className="px-5 pb-24 sm:px-8 sm:pb-32 lg:px-12">
+      <section className="px-5 pb-16 sm:px-8 sm:pb-20 lg:px-12">
         <div className="mx-auto grid max-w-[88rem] gap-16 border-t border-rule pt-14 lg:grid-cols-12 lg:gap-14">
           <div className="lg:col-span-7">
             <h2 className="font-display display-md font-semibold text-brown-950">

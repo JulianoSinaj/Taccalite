@@ -36,7 +36,7 @@ export default async function StoriaPage() {
 
   return (
     <>
-      <section className="px-5 pt-32 pb-16 sm:px-8 sm:pt-40 lg:px-12">
+      <section className="px-5 pt-28 pb-16 sm:px-8 sm:pt-32 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
             <span aria-hidden className="h-px w-10 bg-gold" />
@@ -79,7 +79,7 @@ export default async function StoriaPage() {
         </div>
       </section>
 
-      <section className="bg-paper px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+      <section className="bg-paper px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           <h2 className="font-display display-lg max-w-2xl font-semibold text-brown-950">
             Come ci siamo <span className="wonk text-gold-deep">arrivati</span>
@@ -107,7 +107,7 @@ export default async function StoriaPage() {
         </div>
       </section>
 
-      <section className="bg-paper-warm px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+      <section className="bg-paper-warm px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[88rem]">
           <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
             <span aria-hidden className="h-px w-10 bg-gold" />
@@ -134,7 +134,7 @@ export default async function StoriaPage() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden bg-brown-950 px-5 py-16 sm:px-8 sm:py-32 lg:px-12">
+      <section className="relative overflow-hidden bg-brown-950 px-5 py-12 sm:px-8 sm:py-20 lg:px-12">
         <div aria-hidden className="bg-noise absolute inset-0 opacity-[0.07]" />
         <div
           aria-hidden

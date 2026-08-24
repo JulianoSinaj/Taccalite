@@ -1,7 +1,6 @@
 import Image from "next/image";
 import CTA from "@/components/site/CTA";
 import RevealLines from "@/components/site/RevealLines";
-import SealMark from "@/components/site/SealMark";
 import ParallaxMedia from "@/components/site/ParallaxMedia";
 
 type HeroProps = {
@@ -13,7 +12,7 @@ type HeroProps = {
 
 export default function Hero({ openNow, facts }: HeroProps) {
   return (
-    <section className="relative overflow-hidden px-5 pt-28 pb-14 sm:px-8 sm:pt-32 sm:pb-20 lg:px-12">
+    <section className="relative overflow-hidden px-5 pt-28 pb-14 sm:px-8 sm:pt-32 sm:pb-16 lg:px-12">
       {/* Warmth behind the headline. The hero used to be type on flat white,
           which is why the page read as a document rather than a shopfront: the
           eye had nothing to land on between the words and the photograph. Two
@@ -102,13 +101,7 @@ export default function Hero({ openNow, facts }: HeroProps) {
         </div>
 
         <div className="relative lg:col-span-5">
-          {/* A print mount: the photo sits on the paper, a gold hairline offset
-              behind it the way a mat board sits behind a mounted print. */}
           <div className="relative mx-auto max-w-md lg:max-w-none">
-            <span
-              aria-hidden
-              className="absolute -top-3 -right-3 bottom-3 left-3 border border-gold/45"
-            />
             {/* The 4:5 plate is the intent, but on a short laptop window a
                 616px-tall photo pushes its own caption past the fold and the
                 card renders sliced. Above `lg` the frame is therefore capped to
@@ -141,8 +134,6 @@ export default function Hero({ openNow, facts }: HeroProps) {
                 Coppa al finocchietto, tagliata al momento
               </span>
             </div>
-
-            <SealMark className="pointer-events-none absolute -top-10 -left-10 size-32 sm:-top-14 sm:-left-14 sm:size-44" />
           </div>
         </div>
       </div>

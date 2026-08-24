@@ -20,7 +20,7 @@ export default function LegalLayout({
 }) {
   return (
     <div>
-      <section className="px-5 pt-32 pb-10 sm:px-8 sm:pt-40 lg:px-12">
+      <section className="px-5 pt-28 pb-10 sm:px-8 sm:pt-32 lg:px-12">
         <div className="mx-auto max-w-[46rem]">
           <p className="eyebrow eyebrow-dark">Informazioni legali</p>
           <h1 className="font-display display-lg mt-8 font-semibold text-brown-950">{title}</h1>
@@ -30,7 +30,7 @@ export default function LegalLayout({
         </div>
       </section>
 
-      <article className="mx-auto max-w-[46rem] space-y-8 px-5 pb-24 text-brown-700 sm:px-8 sm:pb-32 [&_a]:font-semibold [&_a]:text-gold-deep [&_a]:underline [&_h2]:font-display [&_h2]:pt-6 [&_h2]:text-[1.5rem] [&_h2]:leading-tight [&_h2]:font-semibold [&_h2]:tracking-[-0.02em] [&_h2]:text-brown-950 [&_li]:leading-relaxed [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6">
+      <article className="mx-auto max-w-[46rem] space-y-8 px-5 pb-16 text-brown-700 sm:px-8 sm:pb-20 [&_a]:font-semibold [&_a]:text-gold-deep [&_a]:underline [&_h2]:font-display [&_h2]:pt-6 [&_h2]:text-[1.5rem] [&_h2]:leading-tight [&_h2]:font-semibold [&_h2]:tracking-[-0.02em] [&_h2]:text-brown-950 [&_li]:leading-relaxed [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6">
         {children}
       </article>
     </div>

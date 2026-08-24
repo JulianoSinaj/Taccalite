@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { INTRO_DONE_EVENT } from "@/components/IntroLoader";
 
 const STORAGE_KEY = "taccalite-cookie-consent";
 
@@ -24,12 +25,24 @@ export default function CookieConsent() {
   const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let undecided = true;
     try {
-      if (!window.localStorage.getItem(STORAGE_KEY)) setVisible(true);
+      undecided = !window.localStorage.getItem(STORAGE_KEY);
     } catch {
       /* private mode — show banner, choice just won't persist */
-      setVisible(true);
     }
+    if (!undecided) return;
+
+    // Not while the intro curtain is down. Sliding in behind it is pointless and,
+    // on some compositors, it painted *through* the curtain — over the "Salta"
+    // control, no less. The curtain announces when the page is actually visible.
+    const show = () => setVisible(true);
+    if (document.documentElement.dataset.intro !== "play") {
+      const id = window.setTimeout(show, 0);
+      return () => window.clearTimeout(id);
+    }
+    window.addEventListener(INTRO_DONE_EVENT, show, { once: true });
+    return () => window.removeEventListener(INTRO_DONE_EVENT, show);
   }, []);
 
   /**
