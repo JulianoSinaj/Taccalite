@@ -60,7 +60,6 @@ you use it):
 | --- | --- |
 | `DATABASE_URL` | `libsql://taccalite-<org>.turso.io` (`TURSO_DATABASE_URL`, as injected by the Vercel Marketplace integration, is accepted too) |
 | `DATABASE_AUTH_TOKEN` | the Turso token (`TURSO_AUTH_TOKEN` is accepted too) |
-| `SESSION_SECRET` | `openssl rand -hex 32` |
 | `CRON_SECRET` | `openssl rand -hex 32` — Vercel Cron sends it as `Authorization: Bearer` automatically |
 | `ADMIN_PASSWORD` | your real admin password (used only when the admin user is first created) |
 | `NEXT_PUBLIC_SITE_URL` | `https://<your-domain>` |
@@ -135,7 +134,7 @@ container** — ignore `docker-compose.yml` and `Caddyfile` (those are for path 
 5. **Persistent storage (critical):** add a Storage volume mounted at **`/app/data`** —
    this is the SQLite database. Without it, every redeploy wipes all data.
 6. **Environment variables:** `NEXT_PUBLIC_SITE_URL`, `DATABASE_URL=/app/data/taccalite.db`,
-   `SESSION_SECRET`, `CRON_SECRET`, `ADMIN_USERNAME`/`ADMIN_PASSWORD`/`ADMIN_NAME`,
+   `CRON_SECRET`, `ADMIN_USERNAME`/`ADMIN_PASSWORD`/`ADMIN_NAME`,
    `OWNER_EMAIL`, `NODE_ENV=production` (**required** — the app only enforces its
    secure-secret guard and the `Secure` cookie flag in production), `TRUST_PROXY=true`
    (safe here because Coolify's proxy overwrites `X-Forwarded-For`), and (when ready)
@@ -178,10 +177,9 @@ nano .env
 ```
 
 > ⚠️ **The shipped `.env.example` contains insecure defaults — override them.** It
-> carries `SESSION_SECRET=dev-insecure-secret-change-me-in-production`,
-> `CRON_SECRET=dev-cron-secret`, and `ADMIN_PASSWORD=taccalite-admin` (and a
+> carries `CRON_SECRET=dev-cron-secret` and `ADMIN_PASSWORD=taccalite-admin` (and a
 > placeholder `OWNER_EMAIL=owner@example.com`). You **must** set fresh
-> `SESSION_SECRET`, `CRON_SECRET`, and `ADMIN_PASSWORD`, and set a real
+> `CRON_SECRET` and `ADMIN_PASSWORD`, and set a real
 > `OWNER_EMAIL` — the app's production guard **logs a loud warning at startup** if the
 > insecure defaults are still in place when `NODE_ENV=production` (it no longer
 > refuses to boot, so check the logs after the first start).
@@ -192,7 +190,6 @@ Set at minimum in `.env`:
 | -------- | ----- |
 | `NEXT_PUBLIC_SITE_URL` | `https://taccalite.it` |
 | `NODE_ENV` | `production` (**required** — gates the secure-secret guard + `Secure` cookie) |
-| `SESSION_SECRET` | `openssl rand -hex 32` |
 | `CRON_SECRET` | `openssl rand -hex 16` |
 | `TRUST_PROXY` | `true` (only because Caddy overwrites `X-Forwarded-For`; never enable without such a proxy) |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | the owner's admin login (must NOT be the `taccalite-admin` default in prod) |
@@ -356,6 +353,38 @@ migration surfaces immediately instead of booting against an un-migrated DB.
 The container runs the server as the unprivileged **`node`** user (the entrypoint
 only uses root briefly to fix the data-volume ownership).
 
+### Monitoring the failures that don't take the site down
+
+Liveness is the easy half. The failure that has actually bitten this app is the
+silent one: a mail relay that rejects every message while all 76 routes keep
+answering `200`. Order confirmations and password-reset links die in the outbox,
+and nothing external notices.
+
+**`GET /api/health?checks=full`** reports that, and answers **`503`** when
+anything is degraded — so a plain uptime monitor alerts on it without parsing
+JSON. It carries operational detail, so it needs the same bearer the scheduler
+uses:
+
+```bash
+curl -si -H "Authorization: Bearer $CRON_SECRET" "https://taccalite.it/api/health?checks=full"
+```
+
+```json
+{ "status": "degraded", "database": "ok",
+  "mail": { "configured": true, "authenticated": false, "failed24h": 12 } }
+```
+
+`authenticated: false` with `configured: true` is degraded on its own, before a
+single message has failed — that is the state where `SMTP_HOST` is set and the
+credentials are blank, and it is worth catching before the first customer meets
+it. `failed24h` is a rolling window, so a batch you have already dealt with
+stops counting.
+
+Point UptimeRobot, Better Stack or Healthchecks.io at that URL with the header
+(all three support custom headers on the free tier), alongside a plain check on
+`/api/health` for liveness. Without this, the only place a dead relay shows up
+is the Gestionale dashboard, which requires someone to go and look.
+
 ## 8. Updates
 
 ```bash
@@ -370,8 +399,10 @@ Migrations apply automatically on startup; seeding is idempotent.
 - SQLite (WAL) is ample for two shops. If the business ever needs horizontal scaling,
   the data layer (`lib/db`) is isolated behind Drizzle and can move to Postgres; the
   in-memory rate limiter (`lib/rate-limit.ts`) would then need a shared store.
-- Keep `SESSION_SECRET` and `.env` secret and backed up. Rotating `SESSION_SECRET`
-  logs everyone out.
+- Keep `.env` secret and backed up. There is no session secret to rotate: sessions
+  are opaque random tokens in the `sessions` table, so revocation means deleting the
+  rows — Gestionale → **Sicurezza** → "Chiudi le altre sessioni", or `revokeSessions()`.
+  They also expire after 30 days, or 7 days of inactivity.
 - **Lean runtime image (~123 MB):** `output: "standalone"` is enabled, so the runner
   ships only the traced server (with `@libsql/client` and its native binding) — **no full
   `node_modules`, no `tsx`, no C build toolchain.** The migrate/seed step runs from

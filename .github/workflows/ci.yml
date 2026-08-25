@@ -28,7 +28,6 @@ jobs:
         env:
           NODE_ENV: production
           # Real values so the production secret-guard is satisfied during build.
-          SESSION_SECRET: ci-build-session-secret-0123456789
           CRON_SECRET: ci-build-cron-secret-0123456789
           ADMIN_PASSWORD: ci-build-admin-password
 

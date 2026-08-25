@@ -33,7 +33,6 @@ const enforceSecurity = !isDev;
 
 /** Dev fallbacks that are safe locally but MUST be overridden in production. */
 const DEV_DEFAULTS = {
-  sessionSecret: "dev-insecure-secret-change-me-in-production",
   cronSecret: "dev-cron-secret",
   adminPassword: "taccalite-admin",
 } as const;
@@ -87,12 +86,15 @@ export const env = {
    */
   trustProxy: bool("TRUST_PROXY", false),
 
-  /**
-   * High-entropy secret reserved for signing/verifying tokens (currently the
-   * production-config guard below; sessions themselves use opaque random DB
-   * tokens, not signed cookies). MUST be overridden in production.
-   */
-  sessionSecret: str("SESSION_SECRET", DEV_DEFAULTS.sessionSecret),
+  /* No `SESSION_SECRET`. Sessions are opaque 32-byte random tokens held in the
+     `sessions` table (`lib/auth/session.ts`) — nothing is signed, so there was
+     nothing for a secret to do. It was still declared here, warned about at
+     boot, and listed as required in `.env.example` and DEPLOYMENT.md, which
+     made rotation look like a revocation lever it never was: an operator who
+     rotated it to kick everyone out changed nothing at all. Revocation lives at
+     /admin/security ("Chiudi le altre sessioni") and in `revokeSessions()`,
+     which delete the rows. If signed tokens are ever added, reintroduce the
+     variable *with* the code that reads it. */
 
   /** Transactional email (Nodemailer SMTP). If host is empty, mail goes to the dev outbox. */
   smtp: {
@@ -184,7 +186,6 @@ export const blobConfigured = env.blobToken !== "";
  */
 if (enforceSecurity && process.env.NEXT_PHASE !== "phase-production-build") {
   const insecure: string[] = [];
-  if (env.sessionSecret === DEV_DEFAULTS.sessionSecret) insecure.push("SESSION_SECRET");
   if (env.cronSecret === DEV_DEFAULTS.cronSecret) insecure.push("CRON_SECRET");
   if (env.admin.password === DEV_DEFAULTS.adminPassword) insecure.push("ADMIN_PASSWORD");
   if (insecure.length > 0) {

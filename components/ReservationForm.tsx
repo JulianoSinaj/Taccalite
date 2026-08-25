@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
+import { PrivacyNote } from "@/components/site/PrivacyNote";
 import { useSearchParams } from "next/navigation";
 import { Check, Flame, Minus, Plus, Users, UtensilsCrossed } from "lucide-react";
 // Deliberately the same module the server refuses with, so the message shown
@@ -447,6 +448,7 @@ export default function ReservationForm({
             ? "Siamo chiusi in questa data"
             : "Conferma prenotazione"}
       </button>
+      <PrivacyNote action="confermando la prenotazione" className="mt-4" />
     </form>
   );
 }

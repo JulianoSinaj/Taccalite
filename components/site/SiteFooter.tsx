@@ -225,6 +225,9 @@ export default async function SiteFooter() {
               <Link href="/cookie" className="py-2 transition-colors hover:text-gold">
                 Cookie
               </Link>
+              <Link href="/termini" className="py-2 transition-colors hover:text-gold">
+                Condizioni di vendita
+              </Link>
               <span className="py-2">Ancona · Marche · Italia</span>
             </div>
           </div>

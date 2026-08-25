@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { PrivacyNote } from "@/components/site/PrivacyNote";
 import { ArrowRight, Check } from "lucide-react";
 
 export default function NewsletterForm() {
@@ -71,6 +72,7 @@ export default function NewsletterForm() {
         className="absolute -left-[9999px] h-0 w-0"
       />
       {status === "error" && message && <p className="mt-3 text-xs text-red-400">{message}</p>}
+      <PrivacyNote tone="dark" action="iscrivendoti" className="mt-3" />
     </form>
   );
 }

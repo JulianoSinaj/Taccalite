@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { AdminHeader, Panel, inputCls, labelCls, fmtDateTime } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
@@ -407,17 +408,87 @@ function SettingField({
   );
 }
 
+/**
+ * The SMTP status, streamed in separately.
+ *
+ * `checkMailer()` opens a real connection and waits up to CHECK_TIMEOUT_MS for
+ * the relay to answer. Awaited in the page body — even inside the `Promise.all`
+ * — that made the *whole* settings page take as long as the slowest thing on
+ * it: measured at 5.0s against a misconfigured relay, on a page whose other 30
+ * panels were ready in ~40ms. The one panel that has to wait now waits alone.
+ *
+ * It never throws: a dead mail server must not take the settings page down.
+ */
+async function MailerStatus() {
+  const mailer = await checkMailer();
+
+  return (
+    <>
+      {/* The status used to read "configurato" whenever SMTP_HOST was
+          non-empty, which says nothing about whether the credentials work —
+          a mistyped password showed green while every message silently
+          failed. `checkMailer()` opens the connection, so this reports what
+          the server says.
+
+          The remaining trap is subtler and had to be split out: with
+          SMTP_USER blank, nodemailer never issues AUTH, so `verify()`
+          resolves against a relay that rejects every real message. That is
+          not "connesso e autenticato" — it is connected and anonymous, and
+          it gets its own amber state rather than a green one. */}
+      <p className="mt-2 text-sm text-brown-800/70">
+        Stato:{" "}
+        {!mailer.configured ? (
+          <span className="font-semibold text-warn">modalità outbox (non configurato)</span>
+        ) : !mailer.ok ? (
+          <span className="font-semibold text-danger">configurato ma non funzionante</span>
+        ) : mailer.authenticated ? (
+          <span className="font-semibold text-ok">connesso e autenticato</span>
+        ) : (
+          <span className="font-semibold text-warn">connesso ma senza credenziali</span>
+        )}
+      </p>
+      {mailer.configured && !mailer.ok && (
+        <p className="mt-2 border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger-soft-fg">
+          Il server di posta ha risposto: <code className="break-all">{mailer.error}</code>
+        </p>
+      )}
+      {mailer.ok && !mailer.authenticated && (
+        <p className="mt-2 border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-warn-soft-fg">
+          <strong className="font-semibold">
+            Il server risponde, ma non stiamo effettuando l&apos;accesso:
+          </strong>{" "}
+          <code>SMTP_USER</code> o <code>SMTP_PASS</code> sono vuoti. Quasi tutti i relay
+          (Brevo compreso) rifiutano l&apos;invio senza autenticazione con{" "}
+          <code>502 Please authenticate first</code>, quindi le email risultano inviate qui e
+          non partono. Compila le due variabili e riavvia.
+        </p>
+      )}
+      {!mailer.configured && (
+        <p className="mt-2 border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-warn-soft-fg">
+          Nessuna email parte davvero: conferme d&apos;ordine, prenotazioni e i link per
+          reimpostare la password restano in coda nell&apos;outbox. Finché resta così, un
+          cliente che dimentica la password non può rientrare da solo.
+        </p>
+      )}
+    </>
+  );
+}
+
+/** Shown while the relay is being probed. Says what is happening rather than
+ *  guessing an outcome — an optimistic placeholder here would be the same lie
+ *  this panel exists to stop telling. */
+function MailerStatusPending() {
+  return (
+    <p className="mt-2 text-sm text-brown-800/70">
+      Stato: <span className="font-semibold text-brown-800/50">verifica in corso…</span>
+    </p>
+  );
+}
+
 export default async function AdminSettings() {
   // Settings are admin-only (staff are redirected away; nav also hides the link).
   if (!(await isAdmin())) redirect("/admin");
-  // `checkMailer` opens a real SMTP connection, so it belongs in the same
-  // parallel fetch rather than blocking after it. It never throws — a dead mail
-  // server must not take the settings page down with it.
-  const [settings, cronStatus, mailer] = await Promise.all([
-    getAllSettings(),
-    getCronStatus(),
-    checkMailer(),
-  ]);
+  const [settings, cronStatus] = await Promise.all([getAllSettings(), getCronStatus()]);
 
   const stored = new Map(settings.map((s) => [s.key, s.value]));
   // Superseded keys count as known too, so a renamed setting doesn't reappear in
@@ -441,52 +512,9 @@ export default async function AdminSettings() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel>
           <h3 className="font-display text-lg text-brown-950">Email (SMTP)</h3>
-          {/* The status used to read "configurato" whenever SMTP_HOST was
-              non-empty, which says nothing about whether the credentials work —
-              a mistyped password showed green while every message silently
-              failed. `checkMailer()` opens the connection, so this reports what
-              the server says.
-
-              The remaining trap is subtler and had to be split out: with
-              SMTP_USER blank, nodemailer never issues AUTH, so `verify()`
-              resolves against a relay that rejects every real message. That is
-              not "connesso e autenticato" — it is connected and anonymous, and
-              it gets its own amber state rather than a green one. */}
-          <p className="mt-2 text-sm text-brown-800/70">
-            Stato:{" "}
-            {!mailer.configured ? (
-              <span className="font-semibold text-warn">modalità outbox (non configurato)</span>
-            ) : !mailer.ok ? (
-              <span className="font-semibold text-danger">configurato ma non funzionante</span>
-            ) : mailer.authenticated ? (
-              <span className="font-semibold text-ok">connesso e autenticato</span>
-            ) : (
-              <span className="font-semibold text-warn">connesso ma senza credenziali</span>
-            )}
-          </p>
-          {mailer.configured && !mailer.ok && (
-            <p className="mt-2 border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger-soft-fg">
-              Il server di posta ha risposto: <code className="break-all">{mailer.error}</code>
-            </p>
-          )}
-          {mailer.ok && !mailer.authenticated && (
-            <p className="mt-2 border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-warn-soft-fg">
-              <strong className="font-semibold">
-                Il server risponde, ma non stiamo effettuando l&apos;accesso:
-              </strong>{" "}
-              <code>SMTP_USER</code> o <code>SMTP_PASS</code> sono vuoti. Quasi tutti i relay
-              (Brevo compreso) rifiutano l&apos;invio senza autenticazione con{" "}
-              <code>502 Please authenticate first</code>, quindi le email risultano inviate qui e
-              non partono. Compila le due variabili e riavvia.
-            </p>
-          )}
-          {!mailer.configured && (
-            <p className="mt-2 border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-warn-soft-fg">
-              Nessuna email parte davvero: conferme d&apos;ordine, prenotazioni e i link per
-              reimpostare la password restano in coda nell&apos;outbox. Finché resta così, un
-              cliente che dimentica la password non può rientrare da solo.
-            </p>
-          )}
+          <Suspense fallback={<MailerStatusPending />}>
+            <MailerStatus />
+          </Suspense>
           <p className="mt-2 text-xs text-brown-800/60">
             Le credenziali SMTP si impostano nelle variabili d&apos;ambiente (<code>.env</code>):
             <code> SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, MAIL_FROM</code>.

@@ -326,3 +326,98 @@ describe("§6 (re-run) no breadcrumb points at a route that does not exist", () 
     expect(existsSync(resolve(__dirname, "..", "app/admin/(dash)/reports/page.tsx"))).toBe(false);
   });
 });
+
+describe("§7 the remaining launch items", () => {
+  it("the CLI bootstrap loads .env, so scripts and the dev server agree", () => {
+    // Next loads `.env` automatically; plain `tsx` does not, and nothing here
+    // ever called dotenv. `admin:reset` therefore wrote the DEV_DEFAULTS
+    // password whatever ADMIN_PASSWORD said, and a `.env`-only DATABASE_URL was
+    // ignored — the seed went into the local file instead of the real database.
+    const src = read("scripts/_bootstrap-env.ts");
+    expect(src).toContain("loadEnvFile");
+    // Must not clobber the real environment: Vercel and Docker pass values as
+    // actual env vars, and those have to win. `loadEnvFile` leaves them alone —
+    // asserting the call is guarded, not that we re-implemented precedence.
+    expect(src).toMatch(/typeof process\.loadEnvFile === "function"/);
+  });
+
+  it("SESSION_SECRET is gone rather than documented as load-bearing", () => {
+    // It signed nothing — sessions are opaque random DB tokens — yet .env.example
+    // said "MUST be set in production" and DEPLOYMENT.md said rotating it logged
+    // everyone out. An operator following that had no working revocation lever.
+    expect(read("lib/env.ts")).not.toContain("sessionSecret");
+    // The *variable* must be gone; the note explaining why it went is not a
+    // regression, it is what stops someone reinstating it. So: no assignment in
+    // `.env.example`, no key in the CI env block, nothing in DEPLOYMENT.md.
+    expect(read(".env.example")).not.toMatch(/^\s*SESSION_SECRET=/m);
+    expect(read(".github/workflows/ci.yml")).not.toMatch(/^\s*SESSION_SECRET:/m);
+    expect(read("DEPLOYMENT.md")).not.toContain("SESSION_SECRET");
+    // The real lever must be named where the false one used to be.
+    expect(read("DEPLOYMENT.md")).toContain("Chiudi le altre sessioni");
+  });
+
+  it("the health endpoint can report mail failure, and does not leak it publicly", () => {
+    const src = read("app/api/health/route.ts");
+    // A broken relay takes nothing down: every route answers 200 while the
+    // outbox fills up. This is that state in a form a monitor can watch.
+    expect(src).toContain("smtpAuthConfigured");
+    expect(src).toContain("failed24h");
+    // 503 on degraded, so a plain uptime check alerts without parsing JSON.
+    expect(src).toContain("degraded ? 503 : 200");
+    // …but the detail is operational, and this route is public: it must be
+    // behind the same bearer the scheduler uses, and the bare probe unchanged.
+    expect(src).toContain("secretMatches");
+    expect(src).toMatch(/if \(!full\) return NextResponse\.json\(\{ status: "ok" \}/);
+  });
+
+  it("every public form that collects personal data links the privacy policy", () => {
+    // GDPR art. 13 wants the notice at the point of collection. The only link
+    // was in the footer, which is not where someone typing their phone number
+    // is looking.
+    for (const form of [
+      "components/NewsletterForm.tsx",
+      "components/ReservationForm.tsx",
+      "components/site/ContactForm.tsx",
+      "components/store/BackInStockForm.tsx",
+      "components/store/CheckoutClient.tsx",
+      "components/account/AuthForms.tsx",
+    ]) {
+      expect(read(form), `${form} collects personal data with no privacy notice`).toContain(
+        "PrivacyNote",
+      );
+    }
+    expect(read("components/site/PrivacyNote.tsx")).toContain('href="/privacy"');
+  });
+
+  it("the checkout links the terms of sale, and the page exists and is reachable", () => {
+    // Ordering online formed a contract with no published terms and no statement
+    // of the right of withdrawal — which for a shop selling mostly perishable
+    // goods is backwards: the art. 59 exceptions only protect you if disclosed.
+    expect(read("components/store/CheckoutClient.tsx")).toMatch(/<PrivacyNote[^>]*\sterms/);
+    expect(existsSync(resolve(__dirname, "..", "app/(site)/termini/page.tsx"))).toBe(true);
+    expect(read("components/site/SiteFooter.tsx")).toContain('href="/termini"');
+    expect(read("app/sitemap.ts")).toContain('absoluteUrl("/termini")');
+  });
+
+  it("the terms name the withdrawal exceptions the catalogue actually relies on", () => {
+    const src = read("lib/site-content.ts");
+    // `\r?\n`: this file is CRLF, so a bare `\n` in the terminator never matches
+    // and the body reads back as "" — a green test asserting nothing.
+    const body =
+      /key: "legal\.terms\.body"[\s\S]*?default: `([\s\S]*?)`,\r?\n {2}\},/.exec(src)?.[1] ?? "";
+    expect(body.length).toBeGreaterThan(500);
+    expect(body).toContain("art. 52"); // the 14-day right
+    expect(body).toContain("art. 59"); // and why most of this catalogue is exempt
+    expect(body).toContain("deteriorarsi");
+    // Drafted, not lawyered: the clauses needing the owner's own facts are
+    // flagged, and the flag must survive edits to the surrounding prose.
+    expect(body).toContain("DA VERIFICARE");
+  });
+
+  it("README does not present `next start` as the deployment command", () => {
+    // `output: "standalone"` is on, and next start warns that it does not work.
+    const readme = read("README.md");
+    const row = /\|\s*`npm run start`\s*\|([^|]*)\|/.exec(readme)?.[1] ?? "";
+    expect(row).toMatch(/standalone/i);
+  });
+});

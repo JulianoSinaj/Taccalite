@@ -228,6 +228,90 @@ Puoi eliminare o bloccare i cookie dalle impostazioni del tuo browser. La disatt
 
 Per maggiori informazioni sul trattamento dei dati consulta la [privacy policy](/privacy) o scrivi a [{email}](mailto:{email}).`,
   },
+  {
+    key: "legal.terms.updated",
+    label: "Condizioni di vendita — ultimo aggiornamento",
+    group: LEGAL,
+    type: "text",
+    default: "25 agosto 2026",
+  },
+  {
+    key: "legal.terms.body",
+    label: "Condizioni di vendita — testo",
+    help:
+      "Stesse regole della privacy policy. ATTENZIONE: è un documento contrattuale — " +
+      "le clausole contrassegnate «DA VERIFICARE» vanno confermate con il commercialista " +
+      "o un legale prima della messa online.",
+    group: LEGAL,
+    type: "rich",
+    default: `Le presenti condizioni disciplinano la vendita dei prodotti offerti da {legalName} tramite questo sito, ai sensi del D.lgs. 206/2005 («Codice del Consumo») e del D.lgs. 70/2003. Effettuando un ordine dichiari di averle lette e accettate.
+
+## 1. Venditore
+
+{legalName}, Ancona (Marche), Italia. Email: [{email}](mailto:{email}). I dati di iscrizione al Registro delle Imprese, la partita IVA e la sede legale completa sono indicati in calce al sito. **DA VERIFICARE**: inserire qui P.IVA, REA e sede legale esatti come depositati.
+
+## 2. Prodotti e prezzi
+
+- I prezzi sono espressi in euro e si intendono **IVA inclusa**.
+- I prodotti venduti a peso (salumi, carni, formaggi, porchetta) sono indicati con il prezzo all'etto o al kg. Il peso effettivo può variare leggermente rispetto a quello richiesto: **l'importo finale è calcolato sul peso realmente servito** e ti viene comunicato prima dell'incasso.
+- Le immagini dei prodotti sono indicative. Trattandosi di prodotti artigianali, aspetto, pezzatura e stagionatura possono variare.
+- La disponibilità è aggiornata in tempo reale ma non è garantita fino alla conferma dell'ordine: in caso di indisponibilità sopravvenuta ti contattiamo e, se preferisci, l'ordine viene annullato senza alcun addebito.
+
+## 3. Conclusione del contratto
+
+L'invio dell'ordine costituisce una proposta d'acquisto. Il contratto si conclude quando ricevi da noi l'**email di conferma**, che riepiloga prodotti, prezzi, modalità di consegna e di pagamento. Se non ricevi la conferma, l'ordine non è stato registrato: scrivici prima di riprovare.
+
+## 4. Pagamenti
+
+Accettiamo, secondo quanto proposto al momento del pagamento:
+
+- **Carta di credito o debito online**, tramite un fornitore di pagamento certificato. I dati della carta non transitano dai nostri server.
+- **Pagamento in bottega**, al ritiro, in contanti o con POS.
+- **Contrassegno**, solo per le consegne effettuate con mezzo proprio e non per le spedizioni con corriere. Può essere previsto un tetto di importo.
+
+## 5. Ritiro, consegna e spedizione
+
+- **Ritiro in bottega**: l'ordine resta a disposizione nella fascia oraria concordata. **DA VERIFICARE**: indicare per quanti giorni la merce viene tenuta da parte prima che l'ordine decada.
+- **Consegna a domicilio**: disponibile solo nei CAP serviti, indicati al momento del pagamento.
+- **Spedizione con corriere**: i tempi indicati sono stimati e decorrono dalla presa in carico. I prodotti freschi viaggiano con imballo isotermico. **DA VERIFICARE**: confermare vettori, tempi e se la spedizione di prodotti freschi è effettivamente offerta.
+- Il rischio di perdita o danneggiamento passa a te al momento della consegna materiale del bene.
+
+## 6. Diritto di recesso e sue eccezioni
+
+Se acquisti come **consumatore**, hai di norma diritto di recedere entro **14 giorni** dalla consegna, senza doverne indicare il motivo (art. 52 Codice del Consumo), scrivendo a [{email}](mailto:{email}).
+
+Il diritto di recesso **non si applica**, per espressa previsione dell'art. 59 del Codice del Consumo, a gran parte di ciò che vendiamo:
+
+- **beni che rischiano di deteriorarsi o scadere rapidamente** (art. 59, lett. d): carni, salumi freschi, formaggi, gastronomia e ogni prodotto fresco o deperibile;
+- **beni confezionati su misura o chiaramente personalizzati** (art. 59, lett. c): la porchetta e i tagli preparati sulla quantità da te richiesta, i cesti composti su richiesta;
+- **beni sigillati non idonei alla restituzione per motivi igienici**, una volta aperti dopo la consegna (art. 59, lett. e).
+
+Restano dunque recedibili i soli prodotti non deperibili, sigillati e integri (ad esempio vini e conserve a lunga conservazione), a tue spese per la restituzione salvo diverso accordo.
+
+**DA VERIFICARE**: l'elenco qui sopra riflette il catalogo attuale. Va riletto insieme al commercialista o a un legale ogni volta che il catalogo cambia in modo sostanziale, perché è la clausola su cui un reclamo si decide.
+
+## 7. Garanzia e conformità
+
+Ai prodotti si applica la garanzia legale di conformità prevista dagli artt. 128 e seguenti del Codice del Consumo. Per gli alimenti, la conformità è riferita alla data di scadenza o al termine minimo di conservazione riportato sulla confezione e alle corrette condizioni di conservazione dopo la consegna.
+
+Se un prodotto arriva danneggiato o non conforme, segnalalo **il prima possibile** e comunque entro i termini di legge, con una foto, a [{email}](mailto:{email}): provvediamo alla sostituzione o al rimborso.
+
+## 8. Reclami e risoluzione delle controversie
+
+Ogni reclamo può essere inviato a [{email}](mailto:{email}). La Commissione Europea mette a disposizione dei consumatori una piattaforma per la risoluzione online delle controversie, raggiungibile all'indirizzo [ec.europa.eu/consumers/odr](https://ec.europa.eu/consumers/odr).
+
+## 9. Legge applicabile e foro
+
+Il contratto è regolato dalla legge italiana. Per il consumatore resta competente, in via inderogabile, il foro del luogo di residenza o domicilio elettivo (art. 66-bis Codice del Consumo).
+
+## 10. Trattamento dei dati
+
+I dati forniti per l'ordine sono trattati come descritto nell'[informativa privacy](/privacy).
+
+---
+
+**Nota per il gestore del sito — da rimuovere prima della pubblicazione.** Questo testo è una bozza costruita sulla struttura richiesta dal Codice del Consumo per la vendita a distanza, non un parere legale. Le voci contrassegnate **DA VERIFICARE** contengono dati o scelte commerciali che solo tu conosci. Falle rileggere al commercialista o a un legale, completa la partita IVA in calce al sito, poi elimina questa nota da Gestionale → Testi del sito.`,
+  },
 ];
 
 const BY_KEY = new Map(SITE_CONTENT.map((d) => [d.key, d]));

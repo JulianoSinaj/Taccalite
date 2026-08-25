@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PrivacyNote } from "@/components/site/PrivacyNote";
 import { Check, Loader2 } from "lucide-react";
 
 const TOPICS = ["Informazioni", "Catering", "Consegna a domicilio", "Richiesta speciale"];
@@ -170,6 +171,7 @@ export default function ContactForm() {
           Rispondiamo in giornata negli orari di bottega.
         </p>
       </div>
+      <PrivacyNote action="inviando il messaggio" className="mt-5" />
     </form>
   );
 }

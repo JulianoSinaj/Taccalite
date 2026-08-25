@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { PrivacyNote } from "@/components/site/PrivacyNote";
 import Link from "next/link";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { useCart } from "./cart";
@@ -611,6 +612,10 @@ export default function CheckoutClient({
                 ? "Nessun addebito online: pagherai alla consegna, in contanti o con il POS."
                 : "Nessun addebito online: pagherai in bottega al momento del ritiro."}
           </p>
+          {/* Terms as well as privacy: this is the button that forms the
+              contract, so it is the point at which the conditions of sale and
+              the right of withdrawal have to be reachable. */}
+          <PrivacyNote action="confermando l'ordine" terms className="text-center" />
         </form>
       </div>
     </section>

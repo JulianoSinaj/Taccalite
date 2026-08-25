@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { PrivacyNote } from "@/components/site/PrivacyNote";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Reveal from "@/components/Reveal";
@@ -236,6 +237,7 @@ export default function AuthForms() {
             >
               {busy ? "Attendere…" : mode === "login" ? "Accedi" : "Crea account"}
             </button>
+            {mode === "register" && <PrivacyNote action="creando un account" className="mt-1" />}
           </form>
         </div>
       </Reveal>

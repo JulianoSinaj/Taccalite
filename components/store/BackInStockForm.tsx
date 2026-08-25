@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { PrivacyNote } from "@/components/site/PrivacyNote";
 
 /**
  * "Notify me when available" form shown on a sold-out product page. Posts to
@@ -56,6 +57,7 @@ export default function BackInStockForm({ slug }: { slug: string }) {
         </button>
       </div>
       {state === "error" && <p className="mt-2 text-xs font-medium text-red-700">Qualcosa è andato storto. Riprova.</p>}
+      <PrivacyNote action="lasciando la tua email" className="mt-2" />
     </form>
   );
 }

@@ -31,6 +31,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: absoluteUrl("/account"), lastModified: now, changeFrequency: "yearly", priority: 0.3 },
     { url: absoluteUrl("/privacy"), lastModified: now, changeFrequency: "yearly", priority: 0.2 },
     { url: absoluteUrl("/cookie"), lastModified: now, changeFrequency: "yearly", priority: 0.2 },
+    { url: absoluteUrl("/termini"), lastModified: now, changeFrequency: "yearly", priority: 0.2 },
   ];
 
   const shopRoutes: MetadataRoute.Sitemap = shops.map((shop) => ({

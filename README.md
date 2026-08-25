@@ -42,7 +42,7 @@ npm run dev        # http://localhost:3000
 | ------ | ------------ |
 | `npm run dev` | Start the dev server (Turbopack) |
 | `npm run build` | Production build |
-| `npm run start` | Serve the production build |
+| `npm run start` | Serve the production build **locally only** — `next.config.ts` sets `output: "standalone"`, which `next start` warns about. Real deployments run `node .next/standalone/server.js` (what the Dockerfile does); see DEPLOYMENT.md |
 | `npm run lint` | Run ESLint |
 | `npm test` | Run the unit/integration suite (Vitest) |
 | `npm run test:e2e` | Run the end-to-end suite (Playwright — first run: `npx playwright install chromium`) |
