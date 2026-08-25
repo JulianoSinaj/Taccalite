@@ -46,6 +46,17 @@ const LABELS: Record<string, string> = {
   settings: "Impostazioni",
 };
 
+/**
+ * Segments that name a section but have no page of their own.
+ *
+ * `LABELS` answers "what is this segment called", which is not the same question
+ * as "can I open it". `/admin/reports/iva` needs a "Report" crumb, but there is
+ * no `app/admin/(dash)/reports/page.tsx` — so linking it gave all three report
+ * pages a crumb that 404s, plus a prefetch of that 404 on every visit. Add a
+ * segment here when it is a grouping folder rather than a route.
+ */
+const NOT_BROWSABLE = new Set(["reports"]);
+
 /** A nanoid-ish path segment is a record id, not a section. */
 const looksLikeId = (seg: string) => !(seg in LABELS) && /^[A-Za-z0-9_-]{8,}$/.test(seg);
 
@@ -58,8 +69,9 @@ export function Breadcrumbs() {
   const crumbs = segments.map((seg, i) => ({
     href: `/${segments.slice(0, i + 1).join("/")}`,
     label: looksLikeId(seg) ? "Dettaglio" : (LABELS[seg] ?? seg),
-    // An id segment isn't a browsable index; neither is the last crumb.
-    link: !looksLikeId(seg) && i < segments.length - 1,
+    // An id segment isn't a browsable index; neither is a grouping folder, nor
+    // the last crumb.
+    link: !looksLikeId(seg) && !NOT_BROWSABLE.has(seg) && i < segments.length - 1,
   }));
 
   return (

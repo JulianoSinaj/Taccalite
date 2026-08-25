@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { resolve, sep } from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { shops, products, settings, orderItems } from "@/lib/db/schema";
@@ -217,5 +217,112 @@ describe("§5 a misconfigured proxy cannot fail silently", () => {
     const req = new Request("http://local", { headers: { "x-forwarded-for": "203.0.113.9" } });
     // The default must stay conservative — the warning is the fix, not trusting it.
     expect(clientIp(req)).toBe("untrusted-proxy");
+  });
+});
+
+/**
+ * Re-run of the same audit against a full production build and a seeded
+ * database, 2026-08-25. All 76 routes answered 200, 472 unit tests and 12 e2e
+ * specs were green — and the screen an operator checks to decide whether mail
+ * works still printed a green "Configurato" while every message in the outbox
+ * was failing `502 Please authenticate first`. The §1 fix reached the layout
+ * banner and the settings page but not the two summaries below.
+ */
+describe("§1 (re-run) the dashboard and outbox summaries tell the same truth as the banner", () => {
+  const dashboard = () => read("app/admin/(dash)/page.tsx");
+
+  it("the dashboard integrations card gates mail on credentials, not merely on a host", () => {
+    const src = dashboard();
+    expect(src).toContain("smtpAuthConfigured");
+    // The bug was a two-state read of the host-only flag, which renders green on
+    // exactly the configuration that loses every message.
+    expect(src).not.toMatch(/smtpConfigured\s*\?\s*"Configurato"/);
+  });
+
+  it("the dashboard distinguishes a missing host from blank credentials", () => {
+    // Blank credentials is the louder failure: messages are marked `failed` and
+    // retired, where a missing host merely leaves them queued.
+    const src = dashboard();
+    expect(src).toContain("Credenziali mancanti");
+    expect(src).toContain("Modalità outbox (test)");
+  });
+
+  it("the dashboard does not claim simulated payments outside development", () => {
+    // `simulatedPayments` is gated on NODE_ENV=development. Without keys in
+    // production nothing is simulated — card checkout is withdrawn entirely, so
+    // labelling that state "Modalità simulazione" described a mode that was not
+    // running, on the same card that decides whether the shop can take money.
+    const src = dashboard();
+    expect(src).toContain("simulatedPayments");
+    expect(src).not.toMatch(/stripeConfigured\s*\?\s*"Configurato"\s*:\s*"Modalità simulazione"/);
+    expect(src).toContain("carta non disponibile");
+  });
+
+  it("the outbox banner is not silent when the relay is rejecting every message", () => {
+    // `!smtpConfigured` is false with a host set, so the one screen whose job is
+    // explaining why nothing arrived said nothing at all.
+    const src = read("app/admin/(dash)/outbox/page.tsx");
+    expect(src).toContain("smtpAuthConfigured");
+    expect(src).not.toContain("{!smtpConfigured && (");
+  });
+
+  it("integration tones are whole class names Tailwind can find", () => {
+    // An interpolated tone is not emitted by the JIT: the status would render
+    // unstyled, which on a status card means a failure that looks like body
+    // text. Comments are stripped first — the note explaining this rule beside
+    // the constants would otherwise trip the rule.
+    const code = dashboard().replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(code).not.toMatch(/text-\$\{/);
+    expect(code).toContain("font-semibold text-ok");
+    expect(code).toContain("font-semibold text-warn");
+    expect(code).toContain("font-semibold text-danger");
+  });
+});
+
+describe("§6 (re-run) no breadcrumb points at a route that does not exist", () => {
+  it("every linkable segment label has a page behind it", () => {
+    // `/admin/reports` has no page.tsx, but `reports` was in LABELS — so all
+    // three report pages rendered a crumb that 404s, and Next prefetched that
+    // 404 on every visit. LABELS answers "what is this called", which is not the
+    // same question as "can I open it"; NOT_BROWSABLE answers the second.
+    const src = read("components/admin/Breadcrumbs.tsx");
+
+    const labels = [...(/const LABELS[\s\S]*?\n};/.exec(src)?.[0] ?? "").matchAll(/^\s*"?([a-z-]+)"?:/gm)].map(
+      (m) => m[1],
+    );
+    expect(labels.length).toBeGreaterThan(10); // the regex still matches the map
+
+    const notBrowsable = new Set(
+      [...(/const NOT_BROWSABLE = new Set\(\[([\s\S]*?)\]\)/.exec(src)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map(
+        (m) => m[1],
+      ),
+    );
+
+    // readdirSync returns platform separators, so normalise before splitting.
+    const pages = (readdirSync(resolve(__dirname, "..", "app/admin"), { recursive: true }) as string[]).map((p) =>
+      p.split(sep).join("/"),
+    );
+    // Only the *innermost* directory of each page.tsx is browsable. Collecting
+    // every ancestor instead would have counted `reports` as a route merely
+    // because `reports/iva/page.tsx` exists — which is the bug, not the fix.
+    const segments = new Set(
+      pages
+        .filter((p) => p.endsWith("page.tsx"))
+        .map((p) => p.split("/").slice(0, -1).filter((s) => !s.startsWith("("))
+          .at(-1))
+        .filter((s): s is string => Boolean(s)),
+    );
+    segments.add("admin"); // app/admin/(dash)/page.tsx is /admin itself
+
+    for (const label of labels) {
+      if (notBrowsable.has(label)) continue;
+      expect(segments.has(label), `breadcrumb links /…/${label} but no page.tsx sits there`).toBe(true);
+    }
+  });
+
+  it("a segment marked not-browsable is genuinely not a route", () => {
+    const src = read("components/admin/Breadcrumbs.tsx");
+    expect(src).toContain("NOT_BROWSABLE");
+    expect(existsSync(resolve(__dirname, "..", "app/admin/(dash)/reports/page.tsx"))).toBe(false);
   });
 });

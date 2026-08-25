@@ -19,7 +19,8 @@ import {
   getTodayReservations,
   getRecentOrders,
 } from "@/lib/admin/queries";
-import { smtpConfigured, stripeConfigured } from "@/lib/env";
+import { smtpAuthConfigured, smtpConfigured, stripeConfigured } from "@/lib/env";
+import { simulatedPayments } from "@/lib/payments/config";
 import { shopScope } from "@/lib/admin/scope";
 import { adminGetShops } from "@/lib/admin/queries";
 
@@ -38,6 +39,53 @@ function DeltaBadge({ d }: { d: { pct: number; up: boolean } | null }) {
     <span className={`text-xs font-bold ${d.up ? "text-ok" : "text-danger"}`}>
       {d.up ? "▲" : "▼"} {d.pct}%
     </span>
+  );
+}
+
+/**
+ * Integration status for the summary card. Derived from the env flags only —
+ * unlike `/admin/settings` this card must not open an SMTP connection, because
+ * it renders on the one page every operator loads all day.
+ *
+ * Both rows are three-state, and the middle state is the one that matters. A
+ * two-state green/amber read as "configured" on exactly the configurations that
+ * lose every message and every card sale, which is worse than saying nothing:
+ * this is the card an operator checks to decide whether mail works.
+ */
+// Whole class names, not `text-${tone}` — Tailwind only emits what it can find
+// as a literal in the source, so an interpolated tone silently renders unstyled.
+const OK = "font-semibold text-ok";
+const WARN = "font-semibold text-warn";
+const DANGER = "font-semibold text-danger";
+
+type IntegrationStatus = { label: string; cls: string };
+
+// Host set with blank credentials is the *loud* failure, not a lesser one: the
+// relay rejects each message with `502 Please authenticate first` and it is
+// retired after OUTBOX_MAX_ATTEMPTS, where a missing host merely leaves it
+// queued. Hence danger here and warn below. Mirrors the banner in the layout.
+const MAIL_STATUS: IntegrationStatus = smtpAuthConfigured
+  ? { label: "Configurato", cls: OK }
+  : smtpConfigured
+    ? { label: "Credenziali mancanti", cls: DANGER }
+    : { label: "Modalità outbox (test)", cls: WARN };
+
+// `simulatedPayments` is gated on NODE_ENV=development, so "modalità
+// simulazione" is only true in dev. Without keys in production nothing is
+// simulated — the card option is withdrawn from the checkout entirely, and
+// saying "simulazione" there described a mode that was not running.
+const PAYMENTS_STATUS: IntegrationStatus = stripeConfigured
+  ? { label: "Configurato", cls: OK }
+  : simulatedPayments
+    ? { label: "Modalità simulazione", cls: WARN }
+    : { label: "Non configurato — carta non disponibile", cls: DANGER };
+
+function IntegrationRow({ name, status }: { name: string; status: IntegrationStatus }) {
+  return (
+    <li className="flex items-center justify-between gap-3">
+      <span className="text-brown-800/80">{name}</span>
+      <span className={`text-right ${status.cls}`}>{status.label}</span>
+    </li>
   );
 }
 
@@ -388,18 +436,8 @@ export default async function AdminDashboard() {
             <h3 className="font-display text-lg text-brown-950">Stato integrazioni</h3>
           </div>
           <ul className="mt-4 space-y-2 text-sm">
-            <li className="flex items-center justify-between">
-              <span className="text-brown-800/80">Invio email (SMTP)</span>
-              <span className={smtpConfigured ? "font-semibold text-ok" : "font-semibold text-warn"}>
-                {smtpConfigured ? "Configurato" : "Modalità outbox (test)"}
-              </span>
-            </li>
-            <li className="flex items-center justify-between">
-              <span className="text-brown-800/80">Pagamenti (Stripe)</span>
-              <span className={stripeConfigured ? "font-semibold text-ok" : "font-semibold text-warn"}>
-                {stripeConfigured ? "Configurato" : "Modalità simulazione"}
-              </span>
-            </li>
+            <IntegrationRow name="Invio email (SMTP)" status={MAIL_STATUS} />
+            <IntegrationRow name="Pagamenti (Stripe)" status={PAYMENTS_STATUS} />
           </ul>
           <p className="mt-4 text-xs text-brown-800/60">
             Le email non inviate restano leggibili in{" "}

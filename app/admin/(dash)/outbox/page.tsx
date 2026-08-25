@@ -5,7 +5,7 @@ import { getOutboxPage } from "@/lib/admin/queries";
 import { outboxFilters } from "@/lib/admin/filters";
 import { retryOutboxEmail, retryAllFailed } from "@/lib/admin/outbox-actions";
 import { OUTBOX_MAX_ATTEMPTS } from "@/lib/mail/mailer";
-import { smtpConfigured } from "@/lib/env";
+import { smtpAuthConfigured, smtpConfigured } from "@/lib/env";
 import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -85,12 +85,27 @@ export default async function AdminOutbox({ searchParams }: SP) {
         }
       />
 
-      {!smtpConfigured && (
-        <div className="mb-6 rounded-2xl border border-warn/40 bg-warn-soft px-5 py-4 text-sm text-warn-soft-fg">
-          SMTP non configurato: le email non vengono inviate ma restano registrate qui (modalità
-          test). Configura l&apos;invio reale da <strong>Impostazioni</strong>.
-        </div>
-      )}
+      {/* Gated on `smtpAuthConfigured`, not `smtpConfigured`. With a host set and
+          blank credentials this banner was silent on the one screen whose whole
+          job is explaining why nothing arrived — and the failure there is the
+          worse of the two: the relay rejects each message and it is retired
+          after OUTBOX_MAX_ATTEMPTS, rather than waiting in `queued` for a fix. */}
+      {!smtpAuthConfigured &&
+        (smtpConfigured ? (
+          <div className="mb-6 rounded-2xl border border-danger/40 bg-danger-soft px-5 py-4 text-sm text-danger-soft-fg">
+            Credenziali SMTP mancanti: il server è impostato ma <code>SMTP_USER</code>/
+            <code>SMTP_PASS</code> sono vuoti, quindi il relay rifiuta ogni messaggio con{" "}
+            <code>502 Please authenticate first</code>. Le email qui sotto risultano{" "}
+            <strong>non inviate</strong> e vengono abbandonate dopo {OUTBOX_MAX_ATTEMPTS} tentativi.
+            Riprovare non serve finché le credenziali non sono impostate — vedi{" "}
+            <strong>Impostazioni</strong>.
+          </div>
+        ) : (
+          <div className="mb-6 rounded-2xl border border-warn/40 bg-warn-soft px-5 py-4 text-sm text-warn-soft-fg">
+            SMTP non configurato: le email non vengono inviate ma restano registrate qui (modalità
+            test). Configura l&apos;invio reale da <strong>Impostazioni</strong>.
+          </div>
+        ))}
 
       {failed > 0 && (
         <div className="mb-6 rounded-2xl border border-danger/40 bg-danger-soft px-5 py-4 text-sm text-danger-soft-fg">
