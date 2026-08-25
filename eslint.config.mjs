@@ -30,6 +30,10 @@ const eslintConfig = defineConfig([
     ".pw-tmp/**",
     "playwright-report/**",
     "test-results/**",
+    // Vendored agent tooling, not application code. Linting it produced 135 of
+    // the project's 140 warnings (one bundled UMD file accounted for 78), which
+    // buried the five that are actually ours and made a clean run unreadable.
+    ".claude/**",
   ]),
 ]);
 

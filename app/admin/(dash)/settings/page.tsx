@@ -444,21 +444,40 @@ export default async function AdminSettings() {
           {/* The status used to read "configurato" whenever SMTP_HOST was
               non-empty, which says nothing about whether the credentials work —
               a mistyped password showed green while every message silently
-              failed. `checkMailer()` actually opens the connection and
-              authenticates, so this now reports what the server says. */}
+              failed. `checkMailer()` opens the connection, so this reports what
+              the server says.
+
+              The remaining trap is subtler and had to be split out: with
+              SMTP_USER blank, nodemailer never issues AUTH, so `verify()`
+              resolves against a relay that rejects every real message. That is
+              not "connesso e autenticato" — it is connected and anonymous, and
+              it gets its own amber state rather than a green one. */}
           <p className="mt-2 text-sm text-brown-800/70">
             Stato:{" "}
             {!mailer.configured ? (
               <span className="font-semibold text-warn">modalità outbox (non configurato)</span>
-            ) : mailer.ok ? (
+            ) : !mailer.ok ? (
+              <span className="font-semibold text-danger">configurato ma non funzionante</span>
+            ) : mailer.authenticated ? (
               <span className="font-semibold text-ok">connesso e autenticato</span>
             ) : (
-              <span className="font-semibold text-danger">configurato ma non funzionante</span>
+              <span className="font-semibold text-warn">connesso ma senza credenziali</span>
             )}
           </p>
           {mailer.configured && !mailer.ok && (
             <p className="mt-2 border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger-soft-fg">
               Il server di posta ha risposto: <code className="break-all">{mailer.error}</code>
+            </p>
+          )}
+          {mailer.ok && !mailer.authenticated && (
+            <p className="mt-2 border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-warn-soft-fg">
+              <strong className="font-semibold">
+                Il server risponde, ma non stiamo effettuando l&apos;accesso:
+              </strong>{" "}
+              <code>SMTP_USER</code> o <code>SMTP_PASS</code> sono vuoti. Quasi tutti i relay
+              (Brevo compreso) rifiutano l&apos;invio senza autenticazione con{" "}
+              <code>502 Please authenticate first</code>, quindi le email risultano inviate qui e
+              non partono. Compila le due variabili e riavvia.
             </p>
           )}
           {!mailer.configured && (

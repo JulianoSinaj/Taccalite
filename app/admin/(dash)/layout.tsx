@@ -8,7 +8,7 @@ import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 import { ThemeToggle } from "@/components/admin/ThemeToggle";
 import { getTheme, themeAttr } from "@/lib/admin/theme";
 import { ephemeralDatabase } from "@/lib/db/client";
-import { smtpConfigured } from "@/lib/env";
+import { smtpAuthConfigured, smtpConfigured } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -88,19 +88,40 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               the order-claiming that hangs off it all travel by email — with no
               SMTP host, a customer who forgets their password is locked out with
               no way back, and nothing anywhere would say so. Hence an alert at
-              the top of every page rather than a line in the settings screen. */}
-          {!smtpConfigured && (
+              the top of every page rather than a line in the settings screen.
+
+              Gated on `smtpAuthConfigured`, not `smtpConfigured`: `.env.example`
+              ships SMTP_HOST pre-filled with Brevo's relay and the credentials
+              blank, which made `smtpConfigured` true and silenced this banner
+              on the exact configuration that loses every message. Credentials
+              missing is a louder failure than no host at all, because the mail
+              is marked `failed` and retired after OUTBOX_MAX_ATTEMPTS rather
+              than sitting `queued` waiting for a fix. */}
+          {!smtpAuthConfigured && (
             <div
               role="alert"
               className="border-b border-danger/30 bg-danger-soft px-5 py-3 text-sm text-danger-soft-fg sm:px-8"
             >
-              <strong className="font-semibold">Email non configurata:</strong> nessun server SMTP
-              impostato, quindi <strong className="font-semibold">nessuna email parte davvero</strong>{" "}
+              <strong className="font-semibold">Email non configurata:</strong>{" "}
+              {smtpConfigured ? (
+                <>
+                  il server SMTP è impostato ma <code>SMTP_USER</code>/<code>SMTP_PASS</code> sono
+                  vuoti, quindi l&apos;invio viene rifiutato e i messaggi finiscono{" "}
+                  <strong className="font-semibold">in errore</strong>
+                </>
+              ) : (
+                <>
+                  nessun server SMTP impostato, quindi{" "}
+                  <strong className="font-semibold">nessuna email parte davvero</strong>
+                </>
+              )}{" "}
               — conferme d&apos;ordine, prenotazioni e soprattutto i link per{" "}
-              <strong className="font-semibold">reimpostare la password</strong> restano in coda
-              nell&apos;<a href="/admin/outbox" className="underline">outbox</a>. Finché resta così, un
-              cliente che dimentica la password non può rientrare da solo. Imposta{" "}
-              <code>SMTP_HOST</code> e le variabili collegate (vedi <code>.env.example</code>).
+              <strong className="font-semibold">reimpostare la password</strong> non arrivano al
+              cliente; li trovi nell&apos;
+              <a href="/admin/outbox" className="underline">outbox</a>. Finché resta così, un cliente
+              che dimentica la password non può rientrare da solo. Imposta{" "}
+              <code>SMTP_HOST</code>, <code>SMTP_USER</code> e <code>SMTP_PASS</code> (vedi{" "}
+              <code>.env.example</code>).
             </div>
           )}
           <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">

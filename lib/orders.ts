@@ -146,6 +146,26 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
 
   if (lines.length === 0) throw new Error("Nessun prodotto valido nel carrello");
 
+  // Refuse a *partial* basket as loudly as an empty one.
+  //
+  // The filter above drops any slug that is missing, deactivated, made
+  // non-purchasable or priceless since the cart was filled — and the cart lives
+  // in localStorage indefinitely, so that is an ordinary consequence of the shop
+  // retiring a product, not an edge case. Only `length === 0` used to throw, so
+  // a two-item basket quietly became a one-item order: the customer reached
+  // Stripe showing a total they never agreed to, or turned up at the counter for
+  // goods that were never on the order. Nothing told them, and nothing told the
+  // shop either.
+  if (lines.length !== input.items.length) {
+    const resolved = new Set(lines.map((l) => l.product.slug));
+    const missing = [...new Set(input.items.map((i) => i.slug).filter((s) => !resolved.has(s)))];
+    throw new Error(
+      missing.length === 1
+        ? "Un prodotto nel carrello non è più disponibile. Rimuovilo e riprova."
+        : `${missing.length} prodotti nel carrello non sono più disponibili. Rimuovili e riprova.`,
+    );
+  }
+
   // Refuse to oversell stock-tracked products. Stock is only decremented at
   // payment, so without this a stale cart / direct POST / concurrent buyer could
   // place a paid order for more than exists (the decrement just floors at 0).

@@ -147,7 +147,29 @@ export const env = {
   },
 } as const;
 
+/** A host is set, so `getTransport()` will build a real transport and try to send
+ *  rather than falling back to the outbox. Says nothing about credentials. */
 export const smtpConfigured = env.smtp.host !== "";
+
+/**
+ * A host **and** both credentials are set, so the transport can actually
+ * authenticate.
+ *
+ * This is a separate flag from `smtpConfigured` because the gap between the two
+ * is silent and total. Nodemailer is given `auth: undefined` when the user is
+ * blank, and `transport.verify()` on a credential-less transport only connects
+ * and greets — it never issues AUTH, so it *resolves* against a relay that will
+ * reject every real message with `502 5.7.0 Please authenticate first`. With
+ * only `smtpConfigured` to go on, both the admin banner and the settings page
+ * reported success while every password reset and order confirmation died.
+ *
+ * Deliberately NOT used to choose the transport: a relay that legitimately takes
+ * no credentials (a postfix on localhost) must keep working. It gates what the
+ * operator is *told*, which is where the lie was.
+ */
+export const smtpAuthConfigured =
+  env.smtp.host !== "" && env.smtp.user !== "" && env.smtp.pass !== "";
+
 export const stripeConfigured = env.stripe.secretKey !== "";
 export const blobConfigured = env.blobToken !== "";
 
@@ -172,6 +194,33 @@ if (enforceSecurity && process.env.NEXT_PHASE !== "phase-production-build") {
       }) with insecure default secrets: ${insecure.join(
         ", ",
       )}. Set them via environment variables (see .env.example).`,
+    );
+  }
+
+  /**
+   * `TRUST_PROXY` off is the safe default for an app reachable directly, and a
+   * site-wide outage for one behind a proxy — `clientIp()` returns a constant,
+   * so every visitor on the internet shares a single rate-limit bucket and the
+   * eleventh checkout of the minute is refused for everyone. It fails silently
+   * in both directions, which is why it gets a line of its own here: all three
+   * deploy paths in DEPLOYMENT.md set it, and nothing noticed when one didn't.
+   */
+  if (!env.trustProxy) {
+    console.warn(
+      "[env] WARNING: TRUST_PROXY is off, so rate limiting cannot tell clients apart — " +
+        "every visitor shares one bucket and normal traffic will hit 429. Set TRUST_PROXY=true " +
+        "if (and only if) a reverse proxy in front of this app overwrites X-Forwarded-For.",
+    );
+  }
+
+  if (!smtpAuthConfigured) {
+    console.warn(
+      env.smtp.host === ""
+        ? "[env] WARNING: no SMTP_HOST — password resets, order confirmations and " +
+            "reservation notices will queue in the outbox and never be delivered."
+        : "[env] WARNING: SMTP_HOST is set but SMTP_USER/SMTP_PASS are empty — the relay will " +
+            "reject every message ('502 Please authenticate first') and each one is retired " +
+            "after a few retries. Set both credentials, or unset SMTP_HOST to use the outbox.",
     );
   }
 }

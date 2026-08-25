@@ -1,7 +1,73 @@
 import type { NextConfig } from "next";
 
+const isProd = process.env.NODE_ENV === "production";
+
+/**
+ * Image hosts that may be loaded directly rather than through `/_next/image`.
+ * Kept next to `images.remotePatterns` below so the CSP and the image allow-list
+ * cannot drift apart — a host added to one and not the other renders a blank box
+ * with only a console error to say why.
+ */
+const IMAGE_HOSTS = [
+  "https://images.unsplash.com",
+  "https://*.cdninstagram.com",
+  "https://*.fbcdn.net",
+  "https://*.public.blob.vercel-storage.com",
+].join(" ");
+
+/**
+ * Security headers.
+ *
+ * These lived only in the `Caddyfile`, which covers exactly one of the three
+ * documented deploy paths — and not the one DEPLOYMENT.md calls recommended.
+ * Coolify (§0) and Vercel (§V) both terminate TLS at their own proxy and add
+ * none of this, so the app shipped there with no CSP, no HSTS and no
+ * clickjacking protection. Defining them here makes them travel with the
+ * application instead of with one operator's reverse proxy; Caddy's `header`
+ * directive replaces rather than appends, so path B is unaffected.
+ *
+ * `unsafe-inline` in script-src is still required by Next's inline hydration
+ * bootstrap (nonces would need a middleware pass). `img-src` needs the remote
+ * hosts only for images bypassing the optimizer — everything rendered through
+ * `next/image` is same-origin by the time the browser fetches it.
+ */
+const CSP = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "frame-ancestors 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+  `img-src 'self' data: blob: ${IMAGE_HOSTS}`,
+  "font-src 'self' data:",
+  "style-src 'self' 'unsafe-inline'",
+  // `unsafe-eval` is required by Turbopack's dev runtime and by React Refresh;
+  // it must never reach production.
+  isProd ? "script-src 'self' 'unsafe-inline'" : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "connect-src 'self'",
+  // Browsers exempt localhost, but `next dev` is routinely opened on the LAN
+  // address it prints at startup — where this would rewrite every asset request
+  // to https:// against a server that only speaks http.
+  ...(isProd ? ["upgrade-insecure-requests"] : []),
+].join("; ");
+
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // Nothing here uses any of them; denying is cheaper than auditing later.
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+  { key: "Content-Security-Policy", value: CSP },
+  // Only meaningful over TLS, and actively hostile on a plain-HTTP dev box.
+  ...(isProd
+    ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }]
+    : []),
+];
+
 const nextConfig: NextConfig = {
   devIndicators: false,
+  // Advertising the framework and its major version to every visitor buys
+  // nothing and narrows the search for an attacker picking targets.
+  poweredByHeader: false,
   experimental: {
     // Enables React's <ViewTransition> and makes Next trigger it on navigation,
     // so a product photo morphs from the grid into its detail page instead of
@@ -37,6 +103,9 @@ const nextConfig: NextConfig = {
       { source: "/negozi", destination: "/sedi", permanent: true },
       { source: "/negozi/:slug", destination: "/sedi/:slug", permanent: true },
     ];
+  },
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
   },
   images: {
     qualities: [75, 82, 90],

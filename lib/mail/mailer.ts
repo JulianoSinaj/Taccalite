@@ -3,7 +3,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 import { db } from "@/lib/db/client";
 import { emailOutbox } from "@/lib/db/schema";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
-import { env, smtpConfigured } from "@/lib/env";
+import { env, smtpAuthConfigured, smtpConfigured } from "@/lib/env";
 
 /**
  * Provider-agnostic mailer.
@@ -230,10 +230,25 @@ export async function drainOutbox({
  * Distinct from "send a test email and go look in the outbox", which cannot tell
  * a wrong password from a wrong recipient. Never throws — the settings page
  * renders whatever it learns.
+ *
+ * `authenticated` is reported separately from `ok` because `verify()` cannot
+ * prove what its name suggests. Nodemailer only issues AUTH when the transport
+ * carries credentials; with `auth: undefined` it connects, greets and resolves
+ * — against a relay that will reject every real message with
+ * `502 5.7.0 Please authenticate first`. Reporting that as success is how a
+ * shop ends up with a green status page and no outgoing email at all, so an
+ * unauthenticated connection is surfaced as its own state rather than folded
+ * into `ok`.
  */
-export async function checkMailer(): Promise<{ ok: boolean; configured: boolean; error?: string }> {
+export async function checkMailer(): Promise<{
+  ok: boolean;
+  configured: boolean;
+  /** True only when credentials were supplied AND the relay accepted them. */
+  authenticated: boolean;
+  error?: string;
+}> {
   const transport = getTransport();
-  if (!transport) return { ok: false, configured: false };
+  if (!transport) return { ok: false, configured: false, authenticated: false };
   try {
     // Belt and braces over the transport's own timeouts: this runs during a page
     // render, and a settings page that hangs is worse than one reporting a
@@ -248,9 +263,14 @@ export async function checkMailer(): Promise<{ ok: boolean; configured: boolean;
         ),
       ),
     ]);
-    return { ok: true, configured: true };
+    return { ok: true, configured: true, authenticated: smtpAuthConfigured };
   } catch (err) {
-    return { ok: false, configured: true, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      configured: true,
+      authenticated: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
