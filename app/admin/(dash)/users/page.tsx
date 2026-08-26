@@ -11,11 +11,11 @@ import {
   NewButton,
 } from "@/components/admin/ui";
 import { SegmentedFilter, FilterToolbar, ActiveFilters, labelFrom } from "@/components/admin/FilterBar";
-import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
+import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
 import { PasswordField } from "@/components/admin/PasswordField";
 import { getUsersPage, adminGetShops } from "@/lib/admin/queries";
 import { userFilters } from "@/lib/admin/filters";
-import { isAdmin } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import {
   unlockUser,
   setUserRole,
@@ -24,6 +24,9 @@ import {
   updateUserProfile,
   resetUserTotp,
   setEmailVerified,
+  resendUserVerification,
+  sendUserPasswordReset,
+  anonymizeCustomer,
 } from "@/lib/admin/user-actions";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +46,7 @@ const STATUS_CHIPS = [
   { value: "disattivati", label: "Disattivati" },
   { value: "da-verificare", label: "Email da verificare" },
   { value: "con-2fa", label: "Con 2FA" },
+  { value: "bloccati", label: "Bloccati" },
 ];
 
 /**
@@ -76,7 +80,10 @@ type SP = { searchParams: Promise<{ page?: string; ruolo?: string; stato?: strin
 
 export default async function AdminUsers({ searchParams }: SP) {
   // User management is admin-only (defence-in-depth beyond the nav gating).
-  if (!(await isAdmin())) redirect("/admin");
+  // The caller's own row is shown but not operable: the server actions refuse
+  // it, and the page says so instead of offering buttons that will fail.
+  const me = await getCurrentUser();
+  if (me?.role !== "admin") redirect("/admin");
 
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
@@ -139,6 +146,7 @@ export default async function AdminUsers({ searchParams }: SP) {
                 <div>
                   <p className="font-display flex flex-wrap items-center gap-1.5 text-lg text-brown-950">
                     {u.name || u.username}
+                    {u.id === me.id && <Tag tone="warn">Sei tu</Tag>}
                     <Tag tone="mute">{roleLabel(u.role)}</Tag>
                     <Tag tone={u.active ? "ok" : "bad"}>{u.active ? "Attivo" : "Disattivato"}</Tag>
                     {/* Verification and 2FA state were invisible here, so a
@@ -181,74 +189,93 @@ export default async function AdminUsers({ searchParams }: SP) {
                       . Si sblocca da solo, oppure subito qui sotto.
                     </p>
                   )}
-                  <Link
-                    href={`/admin/loyalty/${u.id}`}
-                    className="mt-1 inline-block text-[12px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
-                  >
-                    Scheda cliente →
-                  </Link>
+                  {/* The customer page is about orders, points and privacy
+                      rights — none of which a staff or admin account has. */}
+                  {u.role === "customer" && (
+                    <Link
+                      href={`/admin/loyalty/${u.id}`}
+                      className="mt-1 inline-block text-[12px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
+                    >
+                      Scheda cliente →
+                    </Link>
+                  )}
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                  <ActionForm action={setUserRole} className="flex items-center gap-2">
-                    <input type="hidden" name="id" value={u.id} />
-                    <label className="sr-only" htmlFor={`role-${u.id}`}>
-                      Ruolo di {u.username}
-                    </label>
-                    <select id={`role-${u.id}`} name="role" defaultValue={u.role} className={`${inputCls} w-40`}>
-                      <option value="customer">Cliente</option>
-                      <option value="staff">Staff</option>
-                      <option value="admin">Amministratore</option>
-                    </select>
-                    {/* Submitted with the role, because the two are one
-                        privilege: it is ignored for a customer or an admin. */}
-                    <label className="sr-only" htmlFor={`shop-${u.id}`}>
-                      Sede di {u.username}
-                    </label>
-                    <select
-                      id={`shop-${u.id}`}
-                      name="shopSlug"
-                      defaultValue={u.shopSlug ?? ""}
-                      className={`${inputCls} w-40`}
-                    >
-                      <option value="">Tutte le sedi</option>
-                      {shops.map((sh) => (
-                        <option key={sh.slug} value={sh.slug}>
-                          {sh.name}
-                        </option>
-                      ))}
-                    </select>
-                    <PendingButton
-                      tone="dark"
-                      confirm={`Cambiare il ruolo di @${u.username}? Le sessioni attive verranno chiuse.`}
-                    >
-                      Ruolo
-                    </PendingButton>
-                  </ActionForm>
-                  <ActionForm action={resetUserPassword} className="flex items-center gap-2">
-                    <input type="hidden" name="id" value={u.id} />
-                    <PasswordField id={`pw-${u.id}`} label={`Nuova password per ${u.username}`} />
-                    <PendingButton
-                      tone="dark"
-                      confirm={`Reimpostare la password di @${u.username}? Le sessioni attive verranno chiuse.`}
-                    >
-                      Reset
-                    </PendingButton>
-                  </ActionForm>
-                  <ActionForm action={setUserActive} className="flex items-center gap-2">
-                    <input type="hidden" name="id" value={u.id} />
-                    <input type="hidden" name="active" value={u.active ? "false" : "true"} />
-                    {u.active ? (
+                {u.id === me.id ? (
+                  <p className="text-xs text-brown-800/60">
+                    Ruolo, password e 2FA del tuo account si gestiscono da{" "}
+                    <Link href="/admin/security" className="font-bold text-gold-dark hover:underline">
+                      Sicurezza
+                    </Link>
+                    .
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                    <ActionForm action={setUserRole} className="flex items-center gap-2">
+                      <input type="hidden" name="id" value={u.id} />
+                      <label className="sr-only" htmlFor={`role-${u.id}`}>
+                        Ruolo di {u.username}
+                      </label>
+                      <select id={`role-${u.id}`} name="role" defaultValue={u.role} className={`${inputCls} w-40`}>
+                        <option value="customer">Cliente</option>
+                        <option value="staff">Staff</option>
+                        <option value="admin">Amministratore</option>
+                      </select>
+                      {/* Submitted with the role, because the two are one
+                          privilege. Only a staff account has a location to
+                          pick; for anyone else the field would be ignored. */}
+                      {u.role === "staff" && (
+                        <>
+                          <label className="sr-only" htmlFor={`shop-${u.id}`}>
+                            Sede di {u.username}
+                          </label>
+                          <select
+                            id={`shop-${u.id}`}
+                            name="shopSlug"
+                            defaultValue={u.shopSlug ?? ""}
+                            className={`${inputCls} w-40`}
+                          >
+                            <option value="">Tutte le sedi</option>
+                            {shops.map((sh) => (
+                              <option key={sh.slug} value={sh.slug}>
+                                {sh.name}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )}
                       <PendingButton
-                        tone="danger"
-                        confirm={`Disattivare @${u.username}? L'account non potrà più accedere e le sessioni attive verranno chiuse.`}
+                        tone="dark"
+                        confirm={`Cambiare ruolo o sede di @${u.username}? Le sessioni attive verranno chiuse.`}
                       >
-                        Disattiva
+                        {u.role === "staff" ? "Ruolo e sede" : "Ruolo"}
                       </PendingButton>
-                    ) : (
-                      <PendingButton tone="dark">Riattiva</PendingButton>
-                    )}
-                  </ActionForm>
-                </div>
+                    </ActionForm>
+                    <ActionForm action={resetUserPassword} className="flex items-center gap-2">
+                      <input type="hidden" name="id" value={u.id} />
+                      <PasswordField id={`pw-${u.id}`} label={`Nuova password per ${u.username}`} />
+                      <PendingButton
+                        tone="dark"
+                        confirm={`Reimpostare la password di @${u.username}? Le sessioni attive verranno chiuse.`}
+                      >
+                        Reset
+                      </PendingButton>
+                    </ActionForm>
+                    <ActionForm action={setUserActive} className="flex items-center gap-2">
+                      <input type="hidden" name="id" value={u.id} />
+                      <input type="hidden" name="active" value={u.active ? "false" : "true"} />
+                      {u.active ? (
+                        <PendingButton
+                          tone="danger"
+                          confirm={`Disattivare @${u.username}? L'account non potrà più accedere e le sessioni attive verranno chiuse.`}
+                        >
+                          Disattiva
+                        </PendingButton>
+                      ) : (
+                        <PendingButton tone="dark">Riattiva</PendingButton>
+                      )}
+                    </ActionForm>
+                  </div>
+                )}
               </div>
 
               {/* Recovery actions: the ones an operator reaches for when someone
@@ -260,6 +287,22 @@ export default async function AdminUsers({ searchParams }: SP) {
 
                 <ActionForm action={updateUserProfile} className="mt-3 flex flex-wrap items-end gap-3">
                   <input type="hidden" name="id" value={u.id} />
+                  <div className="min-w-40">
+                    <label className={labelCls} htmlFor={`username-${u.id}`}>
+                      Username
+                    </label>
+                    <input
+                      id={`username-${u.id}`}
+                      name="username"
+                      required
+                      minLength={3}
+                      maxLength={40}
+                      pattern="[a-z0-9._-]+"
+                      title="Solo lettere minuscole, numeri, . _ -"
+                      defaultValue={u.username}
+                      className={inputCls}
+                    />
+                  </div>
                   <div className="min-w-48 flex-1">
                     <label className={labelCls} htmlFor={`name-${u.id}`}>
                       Nome
@@ -298,6 +341,19 @@ export default async function AdminUsers({ searchParams }: SP) {
                       className={inputCls}
                     />
                   </div>
+                  <label
+                    htmlFor={`marketing-${u.id}`}
+                    className="flex min-h-11 items-center gap-2 text-sm text-brown-950"
+                  >
+                    <input
+                      id={`marketing-${u.id}`}
+                      type="checkbox"
+                      name="marketingConsent"
+                      defaultChecked={u.marketingConsent}
+                      className="h-4 w-4 accent-gold-dark"
+                    />
+                    Consenso marketing
+                  </label>
                   <PendingButton tone="dark">Salva anagrafica</PendingButton>
                 </ActionForm>
 
@@ -308,6 +364,25 @@ export default async function AdminUsers({ searchParams }: SP) {
                       <input type="hidden" name="verified" value={u.emailVerifiedAt ? "false" : "true"} />
                       <PendingButton tone="dark">
                         {u.emailVerifiedAt ? "Segna email da verificare" : "Segna email verificata"}
+                      </PendingButton>
+                    </ActionForm>
+                  )}
+                  {u.email && !u.emailVerifiedAt && u.active && (
+                    <ActionForm action={resendUserVerification} className="inline-flex">
+                      <input type="hidden" name="id" value={u.id} />
+                      <PendingButton tone="dark">Reinvia email di verifica</PendingButton>
+                    </ActionForm>
+                  )}
+                  {/* The owner picks their own password: nobody has to read
+                      one out over the phone. Needs an address to send it to. */}
+                  {u.email && u.active && u.id !== me.id && (
+                    <ActionForm action={sendUserPasswordReset} className="inline-flex">
+                      <input type="hidden" name="id" value={u.id} />
+                      <PendingButton
+                        tone="dark"
+                        confirm={`Inviare a ${u.email} un link per reimpostare la password?`}
+                      >
+                        Invia link reset password
                       </PendingButton>
                     </ActionForm>
                   )}
@@ -332,7 +407,7 @@ export default async function AdminUsers({ searchParams }: SP) {
                       </ActionForm>
                     </>
                   )}
-                  {u.totpEnabled && (
+                  {u.totpEnabled && u.id !== me.id && (
                     <ActionForm action={resetUserTotp} className="inline-flex">
                       <input type="hidden" name="id" value={u.id} />
                       <PendingButton
@@ -348,6 +423,34 @@ export default async function AdminUsers({ searchParams }: SP) {
                   Usa «Azzera 2FA» quando qualcuno ha perso sia il telefono sia i codici di recupero.
                   Cambiando l&apos;email, l&apos;indirizzo torna &laquo;da verificare&raquo;.
                 </p>
+
+                {/* Privacy rights (art. 15 / 17). Same tools as the customer
+                    page, reachable from here too; an admin must be demoted
+                    before it can be erased. */}
+                {u.role !== "admin" && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-brown-900/10 pt-3">
+                    <p className="text-xs text-brown-800/60">
+                      <span className="font-bold tracking-widest text-brown-800/60 uppercase">Privacy (GDPR)</span>
+                      {" · "}esporta i dati o anonimizza l&apos;account. Gli ordini restano per obblighi fiscali.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={`/api/admin/gdpr/${u.id}`}
+                        download
+                        className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                      >
+                        Esporta dati
+                      </a>
+                      <DeleteForm
+                        action={anonymizeCustomer}
+                        id={u.id}
+                        confirm={`Anonimizzare definitivamente i dati di ${u.name || u.username}? L'operazione non è reversibile. Gli ordini restano per obblighi fiscali.`}
+                      >
+                        Anonimizza
+                      </DeleteForm>
+                    </div>
+                  </div>
+                )}
               </details>
             </Panel>
           ))}

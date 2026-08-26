@@ -19,7 +19,7 @@ import {
 import { logAudit } from "@/lib/audit";
 import { anonymizeUser } from "@/lib/gdpr";
 import { getOrCreateLoyaltyAccount } from "@/lib/loyalty";
-import { deriveUsername, sendVerificationEmail } from "@/lib/auth/service";
+import { deriveUsername, sendVerificationEmail, requestPasswordReset } from "@/lib/auth/service";
 import { subscribeNewsletter } from "@/lib/newsletter";
 import { randomBytes } from "node:crypto";
 
@@ -55,11 +55,22 @@ const userActiveInput = z.object({
     .transform((v) => v === "on" || v === "true" || v === "1"),
 });
 
-/** Change a user's role. Admin-only; refuses to demote the last remaining admin. */
+/** Privilege-changing actions must not be pointed at the caller's own account:
+ *  an admin demoting or deactivating themself is a mistake, and their own
+ *  password and 2FA are managed from /admin/security. */
+function refuseSelf(actorId: string, targetId: string, what: string): void {
+  if (actorId === targetId) {
+    throw new ActionError(`Non puoi ${what} il tuo account da qui.`);
+  }
+}
+
+/** Change a user's role or location. Admin-only; refuses to demote the last
+ *  remaining admin and refuses to act on the caller's own account. */
 export async function setUserRole(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireRole("admin");
     const d = parseForm(userRoleInput, fd);
+    refuseSelf(actor.id, d.id, "cambiare ruolo o sede del");
 
     const [target] = await db.select().from(users).where(eq(users.id, d.id)).limit(1);
     if (!target) throw new ActionError("Utente non trovato");
@@ -74,31 +85,41 @@ export async function setUserRole(_prev: ActionState, fd: FormData): Promise<Act
     // to one location, and demoting an admin must not silently grant them every
     // location for ever.
     const shopSlug = d.role === "staff" ? d.shopSlug ?? null : null;
+    const roleChanged = d.role !== target.role;
+    const shopChanged = shopSlug !== (target.shopSlug ?? null);
+    // Nothing to write means nothing to sign out: a re-submitted form must not
+    // kick a colleague off every device.
+    if (!roleChanged && !shopChanged) return ok("Nessuna modifica.");
+
     await db.update(users).set({ role: d.role, shopSlug }).where(eq(users.id, d.id));
     // Force re-auth so the new privilege level takes effect immediately (a
     // demotion must not keep an elevated session alive).
     await deleteUserSessions(d.id);
+    const summary = roleChanged
+      ? `Ruolo di ${target.username}: ${target.role} → ${d.role}` +
+        (shopSlug ? ` (sede ${shopSlug})` : target.shopSlug ? " (tutte le sedi)" : "")
+      : `Sede di ${target.username}: ${target.shopSlug ?? "tutte le sedi"} → ${shopSlug ?? "tutte le sedi"}`;
     await logAudit({
       actor,
       action: "user.role",
       entity: "user",
       entityId: target.id,
-      summary:
-        `Ruolo di ${target.username}: ${target.role} → ${d.role}` +
-        (shopSlug ? ` (sede ${shopSlug})` : target.shopSlug ? " (tutte le sedi)" : ""),
+      summary,
       meta: { from: target.role, to: d.role, shopSlug },
     });
     revalidatePath("/admin/users");
-    return ok(`Ruolo aggiornato a "${d.role}".`);
+    return ok(roleChanged ? `Ruolo aggiornato a "${d.role}".` : "Sede aggiornata.");
   });
 }
 
-/** Reset a user's password. Admin-only. */
+/** Reset a user's password. Admin-only; not for the caller's own account. */
 export async function resetUserPassword(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireRole("admin");
     const d = parseForm(userPasswordInput, fd);
+    refuseSelf(actor.id, d.id, "reimpostare la password del");
     const [target] = await db.select().from(users).where(eq(users.id, d.id)).limit(1);
+    if (!target) throw new ActionError("Utente non trovato");
     const passwordHash = await hashPasswordAsync(d.password);
     await db.update(users).set({ passwordHash }).where(eq(users.id, d.id));
     // A password reset must log the user out everywhere.
@@ -140,22 +161,41 @@ export async function updateUserProfile(_prev: ActionState, fd: FormData): Promi
       if (clash && clash.id !== d.id) throw new ActionError("Email già in uso da un altro account.");
     }
 
+    // Username is the login handle and is unique; a form without the field
+    // leaves it as it is.
+    const username = d.username ?? target.username;
+    const usernameChanged = username !== target.username;
+    if (usernameChanged) {
+      const [clash] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.username, username))
+        .limit(1);
+      if (clash && clash.id !== d.id) throw new ActionError("Username già in uso.");
+    }
+
     await db
       .update(users)
       .set({
+        username,
         name: d.name,
         email: d.email ?? null,
         phone: d.phone ?? null,
+        marketingConsent: d.marketingConsent,
         ...(emailChanged ? { emailVerifiedAt: null } : {}),
       })
       .where(eq(users.id, d.id));
 
     // Describe what actually changed, so the audit trail is readable.
     const changes: string[] = [];
+    if (usernameChanged) changes.push(`username ${target.username} → ${username}`);
     if (d.name !== target.name) changes.push(`nome "${target.name}" → "${d.name}"`);
     if (emailChanged) changes.push(`email ${target.email ?? "—"} → ${d.email ?? "—"}`);
     if ((d.phone ?? null) !== (target.phone ?? null)) {
       changes.push(`telefono ${target.phone ?? "—"} → ${d.phone ?? "—"}`);
+    }
+    if (d.marketingConsent !== target.marketingConsent) {
+      changes.push(`consenso marketing ${d.marketingConsent ? "attivato" : "revocato"}`);
     }
     if (changes.length === 0) return ok("Nessuna modifica.");
 
@@ -165,7 +205,13 @@ export async function updateUserProfile(_prev: ActionState, fd: FormData): Promi
       entity: "user",
       entityId: target.id,
       summary: `Anagrafica di ${target.username}: ${changes.join(", ")}`,
-      meta: { name: d.name, email: d.email ?? null, phone: d.phone ?? null },
+      meta: {
+        username,
+        name: d.name,
+        email: d.email ?? null,
+        phone: d.phone ?? null,
+        marketingConsent: d.marketingConsent,
+      },
     });
 
     revalidatePath("/admin/users");
@@ -294,6 +340,7 @@ export async function setUserActive(_prev: ActionState, fd: FormData): Promise<A
   return runAction(async () => {
     const actor = await requireRole("admin");
     const d = parseForm(userActiveInput, fd);
+    if (!d.active) refuseSelf(actor.id, d.id, "disattivare");
 
     const [target] = await db.select().from(users).where(eq(users.id, d.id)).limit(1);
     if (!target) throw new ActionError("Utente non trovato");
@@ -341,6 +388,7 @@ export async function resetUserTotp(_prev: ActionState, fd: FormData): Promise<A
     const actor = await requireRole("admin");
     const id = String(fd.get("id") ?? "").trim();
     if (!id) throw new ActionError("Utente non valido.");
+    refuseSelf(actor.id, id, "azzerare la 2FA del");
 
     const [target] = await db.select().from(users).where(eq(users.id, id)).limit(1);
     if (!target) throw new ActionError("Utente non trovato");
@@ -401,6 +449,62 @@ export async function setEmailVerified(_prev: ActionState, fd: FormData): Promis
     revalidatePath("/admin/users");
     revalidatePath(`/admin/loyalty/${id}`);
     return ok(verified ? "Email segnata come verificata." : "Email segnata come da verificare.");
+  });
+}
+
+/**
+ * Send the address-verification link again. Admin-only.
+ *
+ * The manual "segna verificata" next door is for an address confirmed
+ * out-of-band; this is for the ordinary case where the first email was missed.
+ */
+export async function resendUserVerification(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const id = String(fd.get("id") ?? "").trim();
+
+    const [target] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (!target) throw new ActionError("Utente non trovato");
+    if (!target.email) throw new ActionError("Questo account non ha un'email.");
+    if (target.emailVerifiedAt) return ok("L'email è già verificata.");
+    if (!target.active) throw new ActionError("L'account è disattivato.");
+
+    await sendVerificationEmail(target, target.email);
+    await logAudit({
+      actor,
+      action: "user.verification_resent",
+      entity: "user",
+      entityId: id,
+      summary: `Email di verifica reinviata a ${target.username} (${target.email})`,
+    });
+    return ok(`Email di verifica inviata a ${target.email}.`);
+  });
+}
+
+/**
+ * Email the account a password-reset link instead of typing a password for
+ * them. Admin-only. Uses the same token flow as «password dimenticata», so
+ * nobody but the owner ever sees the new password.
+ */
+export async function sendUserPasswordReset(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const id = String(fd.get("id") ?? "").trim();
+
+    const [target] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (!target) throw new ActionError("Utente non trovato");
+    if (!target.email) throw new ActionError("Questo account non ha un'email: usa il reset manuale.");
+    if (!target.active) throw new ActionError("L'account è disattivato.");
+
+    await requestPasswordReset(target.email);
+    await logAudit({
+      actor,
+      action: "user.password_reset_link",
+      entity: "user",
+      entityId: id,
+      summary: `Link di reimpostazione password inviato a ${target.username} (${target.email})`,
+    });
+    return ok(`Link di reimpostazione inviato a ${target.email}.`);
   });
 }
 

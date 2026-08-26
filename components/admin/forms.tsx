@@ -680,6 +680,9 @@ export function DiscountForm({
  *  list (role, password and active state each have their own guarded action). */
 export function UserForm({ shops = [] }: { shops?: { slug: string; name: string }[] }) {
   const fid = useFieldIds();
+  // Only a staff account has a location to pick; showing the field for the
+  // other roles invited a choice the server would then ignore.
+  const [role, setRole] = useState("customer");
   return (
     <ActionForm
       action={createUser}
@@ -708,27 +711,35 @@ export function UserForm({ shops = [] }: { shops?: { slug: string; name: string 
       </div>
       <div>
         <label className={labelCls} htmlFor={fid("role")}>Ruolo</label>
-        <select id={fid("role")} name="role" defaultValue="customer" className={inputCls}>
+        <select
+          id={fid("role")}
+          name="role"
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+          className={inputCls}
+        >
           <option value="customer">Cliente</option>
           <option value="staff">Staff</option>
           <option value="admin">Amministratore</option>
         </select>
       </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("shopSlug")}>Sede (solo staff)</label>
-        <select id={fid("shopSlug")} name="shopSlug" defaultValue="" className={inputCls}>
-          <option value="">Tutte le sedi</option>
-          {shops.map((s) => (
-            <option key={s.slug} value={s.slug}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-brown-800/60">
-          Uno staff assegnato a una sede vede e modifica solo gli ordini, i prodotti e le
-          prenotazioni di quella sede. Ignorato per clienti e amministratori.
-        </p>
-      </div>
+      {role === "staff" && (
+        <div>
+          <label className={labelCls} htmlFor={fid("shopSlug")}>Sede</label>
+          <select id={fid("shopSlug")} name="shopSlug" defaultValue="" className={inputCls}>
+            <option value="">Tutte le sedi</option>
+            {shops.map((s) => (
+              <option key={s.slug} value={s.slug}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-brown-800/60">
+            Uno staff assegnato a una sede vede e modifica solo gli ordini, i prodotti e le
+            prenotazioni di quella sede.
+          </p>
+        </div>
+      )}
       <div>
         <label className={labelCls} htmlFor={fid("password")}>Password</label>
         <input

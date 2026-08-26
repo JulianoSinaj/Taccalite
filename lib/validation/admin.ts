@@ -646,12 +646,25 @@ export const staffCustomerInput = z
     path: ["email"],
   });
 
-/** Editable contact details of an account. `username` and `role` are deliberately
- *  out of scope here — they have their own guarded actions. A cleared email is
- *  stored as NULL so it doesn't collide with the unique index. */
+/** Editable details of an account. `role` is deliberately out of scope here — it
+ *  has its own guarded action. `username` is optional so a form that doesn't
+ *  offer it leaves it unchanged. A cleared email is stored as NULL so it doesn't
+ *  collide with the unique index. */
 export const userProfileInput = z.object({
   id: z.string().trim().min(1),
+  username: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(3, "Lo username deve avere almeno 3 caratteri")
+    .max(40, "Lo username può avere al massimo 40 caratteri")
+    .regex(/^[a-z0-9._-]+$/, "Username non valido (solo lettere minuscole, numeri, . _ -)")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
   name: z.string().trim().min(1, "Il nome è obbligatorio").max(200),
+  marketingConsent: z
+    .union([z.string(), z.null(), z.undefined()])
+    .transform((v) => v === "on" || v === "true" || v === "1"),
   email: z
     .string()
     .trim()

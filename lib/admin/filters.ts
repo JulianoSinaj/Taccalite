@@ -346,8 +346,15 @@ export function usersWhere(f: UserFilters): SQL | undefined {
   if (isSet(f.ruolo)) conds.push(eq(users.role, f.ruolo as "customer"));
   if (f.stato === "attivi") conds.push(eq(users.active, true));
   if (f.stato === "disattivati") conds.push(eq(users.active, false));
-  if (f.stato === "da-verificare") conds.push(sql`${users.emailVerifiedAt} is null`);
+  // "Da verificare" means an address that hasn't proven itself — an account
+  // with no email at all has nothing to verify and must not pad the list.
+  if (f.stato === "da-verificare") {
+    conds.push(sql`${users.email} is not null and ${users.emailVerifiedAt} is null`);
+  }
   if (f.stato === "con-2fa") conds.push(eq(users.totpEnabled, true));
+  // The lock is a timestamp that expires on its own, so "locked" is a question
+  // about now (stored as epoch milliseconds).
+  if (f.stato === "bloccati") conds.push(sql`${users.lockedUntil} > ${Date.now()}`);
   if (f.q) {
     conds.push(
       searchWhere("users", f.q, () => [

@@ -169,6 +169,16 @@ export default async function CustomerDetail({ params }: Params) {
                 <label className={labelCls} htmlFor="profile-phone">Telefono</label>
                 <input id="profile-phone" name="phone" maxLength={40} defaultValue={user.phone ?? ""} className={inputCls} />
               </div>
+              <label htmlFor="profile-marketing" className="flex min-h-11 items-center gap-2 text-sm text-brown-950">
+                <input
+                  id="profile-marketing"
+                  type="checkbox"
+                  name="marketingConsent"
+                  defaultChecked={user.marketingConsent}
+                  className="h-4 w-4 accent-gold-dark"
+                />
+                Consenso marketing
+              </label>
               <PendingButton tone="dark">Salva</PendingButton>
             </ActionForm>
             <p className="mt-3 text-xs text-brown-800/60">
