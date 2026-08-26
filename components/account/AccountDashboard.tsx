@@ -94,7 +94,15 @@ const REDEMPTION_STATUS: Record<Redemption["status"], { label: string; cls: Tone
   cancelled: { label: "Annullato", cls: TONE.bad },
 };
 
-const dateFmt: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
+// Pinned to Rome: the server runs UTC and this renders client-side too, so an
+// unpinned zone lets the two sides disagree on the calendar day for the
+// ~1-2h/day they're on opposite sides of midnight.
+const dateFmt: Intl.DateTimeFormatOptions = {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "Europe/Rome",
+};
 
 export default function AccountDashboard({
   name,
@@ -389,11 +397,7 @@ export default function AccountDashboard({
                           {tx.reason || "Movimento"}
                         </p>
                         <p className="text-xs text-taupe">
-                          {new Date(tx.createdAt).toLocaleDateString("it-IT", {
-                            day: "numeric",
-                            month: "long",
-                            year: "numeric",
-                          })}
+                          {new Date(tx.createdAt).toLocaleDateString("it-IT", dateFmt)}
                         </p>
                       </div>
                       <span

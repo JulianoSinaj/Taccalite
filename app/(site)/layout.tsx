@@ -2,6 +2,7 @@ import { ViewTransition } from "react";
 
 import { getShops } from "@/lib/db/queries";
 import { INTRO_GATE_SCRIPT } from "@/lib/intro";
+import InlineScript from "@/components/InlineScript";
 import IntroLoader from "@/components/IntroLoader";
 import SiteHeader from "@/components/site/SiteHeader";
 import SiteFooter from "@/components/site/SiteFooter";
@@ -43,7 +44,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         {/* Decides whether this load gets the intro at all, and must do it before
             the parser reaches the curtain below — so it is inline and blocking,
             not an effect. See lib/intro.ts. */}
-        <script dangerouslySetInnerHTML={{ __html: INTRO_GATE_SCRIPT }} />
+        <InlineScript html={INTRO_GATE_SCRIPT} />
         {/* First child after the gate so its curtain is in the server HTML ahead
             of everything it covers — see components/IntroLoader.tsx. */}
         <IntroLoader />
