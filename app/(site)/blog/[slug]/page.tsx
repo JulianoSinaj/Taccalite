@@ -59,7 +59,7 @@ export default async function BlogPostPage({ params }: Params) {
         <Reveal className="mx-auto max-w-[46rem]">
           <Link
             href="/blog"
-            className="group inline-flex items-center gap-2 text-[0.6875rem] font-semibold tracking-[0.22em] text-taupe uppercase transition-colors hover:text-brown-950"
+            className="group tap inline-flex items-center gap-2 text-[0.6875rem] font-semibold tracking-[0.22em] text-taupe uppercase transition-colors hover:text-brown-950"
           >
             <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-1" />
             Tutte le news

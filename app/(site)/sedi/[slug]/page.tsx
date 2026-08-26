@@ -214,13 +214,13 @@ export default async function ShopDetailPage({ params }: Params) {
             aria-label="Percorso"
             className="flex flex-wrap items-center gap-2 text-[0.6875rem] font-semibold tracking-[0.2em] text-taupe uppercase"
           >
-            <Link href="/" className="transition-colors hover:text-brown-950">
+            <Link href="/" className="tap transition-colors hover:text-brown-950">
               Home
             </Link>
             <span aria-hidden className="text-rule-strong">
               /
             </span>
-            <Link href="/sedi" className="transition-colors hover:text-brown-950">
+            <Link href="/sedi" className="tap transition-colors hover:text-brown-950">
               Sedi
             </Link>
             <span aria-hidden className="text-rule-strong">
@@ -280,7 +280,7 @@ export default async function ShopDetailPage({ params }: Params) {
                   <LeaderRow
                     label="Telefono"
                     value={
-                      <a href={telHref(shop.phone)} className="hover:text-gold-deep">
+                      <a href={telHref(shop.phone)} className="tap hover:text-gold-deep">
                         {shop.phone}
                       </a>
                     }
@@ -428,7 +428,7 @@ export default async function ShopDetailPage({ params }: Params) {
                     href={mapsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 self-start text-[0.6875rem] font-bold tracking-[0.18em] text-cream/60 uppercase transition-colors hover:text-gold"
+                    className="tap inline-flex items-center gap-2 self-start text-[0.6875rem] font-bold tracking-[0.18em] text-cream/60 uppercase transition-colors hover:text-gold"
                   >
                     Apri in Google Maps
                     <ArrowRight className="size-3.5" />
@@ -622,7 +622,7 @@ export default async function ShopDetailPage({ params }: Params) {
                 </p>
                 <Link
                   href="/negozio"
-                  className="underline-draw inline-flex items-center gap-2 pb-1 text-sm font-semibold text-brown-950"
+                  className="underline-draw tap inline-flex items-center gap-2 pb-1 text-sm font-semibold text-brown-950"
                 >
                   Tutto l&apos;e-shop
                   <ArrowRight className="size-4" />

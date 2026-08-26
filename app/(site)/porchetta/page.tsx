@@ -418,7 +418,7 @@ export default async function PorchettaPage() {
                 </p>
                 <Link
                   href={`/negozio/${product.slug}`}
-                  className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-gold-deep underline-draw"
+                  className="tap mt-4 inline-flex items-center gap-2 text-sm font-semibold text-gold-deep underline-draw"
                 >
                   Scheda prodotto
                   <ArrowRight className="size-4" />

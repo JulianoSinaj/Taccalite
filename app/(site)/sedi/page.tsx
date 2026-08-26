@@ -365,12 +365,16 @@ export default async function NegoziPage() {
               <SectionMark n="01" className="mb-6">
                 La mappa
               </SectionMark>
-              <h2
-                className="font-display display-lg font-semibold text-brown-950"
-                style={{ whiteSpace: "nowrap", textWrap: "nowrap" }}
-              >
-                Scegli la bottega,
-                <span className="wonk text-gold-deep"> ti portiamo lì.</span>
+              {/* Each phrase is unbreakable; the heading itself is not. Held
+                  together with `nowrap` on the whole h2, the line could not
+                  break anywhere at all — at 390px that pushed 118px past the
+                  viewport and gave the whole page a horizontal scroll. Keeping
+                  the rule on the parts gets the same one-line headline wherever
+                  there is room, and a clean break between the two phrases
+                  wherever there is not. */}
+              <h2 className="font-display display-lg font-semibold text-brown-950">
+                <span className="whitespace-nowrap">Scegli la bottega,</span>{" "}
+                <span className="wonk whitespace-nowrap text-gold-deep">ti portiamo lì.</span>
               </h2>
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-brown-700">
                 Tocca una bottega per vederla sulla mappa e avviare le indicazioni dal punto in
@@ -404,13 +408,13 @@ export default async function NegoziPage() {
             <SectionMark n="02" className="mb-6">
               Cosa trovi, dove
             </SectionMark>
-            <h2
-              className="font-display display-lg font-semibold text-brown-950"
-              style={{ whiteSpace: "nowrap", textWrap: "nowrap" }}
-            >
-              {shops.length > 1 ? "Due banchi," : "Il banco,"}
-              <span className="wonk text-gold-deep">
-                {" "}
+            {/* Same shape as above — and this one carries shop-dependent text,
+                so it must be free to wrap on a narrow screen. */}
+            <h2 className="font-display display-lg font-semibold text-brown-950">
+              <span className="whitespace-nowrap">
+                {shops.length > 1 ? "Due banchi," : "Il banco,"}
+              </span>{" "}
+              <span className="wonk whitespace-nowrap text-gold-deep">
                 {servicesDiffer ? "servizi diversi" : "gli stessi servizi"}
               </span>
             </h2>
@@ -611,7 +615,7 @@ export default async function NegoziPage() {
 
                   <Link
                     href={`/sedi/${shop.slug}`}
-                    className="underline-draw mt-6 inline-flex items-center gap-2 text-sm font-semibold text-brown-950"
+                    className="underline-draw tap mt-6 inline-flex items-center gap-2 text-sm font-semibold text-brown-950"
                   >
                     Scopri questa bottega
                     <ArrowRight className="size-4" />

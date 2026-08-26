@@ -79,7 +79,7 @@ export default async function CategoryPage({ params }: Params) {
         <div className="mx-auto max-w-[88rem]">
           <Link
             href="/negozio"
-            className="mb-10 inline-flex items-center gap-2 text-sm font-semibold text-brown-700 transition-colors hover:text-brown-950"
+            className="tap mb-10 inline-flex items-center gap-2 text-sm font-semibold text-brown-700 transition-colors hover:text-brown-950"
           >
             <ArrowLeft className="size-4" />
             Tutto il negozio
