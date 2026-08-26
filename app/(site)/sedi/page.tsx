@@ -365,7 +365,10 @@ export default async function NegoziPage() {
               <SectionMark n="01" className="mb-6">
                 La mappa
               </SectionMark>
-              <h2 className="font-display display-lg font-semibold text-brown-950">
+              <h2
+                className="font-display display-lg font-semibold text-brown-950"
+                style={{ whiteSpace: "nowrap", textWrap: "nowrap" }}
+              >
                 Scegli la bottega,
                 <span className="wonk text-gold-deep"> ti portiamo lì.</span>
               </h2>
@@ -401,7 +404,10 @@ export default async function NegoziPage() {
             <SectionMark n="02" className="mb-6">
               Cosa trovi, dove
             </SectionMark>
-            <h2 className="font-display display-lg font-semibold text-brown-950">
+            <h2
+              className="font-display display-lg font-semibold text-brown-950"
+              style={{ whiteSpace: "nowrap", textWrap: "nowrap" }}
+            >
               {shops.length > 1 ? "Due banchi," : "Il banco,"}
               <span className="wonk text-gold-deep">
                 {" "}
