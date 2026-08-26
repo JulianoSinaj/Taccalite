@@ -203,6 +203,12 @@ describe("login identifier and lockout", () => {
     expect(row.failedLoginCount).toBe(0);
   });
 
+  // Twelve password verifications end to end — ten to trip the lock, one refused
+  // while it stands, one after the reset — and the hash is deliberately expensive.
+  // That is about 9s of real work against Vitest's 5s default, so the test failed
+  // on duration alone rather than on anything it asserts. Scoped to this `it`
+  // instead of raising `testTimeout` in vitest.config.ts, because a global floor
+  // that clears this would also stop a genuinely hung test from ever reporting.
   it("locks the account after repeated failures, then lets a reset through", async () => {
     await seedUser();
     for (let i = 0; i < 10; i++) {
@@ -222,7 +228,7 @@ describe("login identifier and lockout", () => {
     expect(await loginUser({ identifier: EMAIL, password: "post-lock-password" })).toMatchObject({
       ok: true,
     });
-  });
+  }, 30_000);
 
   it("does not leak which identifiers exist", async () => {
     await seedUser();
