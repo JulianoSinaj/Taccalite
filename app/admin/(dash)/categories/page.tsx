@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AdminHeader, Panel, StatusBadge, NewButton, inputCls, labelCls } from "@/components/admin/ui";
+import { AdminHeader, Panel, StatusBadge, NewButton, SearchBox, inputCls, labelCls } from "@/components/admin/ui";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { adminGetCategoriesWithUsage, countUnfiled, type CategoryWithUsage } from "@/lib/admin/queries";
 import { toggleCategoryActive, deleteCategory, mergeCategories } from "@/lib/admin/category-actions";
@@ -17,7 +17,23 @@ const KINDS = [
 ] as const;
 
 type Kind = (typeof KINDS)[number]["value"];
-type SP = { searchParams: Promise<{ kind?: string }> };
+type SP = { searchParams: Promise<{ kind?: string; q?: string }> };
+
+/**
+ * Name/slug search over one vocabulary.
+ *
+ * A child is kept when its *parent* matches, so searching "Salumi" returns the
+ * branch rather than the one row that happens to carry the word — the list is a
+ * tree and a lone subcategory out of context is not a useful answer. `tree()`
+ * already tolerates the reverse case (a match whose parent was filtered away).
+ */
+function search(rows: CategoryWithUsage[], q: string): CategoryWithUsage[] {
+  const needle = q.toLowerCase();
+  const hit = (r: CategoryWithUsage) =>
+    r.name.toLowerCase().includes(needle) || r.slug.toLowerCase().includes(needle);
+  const matchedIds = new Set(rows.filter(hit).map((r) => r.id));
+  return rows.filter((r) => hit(r) || (r.parentId && matchedIds.has(r.parentId)));
+}
 
 /** Parents first, each followed by its children — the order the picker shows. */
 function tree(rows: CategoryWithUsage[]): CategoryWithUsage[] {
@@ -47,18 +63,31 @@ export default async function AdminCategories({ searchParams }: SP) {
   const sp = await searchParams;
   const kind: Kind = sp.kind === "post" ? "post" : "product";
   const active = KINDS.find((k) => k.value === kind)!;
+  const q = sp.q?.trim() ?? "";
 
-  const [rows, unfiled] = await Promise.all([
+  const [all, unfiled] = await Promise.all([
     adminGetCategoriesWithUsage(kind),
     countUnfiled(kind),
   ]);
+  // Filtered in memory: one vocabulary is tens of rows, already fetched whole to
+  // build the tree, and the merge picker below needs the unfiltered list anyway.
+  const rows = q ? search(all, q) : all;
   const ordered = tree(rows);
+  // The merge picker deliberately ignores the search: reconciling a doubled-up
+  // vocabulary means choosing between two rows that, by definition, are spelled
+  // differently — a filter narrow enough to surface the typo would usually hide
+  // the category it should be merged into.
+  const allOrdered = q ? tree(all) : ordered;
 
   return (
     <div>
       <AdminHeader
         title="Categorie"
-        subtitle={`${rows.length} categorie · ${active.label.toLowerCase()}`}
+        subtitle={
+          q
+            ? `${rows.length} di ${all.length} categorie · ${active.label.toLowerCase()} · “${q}”`
+            : `${rows.length} categorie · ${active.label.toLowerCase()}`
+        }
         action={<NewButton href={`${BASE}/new?kind=${kind}`}>+ Nuova categoria</NewButton>}
       />
 
@@ -81,6 +110,15 @@ export default async function AdminCategories({ searchParams }: SP) {
           </Link>
         ))}
       </div>
+
+      {/* `kind` rides along as a hidden field: searching from the News tab must
+          not silently drop the operator back into the product vocabulary. */}
+      <SearchBox
+        basePath={BASE}
+        q={q}
+        placeholder="Cerca per nome o slug…"
+        hidden={kind === "product" ? {} : { kind }}
+      />
 
       {unfiled > 0 && (
         <Panel className="mb-4 border-warn/30 bg-warn-soft">
@@ -106,7 +144,20 @@ export default async function AdminCategories({ searchParams }: SP) {
       {rows.length === 0 ? (
         <Panel>
           <p className="text-brown-800/70">
-            Nessuna categoria. Creane una con «Nuova categoria».
+            {q ? (
+              <>
+                Nessuna categoria corrisponde a «{q}».{" "}
+                <Link
+                  href={kind === "product" ? BASE : `${BASE}?kind=${kind}`}
+                  className="font-semibold text-gold-deep underline"
+                >
+                  Azzera la ricerca
+                </Link>
+                .
+              </>
+            ) : (
+              "Nessuna categoria. Creane una con «Nuova categoria»."
+            )}
           </p>
         </Panel>
       ) : (
@@ -157,7 +208,7 @@ export default async function AdminCategories({ searchParams }: SP) {
         </div>
       )}
 
-      {rows.length > 1 && (
+      {all.length > 1 && (
         <Panel className="mt-8">
           <h2 className="font-display mb-1 text-lg text-brown-950">Unisci due categorie</h2>
           <p className="mb-4 text-sm text-brown-800/70">
@@ -171,7 +222,7 @@ export default async function AdminCategories({ searchParams }: SP) {
                 Da (viene eliminata)
               </label>
               <select id="merge-source" name="sourceId" className={inputCls} required>
-                {ordered.map((c) => (
+                {allOrdered.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} ({c.usage})
                   </option>
@@ -183,7 +234,7 @@ export default async function AdminCategories({ searchParams }: SP) {
                 A (riceve tutto)
               </label>
               <select id="merge-target" name="targetId" className={inputCls} required>
-                {ordered.map((c) => (
+                {allOrdered.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} ({c.usage})
                   </option>

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminHeader, Panel, euro, fmtDate, inputCls, labelCls } from "@/components/admin/ui";
+import { PrintButton } from "@/components/admin/PrintButton";
 import { getInvoiceRegister, adminGetShops } from "@/lib/admin/queries";
+import { invoiceRegisterStatus, invoiceRegisterMatches } from "@/lib/admin/filters";
 import { isAdmin } from "@/lib/auth/session";
 import { vatPeriod, VAT_PRESETS, type VatPresetKey } from "@/lib/fiscal-period";
 
@@ -30,8 +32,12 @@ const FILTERS = [
 export default async function InvoiceRegister({ searchParams }: SP) {
   // Invoices are the business's fiscal identity in someone else's inbox.
   if (!(await isAdmin())) redirect("/admin");
-  const { da, a, periodo, stato = "all" } = await searchParams;
+  const sp = await searchParams;
+  const { da, a, periodo } = sp;
   const period = vatPeriod({ da, a, periodo });
+  // Read through the same helper the export uses, so a hand-typed `stato` can
+  // never filter the screen one way and the CSV another.
+  const stato = invoiceRegisterStatus(sp);
 
   const [rows, shops] = await Promise.all([
     getInvoiceRegister(period.from, period.toExclusive),
@@ -39,12 +45,11 @@ export default async function InvoiceRegister({ searchParams }: SP) {
   ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
 
-  const visible = rows.filter((r) => {
-    if (stato === "emesse") return !!r.invoicedAt;
-    if (stato === "da-emettere") return !r.invoicedAt;
-    if (stato === "note") return !!r.creditNoteAt;
-    return true;
-  });
+  const visible = rows.filter((r) => invoiceRegisterMatches(r, stato));
+
+  // Carries the period and the active facet, so the download is the view.
+  const exportQs = new URLSearchParams({ da: period.fromISO, a: period.toISO });
+  if (stato !== "all") exportQs.set("stato", stato);
 
   const issued = rows.filter((r) => r.invoicedAt).length;
   const pending = rows.length - issued;
@@ -63,9 +68,10 @@ export default async function InvoiceRegister({ searchParams }: SP) {
       <AdminHeader
         title="Registro fatture"
         subtitle={`${rows.length} vendite incassate tra il ${period.fromISO} e il ${period.toISO} · ${issued} con fattura, ${pending} senza`}
+        action={<PrintButton>Stampa</PrintButton>}
       />
 
-      <Panel className="mb-6">
+      <Panel className="mb-6 print:hidden">
         <div className="mb-4 flex flex-wrap gap-2">
           {VAT_PRESETS.map((p) => (
             <a
@@ -101,10 +107,17 @@ export default async function InvoiceRegister({ searchParams }: SP) {
           >
             Aggiorna
           </button>
+          <a
+            href={`/api/admin/export/fatture?${exportQs.toString()}`}
+            download
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+          >
+            Esporta CSV
+          </a>
         </form>
       </Panel>
 
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-6 flex flex-wrap gap-2 print:hidden">
         {FILTERS.map((f) => (
           <Link
             key={f.value}

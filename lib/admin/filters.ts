@@ -609,3 +609,32 @@ export function outboxWhere(f: OutboxFilters): SQL | undefined {
   }
   return conds.length ? and(...conds) : undefined;
 }
+
+// ── Registro fatture ─────────────────────────────────────────────────────────
+export type InvoiceRegisterStatus = "all" | "emesse" | "da-emettere" | "note";
+
+const INVOICE_STATUSES: InvoiceRegisterStatus[] = ["all", "emesse", "da-emettere", "note"];
+
+export function invoiceRegisterStatus(p: ParamBag): InvoiceRegisterStatus {
+  const v = facet(p, "stato") as InvoiceRegisterStatus;
+  return INVOICE_STATUSES.includes(v) ? v : "all";
+}
+
+/**
+ * The register's status facet, as a predicate rather than SQL: the two dates it
+ * filters on are reconstructed from the audit trail after the rows are read, so
+ * there is no column to put in a WHERE clause.
+ *
+ * Shared by the page and its CSV export so the file can never disagree with the
+ * rows the operator was looking at when they pressed the button — the same rule
+ * the row exports get for free by passing their filters through `*Where`.
+ */
+export function invoiceRegisterMatches(
+  row: { invoicedAt: Date | null; creditNoteAt: Date | null },
+  stato: InvoiceRegisterStatus,
+): boolean {
+  if (stato === "emesse") return !!row.invoicedAt;
+  if (stato === "da-emettere") return !row.invoicedAt;
+  if (stato === "note") return !!row.creditNoteAt;
+  return true;
+}

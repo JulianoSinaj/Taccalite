@@ -16,6 +16,8 @@ import {
   getBatchesForExport,
   getLoyaltyForExport,
   getDiscountUsageForExport,
+  getInvoiceRegister,
+  adminGetShops,
 } from "@/lib/admin/queries";
 import {
   orderFilters,
@@ -24,6 +26,8 @@ import {
   productFilters,
   subscriberFilters,
   auditFilters,
+  invoiceRegisterStatus,
+  invoiceRegisterMatches,
 } from "@/lib/admin/filters";
 import { getSetting } from "@/lib/db/queries";
 import { normalizeRange, getAnalyticsSummary } from "@/lib/analytics";
@@ -272,6 +276,43 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
           ...section("Note di credito", report.reversals),
           ...section("Netto periodo", report.buckets),
         ],
+      );
+      break;
+    }
+    case "fatture": {
+      // The register is the one fiscal report the commercialista works from and
+      // the only one that could not leave the screen. Same period resolver and
+      // same status predicate as the page, so the file matches the rows the
+      // operator was looking at.
+      const period = vatPeriod({
+        da: params.get("da") ?? undefined,
+        a: params.get("a") ?? undefined,
+        periodo: params.get("periodo") ?? undefined,
+      });
+      const stato = invoiceRegisterStatus(params);
+      const rows = (await getInvoiceRegister(period.from, period.toExclusive)).filter((r) =>
+        invoiceRegisterMatches(r, stato),
+      );
+      const shops = await adminGetShops();
+      const shopName = new Map(shops.map((s) => [s.slug, s.name]));
+      body = toCsv(
+        // `nettoEuros` is what the page totals and what the credit notes act on;
+        // `totaleEuros` and `rimborsatoEuros` are carried too so a spreadsheet
+        // can reconcile the two without re-deriving either.
+        ["numero", "cliente", "codiceFiscaleCliente", "sede", "incassata", "totaleEuros", "rimborsatoEuros", "nettoEuros", "fatturaEmessaIl", "notaCreditoIl", "stato"],
+        rows.map((r) => [
+          r.orderNumber,
+          r.name,
+          r.hasFiscalIdentity ? "si" : "no",
+          r.shopSlug ? shopName.get(r.shopSlug) ?? r.shopSlug : "",
+          iso(r.settledAt),
+          (r.totalCents / 100).toFixed(2),
+          (r.refundedCents / 100).toFixed(2),
+          ((r.totalCents - r.refundedCents) / 100).toFixed(2),
+          iso(r.invoicedAt),
+          iso(r.creditNoteAt),
+          r.invoicedAt ? "Fattura emessa" : "Da emettere",
+        ]),
       );
       break;
     }
