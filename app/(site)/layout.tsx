@@ -1,6 +1,7 @@
 import { ViewTransition } from "react";
 
 import { getShops } from "@/lib/db/queries";
+import { INTRO_GATE_SCRIPT } from "@/lib/intro";
 import IntroLoader from "@/components/IntroLoader";
 import SiteHeader from "@/components/site/SiteHeader";
 import SiteFooter from "@/components/site/SiteFooter";
@@ -25,9 +26,10 @@ export const dynamic = "force-dynamic";
  *
  * `<IntroLoader />` is the original brown cinematic intro — the gold ring, the
  * name, the rule — brought back after a spell as a white paper veil. It plays on
- * every hard load of the storefront and never on a soft navigation (this layout
- * does not remount). Its length is `TOTAL_DURATION` in the component; it holds
- * the page still while it is up, and "Salta" ends it early.
+ * the first hard load of a tab and never again in it, and never on a soft
+ * navigation (this layout does not remount). Its length is `TOTAL_DURATION` in
+ * the component; it holds the page still while it is up, and "Salta" ends it
+ * early.
  */
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   // Only for the phone menu's "chiama la bottega" rows — the numbers belong to
@@ -38,8 +40,12 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   return (
     <CartProvider>
       <div className="site-shell flex flex-1 flex-col">
-        {/* First child so its curtain is in the server HTML ahead of everything
-            it covers — see components/IntroLoader.tsx. */}
+        {/* Decides whether this load gets the intro at all, and must do it before
+            the parser reaches the curtain below — so it is inline and blocking,
+            not an effect. See lib/intro.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: INTRO_GATE_SCRIPT }} />
+        {/* First child after the gate so its curtain is in the server HTML ahead
+            of everything it covers — see components/IntroLoader.tsx. */}
         <IntroLoader />
         <SmoothScroll />
         <ScrollProgress />

@@ -386,15 +386,18 @@ body:has(.site-shell) {
   }
 }
 
-/* The reload hand-off. Set on <html> by IntroLoader at `beforeunload`: the old
- * document keeps painting while the server thinks, so it shows the same brown
- * the new document's first frame will — no cut through the page in between. */
-html[data-intro="leave"] body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: var(--color-brown-950);
+/* The intro plays once per tab. `data-intro="skip"` is set by the gate script in
+ * app/(site)/layout.tsx while the document is still parsing — before the parser
+ * has even reached the curtain this hides — so on every later load in that tab
+ * the brown never paints at all. Doing it from React instead would be one paint
+ * too late, and that frame of brown is the whole thing being avoided.
+ *
+ * This replaced an overlay painted from `beforeunload`, which tried to brown the
+ * *outgoing* page over the server round-trip. The compositor need not present
+ * another frame for a document that is navigating away, so it landed at random:
+ * page, brown, page. See lib/intro.ts. */
+html[data-intro="skip"] .intro-curtain {
+  display: none;
 }
 
 .site-shell .font-display {

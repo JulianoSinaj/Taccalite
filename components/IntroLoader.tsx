@@ -23,12 +23,14 @@ import { motion, useReducedMotion } from "motion/react";
  * the sequence is the same length on every machine.
  *
  * The reload. Chrome keeps the previous page's last frame on screen until the new
- * document paints (paint holding), so a reload used to read as: the page, a cut
- * to brown, the animation, the page again — the "page first" was the old page
- * lingering through the server round-trip. The old document keeps painting after
- * `beforeunload`, so it drops the same brown curtain there
- * (`html[data-intro="leave"]` in globals.css) and the new document's first frame
- * continues it. `pageshow` clears it again for a page restored from bfcache.
+ * document paints (paint holding), so a replayed intro reads as: the page, a cut
+ * to brown, the animation, the page again — the "page first" being the old page
+ * lingering through the server round-trip. Painting over it from `beforeunload`
+ * was tried and does not hold: the compositor is under no obligation to present
+ * another frame for a document that is already navigating away, so the cut landed
+ * or did not, at random. The intro plays once per tab instead, and a reload has no
+ * brown in it at all — see lib/intro.ts, and the gate script that runs ahead of
+ * the curtain in app/(site)/layout.tsx.
  *
  * `data-intro="play"` on <html> while the curtain is down is the signal the rest
  * of the page reads: the cookie bar waits for `taccalite:intro-done` rather than
@@ -40,8 +42,8 @@ import { motion, useReducedMotion } from "motion/react";
  * component and the coin are gone — the hero's mark is `SealStamp`, which is
  * finished in the server HTML and has no handover to schedule.
  *
- * It plays on every hard load of the storefront (the layout does not remount on a
- * soft navigation, so moving around the site never replays it). Reduced motion
+ * It plays on the first hard load of a tab (the layout does not remount on a soft
+ * navigation, so moving around the site never replays it either). Reduced motion
  * shows the still card for a beat and leaves without the wipe.
  */
 const TOTAL_DURATION = 2.6;
@@ -69,31 +71,23 @@ export default function IntroLoader() {
   const reduceMotion = useReducedMotion();
   const curtainRef = useRef<HTMLDivElement>(null);
 
-  // The reload hand-off. Armed for the life of the page, not just the intro.
   useEffect(() => {
-    const root = document.documentElement;
-    let clear = 0;
-    function leave() {
-      root.dataset.intro = "leave";
-      // A navigation can be cancelled (a download link, a blocked prompt); the
-      // page must not stay brown if it never actually goes anywhere.
-      clear = window.setTimeout(() => {
-        if (root.dataset.intro === "leave") delete root.dataset.intro;
-      }, 6000);
-    }
-    function restore() {
-      if (root.dataset.intro === "leave") delete root.dataset.intro;
-    }
-    window.addEventListener("beforeunload", leave);
-    window.addEventListener("pageshow", restore);
-    return () => {
-      window.clearTimeout(clear);
-      window.removeEventListener("beforeunload", leave);
-      window.removeEventListener("pageshow", restore);
-    };
-  }, []);
+    // Everything below belongs to the curtain being up. Without this the cleanup
+    // never ran: `phase === "done"` returns null but does not unmount the
+    // component, so the scroll hold below stayed armed on `window` for the life of
+    // the page — and with Lenis running `syncTouch: false`, a permanently
+    // prevented `touchmove` is a storefront nobody can scroll on a phone.
+    if (phase !== "loading") return;
 
-  useEffect(() => {
+    // Set by the gate script in the layout before this curtain was ever parsed:
+    // the tab has had its intro, the curtain is already `display: none`, and
+    // nobody is waiting on it — CookieConsent reads the same attribute and comes
+    // straight up. Handed to the next tick for the reason spelled out below.
+    if (document.documentElement.dataset.intro === "skip") {
+      const id = setTimeout(() => setPhase("done"), 0);
+      return () => clearTimeout(id);
+    }
+
     if (reduceMotion) {
       // Next tick rather than in the effect body: the curtain is in the server
       // HTML, so the first client render has to match it before it can leave.
@@ -102,9 +96,10 @@ export default function IntroLoader() {
     }
 
     // Hold the page still behind the curtain. Swallowing the events (rather than
-    // `overflow: hidden` on <body>) keeps the scrollbar in place — so nothing
-    // shifts sideways when the curtain lifts — and it is also what holds Lenis,
-    // which reads these same events.
+    // `overflow: hidden` on <body>) keeps the scrollbar in place, so nothing
+    // shifts sideways when the curtain lifts. It does not hold Lenis, whatever
+    // this comment used to claim — Lenis never reads `defaultPrevented`, so a
+    // wheel during the intro still moves the page behind the curtain.
     function hold(event: Event) {
       event.preventDefault();
     }
@@ -126,7 +121,7 @@ export default function IntroLoader() {
       window.removeEventListener("wheel", hold, opts);
       window.removeEventListener("touchmove", hold, opts);
     };
-  }, [reduceMotion]);
+  }, [phase, reduceMotion]);
 
   useEffect(() => {
     if (phase === "exiting") {
