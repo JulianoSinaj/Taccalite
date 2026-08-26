@@ -49,13 +49,25 @@ function slotsFor(shop: ShopOption | undefined, date: string): string[] | null {
   return timeSlotsOn({ hours: shop.hours ?? null, hoursStructured: shop.hoursStructured ?? null }, date);
 }
 
-/** Next Saturday as yyyy-mm-dd, for the porchetta pickup default. */
-function nextSaturdayIso(): string {
-  const d = new Date();
-  const day = d.getDay();
-  const ahead = (6 - day + 7) % 7 || 7;
+/**
+ * Next Saturday as yyyy-mm-dd, for the porchetta pickup default.
+ *
+ * Computed from `today` (the shop's own date, passed down from the server)
+ * rather than the browser's clock — otherwise a visitor whose local day
+ * differs from the shop's could get a different Saturday than the server
+ * would have rendered, and `new Date(yy, mm - 1, dd)` reads `today` as a
+ * local date rather than through `new Date(iso)`, which would parse a bare
+ * yyyy-mm-dd as UTC midnight and land a day early for anyone east of it.
+ */
+function nextSaturdayIso(today: string): string {
+  const [yy, mm, dd] = today.split("-").map(Number);
+  const d = new Date(yy, mm - 1, dd);
+  const ahead = (6 - d.getDay() + 7) % 7 || 7;
   d.setDate(d.getDate() + ahead);
-  return d.toISOString().slice(0, 10);
+  // Not `toISOString().slice(0, 10)`: that reads the date back out in UTC,
+  // which is a day behind this local midnight for anyone east of Greenwich —
+  // Rome included.
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 const inputClasses =
@@ -414,7 +426,7 @@ export default function ReservationForm({
                 type="date"
                 required
                 min={today}
-                value={date || nextSaturdayIso()}
+                value={date || (today ? nextSaturdayIso(today) : "")}
                 onChange={(e) => setDate(e.target.value)}
                 aria-invalid={hitClosure ? true : undefined}
                 aria-describedby={hitClosure ? "date-closed" : undefined}
