@@ -105,8 +105,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <strong className="font-semibold">Email non configurata:</strong>{" "}
               {smtpConfigured ? (
                 <>
-                  il server SMTP è impostato ma <code>SMTP_USER</code>/<code>SMTP_PASS</code> sono
-                  vuoti, quindi l&apos;invio viene rifiutato e i messaggi finiscono{" "}
+                  il server SMTP è impostato ma <code>SMTP_USER</code>/<code>SMTP_PASS</code>{" "}
+                  sono vuoti, quindi l&apos;invio viene rifiutato e i messaggi finiscono{" "}
                   <strong className="font-semibold">in errore</strong>
                 </>
               ) : (
@@ -116,8 +116,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 </>
               )}{" "}
               — conferme d&apos;ordine, prenotazioni e soprattutto i link per{" "}
-              <strong className="font-semibold">reimpostare la password</strong> non arrivano al
-              cliente; li trovi nell&apos;
+              <strong className="font-semibold">reimpostare la password</strong>{" "}
+              non arrivano al cliente; li trovi nell&apos;
               <a href="/admin/outbox" className="underline">outbox</a>. Finché resta così, un cliente
               che dimentica la password non può rientrare da solo. Imposta{" "}
               <code>SMTP_HOST</code>, <code>SMTP_USER</code> e <code>SMTP_PASS</code> (vedi{" "}

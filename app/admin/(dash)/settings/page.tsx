@@ -457,7 +457,8 @@ async function MailerStatus() {
           <strong className="font-semibold">
             Il server risponde, ma non stiamo effettuando l&apos;accesso:
           </strong>{" "}
-          <code>SMTP_USER</code> o <code>SMTP_PASS</code> sono vuoti. Quasi tutti i relay
+          <code>SMTP_USER</code> o <code>SMTP_PASS</code>{" "}
+          sono vuoti. Quasi tutti i relay
           (Brevo compreso) rifiutano l&apos;invio senza autenticazione con{" "}
           <code>502 Please authenticate first</code>, quindi le email risultano inviate qui e
           non partono. Compila le due variabili e riavvia.

@@ -194,21 +194,36 @@ export default function CheckoutClient({
     setBusy(true);
     setError(null);
     const fd = new FormData(e.currentTarget);
+    // `FormData.get` returns **null** for a field that is not in the DOM, and the
+    // address block only renders for delivery/shipping. `null` is not the same as
+    // absent to Zod — `.optional()` accepts a missing key and rejects an explicit
+    // null — so every pickup order was refused with a raw
+    // "expected string, received null" and no order was ever created. Required
+    // fields keep "" so their own friendly messages still fire; optional ones
+    // become undefined.
+    const req = (k: string) => {
+      const v = fd.get(k);
+      return typeof v === "string" ? v : "";
+    };
+    const opt = (k: string) => {
+      const v = fd.get(k);
+      return typeof v === "string" && v.trim() !== "" ? v : undefined;
+    };
     const payload = {
       items: items.map((i) => ({ slug: i.slug, quantity: i.qty })),
-      name: fd.get("name"),
-      email: fd.get("email"),
-      phone: fd.get("phone"),
+      name: req("name"),
+      email: req("email"),
+      phone: opt("phone"),
       fulfilment,
       shopSlug,
       pickupSlot: chosenSlot || undefined,
-      address: fd.get("address"),
-      city: fd.get("city"),
-      zip,
-      notes: fd.get("notes"),
+      address: opt("address"),
+      city: opt("city"),
+      zip: zip || undefined,
+      notes: opt("notes"),
       paymentMethod,
       discountCode: coupon?.code,
-      company: fd.get("company"),
+      company: req("company"),
     };
     try {
       const res = await fetch("/api/checkout", {

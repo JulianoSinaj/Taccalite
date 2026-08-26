@@ -2,6 +2,25 @@ import { z } from "zod";
 import { FULFILMENT_MODES, needsAddress } from "@/lib/fulfilment";
 import { CUSTOMER_PAYMENT_METHODS } from "@/lib/payments/methods";
 
+/**
+ * A field the client may omit *or* send as `null`.
+ *
+ * `.optional()` alone accepts a missing key and rejects an explicit null, and
+ * `FormData.get` returns null for any input not currently in the DOM — which is
+ * exactly what the checkout does with the address block on a pickup order. The
+ * result was a 400 on every pickup checkout, carrying Zod's own English
+ * "expected string, received null" to an Italian customer. The client no longer
+ * sends null; this makes the contract tolerant of it either way, because a
+ * hand-rolled JSON endpoint is reachable by more than one client.
+ *
+ * `preprocess` rather than `.nullish().transform()`: the latter turns the key
+ * *required-but-undefined* in the inferred type, so every caller that legitimately
+ * omits `address` stops compiling. This keeps the key optional and still enforces
+ * `.max()` on a value that is actually present.
+ */
+const optionalText = (max: number) =>
+  z.preprocess((v) => (v === null ? undefined : v), z.string().trim().max(max).optional());
+
 export const checkoutSchema = z
   .object({
     items: z
@@ -9,7 +28,7 @@ export const checkoutSchema = z
       .min(1, "Il carrello è vuoto"),
     name: z.string().trim().min(2, "Inserisci il tuo nome").max(120),
     email: z.string().trim().toLowerCase().email("Email non valida"),
-    phone: z.string().trim().max(40).optional(),
+    phone: optionalText(40),
     fulfilment: z.enum(FULFILMENT_MODES).default("pickup"),
     /**
      * Shape only. Whether this method is actually *offered* depends on the
@@ -18,14 +37,14 @@ export const checkoutSchema = z
      * refusal can say why in the customer's words.
      */
     paymentMethod: z.enum(CUSTOMER_PAYMENT_METHODS).default("card"),
-    shopSlug: z.string().trim().optional(),
+    shopSlug: optionalText(120),
     /** The chosen pickup window as `yyyy-mm-ddTHH:MM`; re-derived server-side. */
-    pickupSlot: z.string().trim().max(20).optional(),
-    address: z.string().trim().max(200).optional(),
-    city: z.string().trim().max(120).optional(),
-    zip: z.string().trim().max(20).optional(),
-    notes: z.string().trim().max(1000).optional(),
-    discountCode: z.string().trim().max(40).optional(),
+    pickupSlot: optionalText(20),
+    address: optionalText(200),
+    city: optionalText(120),
+    zip: optionalText(20),
+    notes: optionalText(1000),
+    discountCode: optionalText(40),
     company: z.string().optional(), // honeypot
   })
   .superRefine((d, ctx) => {

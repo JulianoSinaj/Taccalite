@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { reservationSchema } from "@/lib/validation/reservation";
 import { registerSchema, loginSchema, passwordResetSchema } from "@/lib/validation/auth";
+import { checkoutSchema } from "@/lib/validation/order";
+import { productInput } from "@/lib/validation/admin";
 
 describe("reservationSchema", () => {
   const base = { name: "Mario Rossi", phone: "0711234567", shop: "centro" };
@@ -80,5 +82,84 @@ describe("auth schemas", () => {
     expect(passwordResetSchema.safeParse({ token: "abc", password: "supersegreta" }).success).toBe(true);
     expect(passwordResetSchema.safeParse({ token: "", password: "supersegreta" }).success).toBe(false);
     expect(passwordResetSchema.safeParse({ token: "abc", password: "short" }).success).toBe(false);
+  });
+});
+
+/**
+ * Two bugs that made the product unusable while every existing test, `tsc`,
+ * `eslint` and `next build` stayed green. Both are about the gap between what a
+ * *browser form* actually submits and what the schema was written to expect,
+ * which is why only driving the real UI found them.
+ */
+describe("checkoutSchema tolerates what a real form posts", () => {
+  const base = {
+    items: [{ slug: "ciauscolo-igp", quantity: 1 }],
+    name: "Mario Rossi",
+    email: "mario@example.com",
+    fulfilment: "pickup" as const,
+    paymentMethod: "in_store" as const,
+    shopSlug: "centro",
+  };
+
+  it("accepts null for the address fields a pickup order does not render", () => {
+    // `FormData.get` returns **null** for an input that is not in the DOM, and
+    // the checkout only renders the address block for delivery/shipping. Zod's
+    // `.optional()` accepts a missing key and rejects an explicit null, so every
+    // pickup order was refused with a raw English "expected string, received
+    // null" and no order was ever created.
+    const r = checkoutSchema.safeParse({ ...base, address: null, city: null, zip: null, phone: null, notes: null });
+    expect(r.success, r.success ? "" : JSON.stringify(r.error.issues)).toBe(true);
+    if (r.success) {
+      expect(r.data.address).toBeUndefined();
+      expect(r.data.city).toBeUndefined();
+    }
+  });
+
+  it("still refuses a delivery order with no address", () => {
+    // The null tolerance must not weaken the rule it sits next to: someone has
+    // to drive to a delivery.
+    const r = checkoutSchema.safeParse({ ...base, fulfilment: "delivery", address: null, city: null, zip: null });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      const paths = r.error.issues.map((i) => String(i.path[0]));
+      expect(paths).toContain("address");
+      expect(r.error.issues.every((i) => /[àèéìòù]|Inserisci/.test(i.message))).toBe(true); // Italian, not raw Zod
+    }
+  });
+
+  it("still enforces length limits on a value that is present", () => {
+    expect(checkoutSchema.safeParse({ ...base, notes: "x".repeat(1001) }).success).toBe(false);
+  });
+});
+
+describe("admin checkbox fields survive being left unticked", () => {
+  const base = { name: "Salame", shopSlug: "centro", priceEuros: "6.90", vatRate: "10", sortOrder: "0" };
+
+  it("parses a product form with no checkbox keys at all", () => {
+    // An unticked checkbox is not submitted — that is how HTML forms work. The
+    // helper used `z.union([…, z.undefined()])` behind a transform, which Zod v4
+    // wraps in a `nonoptional` check that rejects an absent key, so creating a
+    // product failed outright: `purchasable` and `soldByWeight` start unticked.
+    const r = productInput.safeParse(base);
+    expect(r.success, r.success ? "" : JSON.stringify(r.error.issues)).toBe(true);
+    if (r.success) {
+      expect(r.data.purchasable).toBe(false);
+      expect(r.data.soldByWeight).toBe(false);
+      expect(r.data.active).toBe(false);
+    }
+  });
+
+  it("reads a ticked box as true and a null as false", () => {
+    const on = productInput.safeParse({ ...base, purchasable: "on", active: "on" });
+    expect(on.success && on.data.purchasable).toBe(true);
+    expect(on.success && on.data.active).toBe(true);
+    const off = productInput.safeParse({ ...base, purchasable: null });
+    expect(off.success && off.data.purchasable).toBe(false);
+  });
+
+  it("keeps the rule that a purchasable product needs a real price", () => {
+    const r = productInput.safeParse({ ...base, priceEuros: "0", purchasable: "on" });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0].message).toMatch(/prezzo maggiore di zero/i);
   });
 });

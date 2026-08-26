@@ -3,9 +3,22 @@ import { ActionError } from "@/lib/admin/action-state";
 import { FULFILMENT_MODES } from "@/lib/fulfilment";
 import { SETTLEMENT_INSTRUMENTS } from "@/lib/payments/methods";
 
-/** Checkbox → boolean ("on"/"true" = checked). */
+/**
+ * Checkbox → boolean ("on"/"true" = checked).
+ *
+ * `.optional()`, not `z.undefined()` inside the union. An unchecked checkbox is
+ * not submitted at all — that is how HTML forms work — so the key is *absent*,
+ * and Zod v4 wraps a union-with-undefined behind a transform in a `nonoptional`
+ * check that rejects an absent key outright. Every admin form carrying an
+ * unticked box therefore failed to save with "expected nonoptional, received
+ * undefined", including a brand-new product, where `purchasable` and
+ * `soldByWeight` start unticked. 22 fields share this helper, so it failed the
+ * same way in products, categories, news, shops, discounts, rewards and
+ * closures.
+ */
 const checkbox = z
-  .union([z.string(), z.null(), z.undefined()])
+  .union([z.string(), z.null()])
+  .optional()
   .transform((v) => v === "on" || v === "true");
 
 /** Optional trimmed string that becomes undefined when blank. */
