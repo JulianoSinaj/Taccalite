@@ -2,6 +2,7 @@ import Image from "next/image";
 import CTA from "@/components/site/CTA";
 import RevealLines from "@/components/site/RevealLines";
 import ParallaxMedia from "@/components/site/ParallaxMedia";
+import SealStamp from "@/components/site/SealStamp";
 
 type HeroProps = {
   /** Rendered as the live "aperto adesso" pill. Null when hours can't be read. */
@@ -122,6 +123,27 @@ export default function Hero({ openNow, facts }: HeroProps) {
                 className="object-cover"
               />
             </ParallaxMedia>
+
+            {/* The shop's mark, struck across the shoulder of the plate.
+                Deliberately half on the paper and half on the photograph: sitting
+                wholly inside the frame it reads as a sticker applied to the
+                picture, and wholly outside it as a badge floating near one — on
+                the seam it reads as sealing the photograph to the page.
+
+                A sibling of <ParallaxMedia/> and not a child, because that
+                component clips its own contents to make the drift work; nested,
+                the half that overhangs would simply be cut off.
+
+                The overhang has to stay inside the page gutter on a phone. The
+                section clips (`overflow-hidden`, for the washes), the plate is
+                flush to a 20px gutter at that width, and the mark is the one
+                thing on the page that hangs past its own column — so the offsets
+                grow with the gutter rather than being one value. The phone step
+                is the tightest: the mark is a fixed size while the plate shrinks
+                with the screen, so at 320px it is already 37% as wide as the
+                photograph and a full-proportion overhang left it 4px off the
+                edge of the display. */}
+            <SealStamp className="pointer-events-none absolute -top-7 -left-3 z-10 w-25 drop-shadow-[0_10px_22px_rgba(42,26,16,0.16)] sm:-top-8 sm:-left-7 sm:w-32 lg:-top-10 lg:-left-12 lg:w-39" />
 
             {/* The caption a picture in a magazine would carry. It also tells the
                 visitor what they are looking at, which an unlabelled food

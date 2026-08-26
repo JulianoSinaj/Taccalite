@@ -31,9 +31,14 @@ import { motion, useReducedMotion } from "motion/react";
  * continues it. `pageshow` clears it again for a page restored from bfcache.
  *
  * `data-intro="play"` on <html> while the curtain is down is the signal the rest
- * of the page reads: SealMark snaps its handover instead of cross-fading, and the
- * cookie bar waits for `taccalite:intro-done` rather than sliding in under —
- * or, on a bad compositor day, over — the curtain.
+ * of the page reads: the cookie bar waits for `taccalite:intro-done` rather than
+ * sliding in under — or, on a bad compositor day, over — the curtain.
+ *
+ * It used to have a second reader. `SealMark` layered a flat foil seal over a
+ * WebGL coin and checked this flag to decide whether to cross-fade between them
+ * or cut, since a cross-fade behind the curtain is one nobody sees. Both that
+ * component and the coin are gone — the hero's mark is `SealStamp`, which is
+ * finished in the server HTML and has no handover to schedule.
  *
  * It plays on every hard load of the storefront (the layout does not remount on a
  * soft navigation, so moving around the site never replays it). Reduced motion
