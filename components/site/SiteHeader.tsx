@@ -110,7 +110,7 @@ export default function SiteHeader({ shops = [] }: { shops?: HeaderShop[] }) {
             </span>
           </Link>
 
-          <nav className="hidden flex-1 items-center gap-7 lg:flex xl:gap-10">
+          <nav className="hidden flex-1 items-center justify-center gap-7 lg:flex xl:gap-10">
             {links.map((link) => {
               const active = isActive(pathname, link.href);
               return (
