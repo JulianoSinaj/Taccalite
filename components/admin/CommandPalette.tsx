@@ -64,9 +64,38 @@ const HIT_GROUP: Record<Hit["kind"], string> = {
   discount: "Codice sconto",
 };
 
+/**
+ * The palette shell: nothing but the open flag and the shortcut that flips it.
+ *
+ * The body is a separate component mounted only while open, so its query,
+ * cursor and results are reset by unmounting rather than by an effect that
+ * cleared them on every open — the cascading render the compiler warns about,
+ * and one that also blanked the input a frame *after* it appeared.
+ */
 export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
+
+  // Global ⌘K / Ctrl+K toggle. Lives out here so the shortcut works whether or
+  // not the palette is currently mounted.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setOpen((o) => !o);
+      } else if (e.key === "Escape") {
+        setOpen(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  if (!open) return null;
+  return <Palette isAdmin={isAdmin} onClose={() => setOpen(false)} />;
+}
+
+function Palette({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -127,7 +156,7 @@ export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {
    * operator has already typed past.
    */
   useEffect(() => {
-    if (!open || !wantsSearch) return;
+    if (!wantsSearch) return;
     const ctrl = new AbortController();
     const timer = setTimeout(async () => {
       try {
@@ -145,47 +174,27 @@ export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {
       clearTimeout(timer);
       ctrl.abort();
     };
-  }, [trimmed, wantsSearch, open]);
+  }, [trimmed, wantsSearch]);
 
-  // Global ⌘K / Ctrl+K toggle.
+  // Focus after paint. Pure DOM synchronisation — the state it used to reset
+  // alongside this now starts fresh because the component is newly mounted.
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setOpen((o) => !o);
-      } else if (e.key === "Escape") {
-        setOpen(false);
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const id = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(id);
   }, []);
-
-  // Focus the input and reset state when opening.
-  useEffect(() => {
-    if (open) {
-      setQuery("");
-      setActive(0);
-      // Focus after paint.
-      const id = requestAnimationFrame(() => inputRef.current?.focus());
-      return () => cancelAnimationFrame(id);
-    }
-  }, [open]);
 
   const go = useCallback(
     (href: string) => {
-      setOpen(false);
+      onClose();
       router.push(href);
     },
-    [router],
+    [router, onClose],
   );
-
-  if (!open) return null;
 
   return (
     <div
       className="fixed inset-0 z-[60] flex items-start justify-center bg-brown-950/40 px-4 pt-[8dvh] print:hidden"
-      onClick={() => setOpen(false)}
+      onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="Comandi rapidi"

@@ -125,9 +125,18 @@ export default function AdminNav({
   })).filter((g) => g.items.length > 0);
 
   // The drawer is a navigation overlay: it must not survive the navigation.
-  useEffect(() => {
+  //
+  // Adjusted during render rather than in an effect. React re-runs this
+  // component immediately, before the browser paints, so the drawer is already
+  // gone on the first frame of the new page — where the effect version painted
+  // the new page once with the old drawer still over it, then closed it. This
+  // is React's documented "adjust state when a prop changes" shape; the guard
+  // is what stops it looping.
+  const [lastPath, setLastPath] = useState(pathname);
+  if (pathname !== lastPath) {
+    setLastPath(pathname);
     setOpen(false);
-  }, [pathname]);
+  }
 
   // Without this the list behind the overlay scrolls under a dragging finger and
   // takes the drawer off the top of the screen with it. The shared hook pins the

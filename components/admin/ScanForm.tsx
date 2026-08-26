@@ -27,29 +27,46 @@ type Holder =
 export function ScanForm({ pointsPerEuro }: { pointsPerEuro: number }) {
   const [card, setCard] = useState("");
   const [euros, setEuros] = useState("");
-  const [holder, setHolder] = useState<Holder>({ state: "idle" });
+  // What the last completed lookup found, tagged with the card it answered for.
+  const [result, setResult] = useState<{ card: string; holder: Holder } | null>(null);
 
   const trimmed = card.trim();
 
+  /**
+   * Derived, not stored. "Too short" and "still checking" are both facts about
+   * the text in the box, so they can be read off it: only the fetched answer is
+   * state, and it carries the card it belongs to so a stale reply for a card the
+   * operator has already typed past cannot be shown as current.
+   *
+   * The effect used to push these through `setHolder` on every keystroke, which
+   * is the cascading render the compiler warns about — and it was also how a
+   * slow reply could repaint the previous cardholder's name under a new number.
+   */
+  const holder: Holder =
+    trimmed.length < 4
+      ? { state: "idle" }
+      : result?.card === trimmed
+        ? result.holder
+        : { state: "checking" };
+
   useEffect(() => {
-    if (trimmed.length < 4) {
-      setHolder({ state: "idle" });
-      return;
-    }
+    if (trimmed.length < 4) return;
     let cancelled = false;
-    setHolder({ state: "checking" });
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(`/api/admin/loyalty/card?card=${encodeURIComponent(trimmed)}`);
         const data = await res.json();
         if (cancelled) return;
-        setHolder(
-          data.ok
+        setResult({
+          card: trimmed,
+          holder: data.ok
             ? { state: "found", name: data.name, points: data.points, cardNumber: data.cardNumber }
             : { state: "error", message: data.error ?? "Tessera non trovata." },
-        );
+        });
       } catch {
-        if (!cancelled) setHolder({ state: "error", message: "Verifica non riuscita." });
+        if (!cancelled) {
+          setResult({ card: trimmed, holder: { state: "error", message: "Verifica non riuscita." } });
+        }
       }
     }, 300);
     return () => {

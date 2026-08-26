@@ -52,9 +52,14 @@ export default function SiteHeader({ shops = [] }: { shops?: HeaderShop[] }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
-  useEffect(() => {
+  // Closed during render, not from an effect — see the same shape in
+  // `AdminNav`: the effect painted the new page with the old menu still over it
+  // for one frame before closing it.
+  const [lastPath, setLastPath] = useState(pathname);
+  if (pathname !== lastPath) {
+    setLastPath(pathname);
     setMenuOpen(false);
-  }, [pathname]);
+  }
 
   useEffect(() => {
     function onScroll() {
