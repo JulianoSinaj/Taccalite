@@ -37,6 +37,9 @@
 *.db
 *.db-shm
 *.db-wal
+# ad-hoc snapshots taken before a destructive maintenance run — real customer
+# rows, and nothing a repository should ever carry
+/.backups
 
 # debug
 npm-debug.log*

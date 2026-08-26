@@ -6,7 +6,16 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * Run: `npm run test:e2e` (first time: `npx playwright install chromium`).
  */
-const PORT = 3100;
+/**
+ * `reuseExistingServer` is on locally, so Playwright adopts whatever is already
+ * answering on this port — and it does not check that the thing answering is
+ * *this* app. A different Next project parked on 3100 therefore swallows the
+ * whole suite: every spec runs against that site and fails on content it has
+ * never heard of, which reads as 20 broken tests rather than a port clash.
+ * Overridable so a machine running several apps can move the suite out of the
+ * way: `E2E_PORT=3123 npm run test:e2e`.
+ */
+const PORT = Number(process.env.E2E_PORT ?? 3100);
 const BASE_URL = `http://localhost:${PORT}`;
 
 /** The throwaway admin the E2E database is seeded with. Imported by the specs so
@@ -33,7 +42,7 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     // Seed a dedicated E2E database, then start the dev server (which auto-migrates).
-    command: "npm run db:seed && npm run dev -- -p 3100",
+    command: `npm run db:seed && npm run dev -- -p ${PORT}`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
