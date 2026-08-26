@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isValidPartitaIva, normalisePartitaIva, partitaIvaError } from "@/lib/fiscal-id";
+import { isValidPartitaIva, normalisePartitaIva, partitaIvaError, sellerIdentityProblems } from "@/lib/fiscal-id";
 import { settingInput } from "@/lib/validation/admin";
 
 /**
@@ -72,5 +72,46 @@ describe("the settings form refuses a bad Partita IVA at the point of entry", ()
     // that merely hold digits.
     expect(save("store.shippingCents", "11111111111").success).toBe(true);
     expect(save("business.legalName", "Norcineria Taccalite S.r.l.").success).toBe(true);
+  });
+});
+
+describe("sellerIdentityProblems", () => {
+  const complete = {
+    legalName: "Norcineria Taccalite S.r.l.",
+    vatNumber: "12345678903",
+    address: "Piazza Kennedy 10",
+    zip: "60122",
+    city: "Ancona",
+    province: "AN",
+  };
+
+  it("passes a complete identity", () => {
+    expect(sellerIdentityProblems(complete)).toEqual([]);
+  });
+
+  it("catches the empty Sede that every invoice was carrying", () => {
+    // `business.address/.zip/.city/.province` have no defaults and were never
+    // set, so the generated XML held <Indirizzo></Indirizzo> and an empty <CAP>
+    // — mandatory elements, present but blank, refused by the SdI.
+    const p = sellerIdentityProblems({ ...complete, address: "", zip: "", city: "", province: "" });
+    expect(p).toHaveLength(4);
+    expect(p.join(" ")).toMatch(/Indirizzo.*CAP.*Comune.*Provincia/s);
+  });
+
+  it("reports every problem at once, not the first", () => {
+    // One rejection per missing field is exactly the experience this avoids.
+    const p = sellerIdentityProblems({ legalName: "", vatNumber: "", address: "", zip: "", city: "", province: "" });
+    expect(p.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("checks the shape of CAP and provincia, not just their presence", () => {
+    expect(sellerIdentityProblems({ ...complete, zip: "601" }).join()).toMatch(/5 cifre/);
+    expect(sellerIdentityProblems({ ...complete, province: "Ancona" }).join()).toMatch(/due lettere/);
+  });
+
+  it("still catches a checksum-invalid VAT number here too", () => {
+    expect(sellerIdentityProblems({ ...complete, vatNumber: "11111111111" }).join()).toMatch(
+      /codice di controllo/i,
+    );
   });
 });

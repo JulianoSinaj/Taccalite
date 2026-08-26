@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/session";
 import { adminGetOrder } from "@/lib/admin/queries";
 import { getSetting } from "@/lib/db/queries";
-import { partitaIvaError } from "@/lib/fiscal-id";
+import { sellerIdentityProblems } from "@/lib/fiscal-id";
 import {
   buildFatturaXml,
   buildNotaCreditoXml,
@@ -56,24 +56,21 @@ export async function GET(request: Request, ctx: { params: Promise<{ orderId: st
       getSetting<number>("store.shippingVatRate", 22),
     ]);
 
-  if (!vatNumber) {
-    return NextResponse.json(
-      { ok: false, error: "Partita IVA non configurata. Impostala in Impostazioni prima di generare la fattura." },
-      { status: 400 },
-    );
-  }
-  // Presence was never the whole test. This number goes verbatim into
-  // `CedentePrestatore/IdFiscaleIVA/IdCodice`, and the SdI rejects a document
-  // whose seller VAT number fails its check digit — days later, silently as far
-  // as the shop is concerned. `scripts/seed-demo.ts` writes `11111111111`
-  // (check digit should be 5) and it produced a complete, invalid XML. The
-  // settings form refuses one now; this catches anything stored before it did.
-  const vatProblem = partitaIvaError(vatNumber);
-  if (vatProblem) {
+  // Presence was never the whole test — of the VAT number, and still less of the
+  // rest. This number goes verbatim into `CedentePrestatore/IdFiscaleIVA`, and
+  // `Sede` below it is mandatory in the schema; both were emitted unchecked, so
+  // a demo database produced a complete, well-formed, invalid document (VAT
+  // `11111111111`, whose check digit would have to be 5, over an entirely empty
+  // address block). The SdI refuses those days later, one rejection at a time.
+  // Listed together so the operator fixes the document once.
+  const problems = sellerIdentityProblems({ legalName, vatNumber, address, zip, city, province });
+  if (problems.length > 0) {
     return NextResponse.json(
       {
         ok: false,
-        error: `${vatProblem} La fattura non è stata generata: correggi la partita IVA in Impostazioni.`,
+        error: `Dati fiscali del venditore incompleti, la fattura non è stata generata: ${problems.join(
+          " ",
+        )} Completa i dati in Impostazioni.`,
       },
       { status: 400 },
     );

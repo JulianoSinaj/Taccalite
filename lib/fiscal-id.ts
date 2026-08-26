@@ -64,3 +64,49 @@ export function partitaIvaError(raw: string): string | null {
   }
   return null;
 }
+
+/** The seller fields a FatturaPA document cannot be built without. */
+export type SellerIdentity = {
+  legalName: string;
+  vatNumber: string;
+  address: string;
+  zip: string;
+  city: string;
+  province: string;
+};
+
+/**
+ * Everything wrong with the seller's identity, as a list of operator-facing
+ * lines — empty when the shop is ready to invoice.
+ *
+ * `CedentePrestatore/Sede` is mandatory in the schema, and the settings that
+ * fill it (`business.address` / `.zip` / `.city` / `.province`) have no defaults
+ * and were never set: an invoice generated today carries `<Indirizzo></Indirizzo>`,
+ * an empty `<CAP>` and an empty `<Comune>`. Well-formed, complete-looking, and
+ * refused by the SdI — the same silent failure as a bad VAT number, in the block
+ * underneath it. Checked together so the operator fixes the document once
+ * instead of discovering the fields one rejection at a time.
+ */
+export function sellerIdentityProblems(s: SellerIdentity): string[] {
+  const problems: string[] = [];
+  const vat = normalisePartitaIva(s.vatNumber);
+  if (vat === "") problems.push("Partita IVA mancante.");
+  else {
+    const e = partitaIvaError(vat);
+    if (e) problems.push(e);
+  }
+  if (s.legalName.trim() === "") problems.push("Ragione sociale mancante.");
+  if (s.address.trim() === "") problems.push("Indirizzo della sede mancante.");
+  if (!/^\d{5}$/.test(s.zip.trim())) {
+    problems.push(s.zip.trim() === "" ? "CAP della sede mancante." : "Il CAP della sede deve avere 5 cifre.");
+  }
+  if (s.city.trim() === "") problems.push("Comune della sede mancante.");
+  if (!/^[A-Za-z]{2}$/.test(s.province.trim())) {
+    problems.push(
+      s.province.trim() === ""
+        ? "Provincia della sede mancante."
+        : "La provincia va indicata con la sigla di due lettere (es. AN).",
+    );
+  }
+  return problems;
+}
