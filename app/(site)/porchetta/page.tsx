@@ -218,10 +218,36 @@ export default async function PorchettaPage() {
         aside={
           <div className="relative mx-auto hidden max-w-sm lg:block">
             <div className="relative aspect-square overflow-hidden">
+              {/* This was the only `fill` image on the site with no `sizes`, and
+                  it is the LCP element of the page. Without the prop Next assumes
+                  `100vw`, so a 360px box was being served the w=1920 variant:
+                  409KB to paint 24KB worth of pixels.
+
+                  The two halves of `sizes` are doing different jobs. Above `lg`
+                  the box is `max-w-sm` and nothing else — a constant, not a `vw`
+                  fraction — expressed in `rem` so it tracks the fluid root
+                  font-size that sizes the box (24rem × 15px = the 360px measured
+                  at every width from 1024 to 1920).
+
+                  The `1px` fallback is what makes `loading="eager"` safe here.
+                  The parent is `hidden lg:block`, so on a phone this is a
+                  zero-width node the visitor never sees — but it is still in the
+                  DOM, and eager loading does not care that a box is collapsed.
+                  A bare `eager` therefore bought a desktop LCP by making every
+                  phone download an invisible 24KB. Telling the browser the slot
+                  is 1px wide means it satisfies that from the bottom of the
+                  srcset instead: 0.5KB, against 25KB on desktop and 89KB at 2×.
+
+                  Measured after the change: the request now starts at 309ms,
+                  ahead of DOMContentLoaded, where lazy had it at 722ms — and all
+                  three of Next's warnings on this image are gone. */}
               <Image
                 src="/images/selezione-prosciutto-camino.jpg"
                 alt="Porchetta Taccalite dal 1946"
                 fill
+                sizes="(min-width: 1024px) 24rem, 1px"
+                loading="eager"
+                fetchPriority="high"
                 className="object-cover"
               />
             </div>
