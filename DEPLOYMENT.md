@@ -280,7 +280,39 @@ readable under **Admin → Email**, but nothing is sent. To send for real:
   SMTP variables, or swap `lib/mail/mailer.ts` for the provider SDK. Then
   `docker compose up -d` to apply.
 
-Use **Admin → Impostazioni → "Invia prova"** to verify delivery.
+Verify it before trusting it — the failure mode here is silent:
+
+```bash
+npm run mail:check
+```
+
+It prints which of the five variables are set (the password as a length, never a value),
+connects, authenticates, and on failure names the field to change rather than echoing the
+SMTP error. Exit code 0 means the relay accepted the credentials. To prove actual delivery —
+which is a separate question, because a relay will take your login and then refuse an
+unverified `MAIL_FROM` — send a real one:
+
+```bash
+npm run mail:check -- --send you@example.it
+```
+
+**Set `SMTP_HOST`, `SMTP_USER` and `SMTP_PASS` together or not at all.** A host with blank
+credentials is worse than no host: the app builds a real transport, the relay answers every
+message with `502 5.7.0 Please authenticate first`, and each one is retried five times and
+abandoned instead of waiting in the outbox. `mail:check` calls this state out by name.
+
+**Configured** for this deployment is Brevo's EU relay (`smtp-relay.brevo.com:587`,
+STARTTLS). `SMTP_USER` is the SMTP **login** from Brevo → SMTP & API → SMTP tab (it looks
+like `9a1b2c001@smtp-brevo.com`, not the account email); `SMTP_PASS` is a generated **SMTP
+key**, not the account password. Verify the whole sending **domain** rather than one address,
+so reset links come from `@taccalite.it` — mail from a consumer domain is far more likely to
+be filtered.
+
+**If it arrives in spam,** the relay is fine and the problem is DNS: add the SPF and DKIM
+records the provider gives you for the `MAIL_FROM` domain.
+
+**Admin → Impostazioni → "Invia prova"** does the same check from inside the running app,
+which is the one to use after deploying.
 
 ## 6. Payments (Stripe)
 

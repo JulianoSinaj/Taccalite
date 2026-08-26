@@ -15,6 +15,7 @@
     "db:compile-seed": "esbuild scripts/seed.ts --bundle --platform=node --target=node20 --format=cjs --external:@libsql/client --external:libsql --outfile=dist/seed.cjs",
     "db:compile-reset": "esbuild scripts/reset-admin.ts --bundle --platform=node --target=node20 --format=cjs --external:@libsql/client --external:libsql --outfile=dist/reset.cjs",
     "admin:reset": "tsx scripts/reset-admin.ts",
+    "mail:check": "tsx scripts/mail-check.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"
