@@ -68,12 +68,17 @@ const nextConfig: NextConfig = {
   // Advertising the framework and its major version to every visitor buys
   // nothing and narrows the search for an attacker picking targets.
   poweredByHeader: false,
-  experimental: {
-    // Enables React's <ViewTransition> and makes Next trigger it on navigation,
-    // so a product photo morphs from the grid into its detail page instead of
-    // the two pages swapping with no visual link between them.
-    viewTransition: true,
-  },
+  // `experimental.viewTransition` used to live here, to enable React's
+  // <ViewTransition> and have Next trigger it on navigation — that is what makes
+  // a product photo morph from the grid into its detail page instead of the two
+  // pages swapping with no visual link between them.
+  //
+  // Next 16.3 graduated it: the flag was dropped from `ExperimentalConfig`
+  // altogether (so leaving it here is a type error, not a no-op) because the
+  // App Router now does this with no configuration at all — see
+  // `node_modules/next/dist/docs/01-app/02-guides/view-transitions.md`. The
+  // `<ViewTransition>` usage in app/(site)/layout.tsx, ProductTile and the
+  // product page is unchanged and keeps working.
   turbopack: {
     root: __dirname,
   },
