@@ -1343,6 +1343,31 @@ export async function adminGetDiscount(id: string) {
 }
 
 /**
+ * One entry per actor, labelled with the name they most recently acted under.
+ *
+ * Kept in TypeScript rather than SQL on purpose: the equivalent correlated
+ * subquery reads fine on its own but did not survive the query builder — it
+ * came back labelling every actor with the same name — and this list is a
+ * handful of rows, so there is nothing to win by pushing it down.
+ */
+function dedupeActors(
+  rows: { id: string | null; name: string | null; lastAt: number | null }[],
+): { id: string; name: string }[] {
+  const best = new Map<string, { name: string; at: number }>();
+  for (const r of rows) {
+    if (!r.id) continue;
+    const at = r.lastAt ?? 0;
+    const seen = best.get(r.id);
+    // `>=` so a tie resolves to the later row rather than leaving a blank name
+    // standing over a real one.
+    if (!seen || at >= seen.at) best.set(r.id, { name: r.name ?? r.id, at });
+  }
+  return [...best.entries()]
+    .map(([id, v]) => ({ id, name: v.name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "it"));
+}
+
+/**
  * Paginated audit-log feed, newest first, plus the distinct actors and entities
  * present in the whole log so the filters can offer them.
  */
@@ -1358,10 +1383,18 @@ export async function getAuditPage(opts: AuditFilters & { page?: number } = {}) 
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
     db.select({ total: sql<number>`count(*)` }).from(auditLog).where(where),
+    // Every (actor, name) pair with the last time that name was used. Reduced to
+    // one row per actor below — `selectDistinct` on the pair returned them all,
+    // so anyone ever renamed (the demo admin is logged under two names) appeared
+    // twice in the filter, and React warned about the duplicate key behind it.
     db
-      .selectDistinct({ id: auditLog.actorId, name: auditLog.actorName })
+      .select({
+        id: auditLog.actorId,
+        name: auditLog.actorName,
+        lastAt: sql<number>`max(${auditLog.createdAt})`,
+      })
       .from(auditLog)
-      .orderBy(auditLog.actorName),
+      .groupBy(auditLog.actorId, auditLog.actorName),
     db.selectDistinct({ entity: auditLog.entity }).from(auditLog).orderBy(auditLog.entity),
   ]);
   return {
@@ -1369,7 +1402,7 @@ export async function getAuditPage(opts: AuditFilters & { page?: number } = {}) 
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-    actors: actors.filter((a): a is { id: string; name: string } => !!a.id),
+    actors: dedupeActors(actors),
     entities: entities.map((e) => e.entity).filter(Boolean),
   };
 }

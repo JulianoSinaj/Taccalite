@@ -244,11 +244,19 @@ export default async function AdminDashboard() {
           <h3 className="font-display mb-4 text-lg text-brown-950">Andamento incassi · 30 giorni</h3>
           {hasRevenue ? (
             <>
-              <div className="flex h-40 items-end gap-1" role="img" aria-label={chartLabel}>
+              {/* No `items-end` on the row: that sizes each column to its own
+                  content, and a column's content is a bar asking for a
+                  percentage *of that column* — circular, so it resolved to auto
+                  and every bar fell back to its 3px `minHeight`. The chart drew
+                  a flat row of dashes while carrying perfectly correct
+                  percentages. Stretching the columns gives the percentage a
+                  definite height to resolve against; `justify-end` inside each
+                  column is what actually sits the bar on the baseline. */}
+              <div className="flex h-40 gap-1" role="img" aria-label={chartLabel}>
                 {series.map((d) => (
                   <div
                     key={d.day}
-                    className="flex flex-1 flex-col items-center justify-end"
+                    className="flex h-full flex-1 flex-col items-center justify-end"
                     title={`${d.day}: ${euro(d.cents)}`}
                   >
                     <div
