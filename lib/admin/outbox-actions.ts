@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { emailOutbox } from "@/lib/db/schema";
-import { requireAdmin } from "@/lib/auth/session";
+import { requireAdmin, requireRole } from "@/lib/auth/session";
 import { drainOutbox, OUTBOX_MAX_ATTEMPTS } from "@/lib/mail/mailer";
 import { smtpConfigured } from "@/lib/env";
 import { logAudit } from "@/lib/audit";
@@ -126,5 +126,50 @@ export async function retryAllFailed(_prev: ActionState, fd: FormData): Promise<
         exhausted > 0 && !resetAttempts ? ` · ${exhausted} hanno esaurito i tentativi` : ""
       }.`,
     );
+  });
+}
+
+/**
+ * Remove a message that has not been delivered.
+ *
+ * Until now the only way to stop a queued message (a broadcast sent by mistake,
+ * a test to a wrong address) was to let the drain send it. Sent messages are
+ * refused: they are the delivery record the order and reservation pages read,
+ * and the maintenance sweep already prunes them after OUTBOX_RETENTION_DAYS.
+ */
+export async function deleteOutboxEmail(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const id = String(fd.get("id") ?? "").trim();
+    if (!id) throw new ActionError("Email non trovata.");
+
+    const [row] = await db
+      .select({
+        toAddress: emailOutbox.toAddress,
+        subject: emailOutbox.subject,
+        status: emailOutbox.status,
+        attempts: emailOutbox.attempts,
+      })
+      .from(emailOutbox)
+      .where(eq(emailOutbox.id, id))
+      .limit(1);
+    if (!row) throw new ActionError("Email non trovata.");
+    if (row.status === "sent") {
+      throw new ActionError("Le email inviate non si eliminano: sono la prova della consegna.");
+    }
+
+    await db.delete(emailOutbox).where(eq(emailOutbox.id, id));
+
+    await logAudit({
+      actor,
+      action: "outbox.delete",
+      entity: "email",
+      entityId: id,
+      summary: `Eliminata "${row.subject}" → ${row.toAddress} (${row.status})`,
+      meta: { status: row.status, attempts: row.attempts },
+    });
+
+    revalidatePath("/admin/outbox");
+    return ok("Email eliminata.");
   });
 }

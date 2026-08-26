@@ -45,6 +45,7 @@ import {
   stockAdjustInput,
 } from "@/lib/validation/admin";
 import { requireShopScope } from "@/lib/admin/scope";
+import { adminShopReferences } from "@/lib/admin/queries";
 
 // Parse "Label | Value" lines into hours; blank-separated lines into a list.
 function parseHours(raw?: string) {
@@ -779,7 +780,6 @@ export async function saveShop(_prev: ActionState, fd: FormData): Promise<Action
       tagline: d.tagline ?? "",
       description: d.description ?? "",
       address: d.address ?? "",
-      addressConfirmed: d.addressConfirmed,
       hours: parseHours(d.hours),
       hoursConfirmed: d.hoursConfirmed,
       phone: d.phone ?? "",
@@ -812,6 +812,7 @@ export async function saveShop(_prev: ActionState, fd: FormData): Promise<Action
         { key: "phone", label: "telefono" },
         { key: "email", label: "email" },
         { key: "hours", label: "orari", format: () => "(modificati)" },
+        { key: "hoursConfirmed", label: "orari confermati" },
         { key: "reservationsEnabled", label: "prenotazioni" },
         { key: "storeEnabled", label: "store" },
         { key: "porchettaEnabled", label: "porchetta" },
@@ -843,27 +844,62 @@ export async function saveShop(_prev: ActionState, fd: FormData): Promise<Action
         summary: `Sede creata: ${values.name} (/${d.slug})`,
       });
     }
-    revalidatePath("/admin/shops");
-    revalidatePath("/negozi");
+    revalidateShopPages(d.id ? undefined : d.slug);
     return ok(d.id ? "Sede salvata." : "Sede creata.");
   });
+}
+
+/**
+ * Every public page that renders a sede's data. The public route is `/sedi`
+ * (not `/negozi`, which is the admin label) and the detail page is per slug.
+ */
+function revalidateShopPages(slug?: string) {
+  revalidatePath("/admin/shops");
+  revalidatePath("/sedi");
+  if (slug) revalidatePath(`/sedi/${slug}`);
+  revalidatePath("/contatti");
+  revalidatePath("/prenotazioni");
 }
 
 export async function deleteShop(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireRole("admin");
     const id = (fd.get("id") ?? "").toString();
-    const [row] = await db.select({ name: shops.name }).from(shops).where(eq(shops.id, id)).limit(1);
+    const [row] = await db
+      .select({ name: shops.name, slug: shops.slug })
+      .from(shops)
+      .where(eq(shops.id, id))
+      .limit(1);
     if (!row) throw new ActionError("Sede non trovata.");
+
+    // Say exactly what still points at the sede. The FOREIGN KEY error below
+    // only knows *that* something does, and the old message listed three of the
+    // four tables — a staff account assigned to the sede blocked the delete
+    // with a sentence that sent the operator looking for orders.
+    const refs = await adminShopReferences(row.slug);
+    const blocking = [
+      refs.products > 0 && `${refs.products} ${refs.products === 1 ? "prodotto" : "prodotti"}`,
+      refs.orders > 0 && `${refs.orders} ${refs.orders === 1 ? "ordine" : "ordini"}`,
+      refs.reservations > 0 &&
+        `${refs.reservations} ${refs.reservations === 1 ? "prenotazione" : "prenotazioni"}`,
+      refs.users > 0 && `${refs.users} ${refs.users === 1 ? "utente assegnato" : "utenti assegnati"}`,
+    ].filter((x): x is string => typeof x === "string");
+    if (blocking.length > 0) {
+      throw new ActionError(
+        `Impossibile eliminare: la sede ha ancora ${blocking.join(", ")}. Riassegnali o eliminali prima.`,
+      );
+    }
+
     try {
       await db.delete(shops).where(eq(shops.id, id));
     } catch (err) {
-      // Only a FOREIGN KEY failure means "still referenced". Reporting every
-      // error as one sent an operator hunting for orders that don't exist.
+      // Only a FOREIGN KEY failure means "still referenced" (a row created
+      // between the count above and the delete). Reporting every error as one
+      // sent an operator hunting for orders that don't exist.
       const message = err instanceof Error ? err.message : "";
       if (/FOREIGN KEY constraint failed/i.test(message)) {
         throw new ActionError(
-          "Impossibile eliminare: la sede ha prodotti, ordini o prenotazioni collegati. Riassegnali prima.",
+          "Impossibile eliminare: la sede ha ancora dati collegati. Ricarica la pagina e riprova.",
         );
       }
       console.error("[actions] deleteShop failed:", err);
@@ -876,8 +912,7 @@ export async function deleteShop(_prev: ActionState, fd: FormData): Promise<Acti
       entityId: id,
       summary: `Sede eliminata: ${row.name}`,
     });
-    revalidatePath("/admin/shops");
-    revalidatePath("/negozi");
+    revalidateShopPages(row.slug);
     return ok("Sede eliminata.");
   });
 }
@@ -1021,7 +1056,7 @@ export async function adjustPoints(_prev: ActionState, fd: FormData): Promise<Ac
     const d = parseForm(pointsInput, fd);
     // `applied` differs from the requested delta only when a debit was clamped at
     // zero — log what actually happened so the audit matches the ledger + balance.
-    const { applied } = await addPoints(d.userId, d.delta, d.reason || "Rettifica manuale", admin.id);
+    const { applied } = await addPoints(d.userId, d.delta, d.reason, admin.id);
     await logAudit({
       actor: admin,
       action: "loyalty.adjust",
@@ -1047,9 +1082,19 @@ export async function updateRedemptionStatus(_prev: ActionState, fd: FormData): 
     if (!redemption) throw new ActionError("Riscatto non trovato.");
     if (redemption.status === d.status) return ok("Nessuna modifica.");
 
+    // Annullato is terminal. Cancelling handed the points back (and the unit to
+    // stock); re-opening would have to take them again, and a customer who has
+    // meanwhile spent them would end up with the reward *and* the refund. If
+    // they still want it, they redeem it again from their account.
+    if (redemption.status === "cancelled") {
+      throw new ActionError(
+        "Un riscatto annullato non si può riaprire: i punti sono già tornati al cliente, che può riscattare di nuovo il premio.",
+      );
+    }
+
     // Cancelling a redemption returns the spent points to the customer — exactly
     // once (guarded by the from-status), with its own ledger entry via addPoints.
-    if (d.status === "cancelled" && redemption.status !== "cancelled") {
+    if (d.status === "cancelled") {
       await addPoints(
         redemption.userId,
         redemption.pointsSpent,

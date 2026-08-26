@@ -1384,6 +1384,7 @@ export type AuditLogRow = typeof auditLog.$inferSelect;
 export type DiscountCodeRow = typeof discountCodes.$inferSelect;
 export type StockMovementRow = typeof stockMovements.$inferSelect;
 export type NewsletterCampaignRow = typeof newsletterCampaigns.$inferSelect;
+export type EmailOutboxRow = typeof emailOutbox.$inferSelect;
 export type ProductBatchRow = typeof productBatches.$inferSelect;
 export type CustomerSegmentRow = typeof customerSegments.$inferSelect;
 export type SegmentRule = CustomerSegmentRow["rule"];

@@ -189,12 +189,16 @@ export const shopInput = z.object({
   description: optionalText(4000),
   address: optionalText(300),
   phone: optionalText(60),
-  email: optionalText(200),
+  // Rendered as a `mailto:` on the public sede page, so a typo here is a dead
+  // link for every customer. Blank is fine; malformed is not.
+  email: z
+    .union([z.string().trim().email("Email non valida").max(200), z.literal("")])
+    .optional()
+    .transform((v) => (v ? v : undefined)),
   hours: optionalText(2000),
   highlights: optionalText(2000),
   image: optionalText(1000),
   imageLabel: optionalText(200),
-  addressConfirmed: checkbox,
   hoursConfirmed: checkbox,
   reservationsEnabled: checkbox,
   storeEnabled: checkbox,
@@ -710,7 +714,10 @@ export const redemptionStatusInput = z.object({
 export const pointsInput = z.object({
   userId: z.string().trim().min(1),
   delta: z.coerce.number().int().refine((v) => v !== 0, "Inserisci un valore diverso da zero"),
-  reason: optionalText(200),
+  // Points are money-equivalent: every manual movement carries its reason into
+  // the ledger and the audit log, so "Rettifica manuale" as a silent default
+  // was an entry nobody could explain a month later.
+  reason: z.string().trim().min(1, "Indica il motivo della rettifica").max(200, "Motivo troppo lungo"),
 });
 
 export const settingInput = z

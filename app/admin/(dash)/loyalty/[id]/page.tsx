@@ -16,12 +16,13 @@ import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/Action
 import {
   adminGetUser,
   getLoyaltyAccountForUser,
-  getRecentLoyaltyTx,
+  getLoyaltyTxForUser,
   getCustomerStats,
 } from "@/lib/admin/queries";
 import { getReservationsForUser, getRedemptionsForUser } from "@/lib/db/queries";
 import { getOrdersForUser } from "@/lib/orders";
-import { adjustPoints, updateRedemptionStatus } from "@/lib/admin/actions";
+import { RedemptionStatusForm, redemptionStatusLabel } from "@/components/admin/RedemptionStatusForm";
+import { adjustPoints } from "@/lib/admin/actions";
 import { anonymizeCustomer, updateUserProfile } from "@/lib/admin/user-actions";
 import { isAdmin } from "@/lib/auth/session";
 
@@ -42,17 +43,21 @@ function reservationDetail(r: {
   return parts.join(" · ");
 }
 
-type Params = { params: Promise<{ id: string }> };
+type Params = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ movimenti?: string }>;
+};
 
-export default async function CustomerDetail({ params }: Params) {
-  const { id } = await params;
+export default async function CustomerDetail({ params, searchParams }: Params) {
+  const [{ id }, { movimenti }] = await Promise.all([params, searchParams]);
+  const allTx = movimenti === "tutti";
 
   const user = await adminGetUser(id);
   if (!user) notFound();
 
-  const [loyalty, tx, orders, reservations, redemptions, stats, admin] = await Promise.all([
+  const [loyalty, ledger, orders, reservations, redemptions, stats, admin] = await Promise.all([
     getLoyaltyAccountForUser(id),
-    getRecentLoyaltyTx(id),
+    getLoyaltyTxForUser(id, { all: allTx }),
     getOrdersForUser(id),
     getReservationsForUser(id),
     getRedemptionsForUser(id),
@@ -204,6 +209,7 @@ export default async function CustomerDetail({ params }: Params) {
                   id="delta"
                   name="delta"
                   type="number"
+                  step="1"
                   placeholder="±punti"
                   className={`${inputCls} w-32`}
                   required
@@ -213,13 +219,21 @@ export default async function CustomerDetail({ params }: Params) {
                 <label className={labelCls} htmlFor="reason">
                   Motivo
                 </label>
-                <input id="reason" name="reason" placeholder="Es. Rettifica manuale" className={inputCls} />
+                <input
+                  id="reason"
+                  name="reason"
+                  placeholder="Es. Bonus compleanno, correzione scontrino"
+                  maxLength={200}
+                  className={inputCls}
+                  required
+                />
               </div>
               <PendingButton tone="dark">Applica</PendingButton>
             </ActionForm>
             <p className="mt-3 text-xs text-brown-800/60">
               Usa un valore positivo per accreditare (es. <strong>+50</strong> per un bonus), negativo per
-              scalare (es. <strong>−20</strong> per una correzione). Il motivo resta nello storico.
+              scalare (es. <strong>−20</strong> per una correzione). Il motivo è obbligatorio: resta
+              nello storico del cliente e nel registro attività.
             </p>
           </Panel>
         </>
@@ -258,8 +272,10 @@ export default async function CustomerDetail({ params }: Params) {
       )}
 
       {/* Points ledger */}
-      <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Storico punti</h2>
-      {tx.length === 0 ? (
+      <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">
+        Storico punti{ledger.total > 0 ? ` (${ledger.total})` : ""}
+      </h2>
+      {ledger.rows.length === 0 ? (
         <Panel>
           <p className="text-brown-800/70">Nessun movimento punti.</p>
         </Panel>
@@ -275,7 +291,7 @@ export default async function CustomerDetail({ params }: Params) {
               </tr>
             </thead>
             <tbody>
-              {tx.map((t) => (
+              {ledger.rows.map((t) => (
                 <tr key={t.id} className="border-b border-brown-900/5 last:border-0">
                   <td className="px-5 py-3 whitespace-nowrap text-brown-800/70">{fmtDate(t.createdAt)}</td>
                   <td className="px-5 py-3 text-brown-950">{t.reason || "—"}</td>
@@ -292,6 +308,16 @@ export default async function CustomerDetail({ params }: Params) {
             </tbody>
           </table>
         </Panel>
+      )}
+      {!allTx && ledger.total > ledger.rows.length && (
+        <p className="mt-3 text-sm">
+          <Link
+            href={`/admin/loyalty/${user.id}?movimenti=tutti`}
+            className="text-[12px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
+          >
+            Mostra tutti i {ledger.total} movimenti →
+          </Link>
+        </p>
       )}
 
       {/* Orders */}
@@ -358,7 +384,7 @@ export default async function CustomerDetail({ params }: Params) {
           {redemptions.map((r) => (
             <Panel key={r.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <StatusBadge status={r.status} />
+                <StatusBadge status={r.status} label={redemptionStatusLabel(r.status)} />
                 <div>
                   <p className="font-semibold text-brown-950">{r.rewardName}</p>
                   <p className="text-xs text-brown-800/60">
@@ -369,23 +395,7 @@ export default async function CustomerDetail({ params }: Params) {
               {/* Handing the reward over is the whole point of opening a
                   customer's page, and it used to mean going back to the global
                   list on /admin/loyalty and finding the row again. */}
-              <ActionForm action={updateRedemptionStatus} className="flex items-center gap-2">
-                <input type="hidden" name="id" value={r.id} />
-                <label className="sr-only" htmlFor={`red-${r.id}`}>
-                  Stato del riscatto {r.rewardName}
-                </label>
-                <select
-                  id={`red-${r.id}`}
-                  name="status"
-                  defaultValue={r.status}
-                  className={`${inputCls} w-40`}
-                >
-                  <option value="pending">In attesa</option>
-                  <option value="fulfilled">Consegnato</option>
-                  <option value="cancelled">Annullato</option>
-                </select>
-                <PendingButton tone="dark">Aggiorna</PendingButton>
-              </ActionForm>
+              <RedemptionStatusForm redemption={r} />
             </Panel>
           ))}
         </div>

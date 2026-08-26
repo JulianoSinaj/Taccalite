@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { deliveryZones, pickupSlots, orders, shops, products } from "@/lib/db/schema";
+import { deliveryZones, pickupSlots, orders, orderItems, shops, products } from "@/lib/db/schema";
 import { createOrder } from "@/lib/orders";
 import { pickupSlotOptions } from "@/lib/pickup-slots";
 import type { CheckoutInput } from "@/lib/validation/order";
 import { getPickupSlotCounts, getDeliveryZones, getPickupSlots } from "@/lib/db/queries";
+import { getFulfilmentDay } from "@/lib/admin/queries";
 import { instantInRome } from "@/lib/time";
 
 const SHOP = "ff-test-shop";
@@ -20,7 +21,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await db.delete(orders).where(inArray(orders.id, [ORDER, `${ORDER}-2`, `${ORDER}-3`]));
+  await db.delete(orders).where(inArray(orders.id, [ORDER, `${ORDER}-2`, `${ORDER}-3`, `${ORDER}-4`]));
   await db.delete(pickupSlots).where(eq(pickupSlots.shopSlug, SHOP));
   await db.delete(deliveryZones).where(eq(deliveryZones.id, ZONE));
 });
@@ -116,7 +117,7 @@ describe("pickup_slots", () => {
     await expect(db.insert(pickupSlots).values({ ...base, weekday: 8 })).rejects.toThrow();
   });
 
-  it("refuses the same start twice on one day, so re-generating is an upsert", async () => {
+  it("refuses the same start twice on one day", async () => {
     await db.insert(pickupSlots).values(base);
     await expect(db.insert(pickupSlots).values({ ...base, endTime: "11:00" })).rejects.toThrow();
   });
@@ -134,6 +135,56 @@ describe("getPickupSlotCounts", () => {
     // A window held by an order nobody is coming to collect is a place the shop
     // must be able to sell again.
     expect(counts.get(`${SHOP}|${at.getTime()}`)).toBe(2);
+  });
+});
+
+describe("getFulfilmentDay", () => {
+  const at = instantInRome("2099-06-06", "09:00");
+  const fromMs = instantInRome("2099-06-06", "00:00").getTime();
+  const toMs = instantInRome("2099-06-07", "00:00").getTime();
+
+  it("lists what still has to be handed over, and nothing that never will", async () => {
+    // A contrassegno sits unpaid until the doorstep: it is the delivery queue's
+    // whole reason to exist, and "paid and not fulfilled" used to hide it.
+    await makeOrder(ORDER, {
+      fulfilment: "delivery",
+      paymentMethod: "on_delivery",
+      status: "pending",
+      paymentStatus: "unpaid",
+      totalCents: 4200,
+    });
+    await db.insert(orderItems).values({
+      orderId: ORDER,
+      name: "Ciauscolo",
+      unitPriceCents: 1000,
+      quantity: 2,
+      lineTotalCents: 2000,
+    });
+    // A card checkout nobody finished: not a sale, not "da incassare".
+    await makeOrder(`${ORDER}-2`, { fulfilment: "pickup", pickupSlotAt: at, status: "pending" });
+    // Collected already: stays on its day, so the sheet reads as the day's list.
+    await makeOrder(`${ORDER}-3`, {
+      fulfilment: "pickup",
+      pickupSlotAt: at,
+      status: "fulfilled",
+      paymentStatus: "paid",
+    });
+    // A courier parcel belongs to no sede and must survive the sede filter.
+    await makeOrder(`${ORDER}-4`, {
+      fulfilment: "shipping",
+      shopSlug: null,
+      status: "paid",
+      paymentStatus: "paid",
+    });
+
+    const day = await getFulfilmentDay(fromMs, toMs, SHOP);
+    const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
+
+    expect(ids(day.deliveries)).toContain(ORDER);
+    expect(ids(day.pickups)).not.toContain(`${ORDER}-2`);
+    expect(ids(day.pickups)).toContain(`${ORDER}-3`);
+    expect(ids(day.shipments)).toContain(`${ORDER}-4`);
+    expect(day.lines.get(ORDER)).toEqual([{ name: "Ciauscolo", quantity: 2, weightKg: null }]);
   });
 });
 

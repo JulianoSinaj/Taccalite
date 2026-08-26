@@ -173,6 +173,10 @@ describe("createOrder — server-authoritative pricing", () => {
     await expect(createOrder(checkout({ shopSlug: "chiuso" }))).rejects.toThrow();
   });
 
+  it("refuses a discount code it cannot honour instead of charging full price", async () => {
+    await expect(createOrder(checkout({ discountCode: "nope-xyz" }))).rejects.toThrow(/NOPE-XYZ/);
+  });
+
   it("refuses to oversell a stock-tracked product but allows within-stock orders", async () => {
     await db.update(products).set({ stock: 2 }).where(eq(products.slug, "ciauscolo"));
     try {

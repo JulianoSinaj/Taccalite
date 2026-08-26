@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   ShoppingBag,
+  Truck,
   CalendarClock,
   ListChecks,
   Gift,
@@ -11,6 +12,7 @@ import {
   Mail,
   TrendingUp,
   ArrowRight,
+  CalendarX,
 } from "lucide-react";
 import { AdminHeader, Panel, StatusBadge, euro, reservationTypeLabel } from "@/components/admin/ui";
 import {
@@ -18,7 +20,11 @@ import {
   getDashboardInsights,
   getTodayReservations,
   getRecentOrders,
+  adminGetNextClosure,
 } from "@/lib/admin/queries";
+import { isAdmin } from "@/lib/auth/session";
+import { closureRangeLabel, closureStatus, closureTimeLabel } from "@/lib/closures";
+import { dateInRome } from "@/lib/time";
 import { smtpAuthConfigured, smtpConfigured, stripeConfigured } from "@/lib/env";
 import { simulatedPayments } from "@/lib/payments/config";
 import { shopScope } from "@/lib/admin/scope";
@@ -95,14 +101,20 @@ export default async function AdminDashboard() {
   // to the other shop's takings, bookings and recent orders. The lists already
   // enforced the boundary; the summary of those same lists did not.
   const scope = await shopScope();
-  const [s, insights, todayReservations, recentOrders, shops] = await Promise.all([
+  const today = dateInRome();
+  const [s, insights, todayReservations, recentOrders, shops, nextClosure, admin] = await Promise.all([
     getDashboardStats(scope),
     getDashboardInsights(scope),
     getTodayReservations(scope),
     getRecentOrders(6, scope),
-    scope ? adminGetShops() : Promise.resolve([]),
+    adminGetShops(),
+    adminGetNextClosure(scope, 14, today),
+    isAdmin(),
   ]);
   const scopedShopName = scope ? (shops.find((sh) => sh.slug === scope)?.name ?? scope) : null;
+  const closureShop = nextClosure?.shopSlug
+    ? (shops.find((sh) => sh.slug === nextClosure.shopSlug)?.name ?? nextClosure.shopSlug)
+    : "tutte le sedi";
 
   const series = insights.dailySeries;
   const maxCents = Math.max(1, ...series.map((d) => d.cents));
@@ -131,6 +143,15 @@ export default async function AdminDashboard() {
       value: s.ordersToFulfil,
       href: "/admin/orders?stato=to-fulfil",
       icon: ShoppingBag,
+    },
+    // The day sheet's own number: who is coming to the counter today. It was
+    // reachable only by opening the sheet, on the one morning screen that is
+    // meant to say what the day holds.
+    {
+      label: "Ritiri di oggi",
+      value: s.pickupsToday,
+      href: "/admin/fulfilment/oggi",
+      icon: Truck,
     },
     {
       label: "Prenotazioni in attesa",
@@ -194,6 +215,28 @@ export default async function AdminDashboard() {
             : "La tua giornata: incassi, lavoro da fare e attività recente"
         }
       />
+
+      {/* A shutdown nobody remembers is the one that catches the counter out.
+          Only what is under way or inside the fortnight — a closure in six
+          months is the closures page's business, not the morning's. */}
+      {nextClosure && (
+        <Panel className="mb-4 border-warn/40 bg-warn-soft">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-warn-soft-fg">
+            <CalendarX className="size-4 shrink-0" aria-hidden />
+            <span>
+              {closureStatus(nextClosure, today) === "ongoing" ? "Chiusura in corso" : "Prossima chiusura"}:{" "}
+              <strong>{closureRangeLabel(nextClosure)}</strong>
+              {closureTimeLabel(nextClosure) ? ` ${closureTimeLabel(nextClosure)}` : ""} · {closureShop}
+              {nextClosure.reason ? ` · ${nextClosure.reason}` : ""}
+            </span>
+            {admin && (
+              <Link href="/admin/chiusure" className="font-bold underline">
+                Gestisci →
+              </Link>
+            )}
+          </p>
+        </Panel>
+      )}
 
       {/* Money row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

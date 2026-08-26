@@ -36,11 +36,17 @@ export type ChipOption = { value: string; label: string };
 
 type Params = Record<string, string | undefined>;
 
-/** Merge one facet change into the active filters and render the URL. */
-export function filterHref(basePath: string, params: Params, patch: Params): string {
+/**
+ * Merge one facet change into the active filters and render the URL.
+ *
+ * `pageParam` names the pager this facet invalidates. Two lists on one page
+ * paginate independently (`page` / `rpage`), and a filter on the second must
+ * reset its own pager — not send the first list back to page one.
+ */
+export function filterHref(basePath: string, params: Params, patch: Params, pageParam = "page"): string {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries({ ...params, ...patch })) {
-    if (k === "page") continue; // a filter change resets paging
+    if (k === pageParam) continue; // a filter change resets paging
     if (v && v !== "all") sp.set(k, v);
   }
   const qs = sp.toString();
@@ -65,6 +71,7 @@ export function SegmentedFilter({
   name,
   options,
   label,
+  pageParam = "page",
 }: {
   basePath: string;
   params: Params;
@@ -72,6 +79,8 @@ export function SegmentedFilter({
   options: ChipOption[];
   /** Screen-reader name for the control ("Filtra per stato"). */
   label: string;
+  /** The pager this control resets — see `filterHref`. */
+  pageParam?: string;
 }) {
   if (options.length <= 1) return null;
   const active = params[name] ?? "all";
@@ -89,7 +98,7 @@ export function SegmentedFilter({
           return (
             <Link
               key={o.value}
-              href={filterHref(basePath, params, { [name]: o.value })}
+              href={filterHref(basePath, params, { [name]: o.value }, pageParam)}
               aria-current={on ? "page" : undefined}
               className={`inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest whitespace-nowrap uppercase transition-colors ${
                 on

@@ -10,6 +10,7 @@ import {
   getReservationsForExport,
   getSubscribersForExport,
   getAuditForExport,
+  getOutboxForExport,
   getVatReport,
   getOrderItemsForExport,
   getStockMovementsForExport,
@@ -26,6 +27,7 @@ import {
   productFilters,
   subscriberFilters,
   auditFilters,
+  outboxFilters,
   invoiceRegisterStatus,
   invoiceRegisterMatches,
 } from "@/lib/admin/filters";
@@ -180,9 +182,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
     case "customers": {
       const f = customerFilters(params);
       body = streamCsv(
-        ["username", "name", "email", "phone", "role", "points", "cardNumber", "joined"],
+        ["username", "name", "email", "phone", "role", "active", "points", "cardNumber", "joined"],
         (limit, offset) => getCustomersWithPoints(f, limit, offset),
-        (c) => [c.username, c.name, c.email, c.phone, c.role, c.points ?? 0, c.cardNumber, iso(c.createdAt)],
+        (c) => [
+          c.username, c.name, c.email, c.phone, c.role, c.active ? "si" : "no",
+          c.points ?? 0, c.cardNumber, iso(c.createdAt),
+        ],
       );
       break;
     }
@@ -220,6 +225,27 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
           r.entityId,
           r.summary,
           r.meta ? JSON.stringify(r.meta) : "",
+        ],
+      );
+      break;
+    }
+    case "email": {
+      // Bodies are deliberately left out: they carry password-reset and
+      // verification links, and a spreadsheet is not where those belong.
+      const f = outboxFilters(params);
+      body = streamCsv(
+        ["id", "created", "sentAt", "to", "subject", "status", "attempts", "error", "campaignId"],
+        (limit, offset) => getOutboxForExport(f, limit, offset),
+        (e) => [
+          e.id,
+          iso(e.createdAt),
+          iso(e.sentAt),
+          e.toAddress,
+          e.subject,
+          e.status,
+          e.attempts,
+          e.error ?? "",
+          e.campaignId ?? "",
         ],
       );
       break;

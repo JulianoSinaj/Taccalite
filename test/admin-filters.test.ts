@@ -107,19 +107,40 @@ describe("productFilters + getProductsPage", () => {
 });
 
 describe("discountFilters + getDiscountsPage", () => {
+  const DAY = 24 * 60 * 60 * 1000;
   beforeEach(async () => {
-    for (const code of ["FLT-A", "FLT-B"]) {
+    for (const code of ["FLT-A", "FLT-B", "FLT-C", "FLT-D", "FLT-E"]) {
       await db.delete(discountCodes).where(eq(discountCodes.code, code));
     }
     await db.insert(discountCodes).values([
       { code: "FLT-A", type: "percent", value: 10, active: true, maxRedemptions: 2, timesUsed: 2 },
       { code: "FLT-B", type: "fixed", value: 500, active: true, maxRedemptions: 5, timesUsed: 1 },
+      // Switched on but past its end date; still under its cap.
+      { code: "FLT-C", type: "percent", value: 5, active: true, endsAt: new Date(Date.now() - DAY) },
+      // Switched on but not started yet.
+      { code: "FLT-D", type: "percent", value: 5, active: true, startsAt: new Date(Date.now() + DAY) },
+      { code: "FLT-E", type: "percent", value: 5, active: false },
     ]);
   });
 
   it("finds codes that have reached their redemption cap", async () => {
     const { rows } = await getDiscountsPage(discountFilters({ stato: "esauriti", q: "flt-" }));
     expect(rows.map((r) => r.code)).toEqual(["FLT-A"]);
+  });
+
+  it("puts every code under exactly one status chip", async () => {
+    const codesFor = async (stato: string) =>
+      (await getDiscountsPage(discountFilters({ stato, q: "flt-" }))).rows.map((r) => r.code).sort();
+    // "Attivi" is redeemable now — an expired or scheduled code is not.
+    expect(await codesFor("attivi")).toEqual(["FLT-B"]);
+    expect(await codesFor("scaduti")).toEqual(["FLT-C"]);
+    expect(await codesFor("programmati")).toEqual(["FLT-D"]);
+    expect(await codesFor("disattivati")).toEqual(["FLT-E"]);
+  });
+
+  it("reports what each code has cost from the ledger", async () => {
+    const { rows } = await getDiscountsPage(discountFilters({ q: "flt-b" }));
+    expect(rows[0]?.redeemedCents).toBe(0);
   });
 
   it("filters by type", async () => {

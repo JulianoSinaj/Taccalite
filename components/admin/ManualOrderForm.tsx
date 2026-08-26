@@ -160,28 +160,57 @@ export function ManualOrderForm({
     });
   }
 
-  const lines = Object.entries(cart)
-    .map(([slug, entry]) => {
-      const p = bySlug.get(slug);
-      if (!p) return null;
-      const unitPriceCents = entry.priceCents ?? p.priceCents ?? 0;
-      const byWeight = p.soldByWeight;
-      return {
-        product: p,
-        amount: entry.amount,
-        byWeight,
-        unitPriceCents,
-        overridden: entry.priceCents != null && entry.priceCents !== p.priceCents,
-        lineTotalCents: Math.round(unitPriceCents * entry.amount),
-      };
-    })
-    .filter((l): l is NonNullable<typeof l> => l !== null);
+  // Memoised so the `vat` memo below (and everything else keyed on it) sees
+  // the same array until the cart actually changes.
+  const lines = useMemo(
+    () =>
+      Object.entries(cart)
+        .map(([slug, entry]) => {
+          const p = bySlug.get(slug);
+          if (!p) return null;
+          const unitPriceCents = entry.priceCents ?? p.priceCents ?? 0;
+          const byWeight = p.soldByWeight;
+          return {
+            product: p,
+            amount: entry.amount,
+            byWeight,
+            unitPriceCents,
+            overridden: entry.priceCents != null && entry.priceCents !== p.priceCents,
+            lineTotalCents: Math.round(unitPriceCents * entry.amount),
+          };
+        })
+        .filter((l): l is NonNullable<typeof l> => l !== null),
+    [cart, bySlug],
+  );
 
   const subtotalCents = lines.reduce((s, l) => s + l.lineTotalCents, 0);
   const manualDiscountCents = Math.min(
     subtotalCents,
     Math.max(0, Math.round(Number(manualDiscount.replace(",", ".")) * 100) || 0),
   );
+
+
+  // VAT split of the previewed total, mirroring how the receipt will read.
+  const vat = useMemo(() => {
+    const byRate = new Map<number, number>();
+    for (const l of lines) {
+      byRate.set(l.product.vatRateBps, (byRate.get(l.product.vatRateBps) ?? 0) + l.lineTotalCents);
+    }
+    return [...byRate.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([rateBps, gross]) => ({ rateBps, ...splitGross(gross, rateBps) }));
+  }, [lines]);
+
+  // ── Customer lookup ────────────────────────────────────────────────────────
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [matched, setMatched] = useState<{ key: string; list: Customer[] } | null>(null);
+  const [picked, setPicked] = useState<Customer | null>(null);
+  const [contact, setContact] = useState({
+    name: booking?.name ?? "",
+    phone: booking?.phone ?? "",
+    email: booking?.email ?? "",
+  });
+  const [address, setAddress] = useState({ address: "", city: "", zip: "" });
 
   // ── Coupon ─────────────────────────────────────────────────────────────────
   const [code, setCode] = useState("");
@@ -191,21 +220,18 @@ export function ManualOrderForm({
   // buying (per-customer caps, first order only) and on where the goods change
   // hands (a code scoped to one sede), so the check is keyed on all of them:
   // any change re-validates with the exact rules `createManualOrder` prices
-  // by. The key doubles as the request body. Empty means nothing to check.
+  // by. Empty means nothing to check. A flat string rather than an object so
+  // the effect can depend on it alone (none of the parts can contain "\n").
   const trimmedCode = code.trim().toUpperCase();
   const couponKey =
     trimmedCode && subtotalCents > 0
-      ? JSON.stringify({
-          code: trimmedCode,
-          subtotalCents,
-          email: contact.email.trim().toLowerCase() || undefined,
-          fulfilment,
-          shopSlug,
-        })
+      ? `${trimmedCode}\n${subtotalCents}\n${contact.email}\n${fulfilment}\n${shopSlug}`
       : "";
 
   useEffect(() => {
     if (!couponKey) return;
+    const [checkCode, checkSubtotal, rawEmail, checkFulfilment, checkShop] = couponKey.split("\n");
+    const checkEmail = rawEmail.trim().toLowerCase();
     let cancelled = false;
     const timer = setTimeout(async () => {
       let result: Coupon;
@@ -213,7 +239,13 @@ export function ManualOrderForm({
         const res = await fetch("/api/discounts/validate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: couponKey,
+          body: JSON.stringify({
+            code: checkCode,
+            subtotalCents: Number(checkSubtotal),
+            email: checkEmail || undefined,
+            fulfilment: checkFulfilment,
+            shopSlug: checkShop,
+          }),
         });
         const data = await res.json();
         result = data.ok
@@ -241,29 +273,6 @@ export function ManualOrderForm({
   const couponCents = coupon.state === "ok" ? coupon.discountCents : 0;
   const discountCents = Math.min(subtotalCents, couponCents + manualDiscountCents);
   const freeShipping = coupon.state === "ok" && coupon.freeShipping;
-
-
-  // VAT split of the previewed total, mirroring how the receipt will read.
-  const vat = useMemo(() => {
-    const byRate = new Map<number, number>();
-    for (const l of lines) {
-      byRate.set(l.product.vatRateBps, (byRate.get(l.product.vatRateBps) ?? 0) + l.lineTotalCents);
-    }
-    return [...byRate.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([rateBps, gross]) => ({ rateBps, ...splitGross(gross, rateBps) }));
-  }, [lines]);
-
-  // ── Customer lookup ────────────────────────────────────────────────────────
-  const [customerQuery, setCustomerQuery] = useState("");
-  const [matched, setMatched] = useState<{ key: string; list: Customer[] } | null>(null);
-  const [picked, setPicked] = useState<Customer | null>(null);
-  const [contact, setContact] = useState({
-    name: booking?.name ?? "",
-    phone: booking?.phone ?? "",
-    email: booking?.email ?? "",
-  });
-  const [address, setAddress] = useState({ address: "", city: "", zip: "" });
 
   // Same quote the counter's order will actually be priced with. Gates are NOT
   // enforced on this path — an out-of-area CAP still prices from the fallback,

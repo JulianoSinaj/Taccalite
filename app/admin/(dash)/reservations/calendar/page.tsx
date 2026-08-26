@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AdminHeader, Panel, reservationTypeLabel } from "@/components/admin/ui";
-import { getReservationsPage } from "@/lib/admin/queries";
+import { getReservationsPage, adminGetShops } from "@/lib/admin/queries";
+import { getClosures } from "@/lib/db/queries";
+import { closureTimeLabel, isWholeDay } from "@/lib/closures";
 import { shopScope, lockShop } from "@/lib/admin/scope";
 
 export const dynamic = "force-dynamic";
@@ -69,6 +71,21 @@ export default async function ReservationCalendar({ searchParams }: SP) {
   const weekStart = mondayOf(valid ? start! : todayISO());
   const weekEnd = isoAddDays(weekStart, 6);
   const today = todayISO();
+
+  // The week grid is where a closed day is most likely to be booked over by
+  // hand, so it says which days are shut. Every location's closures show in
+  // the all-shops view, each labelled with its shop.
+  const [closures, shops] = await Promise.all([getClosures(weekStart), adminGetShops()]);
+  const shopName = new Map(shops.map((s) => [s.slug, s.name]));
+  const allShops = !shopFilter || shopFilter === "all";
+  const closedOn = (dayISO: string) =>
+    closures.filter(
+      (c) =>
+        c.blocksReservations &&
+        dayISO >= c.fromDate &&
+        dayISO <= c.toDate &&
+        (allShops || c.shopSlug == null || c.shopSlug === shopFilter),
+    );
 
   // Gather every reservation in the visible week — page through the 25-row
   // window until we've collected them all (capped for safety on busy weeks).
@@ -146,11 +163,13 @@ export default async function ReservationCalendar({ searchParams }: SP) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7">
         {Array.from(byDay.entries()).map(([dayISO, items], i) => {
           const isToday = dayISO === today;
+          const closed = closedOn(dayISO);
+          const shutAllDay = closed.some(isWholeDay);
           return (
             <div
               key={dayISO}
               className={`flex break-inside-avoid flex-col rounded-2xl border bg-surface p-3 shadow-sm ${
-                isToday ? "border-gold ring-1 ring-gold" : "border-brown-900/10"
+                isToday ? "border-gold ring-1 ring-gold" : shutAllDay ? "border-danger/40" : "border-brown-900/10"
               }`}
             >
               {/* The header opens that day's prep sheet — the calendar answers
@@ -168,6 +187,16 @@ export default async function ReservationCalendar({ searchParams }: SP) {
                   {fmtDayNum(dayISO)}
                 </span>
               </Link>
+              {closed.map((c) => (
+                <p
+                  key={`${c.id}`}
+                  className="mb-1.5 rounded-md border border-danger/30 bg-danger-soft px-2 py-1 text-[11px] font-semibold text-danger-soft-fg"
+                >
+                  Chiuso{isWholeDay(c) ? "" : ` ${closureTimeLabel(c)}`}
+                  {c.shopSlug ? ` · ${shopName.get(c.shopSlug) ?? c.shopSlug}` : ""}
+                  {c.reason ? ` — ${c.reason}` : ""}
+                </p>
+              ))}
               {items.length === 0 ? (
                 <Link
                   href={`/admin/reservations/new?data=${dayISO}`}

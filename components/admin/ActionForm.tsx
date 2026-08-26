@@ -102,11 +102,16 @@ export function ActionForm({
   className = "",
   id,
   redirectTo,
+  onSuccess,
   "aria-label": ariaLabel,
 }: {
   action: Action;
   children: ReactNode;
   className?: string;
+  /** Runs once per successful submission, with the action's result — for the
+   *  forms that must react in-page (clear themselves, keep a payload on screen)
+   *  rather than navigate. */
+  onSuccess?: (result: ActionState) => void;
   /** Names the form for screen readers when it has no visible heading — a group
    *  of icon-only buttons (the theme switch) reads as loose controls without it. */
   "aria-label"?: string;
@@ -125,7 +130,10 @@ export function ActionForm({
     // Called from the action callback rather than an effect, so the toast is
     // published once per submission instead of on every re-render.
     toast(result);
-    if (result.status === "success" && redirectTo) router.push(redirectTo);
+    if (result.status === "success") {
+      onSuccess?.(result);
+      if (redirectTo) router.push(redirectTo);
+    }
     return result;
   }, idleState);
 

@@ -27,6 +27,7 @@ import {
   resendOrderEmail,
   settleOrderPayment,
   setOrderInternalNotes,
+  markOrderReady,
 } from "@/lib/admin/order-actions";
 import { isAdmin } from "@/lib/auth/session";
 import { getSetting } from "@/lib/db/queries";
@@ -93,6 +94,28 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   // Money still owed on an order that was never charged online. Staff can take
   // it, not just admins — collecting at the counter is the job.
   const canSettle = order.paymentStatus === "unpaid" && order.status !== "cancelled";
+  // «Pronto» is a message, not a state: the customer is told to come (or that
+  // the van has left) and the order stays open until it is handed over. A
+  // shipment's equivalent is the tracking email; an unpaid card checkout is not
+  // an order yet.
+  const canReady =
+    order.fulfilment !== "shipping" &&
+    (order.status === "pending" || order.status === "paid") &&
+    !(order.paymentMethod === "card" && order.paymentStatus === "unpaid");
+  // Mirrors the choice `resendOrderEmail` makes, so the caption says what the
+  // button will actually send.
+  const resendKind =
+    order.status === "cancelled"
+      ? "avviso di annullamento"
+      : order.status === "fulfilled" && order.fulfilment === "shipping"
+        ? "avviso di spedizione"
+        : order.readyAt && order.fulfilment !== "shipping"
+          ? order.fulfilment === "delivery"
+            ? "avviso «in consegna»"
+            : "avviso «pronto per il ritiro»"
+          : order.paymentStatus === "unpaid"
+            ? "ricevuta d'ordine"
+            : "conferma d'ordine";
   // Only the transitions `updateOrderStatus` will accept, so the dropdown never
   // offers a state the server then refuses. Money moves through "Registra
   // incasso" and "Rimborsa" only: once it is in, cancelling would restock the
@@ -307,6 +330,14 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   <dd className="text-brown-950">{zone.name}</dd>
                 </div>
               )}
+              {order.readyAt && order.fulfilment !== "shipping" && (
+                <div>
+                  <dt className="text-brown-800/60">
+                    {order.fulfilment === "delivery" ? "In consegna dal" : "Pronto dal"}
+                  </dt>
+                  <dd className="text-brown-950">{fmtDateTime(order.readyAt)}</dd>
+                </div>
+              )}
             </dl>
             {order.fulfilment !== "pickup" && addr && (
               <p className="mt-3 text-sm text-brown-800/80">
@@ -418,6 +449,22 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               <p className="text-xs text-brown-800/60">Ordine rimborsato: lo stato è definitivo.</p>
             )}
 
+            {canReady && (
+              <ActionForm action={markOrderReady} className="mt-4 space-y-2 border-t border-brown-900/10 pt-4">
+                <input type="hidden" name="id" value={order.id} />
+                <PendingButton tone="gold">
+                  {order.fulfilment === "delivery" ? "In consegna: avvisa il cliente" : "Pronto: avvisa il cliente"}
+                </PendingButton>
+                <p className="text-xs text-brown-800/60">
+                  {order.readyAt
+                    ? `Avvisato il ${fmtDateTime(order.readyAt)}. Premendo di nuovo l'email viene reinviata.`
+                    : order.fulfilment === "delivery"
+                      ? "Invia «il tuo ordine è in consegna». L'ordine resta aperto finché non lo segni evaso."
+                      : "Invia «il tuo ordine è pronto per il ritiro». L'ordine resta aperto finché non lo segni evaso."}
+                </p>
+              </ActionForm>
+            )}
+
             {/* The dates the books are kept on, next to the state they produced. */}
             <dl className="mt-4 space-y-1 border-t border-brown-900/10 pt-3 text-xs text-brown-800/70">
               <div className="flex justify-between gap-3">
@@ -454,12 +501,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   <PendingButton tone="dark">Reinvia email al cliente</PendingButton>
                 </ActionForm>
                 <p className="mt-2 text-xs text-brown-800/60">
-                  Rimanda l&apos;ultima comunicazione utile ({order.status === "fulfilled"
-                    ? "avviso di evasione"
-                    : order.status === "cancelled"
-                      ? "avviso di annullamento"
-                      : "conferma d'ordine"}
-                  ) a {order.email}.
+                  Rimanda l&apos;ultima comunicazione utile ({resendKind}) a {order.email}.
                 </p>
               </div>
             )}

@@ -35,7 +35,7 @@ import {
   type CustomerPaymentMethod,
 } from "@/lib/payments/methods";
 import { getPaymentAvailability } from "@/lib/payments/config";
-import { addPoints } from "@/lib/loyalty";
+import { addPoints, reversePointsForOrder } from "@/lib/loyalty";
 import { isLowStock } from "@/lib/inventory";
 import { env } from "@/lib/env";
 import type { CheckoutInput } from "@/lib/validation/order";
@@ -786,6 +786,19 @@ export async function recordRefund(
   if (full && !wasFull) {
     await restockOrderItems(orderId, opts.reason, opts.actorId ?? null);
     if (order.discountCode) await releaseDiscountUseByCode(order.discountCode, order.id);
+  }
+
+  // The points this order earned go back in proportion to the money returned —
+  // they were credited on payment, so a refund without this left the customer
+  // with the points and the shop without the sale. Outside the claim and
+  // best-effort: the refund is already booked, and a hiccup here must not make
+  // the operator retry a refund that went through.
+  if (order.userId) {
+    try {
+      await reversePointsForOrder(order.userId, order.orderNumber, capped, order.totalCents, opts.actorId ?? null);
+    } catch (err) {
+      console.error(`[orders] loyalty reversal failed for ${order.orderNumber}:`, err);
+    }
   }
 
   return { deltaCents, refundedCents: capped, full };

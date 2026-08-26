@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AdminHeader, Panel, inputCls, labelCls } from "@/components/admin/ui";
-import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
-import { adminGetClosures, adminGetShops } from "@/lib/admin/queries";
-import { saveClosure, deleteClosure, notifyClosureBookings } from "@/lib/admin/fulfilment-actions";
+import { AdminHeader, Panel } from "@/components/admin/ui";
+import { ClosureForm } from "@/components/admin/ClosureForm";
+import { ClosureCard } from "@/components/admin/ClosureCard";
+import { ClosureHolidays } from "@/components/admin/ClosureHolidays";
+import { adminGetClosures, adminGetPastClosures, adminGetShops } from "@/lib/admin/queries";
+import { closureStatus, isWholeDay } from "@/lib/closures";
+import { italianHolidays } from "@/lib/holidays";
 import { isAdmin } from "@/lib/auth/session";
 import { dateInRome } from "@/lib/time";
-import type { ShopRow } from "@/lib/db/schema";
-import type { ClosureWithBookings } from "@/lib/admin/queries";
+import type { ShopClosureRow } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -20,177 +22,116 @@ export const dynamic = "force-dynamic";
  * Day were bookable, and the only lever was the global "prenotazioni attive"
  * switch, which also closes the days either side of the one you meant.
  *
- * The list leads with what is *already booked* inside each range, because
- * declaring a closure deliberately cancels nothing: a shop marking August in
- * June must not silently drop the bookings it has already promised. The number
- * is the difference between "that day is closed now" and "that day is closed
- * now and here are the four people to ring".
+ * The page is three things in order of how often they are needed: add one
+ * closure; add a year's holidays in one go; see what is coming, with what is
+ * already booked inside it — because declaring a closure deliberately cancels
+ * nothing, and the shop has to know who to ring. History unfolds on request.
  */
 
-/** "26 luglio 2026" — the ISO date is already local, so no timezone conversion. */
-function fmtDay(isoDate: string): string {
-  const [y, m, d] = isoDate.split("-").map(Number);
-  if (!y || !m || !d) return isoDate;
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("it-IT", {
-    timeZone: "UTC",
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
+const BTN =
+  "inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15";
 
-/** Whole days a range covers, inclusive of both ends. */
-function dayCount(from: string, to: string): number {
-  const ms = Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`);
-  return Math.max(1, Math.round(ms / 86_400_000) + 1);
-}
+type SP = { searchParams: Promise<{ negozio?: string; passate?: string; anno?: string }> };
 
-/** The create/edit form. Same fields either way — a new closure is one with no id. */
-function ClosureForm({ closure, shops, today }: { closure?: ClosureWithBookings; shops: ShopRow[]; today: string }) {
-  return (
-    <ActionForm action={saveClosure} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      {closure && <input type="hidden" name="id" value={closure.id} />}
-
-      <div>
-        <label className={labelCls} htmlFor={`from-${closure?.id ?? "new"}`}>
-          Dal
-        </label>
-        <input
-          id={`from-${closure?.id ?? "new"}`}
-          type="date"
-          name="fromDate"
-          required
-          // An existing closure may already be under way, so only a new one is
-          // pinned to today onwards; the action refuses a past end either way.
-          min={closure ? undefined : today}
-          defaultValue={closure?.fromDate ?? today}
-          className={inputCls}
-        />
-      </div>
-
-      <div>
-        <label className={labelCls} htmlFor={`to-${closure?.id ?? "new"}`}>
-          Al (compreso)
-        </label>
-        <input
-          id={`to-${closure?.id ?? "new"}`}
-          type="date"
-          name="toDate"
-          min={closure?.fromDate ?? today}
-          defaultValue={closure && closure.toDate !== closure.fromDate ? closure.toDate : ""}
-          className={inputCls}
-        />
-        <p className="mt-1 text-xs text-brown-800/60">Lascia vuoto per un solo giorno.</p>
-      </div>
-
-      <div>
-        <label className={labelCls} htmlFor={`shop-${closure?.id ?? "new"}`}>
-          Sede
-        </label>
-        <select
-          id={`shop-${closure?.id ?? "new"}`}
-          name="shopSlug"
-          defaultValue={closure?.shopSlug ?? ""}
-          className={inputCls}
-        >
-          <option value="">Tutte le sedi</option>
-          {shops.map((s) => (
-            <option key={s.slug} value={s.slug}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className={labelCls} htmlFor={`reason-${closure?.id ?? "new"}`}>
-          Motivo
-        </label>
-        <input
-          id={`reason-${closure?.id ?? "new"}`}
-          name="reason"
-          maxLength={200}
-          defaultValue={closure?.reason ?? ""}
-          placeholder="es. Ferie estive, Ferragosto, lavori"
-          className={inputCls}
-        />
-        <p className="mt-1 text-xs text-brown-800/60">
-          Mostrato al cliente quando la data viene rifiutata.
-        </p>
-      </div>
-
-      <div className="sm:col-span-2">
-        <p className={labelCls}>Cosa si ferma</p>
-        {/* Two flags rather than one because the cases genuinely differ: a
-            kitchen refit stops table bookings while the counter still hands over
-            orders already paid for, and a van off the road is the reverse. */}
-        <div className="flex flex-wrap gap-5">
-          <label className="inline-flex items-center gap-2 text-sm text-brown-900">
-            <input type="hidden" name="blocksReservations" value="false" />
-            <input
-              type="checkbox"
-              name="blocksReservations"
-              value="true"
-              defaultChecked={closure?.blocksReservations ?? true}
-              className="h-5 w-5 rounded accent-brown-950"
-            />
-            Prenotazioni (tavolo, porchetta, ordini speciali)
-          </label>
-          <label className="inline-flex items-center gap-2 text-sm text-brown-900">
-            <input type="hidden" name="blocksPickup" value="false" />
-            <input
-              type="checkbox"
-              name="blocksPickup"
-              value="true"
-              defaultChecked={closure?.blocksPickup ?? true}
-              className="h-5 w-5 rounded accent-brown-950"
-            />
-            Ritiri e consegne
-          </label>
-        </div>
-      </div>
-
-      <div className="sm:col-span-2">
-        <PendingButton>{closure ? "Salva chiusura" : "Aggiungi chiusura"}</PendingButton>
-      </div>
-    </ActionForm>
-  );
-}
-
-export default async function AdminClosures() {
+export default async function AdminClosures({ searchParams }: SP) {
   // Closures gate the public booking form for every location, so they are a
   // full admin's call rather than a per-shop one.
   if (!(await isAdmin())) redirect("/admin");
 
+  const params = await searchParams;
   const today = dateInRome();
-  const [closures, shops] = await Promise.all([adminGetClosures(today), adminGetShops()]);
+  const showPast = params.passate === "1";
+  // The checklist covers this year or next; anything else is a typo in the URL.
+  const thisYear = Number(today.slice(0, 4));
+  const year = Number(params.anno) === thisYear + 1 ? thisYear + 1 : thisYear;
+
+  const [all, shops, allPast] = await Promise.all([
+    adminGetClosures(today),
+    adminGetShops(),
+    showPast ? adminGetPastClosures(today) : Promise.resolve([] as ShopClosureRow[]),
+  ]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
+
+  // `?negozio=` (linked from Negozi) narrows the list to what affects one sede:
+  // its own closures plus the ones declared for every location.
+  const negozio = params.negozio && shopName.has(params.negozio) ? params.negozio : undefined;
+  const forShop = <T extends ShopClosureRow>(rows: T[]) =>
+    negozio ? rows.filter((c) => c.shopSlug == null || c.shopSlug === negozio) : rows;
+  const closures = forShop(all);
+  const past = forShop(allPast);
+  const self = (extra: Record<string, string | undefined>) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries({ negozio, anno: params.anno, passate: params.passate, ...extra })) {
+      if (v) qs.set(k, v);
+    }
+    const s = qs.toString();
+    return `/admin/chiusure${s ? `?${s}` : ""}`;
+  };
+
+  const ongoing = closures.filter((c) => closureStatus(c, today) === "ongoing").length;
+  const toRing = closures.filter((c) => c.toNotify > 0).length;
+
+  // A holiday counts as covered when any whole-day closure spans it, whatever
+  // the scope — the checklist is for the days nobody has thought about yet.
+  const covered = new Set(
+    italianHolidays(year)
+      .filter((h) => all.some((c) => isWholeDay(c) && h.date >= c.fromDate && h.date <= c.toDate))
+      .map((h) => h.date),
+  );
+
+  const subtitle =
+    closures.length === 0
+      ? "Nessuna chiusura programmata — tutti i giorni sono prenotabili"
+      : [
+          ongoing > 0 ? `${ongoing} in corso` : null,
+          `${closures.length - ongoing} ${closures.length - ongoing === 1 ? "programmata" : "programmate"}`,
+          toRing > 0 ? `${toRing} con clienti da avvisare` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
   return (
     <div>
       <AdminHeader
         title="Chiusure"
-        subtitle={
-          closures.length === 0
-            ? "Nessuna chiusura programmata — tutti i giorni sono prenotabili"
-            : closures.length === 1
-              ? "1 chiusura da oggi in poi"
-              : `${closures.length} chiusure da oggi in poi`
+        subtitle={subtitle}
+        action={
+          <Link href={self({ passate: showPast ? undefined : "1" })} className={BTN}>
+            {showPast ? "Nascondi storico" : "Storico"}
+          </Link>
         }
       />
+
+      {negozio && (
+        <p className="mb-4 text-sm text-brown-800/70">
+          Stai vedendo le chiusure di <strong>{shopName.get(negozio)}</strong> (e quelle valide per
+          tutte le sedi).{" "}
+          <Link href={self({ negozio: undefined })} className="font-semibold text-gold-deep underline">
+            Mostra tutte
+          </Link>
+        </p>
+      )}
 
       <Panel className="mb-6">
         <h2 className="font-display mb-1 text-lg text-brown-950">Nuova chiusura</h2>
         <p className="mb-4 text-sm text-brown-800/70">
           Il sito smette di accettare prenotazioni e di offrire fasce di ritiro in queste date. Le
-          prenotazioni già prese <strong>non</strong> vengono annullate — le trovi elencate qui
-          sotto, così puoi avvisare i clienti.
+          prenotazioni già prese <strong>non</strong> vengono annullate — le trovi elencate qui sotto,
+          così puoi avvisare i clienti.
         </p>
-        <ClosureForm shops={shops} today={today} />
+        <ClosureForm shops={shops} today={today} defaultShop={negozio} />
       </Panel>
 
-      <h2 className="font-display mt-8 mb-3 text-xl text-brown-950">Programmate</h2>
+      <ClosureHolidays
+        year={year}
+        today={today}
+        shops={shops}
+        covered={covered}
+        defaultShop={negozio}
+        yearHref={(y) => self({ anno: y === thisYear ? undefined : String(y) })}
+      />
+
+      <h2 className="font-display mt-8 mb-3 text-xl text-brown-950">In corso e programmate</h2>
 
       {closures.length === 0 ? (
         <Panel>
@@ -201,109 +142,27 @@ export default async function AdminClosures() {
         </Panel>
       ) : (
         <div className="space-y-3">
-          {closures.map((c) => {
-            const days = dayCount(c.fromDate, c.toDate);
-            const booked = c.reservationCount + c.pickupCount;
-            // The counts are scoped to the closure's shop, so the lists they
-            // open must be too — otherwise "3 prenotazioni" opened a page of 9.
-            const scope = c.shopSlug ? `&negozio=${encodeURIComponent(c.shopSlug)}` : "";
-            return (
-              <Panel key={c.id}>
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-display text-lg text-brown-950">
-                      {c.fromDate === c.toDate
-                        ? fmtDay(c.fromDate)
-                        : `${fmtDay(c.fromDate)} — ${fmtDay(c.toDate)}`}
-                      {days > 1 && (
-                        <span className="ml-2 text-xs font-normal text-brown-800/50">
-                          {days} giorni
-                        </span>
-                      )}
-                    </p>
-                    <p className="mt-0.5 text-xs text-brown-800/60">
-                      {c.shopSlug ? (shopName.get(c.shopSlug) ?? c.shopSlug) : "Tutte le sedi"}
-                      {c.reason ? ` · ${c.reason}` : ""}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {c.blocksReservations && (
-                        <span className="rounded-full bg-brown-900/10 px-2 py-0.5 text-[10px] font-bold tracking-widest text-brown-800 uppercase">
-                          Prenotazioni sospese
-                        </span>
-                      )}
-                      {c.blocksPickup && (
-                        <span className="rounded-full bg-brown-900/10 px-2 py-0.5 text-[10px] font-bold tracking-widest text-brown-800 uppercase">
-                          Ritiri sospesi
-                        </span>
-                      )}
-                    </div>
-
-                    {/* The whole reason this page counts anything. A closure
-                        added after bookings were taken is the normal case, and
-                        the shop has to know who to call. */}
-                    {booked > 0 && (
-                      <div className="mt-3 rounded-lg border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-warn-soft-fg">
-                        In queste date risultano già{" "}
-                        {c.reservationCount > 0 && (
-                          <Link
-                            href={`/admin/reservations?da=${c.fromDate}&a=${c.toDate}${scope}`}
-                            className="font-bold underline"
-                          >
-                            {c.reservationCount === 1
-                              ? "1 prenotazione"
-                              : `${c.reservationCount} prenotazioni`}
-                          </Link>
-                        )}
-                        {c.reservationCount > 0 && c.pickupCount > 0 ? " e " : ""}
-                        {c.pickupCount > 0 && (
-                          <Link
-                            href={`/admin/fulfilment/oggi?giorno=${c.fromDate}${scope}`}
-                            className="font-bold underline"
-                          >
-                            {c.pickupCount === 1 ? "1 ritiro" : `${c.pickupCount} ritiri`}
-                          </Link>
-                        )}
-                        . Non sono state annullate.
-                        {c.reservationCount > 0 && (
-                          <ActionForm action={notifyClosureBookings} className="mt-2 block">
-                            <input type="hidden" name="id" value={c.id} />
-                            <PendingButton
-                              tone="dark"
-                              confirm={`Avvisare via email i clienti prenotati dal ${c.fromDate} al ${c.toDate}? Le prenotazioni non vengono annullate: l'email dice che siamo chiusi e invita a risentirci.`}
-                            >
-                              Avvisa i clienti via email
-                            </PendingButton>
-                          </ActionForm>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="shrink-0">
-                    <DeleteForm
-                      action={deleteClosure}
-                      id={c.id}
-                      confirm={`Rimuovere la chiusura ${
-                        c.fromDate === c.toDate ? `del ${c.fromDate}` : `dal ${c.fromDate} al ${c.toDate}`
-                      }? Le date tornano prenotabili.`}
-                    >
-                      Rimuovi
-                    </DeleteForm>
-                  </div>
-                </div>
-
-                <details className="mt-4 border-t border-brown-900/10 pt-3">
-                  <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
-                    Modifica
-                  </summary>
-                  <div className="mt-4">
-                    <ClosureForm closure={c} shops={shops} today={today} />
-                  </div>
-                </details>
-              </Panel>
-            );
-          })}
+          {closures.map((c) => (
+            <ClosureCard key={c.id} closure={c} shops={shops} shopName={shopName} today={today} />
+          ))}
         </div>
+      )}
+
+      {showPast && (
+        <>
+          <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Passate</h2>
+          {past.length === 0 ? (
+            <Panel>
+              <p className="text-brown-800/70">Nessuna chiusura passata.</p>
+            </Panel>
+          ) : (
+            <div className="space-y-3">
+              {past.map((c) => (
+                <ClosureCard key={c.id} closure={c} shops={shops} shopName={shopName} today={today} />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <p className="mt-6 text-xs text-brown-800/60">

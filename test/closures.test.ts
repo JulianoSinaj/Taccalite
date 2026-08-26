@@ -3,7 +3,15 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { shops, reservations, shopClosures } from "@/lib/db/schema";
 import { createReservation, ReservationNotAllowedError } from "@/lib/reservations";
-import { closureFor, isClosed, closedDatesBetween, type ClosureLike } from "@/lib/closures";
+import {
+  closureFor,
+  isClosed,
+  closedDatesBetween,
+  closureStatus,
+  sameDayNextYear,
+  dayCount,
+  type ClosureLike,
+} from "@/lib/closures";
 import { pickupSlotOptions, type SlotLike } from "@/lib/pickup-slots";
 import { dateInRome } from "@/lib/time";
 
@@ -307,5 +315,97 @@ describe("createReservation — seats are enforced online, not only at the count
       { notifyOwner: false, notifyCustomer: false, enforceAvailability: false },
     );
     expect(overbooked.reference).toMatch(/^TAC-/);
+  });
+});
+
+describe("partial-day closures — a window inside each day", () => {
+  const afternoon = closure({ startTime: "14:00", endTime: "18:00", reason: "Inventario" });
+
+  it("refuses only a time inside the window, and reopens at the closing minute", () => {
+    expect(closureFor([afternoon], SHOP, FUTURE, "reservations", "15:00")).not.toBeNull();
+    expect(closureFor([afternoon], SHOP, FUTURE, "reservations", "13:59")).toBeNull();
+    expect(closureFor([afternoon], SHOP, FUTURE, "reservations", "18:00")).toBeNull();
+    expect(closureFor([afternoon], SHOP, FUTURE, "reservations", "20:00")).toBeNull();
+  });
+
+  it("never closes the whole day: a date-only question is 'open', and the picker greys nothing", () => {
+    expect(closureFor([afternoon], SHOP, FUTURE, "reservations")).toBeNull();
+    expect(closedDatesBetween([afternoon], SHOP, "2027-08-01", "2027-08-31", "reservations")).toEqual([]);
+  });
+
+  it("catches a pickup window that overlaps it, not one that ends as it starts", () => {
+    expect(isClosed([afternoon], SHOP, FUTURE, "pickup", { start: "12:00", end: "14:30" })).toBe(true);
+    expect(isClosed([afternoon], SHOP, FUTURE, "pickup", { start: "17:00", end: "19:00" })).toBe(true);
+    expect(isClosed([afternoon], SHOP, FUTURE, "pickup", { start: "12:00", end: "14:00" })).toBe(false);
+  });
+
+  it("a whole-day closure on the same day wins, so the customer reads the real reason", () => {
+    const whole = closure({ reason: "Ferragosto" });
+    expect(closureFor([afternoon, whole], SHOP, FUTURE, "reservations", "15:00")?.reason).toBe("Ferragosto");
+  });
+
+  it("drops only the pickup windows that overlap the closed hours", () => {
+    const slot = (start: string, end: string): SlotLike => ({
+      id: `s-${start}`,
+      shopSlug: SHOP,
+      weekday: 4,
+      startTime: start,
+      endTime: end,
+      capacityOrders: null,
+      cutoffHours: 0,
+      active: true,
+    });
+    const now = new Date("2027-08-09T06:00:00Z"); // Monday; Thursday is the 12th
+    const options = pickupSlotOptions([slot("10:00", "12:00"), slot("14:00", "16:00")], {
+      now,
+      days: 7,
+      closures: [closure({ fromDate: "2027-08-12", toDate: "2027-08-12", startTime: "13:00", endTime: "18:00" })],
+    });
+    expect(options.map((o) => o.startTime)).toEqual(["10:00"]);
+  });
+
+  it("the public gate refuses the 15:00 table and takes the 20:00 one", async () => {
+    await db.insert(shopClosures).values({
+      shopSlug: SHOP,
+      fromDate: FUTURE,
+      toDate: FUTURE,
+      startTime: "14:00",
+      endTime: "18:00",
+      reason: "Inventario",
+    });
+    const base = {
+      type: "table" as const,
+      name: "Prova",
+      phone: "071 1",
+      email: undefined,
+      shop: SHOP,
+      guests: 2,
+      date: FUTURE,
+    };
+    await expect(
+      createReservation({ ...base, time: "15:00" }, { notifyOwner: false, notifyCustomer: false }),
+    ).rejects.toThrow(/dalle 14:00 alle 18:00/);
+    const ok = await createReservation({ ...base, time: "20:00" }, { notifyOwner: false, notifyCustomer: false });
+    expect(ok.reference).toMatch(/^TAC-/);
+  });
+});
+
+describe("calendar helpers", () => {
+  it("closureStatus places a closure against today", () => {
+    const c = closure({ fromDate: "2027-08-10", toDate: "2027-08-20" });
+    expect(closureStatus(c, "2027-08-09")).toBe("upcoming");
+    expect(closureStatus(c, "2027-08-10")).toBe("ongoing");
+    expect(closureStatus(c, "2027-08-20")).toBe("ongoing");
+    expect(closureStatus(c, "2027-08-21")).toBe("past");
+  });
+
+  it("sameDayNextYear keeps the calendar date, folding a leap day onto the 28th", () => {
+    expect(sameDayNextYear("2026-08-15")).toBe("2027-08-15");
+    expect(sameDayNextYear("2028-02-29")).toBe("2029-02-28");
+  });
+
+  it("dayCount is inclusive of both ends", () => {
+    expect(dayCount("2027-08-15", "2027-08-15")).toBe(1);
+    expect(dayCount("2027-08-10", "2027-08-20")).toBe(11);
   });
 });

@@ -9,9 +9,11 @@ import {
   inArray,
   isNotNull,
   isNull,
+  like,
   lt,
   lte,
   ne,
+  notInArray,
   or,
   sql,
   type AnyColumn,
@@ -28,12 +30,15 @@ import {
   aggregateVatBuckets,
   type VatBucket,
 } from "@/lib/fiscal";
-import { dateInRome, startOfTodayRome, instantInRome, expiryWindow } from "@/lib/time";
+import { dateInRome, startOfTodayRome, instantInRome, expiryWindow, timeInRome } from "@/lib/time";
+import { shiftIsoDate } from "@/lib/agenda-range";
+import { shiftDay } from "@/lib/closures";
 import { OUTBOX_MAX_ATTEMPTS } from "@/lib/mail/mailer";
 import {
   ordersWhere,
   reservationsWhere,
   customersWhere,
+  customersOrderBy,
   subscribersWhere,
   outboxWhere,
   productsWhere,
@@ -71,6 +76,7 @@ import {
   redemptions,
   newsletterSubscribers,
   emailOutbox,
+  newsletterCampaigns,
   settings,
   auditLog,
   discountCodes,
@@ -85,6 +91,8 @@ import {
   type DeliveryZoneRow,
   type PickupSlotRow,
   type ShopClosureRow,
+  type OrderRow,
+  type ReservationRow,
 } from "@/lib/db/schema";
 
 /**
@@ -114,6 +122,20 @@ const everSettled = inArray(orders.paymentStatus, ["paid", "refunded"]);
  */
 const inShop = (col: AnyColumn, scope: string | null): SQL | undefined =>
   scope ? or(eq(col, scope), isNull(col)) : undefined;
+
+/**
+ * An order somebody still has to hand over — the day sheet's and the
+ * dashboard's shared definition.
+ *
+ * "Paid but not fulfilled" was the definition, and it hid the orders the day
+ * sheet exists for: a contrassegno delivery or a "pago in bottega" pickup sits
+ * unpaid — status `pending` — until the goods change hands, which is exactly
+ * when the driver or the counter needs it listed with its "da incassare". The
+ * one unpaid order left out is a *card* checkout nobody completed: no one is
+ * coming for it, and the abandoned-order sweep will cancel it.
+ */
+const liveCheckout = or(ne(orders.paymentMethod, "card"), eq(orders.paymentStatus, "paid"))!;
+const liveFulfilmentWork = and(inArray(orders.status, ["pending", "paid"]), liveCheckout)!;
 
 export async function getDashboardStats(scope: string | null = null) {
   const resShop = inShop(reservations.shopSlug, scope);
@@ -161,6 +183,22 @@ export async function getDashboardStats(scope: string | null = null) {
     .select({ n: sql<number>`count(*)` })
     .from(orders)
     .where(and(eq(orders.paymentStatus, "paid"), eq(orders.status, "paid"), ordShop));
+  // Today's pickup appointments not yet handed over — the morning's first
+  // question, answered here rather than one page away. A Rome day, not a UTC
+  // one, for the same reason as the day sheet.
+  const todayRome = dateInRome();
+  const [pickupsToday] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.fulfilment, "pickup"),
+        gte(orders.pickupSlotAt, instantInRome(todayRome, "00:00")),
+        lt(orders.pickupSlotAt, instantInRome(shiftIsoDate(todayRome, 1), "00:00")),
+        liveFulfilmentWork,
+        ordShop,
+      ),
+    );
   // Porchetta waitlist awaiting a decision.
   const [waitlisted] = await db
     .select({ n: sql<number>`count(*)` })
@@ -212,6 +250,7 @@ export async function getDashboardStats(scope: string | null = null) {
     totalReservations: totalRes?.n ?? 0,
     paidOrders: paidOrders?.n ?? 0,
     ordersToFulfil: toFulfil?.n ?? 0,
+    pickupsToday: pickupsToday?.n ?? 0,
     waitlisted: waitlisted?.n ?? 0,
     failedEmails: failedEmails?.n ?? 0,
     customers: customers?.n ?? 0,
@@ -579,6 +618,7 @@ export async function getCustomersPage(opts: CustomerFilters & { page?: number }
       email: users.email,
       phone: users.phone,
       role: users.role,
+      active: users.active,
       createdAt: users.createdAt,
       points: loyaltyAccounts.points,
       cardNumber: loyaltyAccounts.cardNumber,
@@ -588,7 +628,7 @@ export async function getCustomersPage(opts: CustomerFilters & { page?: number }
 
   const [rows, [{ total }]] = await Promise.all([
     (where ? base.where(where) : base)
-      .orderBy(desc(users.createdAt))
+      .orderBy(...customersOrderBy(opts))
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
     db
@@ -946,6 +986,19 @@ export const getLoyaltyAccountForUser = (userId: string) =>
     .limit(1)
     .then((r) => r[0] ?? null);
 
+/**
+ * Points every live account could still spend — the scheme's outstanding
+ * liability, which nothing in the admin showed. Deactivated accounts are left
+ * out: erasure zeroes them, and a suspended one can't redeem.
+ */
+export const getLoyaltyOutstanding = () =>
+  db
+    .select({ points: sql<number>`coalesce(sum(${loyaltyAccounts.points}), 0)` })
+    .from(loyaltyAccounts)
+    .innerJoin(users, eq(loyaltyAccounts.userId, users.id))
+    .where(eq(users.active, true))
+    .then((r) => Number(r[0]?.points ?? 0));
+
 export async function getCustomersWithPoints(
   filters: CustomerFilters = {},
   limit?: number,
@@ -960,13 +1013,14 @@ export async function getCustomersWithPoints(
       email: users.email,
       phone: users.phone,
       role: users.role,
+      active: users.active,
       createdAt: users.createdAt,
       points: loyaltyAccounts.points,
       cardNumber: loyaltyAccounts.cardNumber,
     })
     .from(users)
     .leftJoin(loyaltyAccounts, eq(loyaltyAccounts.userId, users.id));
-  const ordered = (where ? base.where(where) : base).orderBy(desc(users.createdAt), users.id);
+  const ordered = (where ? base.where(where) : base).orderBy(...customersOrderBy(filters));
   // The CSV route streams this a page at a time; the list page takes it whole.
   return limit == null ? ordered : ordered.limit(limit).offset(offset ?? 0);
 }
@@ -978,12 +1032,17 @@ export async function getCustomersWithPoints(
  * unusable as a work queue the moment fulfilled rows outnumbered pending ones.
  * Defaults to the ones that still need doing.
  */
-export async function getRedemptionsPage(opts: { page?: number; stato?: string }) {
+export async function getRedemptionsPage(opts: { page?: number; stato?: string; q?: string }) {
   const page = Math.max(1, opts.page ?? 1);
-  const where =
-    opts.stato && opts.stato !== "all"
-      ? eq(redemptions.status, opts.stato as "pending")
-      : undefined;
+  const conds: SQL[] = [];
+  if (opts.stato && opts.stato !== "all") conds.push(eq(redemptions.status, opts.stato as "pending"));
+  // Who it is for, or what it is: the queue is worked with a customer standing
+  // at the counter, and scrolling for their name was the only way to find them.
+  if (opts.q) {
+    const t = `%${opts.q.toLowerCase()}%`;
+    conds.push(or(like(users.name, t), like(users.username, t), like(redemptions.rewardName, t))!);
+  }
+  const where = conds.length ? and(...conds) : undefined;
   const [rows, [{ total }], [{ pending }]] = await Promise.all([
     db
       .select({
@@ -994,10 +1053,14 @@ export async function getRedemptionsPage(opts: { page?: number; stato?: string }
       .from(redemptions)
       .leftJoin(users, eq(redemptions.userId, users.id))
       .where(where)
-      .orderBy(desc(redemptions.createdAt))
+      .orderBy(desc(redemptions.createdAt), redemptions.id)
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
-    db.select({ total: sql<number>`count(*)` }).from(redemptions).where(where),
+    db
+      .select({ total: sql<number>`count(*)` })
+      .from(redemptions)
+      .leftJoin(users, eq(redemptions.userId, users.id))
+      .where(where),
     db
       .select({ pending: sql<number>`count(*)` })
       .from(redemptions)
@@ -1006,13 +1069,27 @@ export async function getRedemptionsPage(opts: { page?: number; stato?: string }
   return { rows, total, pending, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
 }
 
-export const getRecentLoyaltyTx = (userId: string) =>
-  db
+/** How much of a customer's ledger the card shows before offering the rest. */
+export const LEDGER_PREVIEW = 50;
+
+/**
+ * A customer's points ledger, newest first, with its full size — capped at
+ * `LEDGER_PREVIEW` unless the page asks for all of it. The cap was silent: a
+ * regular's card stopped at fifty rows and nothing said there were more.
+ */
+export async function getLoyaltyTxForUser(userId: string, opts: { all?: boolean } = {}) {
+  const mine = eq(loyaltyTransactions.userId, userId);
+  const base = db
     .select()
     .from(loyaltyTransactions)
-    .where(eq(loyaltyTransactions.userId, userId))
-    .orderBy(desc(loyaltyTransactions.createdAt))
-    .limit(50);
+    .where(mine)
+    .orderBy(desc(loyaltyTransactions.createdAt), desc(loyaltyTransactions.id));
+  const [rows, [{ total }]] = await Promise.all([
+    opts.all ? base : base.limit(LEDGER_PREVIEW),
+    db.select({ total: sql<number>`count(*)` }).from(loyaltyTransactions).where(mine),
+  ]);
+  return { rows, total: Number(total) };
+}
 
 /** Paginated newsletter subscribers list. `confirmed` is the full-table count of
  *  confirmed subscribers (used by the broadcast form / subtitle), independent of paging. */
@@ -1064,18 +1141,20 @@ export const getOutbox = () => db.select().from(emailOutbox).orderBy(desc(emailO
 export async function getOutboxPage(opts: OutboxFilters & { page?: number }) {
   const page = Math.max(1, opts.page ?? 1);
   const where = outboxWhere(opts);
-  const [rows, [{ total }], [{ failed, exhausted }]] = await Promise.all([
+  const [rows, [{ total }], [{ failed, exhausted }], byStatus] = await Promise.all([
     db
       .select()
       .from(emailOutbox)
       .where(where)
-      .orderBy(desc(emailOutbox.createdAt))
+      .orderBy(desc(emailOutbox.createdAt), emailOutbox.id)
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
     db.select({ total: sql<number>`count(*)` }).from(emailOutbox).where(where),
+    // Whole-outbox figures for the banner and the bulk retry buttons, which act
+    // on every failed message regardless of what is filtered on screen.
     // `exhausted` is the subset past the retry cap — the ones an ordinary
     // "riprova tutte" deliberately skips, and therefore the only ones that need
-    // the counter reset. Counted here so the page can say how many rather than
+    // the counter reset. Counted so the page can say how many rather than
     // offering a blind "force everything".
     db
       .select({
@@ -1084,12 +1163,41 @@ export async function getOutboxPage(opts: OutboxFilters & { page?: number }) {
       })
       .from(emailOutbox)
       .where(eq(emailOutbox.status, "failed")),
+    // Per-status counts for the segmented control, under every filter except
+    // the status itself — so the chips answer "how many of *these* failed".
+    db
+      .select({ status: emailOutbox.status, n: sql<number>`count(*)` })
+      .from(emailOutbox)
+      .where(outboxWhere({ ...opts, stato: "all" }))
+      .groupBy(emailOutbox.status),
   ]);
+
+  const counts: Record<"all" | "queued" | "sent" | "failed", number> = { all: 0, queued: 0, sent: 0, failed: 0 };
+  for (const r of byStatus) {
+    counts[r.status] = Number(r.n);
+    counts.all += Number(r.n);
+  }
+
+  // Campaign subjects for the rows on this page, plus the active campaign
+  // filter, which needs a label even when nothing matches it.
+  const campaignIds = [...new Set(rows.map((r) => r.campaignId).filter((v): v is string => !!v))];
+  if (opts.campaign && !campaignIds.includes(opts.campaign)) campaignIds.push(opts.campaign);
+  const campaigns: Record<string, string> = {};
+  if (campaignIds.length > 0) {
+    const found = await db
+      .select({ id: newsletterCampaigns.id, subject: newsletterCampaigns.subject })
+      .from(newsletterCampaigns)
+      .where(inArray(newsletterCampaigns.id, campaignIds));
+    for (const c of found) campaigns[c.id] = c.subject;
+  }
+
   return {
     rows,
     total,
     failed,
     exhausted: Number(exhausted ?? 0),
+    counts,
+    campaigns,
     page,
     pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
   };
@@ -1489,6 +1597,25 @@ export async function getAuditPage(opts: AuditFilters & { page?: number } = {}) 
 }
 
 /** Batched audit feed for the CSV export, honouring the same filters. */
+export const getOutboxForExport = (f: OutboxFilters, limit: number, offset: number) =>
+  db
+    .select({
+      id: emailOutbox.id,
+      createdAt: emailOutbox.createdAt,
+      sentAt: emailOutbox.sentAt,
+      toAddress: emailOutbox.toAddress,
+      subject: emailOutbox.subject,
+      status: emailOutbox.status,
+      attempts: emailOutbox.attempts,
+      error: emailOutbox.error,
+      campaignId: emailOutbox.campaignId,
+    })
+    .from(emailOutbox)
+    .where(outboxWhere(f))
+    .orderBy(desc(emailOutbox.createdAt), emailOutbox.id)
+    .limit(limit)
+    .offset(offset);
+
 export const getAuditForExport = (f: AuditFilters, limit: number, offset: number) =>
   db
     .select()
@@ -1877,14 +2004,84 @@ export async function adminGetDeliveryZones(): Promise<ZoneWithUsage[]> {
 }
 
 export type ClosureWithBookings = ShopClosureRow & {
-  /** Live bookings whose date falls inside the range. */
+  /** Live bookings the closure actually lands on — its flags and hours respected. */
   reservationCount: number;
-  /** Paid pickups whose window falls inside the range. */
   pickupCount: number;
+  /** Of those, the ones with an address that "avvisa i clienti" would still write to. */
+  toNotify: number;
 };
 
+export type ClosureBookings = { reservations: ReservationRow[]; pickups: OrderRow[] };
+
 /**
- * Closures, soonest first, each with what is already booked inside it.
+ * The live bookings a closure lands on — what the page counts and what the
+ * notice is sent to, from one predicate so the two can never disagree.
+ *
+ * Only the services the closure stops are looked at: a closure of the counter
+ * alone leaves the table bookings alone, so they are not "affected". A
+ * partial-day closure catches only the bookings timed inside its window; a
+ * booking with no time on such a day is left alone, as the gate leaves it.
+ */
+export async function closureBookings(c: ShopClosureRow): Promise<ClosureBookings> {
+  const partial = !!(c.startTime && c.endTime);
+  const inWindow = (t: string) => !partial || (t >= c.startTime! && t < c.endTime!);
+  const [res, pick] = await Promise.all([
+    c.blocksReservations
+      ? db
+          .select()
+          .from(reservations)
+          .where(
+            and(
+              gte(reservations.date, c.fromDate),
+              lte(reservations.date, c.toDate),
+              sql`${reservations.status} not in ('cancelled', 'no_show')`,
+              // A null `shopSlug` on the closure means every location — the same
+              // rule `closureFor` applies when it refuses a date.
+              c.shopSlug ? eq(reservations.shopSlug, c.shopSlug) : undefined,
+            ),
+          )
+      : Promise.resolve([] as ReservationRow[]),
+    c.blocksPickup
+      ? db
+          .select()
+          .from(orders)
+          .where(
+            and(
+              isNotNull(orders.pickupSlotAt),
+              // Pickups are stored as an instant, so the range is compared as
+              // one: from midnight on the first day to midnight after the last.
+              gte(orders.pickupSlotAt, instantInRome(c.fromDate, "00:00")),
+              lt(orders.pickupSlotAt, instantInRome(shiftDay(c.toDate, 1), "00:00")),
+              // Handed over, cancelled or refunded: nothing left to collect.
+              sql`${orders.status} not in ('cancelled', 'refunded', 'fulfilled')`,
+              c.shopSlug ? eq(orders.shopSlug, c.shopSlug) : undefined,
+            ),
+          )
+      : Promise.resolve([] as OrderRow[]),
+  ]);
+  return {
+    reservations: res.filter((r) => (partial ? !!r.time && inWindow(r.time) : true)),
+    pickups: pick.filter((o) => !partial || inWindow(timeInRome(o.pickupSlotAt!))),
+  };
+}
+
+/**
+ * Which of a closure's bookings the next notice run would write to: those with
+ * an address, taken since the last run. That is what makes the button safe to
+ * press twice — the second press reaches only whoever booked in between.
+ */
+export function closureToNotify(c: ShopClosureRow, b: ClosureBookings): ClosureBookings {
+  const since = c.notifiedAt?.getTime() ?? 0;
+  const fresh = (createdAt: Date | null) => (createdAt?.getTime() ?? 0) > since;
+  return {
+    reservations: b.reservations.filter((r) => !!r.email && fresh(r.createdAt)),
+    pickups: b.pickups.filter((o) => !!o.email && fresh(o.createdAt)),
+  };
+}
+
+/**
+ * Closures under way or ahead, soonest first, each with what is already booked
+ * inside it.
  *
  * Declaring a closure deliberately does **not** cancel anything: a shop that
  * marks Ferragosto in July must not silently drop the four bookings already
@@ -1892,9 +2089,6 @@ export type ClosureWithBookings = ShopClosureRow & {
  * count is the whole point of this query — it is the difference between "the
  * day is now closed" and "the day is now closed and here are the four people
  * you need to ring".
- *
- * `past` rows are kept out: the table only grows, and last year's shutdown is
- * not something anyone is going to edit.
  */
 export async function adminGetClosures(today?: string): Promise<ClosureWithBookings[]> {
   const from = today ?? dateInRome();
@@ -1902,47 +2096,57 @@ export async function adminGetClosures(today?: string): Promise<ClosureWithBooki
     .select()
     .from(shopClosures)
     .where(gte(shopClosures.toDate, from))
-    .orderBy(asc(shopClosures.fromDate), asc(shopClosures.shopSlug));
-  if (rows.length === 0) return [];
+    .orderBy(asc(shopClosures.fromDate), asc(shopClosures.toDate), asc(shopClosures.shopSlug));
 
   return Promise.all(
     rows.map(async (c) => {
-      const [res] = await db
-        .select({ n: sql<number>`count(*)` })
-        .from(reservations)
-        .where(
-          and(
-            gte(reservations.date, c.fromDate),
-            lte(reservations.date, c.toDate),
-            sql`${reservations.status} not in ('cancelled', 'no_show')`,
-            // A null `shopSlug` on the closure means every location — the same
-            // rule `closureFor` applies when it refuses a date.
-            c.shopSlug ? eq(reservations.shopSlug, c.shopSlug) : undefined,
-          ),
-        );
-
-      // Pickups are stored as an instant, so the range is compared as one:
-      // from midnight on the first day to midnight after the last.
-      const [pick] = await db
-        .select({ n: sql<number>`count(*)` })
-        .from(orders)
-        .where(
-          and(
-            isNotNull(orders.pickupSlotAt),
-            gte(orders.pickupSlotAt, instantInRome(c.fromDate, "00:00")),
-            lte(orders.pickupSlotAt, instantInRome(c.toDate, "23:59")),
-            sql`${orders.status} not in ('cancelled', 'refunded')`,
-            c.shopSlug ? eq(orders.shopSlug, c.shopSlug) : undefined,
-          ),
-        );
-
+      const b = await closureBookings(c);
+      const n = closureToNotify(c, b);
       return {
         ...c,
-        reservationCount: Number(res?.n ?? 0),
-        pickupCount: Number(pick?.n ?? 0),
+        reservationCount: b.reservations.length,
+        pickupCount: b.pickups.length,
+        toNotify: n.reservations.length + n.pickups.length,
       };
     }),
   );
+}
+
+/** Closures already over, most recent first — the history the page can unfold. */
+export async function adminGetPastClosures(today?: string, limit = 60): Promise<ShopClosureRow[]> {
+  const from = today ?? dateInRome();
+  return db
+    .select()
+    .from(shopClosures)
+    .where(lt(shopClosures.toDate, from))
+    .orderBy(desc(shopClosures.toDate), asc(shopClosures.shopSlug))
+    .limit(limit);
+}
+
+/**
+ * The closure the dashboard should mention: one under way, or the first to
+ * start within `withinDays`. Narrowed to the viewer's location when they have
+ * one — the other shop's refit is not their morning.
+ */
+export async function adminGetNextClosure(
+  scope: string | null,
+  withinDays = 14,
+  today?: string,
+): Promise<ShopClosureRow | null> {
+  const from = today ?? dateInRome();
+  const [row] = await db
+    .select()
+    .from(shopClosures)
+    .where(
+      and(
+        gte(shopClosures.toDate, from),
+        lte(shopClosures.fromDate, shiftDay(from, withinDays)),
+        scope ? or(isNull(shopClosures.shopSlug), eq(shopClosures.shopSlug, scope)) : undefined,
+      ),
+    )
+    .orderBy(asc(shopClosures.fromDate))
+    .limit(1);
+  return row ?? null;
 }
 
 /** Every pickup window, active or not, in schedule order. */
@@ -1953,15 +2157,25 @@ export async function adminGetPickupSlots(): Promise<PickupSlotRow[]> {
     .orderBy(asc(pickupSlots.shopSlug), asc(pickupSlots.weekday), asc(pickupSlots.startTime));
 }
 
+/** One line of an order, as the sheet prints it so the bag can be packed from it. */
+export type FulfilmentLine = {
+  name: string;
+  quantity: number;
+  /** Set for a line weighed on the scale; `quantity` is then 1 and says nothing. */
+  weightKg: number | null;
+};
+
 export type FulfilmentDay = {
-  /** Pickups booked into a window on this day, earliest first. */
-  pickups: (typeof orders.$inferSelect)[];
-  /** Paid pickups still waiting with no window at all (the standing backlog). */
-  unscheduled: (typeof orders.$inferSelect)[];
-  /** Paid local deliveries not yet handed over, whatever day they were placed. */
-  deliveries: (typeof orders.$inferSelect)[];
-  /** Paid courier orders still to be packed and given a tracking number. */
-  shipments: (typeof orders.$inferSelect)[];
+  /** Pickups booked into a window in the range, earliest first, collected or not. */
+  pickups: OrderRow[];
+  /** Live pickups with no window at all (the standing backlog). */
+  unscheduled: OrderRow[];
+  /** Live local deliveries not yet handed over, whatever day they were placed. */
+  deliveries: OrderRow[];
+  /** Live courier orders still to be packed and given a tracking number. */
+  shipments: OrderRow[];
+  /** The lines of every order above, by order id. */
+  lines: Map<string, FulfilmentLine[]>;
   /**
    * True when a queue hit its cap and is showing only part of itself.
    *
@@ -1973,37 +2187,43 @@ export type FulfilmentDay = {
   truncated: boolean;
 };
 
-/**
- * Everything the counter has to physically do, for one day.
- *
- * The three lists are deliberately scoped differently, because the work is:
- * a pickup is an appointment and belongs to its day, while a delivery or a
- * shipment is a queue that has to be emptied regardless of when it was placed —
- * showing only today's would hide yesterday's unshipped order, which is exactly
- * the one that matters.
- *
- * "Paid but not fulfilled" is the definition of outstanding throughout the
- * gestionale (`stato=to-fulfil` on the orders list), reused here rather than
- * re-invented.
- */
 /** How many rows each standing backlog queue returns before it is truncated. */
 const QUEUE_LIMIT = 100;
 
+/**
+ * Everything the counter has to physically do, for one day (or a week of them).
+ *
+ * The lists are deliberately scoped differently, because the work is: a pickup
+ * is an appointment and belongs to its day, while a delivery or a shipment is a
+ * queue that has to be emptied regardless of when it was placed — showing only
+ * today's would hide yesterday's unshipped order, which is exactly the one that
+ * matters.
+ *
+ * "Live" is `liveFulfilmentWork`: pending or paid, minus abandoned card
+ * checkouts. The day's pickups additionally keep the ones already collected,
+ * so the sheet reads as the day's list rather than shrinking as the morning
+ * goes on; an unpaid card order is dropped there too, or the counter would be
+ * told to collect for a checkout that was never finished.
+ */
 export async function getFulfilmentDay(
   fromMs: number,
   toMs: number,
   shopSlug?: string,
   scope: string | null = null,
 ): Promise<FulfilmentDay> {
-  const outstanding = and(eq(orders.paymentStatus, "paid"), eq(orders.status, "paid"))!;
+  const onTheDay = and(notInArray(orders.status, ["cancelled", "refunded"]), liveCheckout)!;
   // Two different things stacked on the same column: `shopSlug` is what the
-  // operator asked to see, `scope` is what they are allowed to see. The second
-  // was missing, so the day sheet was the way around the boundary the orders
-  // list enforces.
+  // operator asked to see, `scope` is what they are allowed to see. A row with
+  // no location — a courier shipment, a zone no sede drives — belongs to the
+  // business as a whole and stays in view whichever sede is picked, exactly as
+  // `inShop` treats it: filtering it out made every shipment vanish the moment
+  // a sede was chosen.
   const atShop = (extra: SQL) =>
     and(
       extra,
-      shopSlug && shopSlug !== "all" ? eq(orders.shopSlug, shopSlug) : undefined,
+      shopSlug && shopSlug !== "all"
+        ? or(eq(orders.shopSlug, shopSlug), isNull(orders.shopSlug))
+        : undefined,
       inShop(orders.shopSlug, scope),
     )!;
 
@@ -2017,7 +2237,7 @@ export async function getFulfilmentDay(
             eq(orders.fulfilment, "pickup"),
             gte(orders.pickupSlotAt, new Date(fromMs)),
             lt(orders.pickupSlotAt, new Date(toMs)),
-            ne(orders.status, "cancelled"),
+            onTheDay,
           )!,
         ),
       )
@@ -2025,28 +2245,54 @@ export async function getFulfilmentDay(
     db
       .select()
       .from(orders)
-      .where(atShop(and(eq(orders.fulfilment, "pickup"), isNull(orders.pickupSlotAt), outstanding)!))
+      .where(
+        atShop(and(eq(orders.fulfilment, "pickup"), isNull(orders.pickupSlotAt), liveFulfilmentWork)!),
+      )
       .orderBy(asc(orders.createdAt))
       .limit(QUEUE_LIMIT),
     db
       .select()
       .from(orders)
-      .where(atShop(and(eq(orders.fulfilment, "delivery"), outstanding)!))
+      .where(atShop(and(eq(orders.fulfilment, "delivery"), liveFulfilmentWork)!))
       .orderBy(asc(orders.createdAt))
       .limit(QUEUE_LIMIT),
     db
       .select()
       .from(orders)
-      .where(atShop(and(eq(orders.fulfilment, "shipping"), outstanding)!))
+      .where(atShop(and(eq(orders.fulfilment, "shipping"), liveFulfilmentWork)!))
       .orderBy(asc(orders.createdAt))
       .limit(QUEUE_LIMIT),
   ]);
+
+  // What is in each bag, in one query rather than one per row. The sheet is
+  // what the counter packs from, and it printed a name and a total: the lines
+  // were a click away, on a screen nobody has open at the scale.
+  const ids = [...pickups, ...unscheduled, ...deliveries, ...shipments].map((o) => o.id);
+  const lines = new Map<string, FulfilmentLine[]>();
+  if (ids.length > 0) {
+    const rows = await db
+      .select({
+        orderId: orderItems.orderId,
+        name: orderItems.name,
+        quantity: orderItems.quantity,
+        weightKg: orderItems.weightKg,
+      })
+      .from(orderItems)
+      .where(inArray(orderItems.orderId, ids))
+      .orderBy(asc(orderItems.id));
+    for (const r of rows) {
+      const list = lines.get(r.orderId) ?? [];
+      list.push({ name: r.name, quantity: r.quantity, weightKg: r.weightKg });
+      lines.set(r.orderId, list);
+    }
+  }
 
   return {
     pickups,
     unscheduled,
     deliveries,
     shipments,
+    lines,
     truncated: [unscheduled, deliveries, shipments].some((q) => q.length >= QUEUE_LIMIT),
   };
 }
@@ -2259,4 +2505,40 @@ export async function quickSearch(rawTerm: string, opts: { scope?: string | null
         .join(" · "),
     })),
   ];
+}
+
+// ── Shops ────────────────────────────────────────────────────────────────────
+
+/**
+ * Rows that still point at a sede, by table. `deleteShop` refuses while any is
+ * non-zero and names them; the FOREIGN KEY error alone cannot say which.
+ */
+export async function adminShopReferences(slug: string): Promise<{
+  products: number;
+  orders: number;
+  reservations: number;
+  users: number;
+}> {
+  const count = (n: number | null | undefined) => Number(n ?? 0);
+  const [p, o, r, u] = await Promise.all([
+    db.select({ n: sql<number>`count(*)` }).from(products).where(eq(products.shopSlug, slug)),
+    db.select({ n: sql<number>`count(*)` }).from(orders).where(eq(orders.shopSlug, slug)),
+    db.select({ n: sql<number>`count(*)` }).from(reservations).where(eq(reservations.shopSlug, slug)),
+    db.select({ n: sql<number>`count(*)` }).from(users).where(eq(users.shopSlug, slug)),
+  ]);
+  return {
+    products: count(p[0]?.n),
+    orders: count(o[0]?.n),
+    reservations: count(r[0]?.n),
+    users: count(u[0]?.n),
+  };
+}
+
+/** Closures not yet over, soonest first — the plain rows, no booking counts. */
+export function adminUpcomingClosures(today: string = dateInRome()) {
+  return db
+    .select()
+    .from(shopClosures)
+    .where(gte(shopClosures.toDate, today))
+    .orderBy(asc(shopClosures.fromDate), asc(shopClosures.shopSlug));
 }

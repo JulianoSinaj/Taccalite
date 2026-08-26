@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { reservations } from "@/lib/db/schema";
 import { getShopBySlug, getShops, getSetting, getClosures } from "@/lib/db/queries";
 import { closureFor, closureMessage } from "@/lib/closures";
+import { openStateAt } from "@/lib/hours";
 import { dateInRome } from "@/lib/time";
 import { sendMail } from "@/lib/mail/mailer";
 import {
@@ -493,6 +494,20 @@ export async function createReservation(
     // stale tab, a clock skew, or someone poking the endpoint.
     if (date < dateInRome()) {
       throw new ReservationNotAllowedError("Quella data è già passata. Scegline un'altra.");
+    }
+
+    // Opening hours. The public form offers only the open slots, but a stale
+    // tab or a direct POST could still book a table at an hour the sede is
+    // shut. Unknown hours (null) enforce nothing — never refuse on a guess.
+    if (input.type === "table" && input.time) {
+      const at = openStateAt(shop, date, input.time);
+      if (at && !at.open) {
+        throw new ReservationNotAllowedError(
+          at.nextChange
+            ? `Alle ${input.time} la sede è chiusa: apre alle ${at.nextChange}. Scegli un orario di apertura.`
+            : `Alle ${input.time} la sede è chiusa. Scegli un altro giorno o orario.`,
+        );
+      }
     }
 
     // Closed days. The weekly schedule cannot express them, so without this the

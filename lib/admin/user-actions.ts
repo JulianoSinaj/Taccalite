@@ -2,9 +2,9 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { users } from "@/lib/db/schema";
+import { loyaltyAccounts, users } from "@/lib/db/schema";
 import { requireAdmin, requireRole, deleteUserSessions } from "@/lib/auth/session";
 import { hashPasswordAsync } from "@/lib/auth/password";
 import { countAdmins } from "@/lib/admin/queries";
@@ -293,6 +293,26 @@ export async function createCustomerAccount(_prev: ActionState, fd: FormData): P
       if (clash) {
         throw new ActionError("Esiste già un account con questa email.");
       }
+    } else if (d.phone) {
+      // A phone-only card has nothing but the number to identify it, so the
+      // same customer typed twice at the till would silently get two cards and
+      // two balances. Compared with separators stripped on both sides, and only
+      // against live accounts — an anonymised one has no phone left anyway.
+      const digits = d.phone.replace(/[\s\-./()]/g, "");
+      const stored = sql`replace(replace(replace(replace(replace(replace(${users.phone}, ' ', ''), '-', ''), '.', ''), '/', ''), '(', ''), ')', '')`;
+      const [same] = await db
+        .select({ name: users.name, cardNumber: loyaltyAccounts.cardNumber })
+        .from(users)
+        .leftJoin(loyaltyAccounts, eq(loyaltyAccounts.userId, users.id))
+        .where(and(eq(users.active, true), sql`${stored} = ${digits}`))
+        .limit(1);
+      if (same) {
+        throw new ActionError(
+          `Esiste già una tessera con questo telefono: ${same.name || "cliente"}${
+            same.cardNumber ? ` (${same.cardNumber})` : ""
+          }.`,
+        );
+      }
     }
 
     const username = await deriveUsername(d.email ?? `cliente-${randomBytes(4).toString("hex")}@banco.local`);
@@ -330,7 +350,14 @@ export async function createCustomerAccount(_prev: ActionState, fd: FormData): P
 
     revalidatePath("/admin/users");
     revalidatePath("/admin/loyalty");
-    return ok(`Tessera ${account.cardNumber} creata per ${d.name}.`);
+    // The card number must outlive the toast: the counter screen keeps it on
+    // display and can carry it straight into the first accrual.
+    return ok(`Tessera ${account.cardNumber} creata per ${d.name}.`, {
+      cardNumber: account.cardNumber,
+      name: d.name,
+      userId: created.id,
+      email: d.email ?? null,
+    });
   });
 }
 

@@ -36,6 +36,8 @@ import {
 import { isAdmin, getCurrentUser } from "@/lib/auth/session";
 import { shopScope, lockShop, shopChips } from "@/lib/admin/scope";
 import { dateInRome } from "@/lib/time";
+import { getClosures } from "@/lib/db/queries";
+import { closureFor, closureTimeLabel } from "@/lib/closures";
 import type { ReservationRow } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -104,6 +106,7 @@ export default async function AdminReservations({ searchParams }: SP) {
   const filters = reservationFilters({ ...sp, negozio: lockShop(sp.negozio, scope) });
   const viewer = await getCurrentUser();
   const today = dateInRome();
+  const closures = await getClosures(today);
   const [{ rows, total, pageCount }, shops, admin, views, deposits, undecided, expired] =
     await Promise.all([
       getReservationsPage({ ...filters, page }),
@@ -276,6 +279,10 @@ export default async function AdminReservations({ searchParams }: SP) {
               const open = r.status === "pending" || r.status === "confirmed";
               const isPast = r.date < today;
               const deposit = depositLine(r);
+              // A live booking on a day the shop has since closed: the one row
+              // in the list that needs a phone call, and it looked like any other.
+              const closed =
+                open && !isPast ? closureFor(closures, r.shopSlug, r.date, "reservations", r.time || undefined) : null;
               return (
                 <Panel key={r.id}>
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -295,6 +302,14 @@ export default async function AdminReservations({ searchParams }: SP) {
                           {open && isPast && (
                             <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-warn-soft-fg uppercase">
                               Scaduta
+                            </span>
+                          )}
+                          {closed && (
+                            <span
+                              className="rounded-full bg-danger-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-danger-soft-fg uppercase"
+                              title={closed.reason || undefined}
+                            >
+                              Giorno chiuso{closureTimeLabel(closed) ? ` ${closureTimeLabel(closed)}` : ""}
                             </span>
                           )}
                           {r.waitlisted && r.status !== "cancelled" && (

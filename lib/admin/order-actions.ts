@@ -10,6 +10,7 @@ import {
   parseForm,
   orderStatusInput,
   orderSettleInput,
+  orderHandOverInput,
   manualOrderInput,
   orderDetailsInput,
   orderFiscalInput,
@@ -54,7 +55,7 @@ type OrderRow = typeof orders.$inferSelect;
  */
 async function notifyOrderStatus(
   order: OrderRow,
-  status: "fulfilled" | "cancelled" | "refunded",
+  status: "ready" | "fulfilled" | "cancelled" | "refunded",
   /** Refund detail, so a partial refund quotes the amount actually returned
    *  rather than the order total. */
   refund?: { refundAmountCents: number; partialRefund: boolean },
@@ -256,6 +257,10 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
           ? "Per la consegna a domicilio servono indirizzo, città e CAP."
           : "Per la spedizione servono indirizzo, città e CAP.",
       );
+    }
+    // Same rule as the checkout: whoever drives the round must be able to call.
+    if (d.fulfilment === "delivery" && !d.phone) {
+      throw new ActionError("Per la consegna a domicilio serve un telefono: chi consegna deve poter chiamare.");
     }
 
     // Link a known customer by email so the sale shows in their history and (when
@@ -514,6 +519,9 @@ export async function updateOrderDetails(_prev: ActionState, fd: FormData): Prom
           ? "Per la consegna a domicilio servono indirizzo, città e CAP."
           : "Per la spedizione servono indirizzo, città e CAP.",
       );
+    } else if (d.fulfilment === "delivery" && !d.phone) {
+      // Same rule as the checkout: whoever drives the round must be able to call.
+      throw new ActionError("Per la consegna a domicilio serve un telefono: chi consegna deve poter chiamare.");
     }
 
     await db
@@ -865,9 +873,17 @@ export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promi
         .where(eq(orders.id, d.id));
     }
 
-    // Email on fulfilled/cancelled transitions. The paid confirmation is already
-    // sent by finalizeOrder; refunds are blocked above.
-    if ((d.status === "fulfilled" || d.status === "cancelled") && d.status !== order.status) {
+    // Email on the transitions the customer has to hear about. The paid
+    // confirmation is already sent by finalizeOrder; refunds are blocked above.
+    // A courier shipment is "evasa" when it leaves, and its email carries the
+    // tracking. A pickup or a van delivery is "evasa" when the goods are in the
+    // customer's hands — not news to them — and the "pronto per il ritiro" /
+    // "in consegna" notice has its own step (`markOrderReady`). This used to
+    // send that notice here, as the customer walked out of the door with the bag.
+    if (
+      d.status !== order.status &&
+      (d.status === "cancelled" || (d.status === "fulfilled" && order.fulfilment === "shipping"))
+    ) {
       await notifyOrderStatus({ ...cur, status: d.status }, d.status);
     }
 
@@ -884,6 +900,7 @@ export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promi
 
     revalidatePath("/admin/orders");
     revalidatePath(`/admin/orders/${d.id}`);
+    revalidatePath("/admin/fulfilment/oggi");
     return ok("Ordine aggiornato.");
   });
 }
@@ -1024,9 +1041,17 @@ export async function resendOrderEmail(_prev: ActionState, fd: FormData): Promis
     if (!order.email) throw new ActionError("Questo ordine non ha un indirizzo email.");
 
     let what: string;
-    if (order.status === "fulfilled" || order.status === "cancelled") {
-      await notifyOrderStatus(order, order.status);
-      what = order.status === "fulfilled" ? "avviso di evasione" : "avviso di annullamento";
+    if (order.status === "cancelled") {
+      await notifyOrderStatus(order, "cancelled");
+      what = "avviso di annullamento";
+    } else if (order.status === "fulfilled" && order.fulfilment === "shipping") {
+      await notifyOrderStatus(order, "fulfilled");
+      what = "avviso di spedizione";
+    } else if (order.readyAt && order.fulfilment !== "shipping") {
+      // The last thing a pickup or a delivery was told is that it was ready —
+      // whether or not it has since been handed over.
+      await notifyOrderStatus(order, "ready");
+      what = order.fulfilment === "delivery" ? "avviso «in consegna»" : "avviso «pronto per il ritiro»";
     } else if (order.paymentStatus === "paid" || settlesOnHandover(order.paymentMethod)) {
       const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
       const shop = order.shopSlug ? await getShopBySlug(order.shopSlug) : null;
@@ -1122,6 +1147,7 @@ export async function settleOrderPayment(_prev: ActionState, fd: FormData): Prom
     revalidatePath(`/admin/orders/${d.id}`);
     revalidatePath("/admin/orders");
     revalidatePath("/admin/fulfilment");
+    revalidatePath("/admin/fulfilment/oggi");
     return ok(
       `Incasso di ${(order.totalCents / 100).toFixed(2)} € registrato (${PAYMENT_INSTRUMENT_LABEL[d.paidWith]}).`,
     );
@@ -1243,6 +1269,110 @@ export async function refundOrder(_prev: ActionState, fd: FormData): Promise<Act
       isPartial
         ? `Rimborso parziale di ${(amountCents / 100).toFixed(2)} € emesso. Residuo: ${((order.totalCents - outcome.refundedCents) / 100).toFixed(2)} €.`
         : "Rimborso emesso.",
+    );
+  });
+}
+
+/**
+ * Tell the customer the order is ready — "pronto per il ritiro" for a pickup,
+ * "in consegna" for a van delivery — and remember that they were told.
+ *
+ * This is the step `fulfilled` used to stand in for. The only button that
+ * could say "come and collect" was the one that closed the order, so the
+ * notice went out as the customer left with the bag, and an order ready on the
+ * shelf looked exactly like one nobody had started. A courier shipment has no
+ * such step: its notice is the tracking email, sent when it is marked evasa.
+ *
+ * Pressing it again re-sends: emails go missing for all the reasons
+ * `resendOrderEmail` lists, and a second "è pronto" does no harm.
+ */
+export async function markOrderReady(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const id = String(fd.get("id") ?? "").trim();
+    if (!id) throw new ActionError("Ordine non valido.");
+    const order = await mustFindOrder(id);
+
+    if (order.fulfilment === "shipping") {
+      throw new ActionError("Una spedizione si avvisa con il tracking: inseriscilo e segnala come evasa.");
+    }
+    if (order.status === "cancelled" || order.status === "refunded") {
+      throw new ActionError("Questo ordine è annullato o rimborsato: non c'è niente da preparare.");
+    }
+    if (order.status === "fulfilled") {
+      throw new ActionError("Questo ordine è già stato consegnato.");
+    }
+    // A card checkout is not an order until the money arrives: telling the
+    // customer it is ready would confirm a sale that may never complete.
+    if (order.paymentMethod === "card" && order.paymentStatus === "unpaid") {
+      throw new ActionError(
+        "Il pagamento con carta non è ancora arrivato: l'ordine non va preparato finché non risulta pagato.",
+      );
+    }
+
+    const now = new Date();
+    const resent = order.readyAt != null;
+    await db.update(orders).set({ readyAt: now, updatedAt: now }).where(eq(orders.id, id));
+    await notifyOrderStatus({ ...order, readyAt: now }, "ready");
+
+    const what = order.fulfilment === "delivery" ? "in consegna" : "pronto per il ritiro";
+    await logAudit({
+      actor,
+      action: "order.ready",
+      entity: "order",
+      entityId: order.id,
+      summary: `Ordine ${order.orderNumber}: ${what}${resent ? " (avviso reinviato)" : ""} — email a ${order.email}`,
+      meta: { fulfilment: order.fulfilment, previousReadyAt: order.readyAt, resent },
+    });
+
+    revalidatePath("/admin/orders");
+    revalidatePath(`/admin/orders/${id}`);
+    revalidatePath("/admin/fulfilment/oggi");
+    return ok(`Segnato ${what}: email inviata a ${order.email}.`);
+  });
+}
+
+/**
+ * The counter's one gesture: take the money, if still owed, and hand over.
+ *
+ * For an order to be paid on handover the day sheet demanded two screens — the
+ * detail page to register the payment, then back to press "Consegnato" — for
+ * the transaction that happens forty times on a Saturday morning. This runs
+ * the two existing actions in turn, so every rule, side-effect and audit line
+ * of each still applies; an order already paid simply skips the first.
+ */
+export async function handOverOrder(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    await requireAdmin();
+    const d = parseForm(orderHandOverInput, fd);
+    const order = await mustFindOrder(d.id);
+
+    if (order.status === "fulfilled") throw new ActionError("Questo ordine è già stato consegnato.");
+    if (order.fulfilment === "shipping") {
+      throw new ActionError("Una spedizione si chiude dal dettaglio ordine, inserendo il tracking.");
+    }
+
+    const collected = order.paymentStatus === "unpaid";
+    if (collected) {
+      if (!d.paidWith) throw new ActionError("Indica come è stato pagato: contanti o POS.");
+      const settle = new FormData();
+      settle.set("id", d.id);
+      settle.set("paidWith", d.paidWith);
+      const res = await settleOrderPayment({ status: "idle" }, settle);
+      if (res.status === "error") throw new ActionError(res.message ?? "Incasso non registrato.");
+    }
+
+    const close = new FormData();
+    close.set("id", d.id);
+    close.set("status", "fulfilled");
+    const res = await updateOrderStatus({ status: "idle" }, close);
+    if (res.status === "error") throw new ActionError(res.message ?? "Ordine non aggiornato.");
+
+    revalidatePath("/admin/fulfilment/oggi");
+    return ok(
+      collected
+        ? `Incasso di ${(order.totalCents / 100).toFixed(2)} € registrato e ordine consegnato.`
+        : "Ordine consegnato.",
     );
   });
 }

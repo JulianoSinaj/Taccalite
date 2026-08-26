@@ -13,6 +13,7 @@ import {
   closureTimeLabel,
   type ClosureLike,
 } from "@/lib/closures";
+import { timeSlotsOn, type DayHours, type HoursRow } from "@/lib/hours";
 
 type ShopOption = {
   slug: string;
@@ -21,18 +22,32 @@ type ShopOption = {
   address?: string;
   porchettaEnabled?: boolean;
   reservationsEnabled?: boolean;
+  /** Opening hours, so the time picker offers only the hours the sede is open. */
+  hours?: HoursRow[] | null;
+  hoursStructured?: DayHours[] | null;
 };
 type ResType = "table" | "porchetta" | "order";
 type Status = "idle" | "submitting" | "success" | "error";
 
 const PREFERENCES = ["Tavolo tranquillo", "Celebrazione speciale", "Degustazione guidata"];
 
-// Slot ogni 30 minuti entro l'orario di apertura (9:00 – 20:00)
-const timeSlots = Array.from({ length: 23 }, (_, i) => {
+// Generic half-hour slots (9:00 – 20:00), offered only when a sede's opening
+// hours cannot be read; otherwise the slots come from the shop's own schedule.
+const FALLBACK_SLOTS = Array.from({ length: 23 }, (_, i) => {
   const h = 9 + Math.floor(i / 2);
   const m = i % 2 === 0 ? "00" : "30";
   return `${String(h).padStart(2, "0")}:${m}`;
 });
+
+/**
+ * Slots for a table at `shop` on `date`. `null` while no date is chosen (show
+ * the generic list so the field is never empty), `[]` when the sede is closed
+ * that weekday, otherwise every half hour inside the opening ranges.
+ */
+function slotsFor(shop: ShopOption | undefined, date: string): string[] | null {
+  if (!shop || !date) return null;
+  return timeSlotsOn({ hours: shop.hours ?? null, hoursStructured: shop.hoursStructured ?? null }, date);
+}
 
 /** Next Saturday as yyyy-mm-dd, for the porchetta pickup default. */
 function nextSaturdayIso(): string {
@@ -104,6 +119,17 @@ export default function ReservationForm({
 
   // Which location the chosen date is being tested against.
   const activeShop = type === "porchetta" ? porchettaShop : tableShop;
+  // The hours the chosen sede keeps on the chosen day decide which times are
+  // offered — the API refuses a closed hour anyway; this keeps it unpickable.
+  const daySlots = slotsFor(
+    reservationShops.find((s) => s.slug === tableShop),
+    type === "table" ? date : "",
+  );
+  const timeSlots = daySlots ?? FALLBACK_SLOTS;
+  const closedWeekday = type === "table" && daySlots != null && daySlots.length === 0;
+  // A previously picked time that the new day does not offer must not linger
+  // as the form's value — the select would show "--:--" but still post it.
+  const timeValue = time && timeSlots.includes(time) ? time : "";
   const hitClosure = date
     ? closureFor(closures, activeShop, date, "reservations", type === "table" && time ? time : undefined)
     : null;
@@ -273,12 +299,14 @@ export default function ReservationForm({
                 id="time"
                 name="time"
                 required
-                value={time}
+                value={timeValue}
                 onChange={(e) => setTime(e.target.value)}
+                disabled={closedWeekday}
+                aria-describedby={closedWeekday ? "time-closed" : undefined}
                 className={inputClasses}
               >
                 <option value="" disabled>
-                  --:--
+                  {closedWeekday ? "Chiuso" : "--:--"}
                 </option>
                 {timeSlots.map((slot) => (
                   <option key={slot} value={slot}>
@@ -286,6 +314,11 @@ export default function ReservationForm({
                   </option>
                 ))}
               </select>
+              {closedWeekday && !hitClosure && (
+                <p id="time-closed" role="status" className="text-sm font-medium text-red-700">
+                  In questo giorno della settimana la sede è chiusa. Scegli un&apos;altra data.
+                </p>
+              )}
             </Field>
           </div>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -485,7 +518,7 @@ export default function ReservationForm({
 
       <button
         type="submit"
-        disabled={status === "submitting" || !!hitClosure}
+        disabled={status === "submitting" || !!hitClosure || closedWeekday}
         data-magnetic
         className="w-full rounded-full bg-gold px-8 py-4 text-xs font-bold tracking-widest text-brown-950 uppercase shadow-[0_10px_20px_-5px_rgba(225,190,100,0.3)] transition-all duration-500 hover:-translate-y-1 hover:bg-gold-dark hover:shadow-[0_20px_30px_-10px_rgba(225,190,100,0.4)] disabled:pointer-events-none disabled:opacity-60"
       >

@@ -149,6 +149,9 @@ export async function enqueueMail(
 /** After this many failed attempts a message stops being retried automatically. */
 export const OUTBOX_MAX_ATTEMPTS = 5;
 
+/** Sent messages older than this are pruned by the maintenance sweep. */
+export const OUTBOX_RETENTION_DAYS = 90;
+
 /**
  * What actually happened to the customer's copy of an order email.
  *
@@ -316,6 +319,3 @@ export async function checkMailer(): Promise<{
     };
   }
 }
-
-/** @deprecated Use {@link checkMailer}. Kept as the previous export name. */
-export const verifyMailer = checkMailer;

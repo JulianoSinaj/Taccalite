@@ -1,11 +1,13 @@
 import "server-only";
 import { customAlphabet } from "nanoid";
-import { and, desc, eq, gt, lte, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lte, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { loyaltyAccounts, loyaltyTransactions, redemptions, rewards, users } from "@/lib/db/schema";
 import { sendMail } from "@/lib/mail/mailer";
 import { rewardUnlockedEmail } from "@/lib/mail/templates";
 import { getSetting } from "@/lib/db/queries";
+import { formatEuro } from "@/lib/format";
+import { pointsForEuros } from "@/lib/loyalty-rules";
 
 /** Thrown inside the redeem transaction to roll it back on insufficient points. */
 class InsufficientPointsError extends Error {}
@@ -91,18 +93,24 @@ export type PurchaseAccrualResult =
 /**
  * Accrue loyalty points for an in-shop purchase, identified by card number.
  *
- * Points = floor(euros * loyalty.pointsPerEuro). This is ACCRUAL only (the delta
- * is always ≥ 0, never a debit), which is why it's safe to expose to staff: they
- * can only ever credit points tied to a real purchase, never remove them. Unknown
- * cards and non-positive amounts are rejected without touching any balance.
+ * Points follow `pointsForEuros` — the same rule the counter screen previews.
+ * This is ACCRUAL only (the delta is always ≥ 0, never a debit), which is why
+ * it's safe to expose to staff: they can only ever credit points tied to a real
+ * purchase, never remove them. Unknown cards and non-positive amounts are
+ * rejected without touching any balance, and so is every card while the
+ * programme is switched off — the same switch the order accrual honours.
  */
 export async function addPointsForPurchase(
   cardNumber: string,
   euros: number,
   byUserId: string,
+  receipt?: string,
 ): Promise<PurchaseAccrualResult> {
   if (!Number.isFinite(euros) || euros <= 0) {
     return { ok: false, error: "Importo non valido" };
+  }
+  if (!(await getSetting<boolean>("loyalty.enabled", true))) {
+    return { ok: false, error: "Il programma fedeltà è disattivato" };
   }
 
   const account = await getAccountByCard(cardNumber);
@@ -115,20 +123,147 @@ export async function addPointsForPurchase(
   }
 
   const pointsPerEuro = await getSetting<number>("loyalty.pointsPerEuro", 1);
-  const points = Math.floor(euros * pointsPerEuro);
+  const points = pointsForEuros(euros, pointsPerEuro);
   if (points <= 0) {
     return { ok: false, error: "L'importo non genera punti" };
   }
 
-  const { points: balance } = await addPoints(
-    account.userId,
-    points,
-    `Acquisto in negozio (€${euros})`,
-    byUserId,
-  );
+  // The reason is what the customer reads in their own history, so it is
+  // formatted like every other price on the site, with the receipt number when
+  // the operator noted one — that is what ties the credit back to the till.
+  const amount = formatEuro(Math.round(euros * 100));
+  const reason = `Acquisto in negozio (${amount})${receipt ? ` · scontrino ${receipt}` : ""}`;
+  const { points: balance } = await addPoints(account.userId, points, reason, byUserId);
 
   const name = account.name || account.username;
   return { ok: true, userId: account.userId, name, added: points, balance };
+}
+
+export type CounterView = {
+  userId: string;
+  name: string;
+  points: number;
+  cardNumber: string;
+  active: boolean;
+  /** The most recent credit, so the till can spot the same receipt scanned twice. */
+  lastAccrual: { delta: number; reason: string; createdAt: Date | null } | null;
+  /** Rewards already claimed and waiting to be handed over. */
+  pending: { id: string; rewardName: string; pointsSpent: number; createdAt: Date | null }[];
+  /** Rewards this holder can claim right now: available, affordable, under their cap. */
+  rewards: { id: string; name: string; points: number }[];
+};
+
+/**
+ * Everything the counter needs to know about a scanned card in one read: who
+ * it is, what they have, what they were last credited, what is waiting for
+ * them and what they could take home today. `redeemReward` remains the
+ * authority on the last one — this list is the friendly preview.
+ */
+export async function getCounterView(cardNumber: string): Promise<CounterView | null> {
+  const account = await getAccountByCard(cardNumber);
+  if (!account) return null;
+
+  const [[lastAccrual], pending, catalogue, claimed] = await Promise.all([
+    db
+      .select({
+        delta: loyaltyTransactions.delta,
+        reason: loyaltyTransactions.reason,
+        createdAt: loyaltyTransactions.createdAt,
+      })
+      .from(loyaltyTransactions)
+      .where(and(eq(loyaltyTransactions.userId, account.userId), gt(loyaltyTransactions.delta, 0)))
+      .orderBy(desc(loyaltyTransactions.createdAt))
+      .limit(1),
+    db
+      .select({
+        id: redemptions.id,
+        rewardName: redemptions.rewardName,
+        pointsSpent: redemptions.pointsSpent,
+        createdAt: redemptions.createdAt,
+      })
+      .from(redemptions)
+      .where(and(eq(redemptions.userId, account.userId), eq(redemptions.status, "pending")))
+      .orderBy(desc(redemptions.createdAt)),
+    db.select().from(rewards).where(eq(rewards.active, true)).orderBy(rewards.sortOrder),
+    db
+      .select({ rewardId: redemptions.rewardId, count: sql<number>`count(*)` })
+      .from(redemptions)
+      .where(and(eq(redemptions.userId, account.userId), ne(redemptions.status, "cancelled")))
+      .groupBy(redemptions.rewardId),
+  ]);
+
+  const taken = new Map(claimed.map((c) => [c.rewardId, c.count]));
+  const now = new Date();
+  const affordable = catalogue
+    .filter(
+      (r) =>
+        rewardAvailability(r, now) == null &&
+        r.points <= account.points &&
+        (r.maxPerCustomer == null || (taken.get(r.id) ?? 0) < r.maxPerCustomer),
+    )
+    .map((r) => ({ id: r.id, name: r.name, points: r.points }));
+
+  return {
+    userId: account.userId,
+    name: account.name || account.username,
+    points: account.points,
+    cardNumber: account.cardNumber,
+    active: account.active,
+    lastAccrual: lastAccrual ?? null,
+    pending,
+    rewards: affordable,
+  };
+}
+
+export type CounterRedeemResult =
+  | {
+      ok: true;
+      userId: string;
+      name: string;
+      rewardName: string;
+      pointsSpent: number;
+      balance: number;
+      redemptionId: string;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Claim a reward for a customer standing at the counter, identified by card.
+ *
+ * Same checks and the same atomic debit as the customer's own "Riscatta", then
+ * the redemption is marked fulfilled straight away — the prize is being handed
+ * across the counter, so there is nothing left to deliver. This is what lets a
+ * card created at the till (no email, no login) actually spend its points.
+ */
+export async function redeemRewardAtCounter(
+  cardNumber: string,
+  rewardId: string,
+  byUserId: string,
+): Promise<CounterRedeemResult> {
+  const account = await getAccountByCard(cardNumber);
+  if (!account) return { ok: false, error: "Tessera non trovata" };
+  if (!account.active) {
+    return { ok: false, error: "Questa tessera appartiene a un account disattivato" };
+  }
+
+  const res = await redeemReward(account.userId, rewardId, byUserId);
+  if (!res.ok) return res;
+
+  const [row] = await db
+    .update(redemptions)
+    .set({ status: "fulfilled", fulfilledAt: new Date() })
+    .where(eq(redemptions.id, res.reference))
+    .returning({ rewardName: redemptions.rewardName, pointsSpent: redemptions.pointsSpent });
+
+  return {
+    ok: true,
+    userId: account.userId,
+    name: account.name || account.username,
+    rewardName: row.rewardName,
+    pointsSpent: row.pointsSpent,
+    balance: res.pointsLeft,
+    redemptionId: res.reference,
+  };
 }
 
 export async function getLoyaltySummary(userId: string) {
@@ -221,6 +356,61 @@ export async function addPoints(
   return { points: result.points, applied: result.applied };
 }
 
+/**
+ * Take back the points an order earned, in proportion to the money refunded.
+ *
+ * Accrual left a ledger row per order (`Ordine X` from checkout, `Vendita al
+ * banco X` from the till); any reversal already booked (`Rimborso ordine X`) is
+ * netted out, so the target is cumulative: a second partial refund, or the
+ * webhook and the admin action both landing for the same refund, converge on
+ * the same number instead of debiting twice. Points the customer has already
+ * spent can't be taken — the debit stops at the balance, and the ledger says so.
+ */
+export async function reversePointsForOrder(
+  userId: string,
+  orderNumber: string,
+  refundedCents: number,
+  totalCents: number,
+  byUserId?: string | null,
+): Promise<{ applied: number }> {
+  if (totalCents <= 0 || refundedCents <= 0) return { applied: 0 };
+  const earnReasons = [`Ordine ${orderNumber}`, `Vendita al banco ${orderNumber}`];
+  const reverseReason = `Rimborso ordine ${orderNumber}`;
+
+  const [[earnedRow], [reversedRow], [account]] = await Promise.all([
+    db
+      .select({ n: sql<number>`coalesce(sum(${loyaltyTransactions.delta}), 0)` })
+      .from(loyaltyTransactions)
+      .where(
+        and(
+          eq(loyaltyTransactions.userId, userId),
+          inArray(loyaltyTransactions.reason, earnReasons),
+          gt(loyaltyTransactions.delta, 0),
+        ),
+      ),
+    db
+      .select({ n: sql<number>`coalesce(sum(-${loyaltyTransactions.delta}), 0)` })
+      .from(loyaltyTransactions)
+      .where(and(eq(loyaltyTransactions.userId, userId), eq(loyaltyTransactions.reason, reverseReason))),
+    db
+      .select({ points: loyaltyAccounts.points })
+      .from(loyaltyAccounts)
+      .where(eq(loyaltyAccounts.userId, userId))
+      .limit(1),
+  ]);
+
+  const earned = Number(earnedRow?.n ?? 0);
+  if (earned <= 0) return { applied: 0 };
+  const share = Math.min(refundedCents, totalCents) / totalCents;
+  const target = Math.min(earned, Math.round(earned * share));
+  const owed = target - Number(reversedRow?.n ?? 0);
+  const toRemove = Math.min(owed, account?.points ?? 0);
+  if (toRemove <= 0) return { applied: 0 };
+
+  const { applied } = await addPoints(userId, -toRemove, reverseReason, byUserId ?? undefined);
+  return { applied: -applied };
+}
+
 /** Email the customer if their balance just crossed one or more reward thresholds. */
 async function notifyRewardsUnlocked(userId: string, prevPoints: number, newPoints: number): Promise<void> {
   if (newPoints <= prevPoints) return;
@@ -287,7 +477,12 @@ export function rewardAvailability(
  * single transaction, so two concurrent redeems can't both pass the check (TOCTOU)
  * and a crash mid-way can't leave a debit without its audit row.
  */
-export async function redeemReward(userId: string, rewardId: string): Promise<RedeemResult> {
+export async function redeemReward(
+  userId: string,
+  rewardId: string,
+  /** The staff member acting for the customer, when claimed at the counter. */
+  byUserId?: string,
+): Promise<RedeemResult> {
   const [reward] = await db
     .select()
     .from(rewards)
@@ -373,6 +568,7 @@ export async function redeemReward(userId: string, rewardId: string): Promise<Re
           delta: -reward.points,
           balanceAfter: newBalance,
           reason: `Riscatto: ${reward.name}`,
+          createdByUserId: byUserId ?? null,
         })
 ;
       const [redemption] = await tx

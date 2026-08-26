@@ -26,3 +26,24 @@ export function formatEuro(cents: number): string {
 export function formatKg(kg: number): string {
   return Number.isInteger(kg) ? String(kg) : kg.toFixed(1).replace(".", ",");
 }
+
+const shortDate = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+/**
+ * "adesso", "5 min fa", "2 ore fa", "ieri", else a short date — for the counter
+ * screen, where "when was this card last credited?" is a same-shift question.
+ * `now` is passed in so callers render deterministically.
+ */
+export function formatRelativeTime(value: Date | string | number, now: number): string {
+  const t = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  if (!Number.isFinite(t)) return "";
+  const minutes = Math.floor(Math.max(0, now - t) / 60_000);
+  if (minutes < 1) return "adesso";
+  if (minutes < 60) return `${minutes} min fa`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours === 1 ? "1 ora fa" : `${hours} ore fa`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "ieri";
+  if (days < 7) return `${days} giorni fa`;
+  return shortDate.format(t);
+}

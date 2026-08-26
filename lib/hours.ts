@@ -450,3 +450,77 @@ export function shopWeekGrid(shop: {
 export function clockNow(now: Date = new Date()): { day: number; minutes: number } {
   return { day: isoWeekday(now), minutes: now.getHours() * 60 + now.getMinutes() };
 }
+
+// ── Opening hours on a calendar date ─────────────────────────────────────────
+
+/** ISO weekday (1 = Monday … 7 = Sunday) of a `yyyy-mm-dd`, or null if malformed. */
+export function isoWeekdayOf(isoDate: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const probe = new Date(Date.UTC(y, mo - 1, d));
+  if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== mo - 1 || probe.getUTCDate() !== d) return null;
+  const js = probe.getUTCDay();
+  return js === 0 ? 7 : js;
+}
+
+/**
+ * The opening ranges (minutes since midnight) a shop has on a calendar date.
+ *
+ * `[]` means the shop is closed that weekday; `null` means the hours are
+ * unknown (no schedule, or free text that could not be read) — callers must
+ * treat null as "say nothing / enforce nothing", never as closed.
+ */
+export function openRangesOn(
+  shop: { hours: HoursRow[] | null; hoursStructured?: DayHours[] | null },
+  isoDate: string,
+): { start: number; end: number }[] | null {
+  const day = isoWeekdayOf(isoDate);
+  if (day == null) return null;
+  const grid = shopWeekGrid(shop);
+  return grid?.find((d) => d.day === day)?.ranges ?? null;
+}
+
+/**
+ * Open/closed at a given wall-clock `HH:MM` on a calendar date.
+ *
+ * Unlike `shopIsOpenNow` this takes the date and time as the shop's own local
+ * values, so a server running in UTC can ask about Italian time without
+ * building a shifted `Date`.
+ */
+export function openStateAt(
+  shop: { hours: HoursRow[] | null; hoursStructured?: DayHours[] | null },
+  isoDate: string,
+  time: string,
+): OpenState | null {
+  const ranges = openRangesOn(shop, isoDate);
+  const cur = parseTimeToMinutes(time);
+  if (ranges == null || cur == null) return null;
+  if (ranges.length === 0) return { open: false };
+  for (const r of ranges) {
+    if (cur >= r.start && cur < r.end) return { open: true, nextChange: fmt(r.end) };
+  }
+  const next = ranges.map((r) => r.start).filter((s) => s > cur).sort((a, b) => a - b)[0];
+  return next != null ? { open: false, nextChange: fmt(next) } : { open: false };
+}
+
+/**
+ * Bookable `HH:MM` slots on a date: every `stepMinutes` from each opening to
+ * strictly before its closing. `[]` when closed that day, `null` when the hours
+ * are unknown so the caller can fall back to a generic list.
+ */
+export function timeSlotsOn(
+  shop: { hours: HoursRow[] | null; hoursStructured?: DayHours[] | null },
+  isoDate: string,
+  stepMinutes = 30,
+): string[] | null {
+  const ranges = openRangesOn(shop, isoDate);
+  if (ranges == null) return null;
+  const out = new Set<string>();
+  for (const r of ranges) {
+    // Align to the step so a 9:15 opening offers 9:30, not 9:15/9:45.
+    const first = Math.ceil(r.start / stepMinutes) * stepMinutes;
+    for (let t = first; t < r.end; t += stepMinutes) out.add(fmt(t));
+  }
+  return [...out].sort();
+}

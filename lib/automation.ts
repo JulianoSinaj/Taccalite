@@ -16,7 +16,7 @@ import {
 import { deleteExpiredSessions } from "@/lib/auth/session";
 import { deleteExpiredAuthTokens } from "@/lib/auth/tokens";
 import { deleteExpiredRateLimits } from "@/lib/rate-limit";
-import { sendMail, enqueueMail, drainOutbox } from "@/lib/mail/mailer";
+import { sendMail, enqueueMail, drainOutbox, OUTBOX_RETENTION_DAYS } from "@/lib/mail/mailer";
 import {
   porchettaReminderEmail,
   tableReminderEmail,
@@ -408,7 +408,7 @@ export async function runAbandonedOrderSweep(
  */
 export async function runMaintenance(
   now = new Date(),
-  outboxRetentionDays = 90,
+  outboxRetentionDays = OUTBOX_RETENTION_DAYS,
 ): Promise<{
   sessionsDeleted: number;
   authTokensDeleted: number;

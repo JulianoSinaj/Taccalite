@@ -61,7 +61,8 @@ const ENTITY_HREF: Record<string, (id: string) => string | null> = {
   category: (id) => `/admin/categories/${id}`,
   closure: () => "/admin/chiusure",
   setting: () => "/admin/settings",
-  email: () => "/admin/outbox",
+  // Bulk retries and the SMTP test log a placeholder id, not a message.
+  email: (id) => (id === "outbox" || id === "smtp" ? "/admin/outbox" : `/admin/outbox?id=${id}`),
   campaign: () => "/admin/newsletter",
   segment: () => "/admin/newsletter",
   redemption: () => "/admin/loyalty",

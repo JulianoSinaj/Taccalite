@@ -325,10 +325,32 @@ export function reservationsWhere(f: ReservationFilters): SQL | undefined {
 
 // ── Customers (users ⟕ loyalty accounts) ─────────────────────────────────────
 /** `ruolo` defaults to real customers — staff are not the shop's clientele. */
-export type CustomerFilters = { q?: string; ruolo?: string };
+export type CustomerFilters = { q?: string; ruolo?: string; stato?: string; ordina?: string };
+
+/** Sort keys the customer list accepts; anything else means newest first. */
+export const CUSTOMER_SORTS = ["punti", "nome"] as const;
 
 export function customerFilters(p: ParamBag): CustomerFilters {
-  return { q: read(p, "q"), ruolo: read(p, "ruolo") ?? "customer" };
+  const ordina = read(p, "ordina");
+  return {
+    q: read(p, "q"),
+    ruolo: read(p, "ruolo") ?? "customer",
+    stato: read(p, "stato"),
+    // Absent = newest first, so the default never reads as an active filter.
+    ordina: ordina && (CUSTOMER_SORTS as readonly string[]).includes(ordina) ? ordina : undefined,
+  };
+}
+
+/** ORDER BY for the customer list and its CSV — the two must agree. */
+export function customersOrderBy(f: CustomerFilters): SQL[] {
+  switch (f.ordina) {
+    case "punti":
+      return [desc(sql`coalesce(${loyaltyAccounts.points}, 0)`), asc(users.name), asc(users.id)];
+    case "nome":
+      return [asc(sql`lower(coalesce(nullif(${users.name}, ''), ${users.username}))`), asc(users.id)];
+    default:
+      return [desc(users.createdAt), asc(users.id)];
+  }
 }
 
 /** Requires the `loyaltyAccounts` left-join to be present in the query. */
@@ -339,14 +361,23 @@ export function customersWhere(f: CustomerFilters): SQL | undefined {
   // account could have its points adjusted from a customer screen. "tutti"
   // stays available for the rare case an operator wants every account.
   if (isSet(f.ruolo)) conds.push(eq(users.role, f.ruolo as "customer"));
+  // A deactivated account keeps its row and its balance. The list marks it;
+  // this lets an operator see only the live ones — or only the dead ones.
+  if (f.stato === "attivi") conds.push(eq(users.active, true));
+  else if (f.stato === "disattivati") conds.push(eq(users.active, false));
   if (f.q) {
     conds.push(
       searchWhere(
         "users",
         f.q,
         () => [like(sql`${users.name}`, term(f.q!)), like(sql`${users.username}`, term(f.q!))],
-        // Not in the users index — it belongs to the joined loyalty account.
-        [like(sql`coalesce(${loyaltyAccounts.cardNumber}, '')`, term(f.q))],
+        // Not in the users index — the card belongs to the joined loyalty
+        // account, and the phone is how the counter finds a customer who has
+        // no card with them.
+        [
+          like(sql`coalesce(${loyaltyAccounts.cardNumber}, '')`, term(f.q)),
+          like(sql`coalesce(${users.phone}, '')`, term(f.q)),
+        ],
       ),
     );
   }
@@ -646,15 +677,42 @@ export function auditWhere(f: AuditFilters): SQL | undefined {
 }
 
 // ── Email outbox ─────────────────────────────────────────────────────────────
-export type OutboxFilters = { stato?: string; q?: string };
+const OUTBOX_STATUSES = ["queued", "sent", "failed"] as const;
+type OutboxStatus = (typeof OUTBOX_STATUSES)[number];
+
+export type OutboxFilters = {
+  stato?: string;
+  q?: string;
+  /** One message, for deep links from the audit log. */
+  id?: string;
+  /** Newsletter campaign the rows were sent for. */
+  campaign?: string;
+  da?: string;
+  a?: string;
+};
 
 export function outboxFilters(p: ParamBag): OutboxFilters {
-  return { stato: facet(p, "stato"), q: read(p, "q") };
+  const stato = facet(p, "stato");
+  return {
+    // An unknown status (a stale link, a typo in the URL) used to match nothing
+    // and render an empty list with no hint why; it now falls back to "all".
+    stato: (OUTBOX_STATUSES as readonly string[]).includes(stato) ? stato : "all",
+    q: read(p, "q"),
+    id: read(p, "id"),
+    campaign: read(p, "campaign"),
+    da: read(p, "da"),
+    a: read(p, "a"),
+  };
 }
 
 export function outboxWhere(f: OutboxFilters): SQL | undefined {
   const conds: SQL[] = [];
-  if (isSet(f.stato)) conds.push(eq(emailOutbox.status, f.stato as "sent"));
+  if (isSet(f.stato)) conds.push(eq(emailOutbox.status, f.stato as OutboxStatus));
+  if (f.id) conds.push(eq(emailOutbox.id, f.id));
+  if (f.campaign) conds.push(eq(emailOutbox.campaignId, f.campaign));
+  // Whole days in the operator's calendar, `a` inclusive — same as the audit log.
+  if (f.da) conds.push(gte(emailOutbox.createdAt, romeDayStart(f.da)));
+  if (f.a) conds.push(lt(emailOutbox.createdAt, romeDayAfter(f.a)));
   if (f.q) {
     conds.push(
       or(

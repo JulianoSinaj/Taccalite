@@ -639,8 +639,8 @@ function ShopSchedule({
         ) : (
           <div className="mt-3">
             <Notice tone="info">
-              {shop.name} non ha orari di apertura strutturati, quindi non c&apos;è nulla da cui
-              generare.{" "}
+              {shop.name}
+              {" non ha orari di apertura strutturati, quindi non c'è nulla da cui generare. "}
               <Link href={hoursHref} className="underline">
                 Impostali nella scheda della sede
               </Link>
@@ -706,7 +706,8 @@ export default async function AdminFulfilment({ searchParams }: SP) {
         <div className="space-y-6">
           <Panel>
             <p className="text-sm text-brown-800/70">
-              Una sede <strong>senza fasce attive</strong> offre il ritiro senza orario. Appena una
+              Una sede <strong>senza fasce attive</strong>
+              {" offre il ritiro senza orario. Appena una "}
               fascia è attiva, al checkout la scelta dell&apos;orario diventa obbligatoria e la pagina{" "}
               <Link href="/admin/fulfilment/oggi" className="underline">
                 Ritiri e consegne

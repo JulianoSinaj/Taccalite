@@ -25,9 +25,11 @@ const LABELS: Record<string, string> = {
   calendar: "Calendario",
   products: "Prodotti",
   categories: "Categorie",
-  fulfilment: "Ritiri e consegne",
+  // The nav calls the config page "Zone e fasce" and the day sheet under it
+  // "Ritiri e consegne"; the crumbs say the same so the two never swap names.
+  fulfilment: "Zone e fasce",
   contenuti: "Testi del sito",
-  oggi: "Oggi",
+  oggi: "Ritiri e consegne di oggi",
   scadenze: "Scadenze",
   blog: "News",
   shops: "Negozi",

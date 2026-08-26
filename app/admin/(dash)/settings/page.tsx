@@ -209,7 +209,7 @@ const KNOWN: {
   {
     key: "loyalty.enabled",
     label: "Programma fedeltà attivo",
-    help: "Abilita il programma fedeltà: accredito dei punti sugli ordini pagati e anteprima dei punti al checkout.",
+    help: "Abilita il programma fedeltà: accredito dei punti sugli ordini pagati e sugli acquisti in negozio, anteprima dei punti al checkout. Da spento, i premi già riscattati si possono comunque consegnare.",
     control: "boolean",
     default: true,
   },
@@ -530,7 +530,9 @@ export default async function AdminSettings() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel>
-          <h3 className="font-display text-lg text-brown-950">Email (SMTP)</h3>
+          <h3 id="smtp" className="scroll-mt-24 font-display text-lg text-brown-950">
+            Email (SMTP)
+          </h3>
           <Suspense fallback={<MailerStatusPending />}>
             <MailerStatus />
           </Suspense>

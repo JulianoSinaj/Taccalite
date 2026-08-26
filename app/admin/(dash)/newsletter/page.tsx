@@ -366,7 +366,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
                           )}
                           {d.failed > 0 && (
                             <Link
-                              href="/admin/outbox?stato=failed"
+                              href={`/admin/outbox?campaign=${c.id}&stato=failed`}
                               className="rounded-full bg-danger-soft px-2 py-0.5 text-danger-soft-fg hover:brightness-95"
                             >
                               {d.failed} non recapitate

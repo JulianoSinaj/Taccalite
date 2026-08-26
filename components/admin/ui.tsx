@@ -154,14 +154,18 @@ export function roleLabel(role: string): string {
   return roleLabels[role] ?? role;
 }
 
-export function StatusBadge({ status }: { status: string }) {
+/**
+ * `label` overrides the shared wording for an entity whose states reuse an
+ * enum value but not its meaning — a redemption is "consegnato", not "evaso".
+ */
+export function StatusBadge({ status, label }: { status: string; label?: string }) {
   return (
     <span
       className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-bold tracking-widest uppercase ${
         badgeStyles[status] ?? "bg-brown-900/10 text-brown-800"
       }`}
     >
-      {statusLabels[status] ?? status}
+      {label ?? statusLabels[status] ?? status}
     </span>
   );
 }

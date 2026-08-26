@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { inputCls, labelCls } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
 import { HoursEditor } from "./HoursEditor";
@@ -477,118 +477,163 @@ export function BlogForm({
   );
 }
 
+/** A titled group of fields inside a two-column admin form. */
+function FormSection({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  const id = useId();
+  return (
+    <section
+      aria-labelledby={id}
+      className="grid grid-cols-1 gap-4 border-t border-brown-900/10 pt-5 first:border-t-0 first:pt-0 sm:col-span-2 sm:grid-cols-2"
+    >
+      <div className="sm:col-span-2">
+        <h3 id={id} className="font-display text-base text-brown-950">
+          {title}
+        </h3>
+        {hint && <p className="mt-0.5 text-xs text-brown-800/60">{hint}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function ShopForm({ shop }: { shop?: ShopRow | null }) {
   const fid = useFieldIds();
   return (
     <ActionForm
       action={saveShop}
       redirectTo="/admin/shops"
-      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+      className="grid grid-cols-1 gap-5 sm:grid-cols-2"
     >
       {shop && <input type="hidden" name="id" value={shop.id} />}
-      <div>
-        <label className={labelCls} htmlFor={fid("name")}>Nome</label>
-        <input id={fid("name")} name="name" required defaultValue={shop?.name} className={inputCls} />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("slug")}>Slug (identificativo URL)</label>
-        <input
-          id={fid("slug")}
-          name="slug"
-          defaultValue={shop?.slug}
-          placeholder="es. centro"
-          readOnly={!!shop}
-          className={inputCls}
-        />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("specialty")}>Specialità</label>
-        <input id={fid("specialty")} name="specialty" defaultValue={shop?.specialty} className={inputCls} />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
-        <input id={fid("sortOrder")} name="sortOrder" type="number" defaultValue={shop?.sortOrder ?? 0} className={inputCls} />
-      </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls} htmlFor={fid("tagline")}>Tagline</label>
-        <input id={fid("tagline")} name="tagline" defaultValue={shop?.tagline} className={inputCls} />
-      </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls} htmlFor={fid("description")}>Descrizione</label>
-        <textarea id={fid("description")} name="description" rows={3} defaultValue={shop?.description} className={inputCls} />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("phone")}>Telefono</label>
-        <input id={fid("phone")} name="phone" defaultValue={shop?.phone} className={inputCls} />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("email")}>Email</label>
-        <input id={fid("email")} name="email" defaultValue={shop?.email} className={inputCls} />
-      </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls} htmlFor={fid("address")}>Indirizzo</label>
-        <input id={fid("address")} name="address" defaultValue={shop?.address} className={inputCls} />
-      </div>
-      <div className="sm:col-span-2">
-        <HoursEditor shop={shop} />
-      </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls} htmlFor={fid("highlights")}>Punti di forza (uno per riga)</label>
-        <textarea id={fid("highlights")} name="highlights" rows={3} defaultValue={shop?.highlights.join("\n")} className={inputCls} />
-      </div>
-      <ImageField current={shop?.image} />
-      <div>
-        <label className={labelCls} htmlFor={fid("imageLabel")}>Etichetta immagine</label>
-        <input id={fid("imageLabel")} name="imageLabel" defaultValue={shop?.imageLabel} className={inputCls} />
-      </div>
-      <div className="flex flex-wrap items-center gap-6 pt-6 sm:col-span-2">
-        <Toggle name="addressConfirmed" label="Indirizzo confermato" defaultChecked={shop?.addressConfirmed ?? true} />
-        <Toggle name="hoursConfirmed" label="Orari confermati" defaultChecked={shop?.hoursConfirmed ?? true} />
-      </div>
-      <div className="flex flex-wrap items-center gap-6 sm:col-span-2">
-        <Toggle name="reservationsEnabled" label="Prenotazioni attive" defaultChecked={shop?.reservationsEnabled ?? true} />
-        <Toggle name="storeEnabled" label="Ritiro in negozio (store)" defaultChecked={shop?.storeEnabled ?? true} />
-        <Toggle name="porchettaEnabled" label="Porchetta del sabato" defaultChecked={shop?.porchettaEnabled ?? true} />
-      </div>
 
-      {/* Capacity is per location: the two shops prepare separately, and one
-          may seat twice as many people as the other. */}
-      <div>
-        <label className={labelCls} htmlFor="shop-porchetta-kg">
-          Capacità porchetta (kg al giorno)
-        </label>
-        <input
-          id="shop-porchetta-kg"
-          name="porchettaCapacityKg"
-          type="number"
-          min={0}
-          defaultValue={shop?.porchettaCapacityKg ?? ""}
-          placeholder="usa il valore generale"
-          className={inputCls}
-        />
-        <p className="mt-1 text-xs text-brown-800/60">
-          Vuoto: usa la capacità impostata in Impostazioni per tutte le sedi.
-        </p>
-      </div>
-      <div>
-        <label className={labelCls} htmlFor="shop-seats">
-          Coperti per fascia oraria
-        </label>
-        <input
-          id="shop-seats"
-          name="seatsCapacity"
-          type="number"
-          min={0}
-          defaultValue={shop?.seatsCapacity ?? ""}
-          placeholder="nessun limite"
-          className={inputCls}
-        />
-        <p className="mt-1 text-xs text-brown-800/60">
-          Oltre questo numero di ospiti nella stessa fascia la prenotazione viene segnalata.
-        </p>
-      </div>
+      <FormSection title="Sede" hint="Nome e identificativo con cui la sede compare nel gestionale e sul sito.">
+        <div>
+          <label className={labelCls} htmlFor={fid("name")}>Nome</label>
+          <input id={fid("name")} name="name" required maxLength={200} defaultValue={shop?.name} className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("slug")}>Slug (identificativo URL)</label>
+          <input
+            id={fid("slug")}
+            name="slug"
+            required={!shop}
+            pattern="[a-z0-9-]+"
+            defaultValue={shop?.slug}
+            placeholder="es. centro"
+            readOnly={!!shop}
+            aria-describedby={fid("slug-hint")}
+            className={inputCls}
+          />
+          <p id={fid("slug-hint")} className="mt-1 text-xs text-brown-800/60">
+            {shop
+              ? `Pagina pubblica: /sedi/${shop.slug}. Non modificabile dopo la creazione.`
+              : "Solo lettere minuscole, numeri e trattini. Diventa l'indirizzo /sedi/<slug>."}
+          </p>
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("specialty")}>Specialità</label>
+          <input id={fid("specialty")} name="specialty" maxLength={200} defaultValue={shop?.specialty} placeholder="es. Formaggi" className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
+          <input id={fid("sortOrder")} name="sortOrder" type="number" step={1} defaultValue={shop?.sortOrder ?? 0} className={inputCls} />
+          <p className="mt-1 text-xs text-brown-800/60">Posizione negli elenchi: il numero più basso viene prima.</p>
+        </div>
+      </FormSection>
+
+      <FormSection title="Contatti" hint="Indirizzo, telefono ed email mostrati ai clienti e usati nelle email di conferma.">
+        <div className="sm:col-span-2">
+          <label className={labelCls} htmlFor={fid("address")}>Indirizzo</label>
+          <input id={fid("address")} name="address" maxLength={300} defaultValue={shop?.address} placeholder="Via, numero — Città" className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("phone")}>Telefono</label>
+          <input id={fid("phone")} name="phone" type="tel" maxLength={60} defaultValue={shop?.phone} className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("email")}>Email</label>
+          <input id={fid("email")} name="email" type="email" maxLength={200} defaultValue={shop?.email} className={inputCls} />
+        </div>
+      </FormSection>
+
+      <FormSection title="Orari di apertura" hint="Decidono il badge «aperto adesso», gli orari prenotabili per un tavolo e le fasce di ritiro.">
+        <div className="sm:col-span-2">
+          <HoursEditor shop={shop} />
+        </div>
+        <div className="sm:col-span-2">
+          <Toggle name="hoursConfirmed" label="Orari confermati" defaultChecked={shop?.hoursConfirmed ?? true} />
+          <p className="mt-1 text-xs text-brown-800/60">
+            Se non confermati, il sito mostra gli orari con l&apos;avviso «da confermare» e nasconde il badge «aperto adesso».
+          </p>
+        </div>
+      </FormSection>
+
+      <FormSection title="Servizi e capacità" hint="Cosa offre questa sede sul sito e quanto può accogliere.">
+        <div className="flex flex-wrap items-center gap-6 sm:col-span-2">
+          <Toggle name="reservationsEnabled" label="Prenotazioni tavolo e ordini speciali" defaultChecked={shop?.reservationsEnabled ?? true} />
+          <Toggle name="storeEnabled" label="Ritiro in negozio (store)" defaultChecked={shop?.storeEnabled ?? true} />
+          <Toggle name="porchettaEnabled" label="Porchetta del sabato" defaultChecked={shop?.porchettaEnabled ?? true} />
+        </div>
+        {/* Capacity is per location: the two shops prepare separately, and one
+            may seat twice as many people as the other. */}
+        <div>
+          <label className={labelCls} htmlFor={fid("porchettaCapacityKg")}>Capacità porchetta (kg al giorno)</label>
+          <input
+            id={fid("porchettaCapacityKg")}
+            name="porchettaCapacityKg"
+            type="number"
+            min={0}
+            max={10000}
+            step={1}
+            defaultValue={shop?.porchettaCapacityKg ?? ""}
+            placeholder="usa il valore generale"
+            className={inputCls}
+          />
+          <p className="mt-1 text-xs text-brown-800/60">
+            Vuoto: usa la capacità impostata in Impostazioni per tutte le sedi.
+          </p>
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("seatsCapacity")}>Coperti per fascia oraria</label>
+          <input
+            id={fid("seatsCapacity")}
+            name="seatsCapacity"
+            type="number"
+            min={0}
+            max={1000}
+            step={1}
+            defaultValue={shop?.seatsCapacity ?? ""}
+            placeholder="nessun limite"
+            className={inputCls}
+          />
+          <p className="mt-1 text-xs text-brown-800/60">
+            Il sito rifiuta le prenotazioni oltre questo numero di ospiti nella stessa fascia; nel gestionale vengono solo segnalate.
+          </p>
+        </div>
+      </FormSection>
+
+      <FormSection title="Presentazione sul sito" hint="Testi e immagine della pagina pubblica della sede.">
+        <div className="sm:col-span-2">
+          <label className={labelCls} htmlFor={fid("tagline")}>Tagline</label>
+          <input id={fid("tagline")} name="tagline" maxLength={300} defaultValue={shop?.tagline} className={inputCls} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className={labelCls} htmlFor={fid("description")}>Descrizione</label>
+          <textarea id={fid("description")} name="description" rows={3} maxLength={4000} defaultValue={shop?.description} className={inputCls} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className={labelCls} htmlFor={fid("highlights")}>Punti di forza (uno per riga)</label>
+          <textarea id={fid("highlights")} name="highlights" rows={3} maxLength={2000} defaultValue={shop?.highlights.join("\n")} className={inputCls} />
+        </div>
+        <ImageField current={shop?.image} />
+        <div>
+          <label className={labelCls} htmlFor={fid("imageLabel")}>Etichetta immagine</label>
+          <input id={fid("imageLabel")} name="imageLabel" maxLength={200} defaultValue={shop?.imageLabel} className={inputCls} />
+        </div>
+      </FormSection>
+
       <div className="sm:col-span-2">
-        <PendingButton>{shop ? "Salva negozio" : "Crea negozio"}</PendingButton>
+        <PendingButton>{shop ? "Salva sede" : "Crea sede"}</PendingButton>
       </div>
     </ActionForm>
   );
