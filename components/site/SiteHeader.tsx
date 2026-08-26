@@ -123,8 +123,15 @@ export default function SiteHeader({ shops = [] }: { shops?: HeaderShop[] }) {
                   key={link.href}
                   href={link.href}
                   aria-current={active ? "page" : undefined}
+                  // `.tap` rather than more padding: 11px of type on a 15px
+                  // line box is a 23px target, and the gold underline below is
+                  // pinned to *this* box — growing it would push the underline
+                  // away from the word it belongs to. The hit area grows to
+                  // 44px on an invisible pseudo-element instead, so the mark and
+                  // its animation are untouched. The links sit 28px apart
+                  // (`gap-7`) and overhang 3.5px a side, so no two targets meet.
                   className={cn(
-                    "relative py-1 text-[0.6875rem] font-semibold tracking-[0.18em] whitespace-nowrap uppercase transition-colors",
+                    "tap relative py-1 text-[0.6875rem] font-semibold tracking-[0.18em] whitespace-nowrap uppercase transition-colors",
                     active ? "text-brown-950" : "text-brown-700/70 hover:text-brown-950"
                   )}
                 >
