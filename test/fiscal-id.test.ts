@@ -95,7 +95,10 @@ describe("sellerIdentityProblems", () => {
     // — mandatory elements, present but blank, refused by the SdI.
     const p = sellerIdentityProblems({ ...complete, address: "", zip: "", city: "", province: "" });
     expect(p).toHaveLength(4);
-    expect(p.join(" ")).toMatch(/Indirizzo.*CAP.*Comune.*Provincia/s);
+    // `[\s\S]` rather than `.` under the `s` flag: tsconfig targets ES2017 and
+    // dotAll is ES2018, so the flag is a compile error — and because
+    // `next build` type-checks, it failed the production build outright.
+    expect(p.join(" ")).toMatch(/Indirizzo[\s\S]*CAP[\s\S]*Comune[\s\S]*Provincia/);
   });
 
   it("reports every problem at once, not the first", () => {
