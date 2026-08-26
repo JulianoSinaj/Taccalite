@@ -149,6 +149,49 @@ export async function enqueueMail(
 /** After this many failed attempts a message stops being retried automatically. */
 export const OUTBOX_MAX_ATTEMPTS = 5;
 
+/**
+ * What actually happened to the customer's copy of an order email.
+ *
+ *  - `sent`    — the relay accepted it.
+ *  - `pending` — recorded but not delivered yet, and still inside the retry cap,
+ *                so `drainOutbox` will try again (this is also the state when no
+ *                SMTP is configured at all: the row sits `queued` forever).
+ *  - `failed`  — out of attempts. Nothing further will happen on its own.
+ *  - `none`    — nothing was ever recorded for this order.
+ *
+ * Exists because the checkout success page told every customer "ti abbiamo
+ * inviato una email di conferma" unconditionally, while `placeOrder` throws the
+ * `sendMail` results away in a `Promise.allSettled`. With a misconfigured relay
+ * that sentence was simply false — and it is the one sentence the terms of sale
+ * hang the contract on ("il contratto si conclude quando ricevi da noi l'email
+ * di conferma"), so a customer who never got it had been told they had.
+ *
+ * Matched on the order number in the subject, which every customer-facing order
+ * template carries (`Ordine confermato · ORD-…`, `Ordine ricevuto · ORD-…`).
+ * Order numbers are generated from digits and hyphens, so they contain no LIKE
+ * wildcard to escape.
+ */
+export async function orderEmailDelivery(
+  orderNumber: string,
+  toAddress: string,
+): Promise<"sent" | "pending" | "failed" | "none"> {
+  const [row] = await db
+    .select({ status: emailOutbox.status, attempts: emailOutbox.attempts })
+    .from(emailOutbox)
+    .where(
+      and(
+        eq(emailOutbox.toAddress, toAddress),
+        sql`${emailOutbox.subject} like ${"%" + orderNumber + "%"}`,
+      ),
+    )
+    .orderBy(sql`${emailOutbox.createdAt} desc`)
+    .limit(1);
+
+  if (!row) return "none";
+  if (row.status === "sent") return "sent";
+  return row.attempts >= OUTBOX_MAX_ATTEMPTS ? "failed" : "pending";
+}
+
 /** A claim older than this is treated as abandoned (process died mid-send). */
 const CLAIM_STALE_MS = 5 * 60 * 1000;
 

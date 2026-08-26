@@ -4,20 +4,11 @@ import { nanoid } from "nanoid";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { db } from "@/lib/db/client";
 
-/**
- * Build a URL slug from free text: lowercase, accents stripped, spaces and other
- * characters collapsed to hyphens, edges trimmed. May legitimately return "" for
- * input with no usable characters (e.g. only emoji), which callers must handle.
- */
-export function slugify(input: string): string {
-  return input
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "") // drop combining accent marks
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-") // spaces & non [a-z0-9] → hyphen
-    .replace(/-+/g, "-") // collapse repeats
-    .replace(/^-|-$/g, ""); // trim leading/trailing hyphens
-}
+// The pure half lives in `lib/slug-core.ts` so the seed scripts can build a slug
+// without importing this module's `server-only` runtime. Re-exported here so
+// every caller keeps importing `slugify` from where it always did.
+export { slugify } from "./slug-core";
+import { slugify } from "./slug-core";
 
 /**
  * Resolve the slug to store for a record.

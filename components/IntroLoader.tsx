@@ -145,19 +145,36 @@ export default function IntroLoader() {
     if (phase === "loading") setPhase("exiting");
   }
 
+  // Esc ends it too. The curtain covers the whole viewport and swallows scroll
+  // for the better part of four seconds, and until this the only way out was
+  // clicking one small button in a corner — nothing at all for a visitor who is
+  // not using a mouse.
+  useEffect(() => {
+    if (phase !== "loading") return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setPhase("exiting");
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [phase]);
+
   if (phase === "done") return null;
 
   return (
     <motion.div
       ref={curtainRef}
       className="intro-curtain bg-noise fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-brown-950"
-      role="presentation"
-      aria-hidden="true"
+      // Deliberately *not* `aria-hidden` on the wrapper. It used to be, which
+      // hid the skip button below from the accessibility tree while leaving it
+      // focusable — the classic focusable-inside-aria-hidden fault, and here it
+      // meant a screen-reader user was held behind an opaque full-screen curtain
+      // with the only exit unannounced. The decoration carries `aria-hidden`
+      // individually instead, so the button is the one thing that is announced.
       initial={{ clipPath: "inset(0% 0% 0% 0%)" }}
       animate={{ clipPath: phase === "exiting" ? "inset(0% 0% 100% 0%)" : "inset(0% 0% 0% 0%)" }}
       transition={{ duration: EXIT_DURATION, ease: [0.76, 0, 0.24, 1] }}
     >
-      <svg width="132" height="132" viewBox="0 0 132 132" className="mb-6">
+      <svg width="132" height="132" viewBox="0 0 132 132" className="mb-6" aria-hidden>
         <circle
           className="intro-ring"
           cx="66"
@@ -195,26 +212,34 @@ export default function IntroLoader() {
       </svg>
 
       <div
+        aria-hidden
         className="intro-name absolute text-3xl font-semibold tracking-wide text-cream"
         style={{ fontFamily: DISPLAY_FONT }}
       >
         Taccalite
       </div>
 
-      <p className="intro-tagline mt-24 text-xs font-medium tracking-[0.25em] text-cream/50 uppercase">
+      <p
+        aria-hidden
+        className="intro-tagline mt-24 text-xs font-medium tracking-[0.25em] text-cream/50 uppercase"
+      >
         Norcineria di famiglia · dal 1946
       </p>
 
-      <div className="intro-rule mt-8 h-px w-40 overflow-hidden bg-cream/10">
+      <div aria-hidden className="intro-rule mt-8 h-px w-40 overflow-hidden bg-cream/10">
         <div className="intro-rule-fill h-full w-full bg-gold" />
       </div>
 
+      {/* The first focusable thing in the document — the layout renders this
+          component ahead of the header — so one Tab reaches it. Named in full
+          for a screen reader, which gets no help from the arrow. */}
       <button
         type="button"
         onClick={handleSkip}
-        className="intro-skip absolute right-6 bottom-6 text-xs font-medium tracking-wide text-cream/75 hover:text-cream sm:right-10 sm:bottom-10"
+        aria-label="Salta l'introduzione"
+        className="intro-skip absolute right-6 bottom-6 text-xs font-medium tracking-wide text-cream/75 hover:text-cream focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none sm:right-10 sm:bottom-10"
       >
-        Salta →
+        <span aria-hidden>Salta →</span>
       </button>
     </motion.div>
   );

@@ -7,6 +7,7 @@ import { getOrderForViewer } from "@/lib/orders";
 import { getShopBySlug } from "@/lib/db/queries";
 import { formatEuro } from "@/lib/format";
 import { trackingUrlFor } from "@/lib/carriers";
+import StatusChip, { TONE, type Tone } from "@/components/account/StatusChip";
 
 import { FULFILMENT_LABEL } from "@/lib/fulfilment";
 import { settlesOnHandover } from "@/lib/payments/methods";
@@ -26,12 +27,14 @@ const STATUS_LABEL: Record<string, string> = {
   refunded: "Rimborsato",
 };
 
-const STATUS_STYLE: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-800",
-  paid: "bg-emerald-100 text-emerald-800",
-  fulfilled: "bg-emerald-100 text-emerald-800",
-  cancelled: "bg-red-100 text-red-700",
-  refunded: "bg-brown-900/10 text-brown-800",
+// Same tones as the dashboard that links here, drawn by the same chip — an
+// order should not change colour language between the list and its own page.
+const STATUS_STYLE: Record<string, Tone> = {
+  pending: TONE.waiting,
+  paid: TONE.good,
+  fulfilled: TONE.good,
+  cancelled: TONE.bad,
+  refunded: TONE.neutral,
 };
 
 const PAYMENT_LABEL: Record<string, string> = {
@@ -40,10 +43,10 @@ const PAYMENT_LABEL: Record<string, string> = {
   refunded: "Rimborsato",
 };
 
-const PAYMENT_STYLE: Record<string, string> = {
-  unpaid: "bg-amber-100 text-amber-800",
-  paid: "bg-emerald-100 text-emerald-800",
-  refunded: "bg-brown-900/10 text-brown-800",
+const PAYMENT_STYLE: Record<string, Tone> = {
+  unpaid: TONE.waiting,
+  paid: TONE.good,
+  refunded: TONE.neutral,
 };
 
 type PageProps = { params: Promise<{ number: string }> };
@@ -63,7 +66,7 @@ export default async function OrderDetailPage({ params }: PageProps) {
   const trackingHref = await trackingUrlFor(order.carrier, order.trackingNumber);
 
   const statusLabel = STATUS_LABEL[order.status] ?? order.status;
-  const statusStyle = STATUS_STYLE[order.status] ?? "bg-brown-900/10 text-brown-800";
+  const statusStyle = STATUS_STYLE[order.status] ?? TONE.neutral;
   // "Non pagato" reads like a problem. For an order the customer chose to settle
   // on collection it is simply the arrangement, so say which one it is.
   const awaitingPayment =
@@ -75,7 +78,7 @@ export default async function OrderDetailPage({ params }: PageProps) {
       ? "Da pagare alla consegna"
       : "Da pagare al ritiro"
     : PAYMENT_LABEL[order.paymentStatus] ?? order.paymentStatus;
-  const paymentStyle = PAYMENT_STYLE[order.paymentStatus] ?? "bg-brown-900/10 text-brown-800";
+  const paymentStyle = PAYMENT_STYLE[order.paymentStatus] ?? TONE.neutral;
 
   return (
     <section className="min-h-[70svh] bg-cream px-5 pt-28 pb-16 sm:px-8 lg:px-12">
@@ -96,16 +99,12 @@ export default async function OrderDetailPage({ params }: PageProps) {
             {order.orderNumber}
           </h1>
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <span
-              className={`inline-flex rounded-full px-4 py-1.5 text-[12px] font-bold uppercase tracking-widest ${statusStyle}`}
-            >
+            <StatusChip tone={statusStyle} className="px-4 py-1.5 text-[0.6875rem]">
               {statusLabel}
-            </span>
-            <span
-              className={`inline-flex rounded-full px-4 py-1.5 text-[12px] font-bold uppercase tracking-widest ${paymentStyle}`}
-            >
+            </StatusChip>
+            <StatusChip tone={paymentStyle} className="px-4 py-1.5 text-[0.6875rem]">
               {paymentLabel}
-            </span>
+            </StatusChip>
           </div>
           {awaitingPayment && (
             <p className="mt-5 border border-gold-dark/40 bg-gold/15 px-5 py-4 text-sm text-brown-900">

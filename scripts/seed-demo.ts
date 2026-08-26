@@ -21,6 +21,7 @@
  */
 import "./_bootstrap-env"; // MUST be first: defaults NODE_ENV before lib/env loads
 import { openDatabase, type Db } from "../lib/db/connection";
+import { reconcileCategories } from "../lib/db/seed-data";
 import { eq } from "drizzle-orm";
 import * as schema from "../lib/db/schema";
 import { hashPassword } from "../lib/auth/password";
@@ -699,6 +700,11 @@ async function main() {
       .values({ key, value })
       .onConflictDoUpdate({ target: schema.settings.key, set: { value } });
   }
+
+  // The demo catalogue is inserted with category *names* only, so without this
+  // its Carni, Gastronomia, Cantina and Regalo products have nothing in
+  // `categories` to join to and never appear as filters on /negozio.
+  await reconcileCategories(db);
 
   console.log("\n✓ Demo data ready. Log in at /admin and have a look around.");
   console.log("  Re-run with `-- --reset` to clear and regenerate.");

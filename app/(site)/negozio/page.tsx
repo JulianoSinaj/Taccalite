@@ -140,7 +140,19 @@ export default async function StorePage({ searchParams }: SearchParams) {
                     the last of the old pill-and-white-card language still on the
                     site, and it made the shop — the page that has to sell — look
                     like a different product from the one around it. */}
-                <form method="get" className="flex flex-col gap-2.5 sm:flex-row sm:gap-3">
+                {/* Keyed on the filters it is showing.
+                    `defaultValue` only applies when an input mounts, and a soft
+                    navigation re-renders this form in place rather than
+                    remounting it — so "Rimuovi i filtri" used to clear the URL
+                    and the grid while leaving the old query sitting in the box.
+                    The next Applica then silently re-submitted the search the
+                    visitor had just deleted. Changing the key remounts the pair,
+                    so the fields always state what the page is actually showing. */}
+                <form
+                  key={`${q}|${cat}|${sort}`}
+                  method="get"
+                  className="flex flex-col gap-2.5 sm:flex-row sm:gap-3"
+                >
                   {cat && <input type="hidden" name="cat" value={cat} />}
                   <div className="relative flex-1">
                     <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-taupe" />

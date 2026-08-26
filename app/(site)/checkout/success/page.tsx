@@ -9,6 +9,7 @@ import { settlesOnHandover } from "@/lib/payments/methods";
 import ClearCart from "@/components/store/ClearCart";
 import ClaimOrderOffer from "@/components/store/ClaimOrderOffer";
 import { getSetting } from "@/lib/db/queries";
+import { orderEmailDelivery } from "@/lib/mail/mailer";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,13 @@ export default async function CheckoutSuccess({ searchParams }: SP) {
       : 0;
   const awaitingPayment = !!order && order.paymentStatus === "unpaid" && settlesOnHandover(order.paymentMethod);
 
+  // Whether the confirmation actually left, rather than assuming it did. See
+  // `orderEmailDelivery` — the send happens inside a `Promise.allSettled` whose
+  // results are discarded, so this page is the only place that can still find
+  // out, and it has to ask the outbox.
+  const mail = order ? await orderEmailDelivery(order.orderNumber, order.email) : "none";
+  const mailSent = mail === "sent";
+
   return (
     <section className="flex min-h-[70svh] items-center justify-center bg-cream px-5 pt-28 pb-16">
       <ClearCart />
@@ -75,9 +83,30 @@ export default async function CheckoutSuccess({ searchParams }: SP) {
         <h1 className="font-display display-lg font-semibold text-brown-950">Grazie!</h1>
         <p className="mt-4 text-lg text-brown-700">
           {order
-            ? `Il tuo ordine ${order.orderNumber} è stato registrato. Ti abbiamo inviato una email di conferma.`
+            ? `Il tuo ordine ${order.orderNumber} è stato registrato.${
+                mailSent ? " Ti abbiamo inviato una email di conferma." : ""
+              }`
             : "Il tuo ordine è stato registrato."}
         </p>
+
+        {/* The email did not go out. Saying nothing would be no better than the
+            old unconditional promise: the terms of sale hang the contract on
+            that message ("il contratto si conclude quando ricevi da noi l'email
+            di conferma"), so a customer waiting for one that is never coming
+            would reasonably conclude the order failed and place it again.
+            The order number is the record in the meantime. */}
+        {order && !mailSent && (
+          <p className="mt-6 border border-gold-dark/40 bg-gold/15 px-5 py-4 text-left text-sm text-brown-900">
+            <span className="block font-semibold text-brown-950">
+              Annota il numero dell&apos;ordine: {order.orderNumber}
+            </span>
+            <span className="mt-1 block text-brown-700">
+              {mail === "failed"
+                ? "Non siamo riusciti a inviarti l'email di conferma. L'ordine è comunque registrato: contattaci con questo numero e te lo confermiamo noi."
+                : "L'email di conferma non è ancora partita. L'ordine è già registrato — se entro poco non ricevi nulla, scrivici con questo numero invece di rifare l'ordine."}
+            </span>
+          </p>
+        )}
 
         {/* An order paid on handover is not a completed purchase, and this page
             is the last thing the customer reads before closing the tab. Say what
