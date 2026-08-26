@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ActionError } from "@/lib/admin/action-state";
 import { FULFILMENT_MODES } from "@/lib/fulfilment";
 import { SETTLEMENT_INSTRUMENTS } from "@/lib/payments/methods";
+import { partitaIvaError } from "@/lib/fiscal-id";
 
 /**
  * Checkbox → boolean ("on"/"true" = checked).
@@ -584,13 +585,22 @@ export const pointsInput = z.object({
   reason: optionalText(200),
 });
 
-export const settingInput = z.object({
-  key: z.string().trim().min(1).max(120),
-  value: z.string(),
-  // When "text", the value is stored verbatim as a string (never JSON-parsed) so
-  // numeric-looking text like a Partita IVA keeps its leading zeros and type.
-  valueType: z.enum(["json", "text"]).optional(),
-});
+export const settingInput = z
+  .object({
+    key: z.string().trim().min(1).max(120),
+    value: z.string(),
+    // When "text", the value is stored verbatim as a string (never JSON-parsed) so
+    // numeric-looking text like a Partita IVA keeps its leading zeros and type.
+    valueType: z.enum(["json", "text"]).optional(),
+  })
+  // The settings screen is a generic key/value editor, so a wrong Partita IVA
+  // used to be storable in one keystroke and only surfaced days later as an SdI
+  // rejection. Checked at the point of entry, where it can still be a typo.
+  .superRefine((d, ctx) => {
+    if (d.key !== "business.vatNumber") return;
+    const message = partitaIvaError(d.value);
+    if (message) ctx.addIssue({ code: "custom", message, path: ["value"] });
+  });
 
 export const userRoleInput = z.object({
   id: z.string().trim().min(1),

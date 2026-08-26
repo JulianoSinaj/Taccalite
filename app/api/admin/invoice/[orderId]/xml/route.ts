@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/session";
 import { adminGetOrder } from "@/lib/admin/queries";
 import { getSetting } from "@/lib/db/queries";
+import { partitaIvaError } from "@/lib/fiscal-id";
 import {
   buildFatturaXml,
   buildNotaCreditoXml,
@@ -58,6 +59,22 @@ export async function GET(request: Request, ctx: { params: Promise<{ orderId: st
   if (!vatNumber) {
     return NextResponse.json(
       { ok: false, error: "Partita IVA non configurata. Impostala in Impostazioni prima di generare la fattura." },
+      { status: 400 },
+    );
+  }
+  // Presence was never the whole test. This number goes verbatim into
+  // `CedentePrestatore/IdFiscaleIVA/IdCodice`, and the SdI rejects a document
+  // whose seller VAT number fails its check digit — days later, silently as far
+  // as the shop is concerned. `scripts/seed-demo.ts` writes `11111111111`
+  // (check digit should be 5) and it produced a complete, invalid XML. The
+  // settings form refuses one now; this catches anything stored before it did.
+  const vatProblem = partitaIvaError(vatNumber);
+  if (vatProblem) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `${vatProblem} La fattura non è stata generata: correggi la partita IVA in Impostazioni.`,
+      },
       { status: 400 },
     );
   }

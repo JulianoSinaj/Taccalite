@@ -685,7 +685,12 @@ async function main() {
       "Rineri, San Cesario, SIGI, Menchi, Villani, Caseificio Esino, Fattoria Petrini, Antica Norcineria Fabriano, Mielizia, Oleificio Conero",
     ],
     // Obvious placeholders: an eleven-digit run of ones could never be mistaken
-    // for a real Partita IVA, so nobody ships it by accident.
+    // for a real Partita IVA, so nobody ships it by accident. It is also
+    // deliberately checksum-invalid (the check digit would have to be 5), and
+    // that is now enforced rather than merely hoped for: `partitaIvaError`
+    // refuses it on the settings form and again in the invoice route, so a demo
+    // database cannot emit a complete-looking FatturaPA XML the SdI would
+    // reject. Keep it invalid if you ever change it.
     ["business.legalName", "Norcineria Taccalite S.r.l. — DEMO"],
     ["business.vatNumber", "11111111111"],
   ] as const) {
