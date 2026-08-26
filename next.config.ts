@@ -86,7 +86,9 @@ const nextConfig: NextConfig = {
   // dependencies, so the runtime image drops the full node_modules, the C build
   // toolchain, and tsx (see Dockerfile). The seed/migrate step is precompiled to
   // a plain-node bundle (`npm run db:compile-seed`) for the same reason.
-  output: "standalone",
+  // Vercel builds its own serverless bundle and chokes on standalone mode
+  // (ENOENT next-server.js.nft.json in Next 16.3) — only Docker needs it.
+  ...(process.env.VERCEL ? {} : { output: "standalone" as const }),
   // @libsql/client pulls in the native `libsql` package for `file:` URLs — keep
   // it out of the bundle (traced into standalone node_modules for Docker; on
   // Vercel the remote Turso URL uses the pure-JS HTTP transport).

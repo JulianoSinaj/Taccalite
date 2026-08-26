@@ -408,7 +408,7 @@ function Body({ email: e, admin }: { email: EmailOutboxRow; admin: boolean }) {
         title={`Anteprima: ${e.subject}`}
         srcDoc={html}
         sandbox=""
-        className="h-80 w-full rounded-lg border border-brown-900/10 bg-white"
+        className="h-80 w-full rounded-lg border border-brown-900/10 bg-surface"
       />
       <details>
         <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
