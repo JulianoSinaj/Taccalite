@@ -86,6 +86,17 @@ const badgeStyles: Record<string, string> = {
   failed: "bg-danger-soft text-danger-soft-fg",
   confirmedSub: "bg-ok-soft text-ok-soft-fg",
   unsubscribed: "bg-danger-soft text-danger-soft-fg",
+  // A category switched off the storefront — neutral, not an error.
+  hidden: "bg-brown-900/10 text-brown-800",
+  // A product switched off (worth a glance) and one taken out of the catalogue
+  // altogether (neutral: it is where it was put).
+  inactive: "bg-warn-soft text-warn-soft-fg",
+  archived: "bg-brown-900/10 text-brown-800",
+  // Discount codes that are switched on but not redeemable: waiting for their
+  // start date (worth a glance), past their end date or out of uses (neutral).
+  scheduled: "bg-warn-soft text-warn-soft-fg",
+  expired: "bg-brown-900/10 text-brown-800",
+  exhausted: "bg-brown-900/10 text-brown-800",
 };
 
 /** Italian labels for the raw enum values stored in the DB. */
@@ -103,6 +114,12 @@ const statusLabels: Record<string, string> = {
   sent: "Inviata",
   failed: "Fallita",
   unsubscribed: "Disiscritto",
+  inactive: "Disattivato",
+  archived: "Archiviato",
+  scheduled: "Programmato",
+  expired: "Scaduto",
+  exhausted: "Esaurito",
+  hidden: "Nascosta",
 };
 
 export function statusLabel(status: string): string {

@@ -47,6 +47,33 @@ function layout(opts: { heading: string; body: string; preheader?: string }): st
 </body></html>`;
 }
 
+/**
+ * "15 agosto 2026" from the ISO `yyyy-mm-dd` the date columns store. Anything
+ * that isn't one comes back untouched, so a caller passing prose keeps it.
+ */
+function fmtDateIt(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("it-IT", {
+    timeZone: "UTC",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/** "sabato 15 agosto alle 10:00" for a stored pickup instant, on the shop's clock. */
+function fmtPickupIt(at: Date): string {
+  return at.toLocaleString("it-IT", {
+    timeZone: "Europe/Rome",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function row(label: string, value: string): string {
   if (!value) return "";
   // `label` is a hard-coded constant; `value` is often user-supplied → escape it.
@@ -81,7 +108,7 @@ function reservationDetailTable(d: ReservationEmailData): string {
     ${row("Riferimento", d.reference)}
     ${row("Tipo", TYPE_LABEL[d.type])}
     ${row("Negozio", d.shopName)}
-    ${row("Data", d.date)}
+    ${row("Data", fmtDateIt(d.date))}
     ${row("Ora", d.time ?? "")}
     ${row("Ospiti", d.guests != null ? String(d.guests) : "")}
     ${row("Quantità", d.quantityKg != null ? `${d.quantityKg} kg` : "")}
@@ -112,7 +139,7 @@ export function reservationCustomerEmail(d: ReservationEmailData): Built {
     html: layout({ heading, body, preheader: `Riepilogo della tua prenotazione ${d.reference}` }),
     text:
       `Ciao ${d.name}, abbiamo ricevuto la tua richiesta (${d.reference}).\n` +
-      `Tipo: ${TYPE_LABEL[d.type]}\nNegozio: ${d.shopName}\nData: ${d.date}` +
+      `Tipo: ${TYPE_LABEL[d.type]}\nNegozio: ${d.shopName}\nData: ${fmtDateIt(d.date)}` +
       `${d.time ? ` ${d.time}` : ""}\n${d.guests != null ? `Ospiti: ${d.guests}\n` : ""}` +
       `${d.quantityKg != null ? `Quantità: ${d.quantityKg} kg\n` : ""}` +
       `Ti contatteremo per confermare. — Norcineria Taccalite`,
@@ -490,6 +517,54 @@ export function newsletterConfirmEmail(confirmUrl: string): Built {
   };
 }
 
+/**
+ * Sent to the customer who cancelled their own booking from the account page.
+ *
+ * `reservationStatusEmail(d, "cancelled")` says "purtroppo non possiamo
+ * accogliere la tua richiesta" — the shop's wording, wrong for a cancellation
+ * the customer chose.
+ */
+export function reservationCancelledByCustomerEmail(d: ReservationEmailData): Built {
+  const heading = "Prenotazione annullata";
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(d.name)}, come richiesto abbiamo annullato la tua prenotazione. Se cambi idea,
+      puoi prenotare di nuovo dal sito o chiamarci in bottega.
+    </p>
+    ${reservationDetailTable(d)}`;
+  return {
+    subject: `Annullata · ${d.reference} — Norcineria Taccalite`,
+    html: layout({ heading, body }),
+    text: `Ciao ${d.name}, come richiesto abbiamo annullato la tua prenotazione.
+Riferimento: ${d.reference}`,
+  };
+}
+
+/** Sent to the shop owner when a customer cancels a booking from their account. */
+export function reservationCustomerCancelledOwnerEmail(d: ReservationEmailData): Built {
+  const heading = "Prenotazione annullata dal cliente";
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      ${esc(d.name)} ha annullato la prenotazione dal proprio account. Dettagli:
+    </p>
+    ${reservationDetailTable(d)}
+    <p style="margin:22px 0 0;">
+      <a href="${absoluteUrl("/admin/reservations")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Apri nel gestionale</a>
+    </p>`;
+  return {
+    subject: `Annullata dal cliente · ${TYPE_LABEL[d.type]} · ${d.reference}`,
+    html: layout({ heading, body }),
+    text:
+      `Prenotazione ${d.reference} annullata dal cliente
+Tipo: ${TYPE_LABEL[d.type]}
+Nome: ${d.name}
+` +
+      `Telefono: ${d.phone}
+Negozio: ${d.shopName}
+Data: ${fmtDateIt(d.date)}${d.time ? ` ${d.time}` : ""}`,
+  };
+}
+
 /** Sent to the shop owner when a reservation arrives. */
 export function reservationOwnerEmail(d: ReservationEmailData): Built {
   const heading = "Nuova richiesta di prenotazione";
@@ -507,7 +582,7 @@ export function reservationOwnerEmail(d: ReservationEmailData): Built {
     text:
       `Nuova richiesta ${d.reference}\nTipo: ${TYPE_LABEL[d.type]}\nNome: ${d.name}\n` +
       `Telefono: ${d.phone}\nEmail: ${d.email ?? "-"}\nNegozio: ${d.shopName}\n` +
-      `Data: ${d.date}${d.time ? ` ${d.time}` : ""}\n` +
+      `Data: ${fmtDateIt(d.date)}${d.time ? ` ${d.time}` : ""}\n` +
       `${d.guests != null ? `Ospiti: ${d.guests}\n` : ""}` +
       `${d.quantityKg != null ? `Quantità: ${d.quantityKg} kg\n` : ""}` +
       `Note: ${d.notes ?? "-"}`,
@@ -552,13 +627,18 @@ export function closureNoticeEmail(d: {
   time: string | null;
   shopName: string;
   reason: string | null;
+  /** Set for a partial-day closure: "chiusi dalle 14:00 alle 18:00". */
+  startTime?: string | null;
+  endTime?: string | null;
 }): Built {
-  const when = `${d.date}${d.time ? ` alle ${d.time}` : ""}`;
+  const day = fmtDateIt(d.date);
+  const when = `${day}${d.time ? ` alle ${d.time}` : ""}`;
+  const hours = d.startTime && d.endTime ? ` dalle ${d.startTime} alle ${d.endTime}` : "";
   const why = d.reason ? ` (${d.reason})` : "";
   const body = `
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
-      Ciao ${esc(d.name)}, ci dispiace: il <strong>${esc(when)}</strong> resteremo chiusi${esc(why)},
-      quindi non potremo accoglierti come previsto da ${esc(d.shopName)}.
+      Ciao ${esc(d.name)}, ci dispiace: il <strong>${esc(day)}</strong> resteremo chiusi${esc(hours)}${esc(why)},
+      quindi non potremo accoglierti come previsto${d.time ? ` alle ${esc(d.time)}` : ""} da ${esc(d.shopName)}.
     </p>
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
       La tua prenotazione <strong>${esc(d.reference)}</strong> è ancora registrata: scrivici o
@@ -566,15 +646,58 @@ export function closureNoticeEmail(d: {
       riconosciamo per intero sulla nuova prenotazione.
     </p>`;
   return {
-    subject: `Siamo chiusi il ${d.date} — spostiamo la tua prenotazione?`,
+    subject: `Siamo chiusi il ${day} — spostiamo la tua prenotazione?`,
     html: layout({
       heading: "Cambio di programma",
       body,
-      preheader: `La bottega è chiusa il ${d.date}`,
+      preheader: `La bottega è chiusa il ${day}`,
     }),
-    text: `Ciao ${d.name}, il ${when} resteremo chiusi${why}, quindi non potremo accoglierti da ${d.shopName}.
+    text: `Ciao ${d.name}, il ${when} resteremo chiusi${hours}${why}, quindi non potremo accoglierti da ${d.shopName}.
 
 La tua prenotazione ${d.reference} è ancora registrata: contattaci e troviamo un'altra data. Un eventuale acconto ti viene riconosciuto per intero.`,
+  };
+}
+
+/**
+ * The same notice for a paid order booked into a pickup window on a closed day.
+ *
+ * Nothing is cancelled here either: the goods are paid for and the shop still
+ * owes them. The customer is asked to pick another window, or to get in touch
+ * if none suits.
+ */
+export function closurePickupNoticeEmail(d: {
+  orderNumber: string;
+  name: string;
+  pickupAt: Date;
+  shopName: string;
+  reason: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+}): Built {
+  const when = fmtPickupIt(d.pickupAt);
+  const hours = d.startTime && d.endTime ? ` dalle ${d.startTime} alle ${d.endTime}` : "";
+  const why = d.reason ? ` (${d.reason})` : "";
+  const body = `
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      Ciao ${esc(d.name)}, ci dispiace: il giorno del tuo ritiro (<strong>${esc(when)}</strong>)
+      ${esc(d.shopName)} resterà chiusa${esc(hours)}${esc(why)}, quindi non potremo consegnarti l’ordine
+      nell’orario che avevi scelto.
+    </p>
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
+      L’ordine <strong>${esc(d.orderNumber)}</strong> è pagato e ti aspetta: rispondi a questa email o
+      chiamaci per scegliere un altro orario di ritiro. Se nessuno ti va bene, troviamo insieme la
+      soluzione migliore.
+    </p>`;
+  return {
+    subject: `Siamo chiusi il giorno del tuo ritiro — ordine ${d.orderNumber}`,
+    html: layout({
+      heading: "Cambio di programma",
+      body,
+      preheader: `${d.shopName} è chiusa ${when}`,
+    }),
+    text: `Ciao ${d.name}, il giorno del tuo ritiro (${when}) ${d.shopName} resterà chiusa${hours}${why}.
+
+L'ordine ${d.orderNumber} è pagato e ti aspetta: contattaci per scegliere un altro orario di ritiro.`,
   };
 }
 
@@ -595,7 +718,7 @@ export function tableReminderEmail(d: {
   guests: number | null;
   shopName: string;
 }): Built {
-  const when = `${d.date}${d.time ? ` alle ${d.time}` : ""}`;
+  const when = `${fmtDateIt(d.date)}${d.time ? ` alle ${d.time}` : ""}`;
   const party = d.guests ? ` per ${d.guests} ${d.guests === 1 ? "persona" : "persone"}` : "";
   const body = `
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">
@@ -683,7 +806,7 @@ export function ownerDigestEmail(d: OwnerDigestData): Built {
         .join("")}</ul>`
     : `<p style="font-size:14px;color:#807868;margin:0;">Scorte a posto.</p>`;
   const body = `
-    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 4px;">Riepilogo del ${esc(d.date)}.</p>
+    <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 4px;">Riepilogo del ${esc(fmtDateIt(d.date))}.</p>
     ${section("Prenotazioni di oggi", resHtml)}
     ${section("Ordini (ultime 24h)", ordHtml)}
     ${section("Scorte in esaurimento", lowHtml)}
@@ -691,10 +814,10 @@ export function ownerDigestEmail(d: OwnerDigestData): Built {
       <a href="${absoluteUrl("/admin")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Apri il gestionale</a>
     </p>`;
   return {
-    subject: `Riepilogo giornaliero · ${d.date}`,
+    subject: `Riepilogo giornaliero · ${fmtDateIt(d.date)}`,
     html: layout({ heading: "Il tuo riepilogo", body, preheader: `${d.reservations.length} prenotazioni · ${d.orders.length} ordini` }),
     text:
-      `Riepilogo del ${d.date}\n\nPrenotazioni oggi: ${d.reservations.length}\n` +
+      `Riepilogo del ${fmtDateIt(d.date)}\n\nPrenotazioni oggi: ${d.reservations.length}\n` +
       d.reservations.map((r) => `- ${TYPE_LABEL[r.type]} ${r.name}${r.time ? ` ${r.time}` : ""} (${r.reference})`).join("\n") +
       `\n\nOrdini 24h: ${d.orders.length}\n` +
       d.orders.map((o) => `- ${o.orderNumber} ${o.name} ${euro(o.totalCents)}`).join("\n") +
@@ -723,7 +846,7 @@ export function orderStatusEmail(
     /** True when money remains on the order after this refund. */
     partialRefund?: boolean;
   },
-  status: "fulfilled" | "cancelled" | "refunded",
+  status: "ready" | "fulfilled" | "cancelled" | "refunded",
 ): Built {
   const euroTot = euro(d.refundAmountCents ?? d.totalCents);
   let heading: string;
@@ -731,7 +854,12 @@ export function orderStatusEmail(
   let extraHtml = "";
   let extraText = "";
 
-  if (status === "fulfilled") {
+  // "ready" is the moment the customer is told to come (pickup) or to expect
+  // the van (delivery); "fulfilled" is the same news for a courier shipment,
+  // whose "ready" is the parcel leaving with a tracking number. A pickup or a
+  // delivery marked fulfilled is already in the customer's hands and is sent
+  // nothing — the copy is kept for both statuses so a re-send still works.
+  if (status === "ready" || status === "fulfilled") {
     if (d.fulfilment === "shipping") {
       heading = "Il tuo ordine è in viaggio";
       intro = `il tuo ordine <strong>${esc(d.orderNumber)}</strong> è stato spedito.`;

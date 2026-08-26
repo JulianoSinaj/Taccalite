@@ -6,7 +6,13 @@ import { useSearchParams } from "next/navigation";
 import { Check, Flame, Minus, Plus, Users, UtensilsCrossed } from "lucide-react";
 // Deliberately the same module the server refuses with, so the message shown
 // beside the date field and the one the API would return cannot disagree.
-import { closureFor, closureMessage, type ClosureLike } from "@/lib/closures";
+import {
+  closureFor,
+  closureMessage,
+  closureRangeLabel,
+  closureTimeLabel,
+  type ClosureLike,
+} from "@/lib/closures";
 
 type ShopOption = {
   slug: string;
@@ -89,13 +95,29 @@ export default function ReservationForm({
   // refuses it regardless — this is so the customer finds out before filling in
   // the rest of the form rather than after submitting it.
   const [date, setDate] = useState("");
+  // Watched for the same reason: a closure of just the afternoon only refuses
+  // the times inside it, so the verdict can change when the hour is picked.
+  const [time, setTime] = useState("");
   const [tableShop, setTableShop] = useState(reservationShops[0]?.slug ?? "");
 
   const porchettaPickup = porchettaShops.find((s) => s.slug === porchettaShop) ?? porchettaShops[0];
 
   // Which location the chosen date is being tested against.
   const activeShop = type === "porchetta" ? porchettaShop : tableShop;
-  const hitClosure = date ? closureFor(closures, activeShop, date, "reservations") : null;
+  const hitClosure = date
+    ? closureFor(closures, activeShop, date, "reservations", type === "table" && time ? time : undefined)
+    : null;
+  // Said up front, because a native date picker cannot grey days out: the
+  // customer reads "chiusi dal 10 al 24 agosto" before choosing, instead of
+  // choosing and being refused.
+  const upcomingClosures = closures
+    .filter(
+      (c) =>
+        c.blocksReservations &&
+        (c.shopSlug == null || c.shopSlug === activeShop) &&
+        (!today || c.toDate >= today),
+    )
+    .slice(0, 4);
   // Only offer reservation types that at least one location supports.
   const availableTypes = TYPES.filter((t) =>
     t.key === "porchetta" ? porchettaShops.length > 0 : reservationShops.length > 0,
@@ -247,7 +269,14 @@ export default function ReservationForm({
               />
             </Field>
             <Field label="Ora" htmlFor="time">
-              <select id="time" name="time" required defaultValue="" className={inputClasses}>
+              <select
+                id="time"
+                name="time"
+                required
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className={inputClasses}
+              >
                 <option value="" disabled>
                   --:--
                 </option>
@@ -428,10 +457,28 @@ export default function ReservationForm({
       {/* A closed day is refused by the API either way; saying so here means
           the customer finds out at the date field instead of after filling in
           the whole form and pressing send. */}
-      {hitClosure && (
+      {hitClosure ? (
         <p id="date-closed" role="status" className="text-sm font-medium text-red-700">
           {closureMessage(hitClosure, date)}
         </p>
+      ) : (
+        upcomingClosures.length > 0 && (
+          <p className="text-sm text-taupe">
+            Giorni di chiusura:{" "}
+            {upcomingClosures.map((c, i) => {
+              const hours = closureTimeLabel(c);
+              return (
+                <span key={`${c.fromDate}-${c.toDate}-${c.shopSlug ?? ""}`}>
+                  {i > 0 ? ", " : ""}
+                  {closureRangeLabel(c)}
+                  {hours ? ` ${hours}` : ""}
+                  {c.reason ? ` (${c.reason})` : ""}
+                </span>
+              );
+            })}
+            .
+          </p>
+        )
       )}
 
       {error && <p className="text-sm font-medium text-red-700">{error}</p>}

@@ -34,6 +34,9 @@ function shift(iso: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
+/** The same shift, for callers that have to bound a range this helper built. */
+export const shiftIsoDate = shift;
+
 const pretty = (iso: string) =>
   new Date(`${iso}T00:00:00`).toLocaleDateString("it-IT", {
     weekday: "long",

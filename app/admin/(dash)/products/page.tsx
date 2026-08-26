@@ -18,10 +18,12 @@ import {
 } from "@/components/admin/FilterBar";
 import { DataTable, type Column } from "@/components/admin/DataTable";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
+import { BulkBar, BulkCheckbox } from "@/components/admin/BulkBar";
 import {
   getProductsPage,
   adminGetShops,
   countExpiringSoon,
+  countProductStockStates,
   getSavedViews,
   PRODUCT_SORTS,
 } from "@/lib/admin/queries";
@@ -30,9 +32,10 @@ import { getCurrentUser, isAdmin } from "@/lib/auth/session";
 import { productFilters, sortFilters, filterQuery } from "@/lib/admin/filters";
 import { expiryWindow } from "@/lib/time";
 import { getSetting } from "@/lib/db/queries";
-import { isLowStock } from "@/lib/inventory";
+import { isLowStock, reorderPointFor } from "@/lib/inventory";
 import {
   archiveProduct,
+  bulkUpdateProducts,
   importProducts,
   toggleProductActive,
   toggleProductFeatured,
@@ -43,6 +46,7 @@ import { shopScope, lockShop, shopChips } from "@/lib/admin/scope";
 export const dynamic = "force-dynamic";
 
 const BASE = "/admin/products";
+const BULK_FORM = "bulk-products";
 
 const STATUS_CHIPS = [
   { value: "all", label: "Tutti" },
@@ -58,6 +62,19 @@ const STOCK_CHIPS = [
   { value: "esaurite", label: "Esauriti" },
   { value: "illimitate", label: "Senza giacenza" },
 ];
+
+/** What a selection can be put through. Archived rows only come back. */
+const BULK_OPTIONS = [
+  { value: "attiva", label: "Attiva" },
+  { value: "disattiva", label: "Disattiva" },
+  { value: "evidenza", label: "Metti in evidenza" },
+  { value: "no-evidenza", label: "Togli dall'evidenza" },
+  { value: "archivia", label: "Archivia" },
+];
+const BULK_OPTIONS_ARCHIVED = [{ value: "ripristina", label: "Ripristina" }];
+
+const pill =
+  "inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15";
 
 type SP = {
   searchParams: Promise<{
@@ -88,15 +105,23 @@ export default async function AdminProducts({ searchParams }: SP) {
   // Bulk CSV import and export are full-admin operations server-side (a price
   // list rewrites the catalogue; an export is a bulk dump). Staff used to see
   // both controls and only find out on submit.
-  const [{ rows: products, total, pageCount, categories }, shops, expiringSoon, views, admin] =
-    await Promise.all([
-      getProductsPage({ ...filters, page, sort, lowStockThreshold }),
-      adminGetShops(),
-      countExpiringSoon(expiryHorizon, scope),
-      viewer ? getSavedViews(viewer.id, BASE) : Promise.resolve([]),
-      isAdmin(),
-    ]);
+  const [
+    { rows: products, total, pageCount, categories },
+    shops,
+    expiringSoon,
+    stockCounts,
+    views,
+    admin,
+  ] = await Promise.all([
+    getProductsPage({ ...filters, page, sort, lowStockThreshold }),
+    adminGetShops(),
+    countExpiringSoon(expiryHorizon, scope),
+    countProductStockStates(filters, lowStockThreshold),
+    viewer ? getSavedViews(viewer.id, BASE) : Promise.resolve([]),
+    isAdmin(),
+  ]);
 
+  const archivedView = filters.stato === "archiviati";
   const filtered = Object.values(filters).some((v) => v && v !== "all");
   // Carried on every sort/page link so the view survives navigation.
   const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso };
@@ -109,30 +134,56 @@ export default async function AdminProducts({ searchParams }: SP) {
     // them.
     { value: "non-assegnata", label: "Senza categoria valida" },
   ];
+  // The work-queue chips carry their size, like the Scadenze button does.
+  const stockChips = STOCK_CHIPS.map((c) => {
+    const n = c.value === "basse" ? stockCounts.basse : c.value === "esaurite" ? stockCounts.esaurite : 0;
+    return n > 0 ? { ...c, label: `${c.label} · ${n}` } : c;
+  });
 
   const columns: Column<ProductRow>[] = [
     {
+      // The tick shares the pinned column with the name, as on /admin/orders:
+      // it joins the bulk form through `form="…"`, so its place in the DOM is
+      // free, and a column of its own would identify nothing.
       key: "nome",
       header: "Prodotto",
       sortable: true,
       sticky: true,
       cell: (p) => (
-        <div>
-          <Link href={`/admin/products/${p.id}`} className="font-semibold text-brown-950 hover:underline">
-            {p.name}
-          </Link>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-            {!p.active && <StatusBadge status="cancelled" />}
-            {p.purchasable && (
-              <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[11px] font-bold tracking-widest text-ok-soft-fg uppercase">
-                Shop
-              </span>
-            )}
-            {p.featured && (
-              <span className="rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-bold tracking-widest text-brown-950 uppercase">
-                ★
-              </span>
-            )}
+        <div className="flex items-start gap-3">
+          <BulkCheckbox formId={BULK_FORM} id={p.id} label={`Seleziona ${p.name}`} />
+          {p.image ? (
+            // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail, any host
+            <img
+              src={p.image}
+              alt=""
+              className="size-10 shrink-0 rounded-lg object-cover ring-1 ring-brown-900/10"
+            />
+          ) : (
+            <span aria-hidden className="size-10 shrink-0 rounded-lg bg-brown-900/5 ring-1 ring-brown-900/10" />
+          )}
+          <div className="min-w-0">
+            <Link href={`/admin/products/${p.id}`} className="font-semibold text-brown-950 hover:underline">
+              {p.name}
+            </Link>
+            {p.sku && <p className="mt-0.5 font-mono text-[11px] text-brown-800/50">{p.sku}</p>}
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+              {p.archivedAt ? (
+                <StatusBadge status="archived" />
+              ) : (
+                !p.active && <StatusBadge status="inactive" />
+              )}
+              {p.purchasable && (
+                <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[11px] font-bold tracking-widest text-ok-soft-fg uppercase">
+                  Shop
+                </span>
+              )}
+              {p.featured && (
+                <span className="rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-bold tracking-widest text-brown-950 uppercase">
+                  ★
+                </span>
+              )}
+            </div>
           </div>
         </div>
       ),
@@ -147,6 +198,7 @@ export default async function AdminProducts({ searchParams }: SP) {
     {
       key: "negozio",
       header: "Sede",
+      sortable: true,
       hideOnMobile: true,
       cell: (p) => <span className="text-brown-800/70">{shopName.get(p.shopSlug) ?? p.shopSlug}</span>,
     },
@@ -167,11 +219,20 @@ export default async function AdminProducts({ searchParams }: SP) {
       header: "Giacenza",
       sortable: true,
       align: "right",
+      // Three states, three looks: none left is a word, not a red zero; under
+      // the reorder point is a number that needs a glance; the rest is a number.
       cell: (p) =>
         p.stock == null ? (
           <span className="text-xs text-brown-800/40">illimitata</span>
+        ) : p.stock <= 0 ? (
+          <span className="rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-bold tracking-widest text-danger-soft-fg uppercase">
+            Esaurito
+          </span>
         ) : isLowStock(p, lowStockThreshold) ? (
-          <span className="rounded-full bg-danger-soft px-2 py-0.5 text-xs font-bold tabular-nums text-danger-soft-fg">
+          <span
+            className="rounded-full bg-warn-soft px-2 py-0.5 text-xs font-bold tabular-nums text-warn-soft-fg"
+            title={`Sotto la soglia di riordino (${reorderPointFor(p, lowStockThreshold)})`}
+          >
             {p.stock}
           </span>
         ) : (
@@ -182,40 +243,33 @@ export default async function AdminProducts({ searchParams }: SP) {
       key: "azioni",
       header: <span className="sr-only">Azioni</span>,
       align: "right",
+      // An archived row has one way forward, back. Everything else lives on the
+      // product page (archive, delete, duplicate) or in the bulk bar.
       cell: (p) => (
         <div className="flex items-center justify-end gap-1.5">
-          <ActionForm action={toggleProductFeatured} className="inline-flex">
-            <input type="hidden" name="id" value={p.id} />
-            <input type="hidden" name="featured" value={p.featured ? "false" : "true"} />
-            <PendingButton tone={p.featured ? "gold" : "dark"}>{p.featured ? "★" : "☆"}</PendingButton>
-          </ActionForm>
-          <ActionForm action={toggleProductActive} className="inline-flex">
-            <input type="hidden" name="id" value={p.id} />
-            <input type="hidden" name="active" value={p.active ? "false" : "true"} />
-            <PendingButton tone="dark">{p.active ? "Disattiva" : "Attiva"}</PendingButton>
-          </ActionForm>
-          <Link
-            href={`/admin/products/${p.id}`}
-            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-3 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-          >
+          {p.archivedAt ? (
+            <ActionForm action={archiveProduct} className="inline-flex">
+              <input type="hidden" name="id" value={p.id} />
+              <input type="hidden" name="restore" value="true" />
+              <PendingButton tone="dark">Ripristina</PendingButton>
+            </ActionForm>
+          ) : (
+            <>
+              <ActionForm action={toggleProductFeatured} className="inline-flex">
+                <input type="hidden" name="id" value={p.id} />
+                <input type="hidden" name="featured" value={p.featured ? "false" : "true"} />
+                <PendingButton tone={p.featured ? "gold" : "dark"}>{p.featured ? "★" : "☆"}</PendingButton>
+              </ActionForm>
+              <ActionForm action={toggleProductActive} className="inline-flex">
+                <input type="hidden" name="id" value={p.id} />
+                <input type="hidden" name="active" value={p.active ? "false" : "true"} />
+                <PendingButton tone="dark">{p.active ? "Disattiva" : "Attiva"}</PendingButton>
+              </ActionForm>
+            </>
+          )}
+          <Link href={`/admin/products/${p.id}`} className={`${pill} px-3`}>
             Modifica
           </Link>
-          {/* Archiving is the default: deleting cascades the product's stock
-              movements away, and the ledger is the point of having one. */}
-          <ActionForm action={archiveProduct} className="inline-flex">
-            <input type="hidden" name="id" value={p.id} />
-            <input type="hidden" name="restore" value={p.archivedAt ? "true" : "false"} />
-            <PendingButton
-              tone="dark"
-              confirm={
-                p.archivedAt
-                  ? undefined
-                  : `Archiviare "${p.name}"? Sparisce dal catalogo e dal sito, ma storico e movimenti restano.`
-              }
-            >
-              {p.archivedAt ? "Ripristina" : "Archivia"}
-            </PendingButton>
-          </ActionForm>
         </div>
       ),
     },
@@ -241,21 +295,17 @@ export default async function AdminProducts({ searchParams }: SP) {
             {admin ? (
               <>
                 {/* The movement ledger is what a stocktake gets reconciled
-                    against, and it was readable twenty rows at a time on a
-                    product page with no way to take it anywhere. */}
+                    against; a product page shows its own last twenty rows and
+                    links to its own slice of this file. */}
                 <a
                   href="/api/admin/export/stock-movements"
                   download
-                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                  className={pill}
                   title="Tutti i movimenti di giacenza, con motivo e operatore"
                 >
                   Movimenti CSV
                 </a>
-                <a
-                  href={`/api/admin/export/products${filterQuery({ ...filters })}`}
-                  download
-                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-                >
+                <a href={`/api/admin/export/products${filterQuery({ ...filters })}`} download className={pill}>
                   Esporta CSV
                 </a>
               </>
@@ -271,14 +321,14 @@ export default async function AdminProducts({ searchParams }: SP) {
         basePath={BASE}
         params={linkParams}
         name="scorte"
-        options={STOCK_CHIPS}
+        options={stockChips}
         label="Filtra per scorte"
       />
 
       <FilterToolbar
         basePath={BASE}
         params={linkParams}
-        searchPlaceholder="Nome, slug o categoria…"
+        searchPlaceholder="Nome, slug, categoria, SKU o fornitore…"
         carry={["scorte"]}
         formId="products-filters"
         facets={[
@@ -354,6 +404,16 @@ export default async function AdminProducts({ searchParams }: SP) {
           </Panel>
         </details>
       )}
+
+      {/* A price list is hundreds of rows; switching a season's worth of them
+          off one click at a time was the only way. */}
+      <BulkBar
+        formId={BULK_FORM}
+        action={bulkUpdateProducts}
+        label="prodotti"
+        options={archivedView ? BULK_OPTIONS_ARCHIVED : BULK_OPTIONS}
+        confirmTemplate="Applicare l'azione a {n} prodotti? Quelli per cui non è consentita vengono saltati."
+      />
 
       <DataTable
         rows={products}

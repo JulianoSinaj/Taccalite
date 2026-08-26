@@ -1,0 +1,1 @@
+ALTER TABLE `orders` ADD `ready_at` integer;

@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "./client";
 import * as schema from "./schema";
 import { dateInRome } from "@/lib/time";
@@ -297,6 +297,12 @@ export const getClosures = cache(async (fromDate?: string) => {
  * render body.
  */
 export async function getPickupSlotCounts(fromMs = Date.now()): Promise<Map<string, number>> {
+  // A card checkout holds its window only while the customer can still be
+  // paying for it. The Stripe session lasts 30 minutes; an hour on, an unpaid
+  // card order is an abandoned one, and it must not keep a place that the
+  // sweep (`orders.abandonedAfterHours`, default 24 h) will only release later
+  // — the last place in a Saturday window was going to nobody.
+  const staleCardSince = new Date(Date.now() - 60 * 60_000);
   const rows = await db
     .select({
       shopSlug: schema.orders.shopSlug,
@@ -308,6 +314,11 @@ export async function getPickupSlotCounts(fromMs = Date.now()): Promise<Map<stri
       and(
         gte(schema.orders.pickupSlotAt, new Date(fromMs)),
         sql`${schema.orders.status} not in ('cancelled', 'refunded')`,
+        or(
+          ne(schema.orders.paymentMethod, "card"),
+          eq(schema.orders.paymentStatus, "paid"),
+          gte(schema.orders.createdAt, staleCardSince),
+        ),
       ),
     )
     .groupBy(schema.orders.shopSlug, schema.orders.pickupSlotAt);

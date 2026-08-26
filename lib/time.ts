@@ -26,6 +26,23 @@ export function dateInRome(date: Date = new Date()): string {
 }
 
 /**
+ * The wall-clock `HH:MM` of an instant in the business timezone — what a stored
+ * pickup instant reads as on the shop's own clock, for comparing against the
+ * `HH:MM` strings a partial-day closure is written in.
+ */
+export function timeInRome(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: BUSINESS_TZ,
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(date);
+  const get = (t: string) => parts.find((p) => p.type === t)!.value;
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return `${hour}:${get("minute")}`;
+}
+
+/**
  * `yyyy-mm-dd` for `days` from today in the business timezone.
  *
  * Lives here rather than in a page because the React Compiler lint forbids

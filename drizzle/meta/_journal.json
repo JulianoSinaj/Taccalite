@@ -267,6 +267,41 @@
       "when": 1787572497331,
       "tag": "0037_exotic_rachel_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1787760129644,
+      "tag": "0038_order_pricing_overrides",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1787760747980,
+      "tag": "0039_reservation_deposit_refund",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1787761381583,
+      "tag": "0040_closure_time_window_notified",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1787761578102,
+      "tag": "0041_product_seo",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1787761645294,
+      "tag": "0042_wonderful_tiger_shark",
+      "breakpoints": true
     }
   ]
 }

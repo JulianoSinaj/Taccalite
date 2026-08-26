@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { resolveSlug } from "@/lib/slug";
@@ -206,6 +207,8 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
       costCents: d.costEuros,
       sku: d.sku ?? null,
       supplier: d.supplier ?? null,
+      seoTitle: d.seoTitle ?? null,
+      seoDescription: d.seoDescription ?? null,
       ...(clearLowStock ? { lowStockNotifiedAt: null } : {}),
       featured: d.featured,
       active: d.active,
@@ -219,6 +222,10 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
       // edit another shop's product nor reassign one of their own away.
       await requireShopScope(prev?.shopSlug);
       await requireShopScope(d.shopSlug);
+      // Archived means out of the catalogue, whatever the form's toggles say:
+      // the flags come back only through "Ripristina", never as a side effect
+      // of saving an edit.
+      if (prev?.archivedAt) Object.assign(values, { active: false, purchasable: false, featured: false });
       await db.update(products).set(values).where(eq(products.id, d.id));
       if (prev && (prev.stock ?? 0) <= 0 && d.stock != null && d.stock > 0) {
         await notifyBackInStock(d.id, prev.name, prev.slug);
@@ -256,26 +263,53 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
   });
 }
 
+/**
+ * The product a row-level action targets, checked against the viewer's scope.
+ *
+ * The list is confined to the operator's location; the toggles under it were
+ * not, so another sede's product was one hidden `id` away from being switched
+ * off, featured, archived or deleted. `saveProduct` and `adjustStock` already
+ * refuse — this brings the quick actions in line.
+ */
+async function productForAction(fd: FormData) {
+  const id = (fd.get("id") ?? "").toString();
+  const [row] = await db
+    .select({
+      id: products.id,
+      name: products.name,
+      shopSlug: products.shopSlug,
+      archivedAt: products.archivedAt,
+    })
+    .from(products)
+    .where(eq(products.id, id))
+    .limit(1);
+  if (!row) throw new ActionError("Prodotto non trovato.");
+  await requireShopScope(row.shopSlug);
+  return row;
+}
+
 /** Quick list-row toggle: activate/deactivate a product. */
 export async function toggleProductActive(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireAdmin();
-    const id = (fd.get("id") ?? "").toString();
+    const row = await productForAction(fd);
     const active = fd.get("active") === "true";
-    const [row] = await db
-      .update(products)
-      .set({ active })
-      .where(eq(products.id, id))
-      .returning({ name: products.name });
+    // Archived is out of the catalogue by definition. Activating one produced a
+    // row that read "attivo" and appeared nowhere.
+    if (active && row.archivedAt) {
+      throw new ActionError(`"${row.name}" è archiviato: ripristinalo prima di attivarlo.`);
+    }
+    await db.update(products).set({ active }).where(eq(products.id, row.id));
     await logAudit({
       actor,
       action: "product.active",
       entity: "product",
-      entityId: id,
-      summary: `Prodotto ${row?.name ?? id} ${active ? "attivato" : "disattivato"}`,
+      entityId: row.id,
+      summary: `Prodotto ${row.name} ${active ? "attivato" : "disattivato"}`,
       meta: { active },
     });
     revalidatePath("/admin/products");
+    revalidatePath(`/admin/products/${row.id}`);
     revalidatePath("/negozio");
     return ok(active ? "Prodotto attivato." : "Prodotto disattivato.");
   });
@@ -285,25 +319,136 @@ export async function toggleProductActive(_prev: ActionState, fd: FormData): Pro
 export async function toggleProductFeatured(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireAdmin();
-    const id = (fd.get("id") ?? "").toString();
+    const row = await productForAction(fd);
     const featured = fd.get("featured") === "true";
-    const [row] = await db
-      .update(products)
-      .set({ featured })
-      .where(eq(products.id, id))
-      .returning({ name: products.name });
+    if (featured && row.archivedAt) {
+      throw new ActionError(`"${row.name}" è archiviato: ripristinalo prima di metterlo in evidenza.`);
+    }
+    await db.update(products).set({ featured }).where(eq(products.id, row.id));
     await logAudit({
       actor,
       action: "product.featured",
       entity: "product",
-      entityId: id,
-      summary: `Prodotto ${row?.name ?? id} ${featured ? "messo in evidenza" : "rimosso dalle evidenze"}`,
+      entityId: row.id,
+      summary: `Prodotto ${row.name} ${featured ? "messo in evidenza" : "rimosso dalle evidenze"}`,
       meta: { featured },
     });
     revalidatePath("/admin/products");
+    revalidatePath(`/admin/products/${row.id}`);
     revalidatePath("/negozio");
     return ok(featured ? "Prodotto messo in evidenza." : "Prodotto rimosso dalle evidenze.");
   });
+}
+
+const BULK_PRODUCT_OPS = ["attiva", "disattiva", "evidenza", "no-evidenza", "archivia", "ripristina"] as const;
+
+/**
+ * One gesture over a selection of catalogue rows.
+ *
+ * Runs the single-row action per id, so scope, the archived guard and the
+ * audit line are exactly what a click on that row would have produced; a
+ * refused row is reported and skipped rather than failing the batch.
+ */
+export async function bulkUpdateProducts(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    await requireAdmin();
+    const ids = fd.getAll("ids").map(String).filter(Boolean);
+    const op = String(fd.get("status") ?? "");
+    if (ids.length === 0) throw new ActionError("Seleziona almeno un prodotto.");
+    if (!BULK_PRODUCT_OPS.includes(op as (typeof BULK_PRODUCT_OPS)[number])) {
+      throw new ActionError("Questa operazione non è disponibile in blocco.");
+    }
+
+    let changed = 0;
+    const failures: string[] = [];
+    for (const id of ids) {
+      const single = new FormData();
+      single.set("id", id);
+      let res: ActionState;
+      switch (op) {
+        case "attiva":
+        case "disattiva":
+          single.set("active", op === "attiva" ? "true" : "false");
+          res = await toggleProductActive({ status: "idle" }, single);
+          break;
+        case "evidenza":
+        case "no-evidenza":
+          single.set("featured", op === "evidenza" ? "true" : "false");
+          res = await toggleProductFeatured({ status: "idle" }, single);
+          break;
+        default:
+          single.set("restore", op === "ripristina" ? "true" : "false");
+          res = await archiveProduct({ status: "idle" }, single);
+      }
+      if (res.status === "error") failures.push(res.message ?? id);
+      else changed += 1;
+    }
+
+    revalidatePath("/admin/products");
+    revalidatePath("/negozio");
+    if (failures.length > 0) {
+      return ok(
+        `${changed} prodotti aggiornati, ${failures.length} saltati (${failures[0]}${
+          failures.length > 1 ? " …" : ""
+        }).`,
+      );
+    }
+    return ok(`${changed} prodotti aggiornati.`);
+  });
+}
+
+/**
+ * Copy a product into a new, switched-off row and open it for editing.
+ *
+ * A variant (the same salame in a different cut) shares almost every field
+ * with its sibling; retyping twenty of them was the alternative. The copy is
+ * inactive, not purchasable, not featured and tracks no stock — nothing on the
+ * storefront changes until somebody finishes it and turns it on.
+ */
+export async function duplicateProduct(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  let newId: string | undefined;
+  const res = await runAction(async () => {
+    const actor = await requireAdmin();
+    const target = await productForAction(fd);
+    const [src] = await db.select().from(products).where(eq(products.id, target.id)).limit(1);
+    if (!src) throw new ActionError("Prodotto non trovato.");
+    // Everything but identity and lifecycle stamps.
+    const { id: _id, createdAt: _createdAt, lowStockNotifiedAt: _n, archivedAt: _a, ...copy } = src;
+    void _id; void _createdAt; void _n; void _a;
+    const name = `${src.name} (copia)`;
+    const [created] = await db
+      .insert(products)
+      .values({
+        ...copy,
+        name,
+        slug: await resolveSlug({
+          table: products,
+          slugColumn: products.slug,
+          idColumn: products.id,
+          fallbackText: name,
+        }),
+        active: false,
+        purchasable: false,
+        featured: false,
+        stock: null,
+      })
+      .returning({ id: products.id });
+    newId = created?.id;
+    await logAudit({
+      actor,
+      action: "product.create",
+      entity: "product",
+      entityId: newId,
+      summary: `Prodotto creato: ${name} — copia di ${src.name}`,
+      meta: { copiedFrom: src.id, priceCents: src.priceCents, vatRateBps: src.vatRateBps },
+    });
+    revalidatePath("/admin/products");
+    return ok("Copia creata.");
+  });
+  // Outside `runAction`: a redirect is thrown, and the wrapper would report it
+  // as an unexpected error.
+  if (res.status === "success" && newId) redirect(`/admin/products/${newId}`);
+  return res;
 }
 
 /**
@@ -318,33 +463,41 @@ export async function toggleProductFeatured(_prev: ActionState, fd: FormData): P
 export async function archiveProduct(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireAdmin();
-    const id = (fd.get("id") ?? "").toString();
+    const row = await productForAction(fd);
     const restore = fd.get("restore") === "true";
+    if (restore && !row.archivedAt) return ok(`"${row.name}" non è archiviato.`);
+    if (!restore && row.archivedAt) return ok(`"${row.name}" è già archiviato.`);
 
-    const [row] = await db
+    await db
       .update(products)
-      .set({
-        archivedAt: restore ? null : new Date(),
-        // An archived product must not stay purchasable on the storefront.
-        ...(restore ? {} : { active: false, purchasable: false, featured: false }),
-      })
-      .where(eq(products.id, id))
-      .returning({ name: products.name });
-    if (!row) throw new ActionError("Prodotto non trovato.");
+      .set(
+        restore
+          ? // Back in the catalogue, and active in the gestionale so it does
+            // not reappear as a greyed-out row nobody asked for. The storefront
+            // flags stay off: restoring never silently puts something on sale.
+            { archivedAt: null, active: true }
+          : // An archived product must not stay purchasable on the storefront.
+            { archivedAt: new Date(), active: false, purchasable: false, featured: false },
+      )
+      .where(eq(products.id, row.id));
 
     await logAudit({
       actor,
       action: restore ? "product.restore" : "product.archive",
       entity: "product",
-      entityId: id,
+      entityId: row.id,
       summary: `Prodotto ${row.name} ${restore ? "ripristinato dall'archivio" : "archiviato"}`,
     });
     revalidatePath("/admin/products");
     // Also reachable from the product's own page, which has to re-read the
     // archive stamp it renders the button from.
-    revalidatePath(`/admin/products/${id}`);
+    revalidatePath(`/admin/products/${row.id}`);
     revalidatePath("/negozio");
-    return ok(restore ? "Prodotto ripristinato." : "Prodotto archiviato.");
+    return ok(
+      restore
+        ? "Prodotto ripristinato e attivo. Vendita online ed evidenza restano spente: riattivale dalla scheda se servono."
+        : "Prodotto archiviato.",
+    );
   });
 }
 
@@ -356,14 +509,8 @@ export async function archiveProduct(_prev: ActionState, fd: FormData): Promise<
 export async function deleteProduct(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireAdmin();
-    const id = (fd.get("id") ?? "").toString();
-
-    const [row] = await db
-      .select({ name: products.name })
-      .from(products)
-      .where(eq(products.id, id))
-      .limit(1);
-    if (!row) throw new ActionError("Prodotto non trovato.");
+    const row = await productForAction(fd);
+    const id = row.id;
 
     const [{ sold }] = await db
       .select({ sold: sql<number>`count(*)` })

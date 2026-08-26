@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getLoyaltySummary } from "@/lib/loyalty";
 import { getOrdersForUser } from "@/lib/orders";
 import { getReservationsForUser, getRedemptionsForUser } from "@/lib/db/queries";
+import { dateInRome } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,7 @@ export default async function AccountPage({ searchParams }: SearchParams) {
       ? { orders: Number(ordini ?? 0) || 0, points: Number(punti ?? 0) || 0 }
       : null;
 
+  const today = dateInRome();
   const [{ account, transactions, rewards, nextReward }, orders, reservations, redemptions] =
     await Promise.all([
       getLoyaltySummary(user.id),
@@ -69,6 +71,7 @@ export default async function AccountPage({ searchParams }: SearchParams) {
         time: r.time,
         quantityKg: r.quantityKg,
         name: r.name,
+        cancellable: (r.status === "pending" || r.status === "confirmed") && r.date >= today,
       }))}
       redemptions={redemptions.map((r) => ({
         id: r.id,

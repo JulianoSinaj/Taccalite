@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, lte, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { deliveryZones, pickupSlots, orders, shops, shopClosures, reservations } from "@/lib/db/schema";
 import { requireRole } from "@/lib/auth/session";
@@ -11,6 +11,7 @@ import { parseForm, deliveryZoneInput, pickupSlotInput, shopClosureInput } from 
 import { FULFILMENT_LABEL, WEEKDAY_NAME } from "@/lib/fulfilment";
 import { enqueueMail } from "@/lib/mail/mailer";
 import { closureNoticeEmail } from "@/lib/mail/templates";
+import { dateInRome } from "@/lib/time";
 
 /**
  * Delivery zones and pickup windows.
@@ -175,21 +176,35 @@ export async function savePickupSlot(_prev: ActionState, fd: FormData): Promise<
     };
 
     if (d.id) {
-      await db.update(pickupSlots).set(values).where(eq(pickupSlots.id, d.id));
-    } else {
-      const clash = await db
+      const [prev] = await db
         .select({ id: pickupSlots.id })
         .from(pickupSlots)
-        .where(
-          and(
-            eq(pickupSlots.shopSlug, d.shopSlug),
-            eq(pickupSlots.weekday, d.weekday),
-            eq(pickupSlots.startTime, d.startTime),
-          ),
-        );
-      if (clash.length > 0) {
-        throw new ActionError("Esiste già una fascia che inizia a quest'ora in questo giorno.");
-      }
+        .where(eq(pickupSlots.id, d.id))
+        .limit(1);
+      if (!prev) throw new ActionError("Fascia non trovata.");
+    }
+
+    // The unique index would refuse this anyway; checking first turns a
+    // constraint name into a sentence. On update the row's own start is not a
+    // clash with itself.
+    const clash = await db
+      .select({ id: pickupSlots.id })
+      .from(pickupSlots)
+      .where(
+        and(
+          eq(pickupSlots.shopSlug, d.shopSlug),
+          eq(pickupSlots.weekday, d.weekday),
+          eq(pickupSlots.startTime, d.startTime),
+          d.id ? ne(pickupSlots.id, d.id) : undefined,
+        ),
+      );
+    if (clash.length > 0) {
+      throw new ActionError("Esiste già una fascia che inizia a quest'ora in questo giorno.");
+    }
+
+    if (d.id) {
+      await db.update(pickupSlots).set(values).where(eq(pickupSlots.id, d.id));
+    } else {
       await db.insert(pickupSlots).values(values);
     }
 
@@ -230,6 +245,75 @@ export async function deletePickupSlot(_prev: ActionState, fd: FormData): Promis
   });
 }
 
+/**
+ * Suspend or reactivate every window of one shop at once.
+ *
+ * With every window suspended the checkout offers no picker and pickup falls
+ * back to "no time" — the same as a shop that never had windows — so this is
+ * the way to pause timed pickup without losing the schedule.
+ */
+export async function setShopPickupSlotsActive(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const shopSlug = String(fd.get("shopSlug") ?? "").trim();
+    const active = fd.get("active") === "true";
+    const [shop] = await db.select().from(shops).where(eq(shops.slug, shopSlug)).limit(1);
+    if (!shop) throw new ActionError("Sede non valida.");
+
+    const changed = await db
+      .update(pickupSlots)
+      .set({ active })
+      .where(and(eq(pickupSlots.shopSlug, shopSlug), eq(pickupSlots.active, !active)))
+      .returning({ id: pickupSlots.id });
+    if (changed.length === 0) {
+      return ok(active ? "Nessuna fascia da riattivare." : "Nessuna fascia da sospendere.");
+    }
+
+    await logAudit({
+      actor,
+      action: active ? "fulfilment.slot.activate_all" : "fulfilment.slot.suspend_all",
+      entity: "pickup_slot",
+      entityId: shopSlug,
+      summary: `Fasce di ritiro di ${shop.name} ${active ? "riattivate" : "sospese"}: ${changed.length}`,
+      meta: { shopSlug, active, count: changed.length },
+    });
+    revalidateAll();
+    return ok(
+      active
+        ? `${changed.length} fasce riattivate.`
+        : `${changed.length} fasce sospese: il ritiro da ${shop.name} torna senza orario finché non le riattivi.`,
+    );
+  });
+}
+
+/** Remove every window of one shop. Same safety as the single delete: no
+ *  appointment already made moves, the windows just stop being offered. */
+export async function deleteShopPickupSlots(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const shopSlug = String(fd.get("shopSlug") ?? "").trim();
+    const [shop] = await db.select().from(shops).where(eq(shops.slug, shopSlug)).limit(1);
+    if (!shop) throw new ActionError("Sede non valida.");
+
+    const removed = await db
+      .delete(pickupSlots)
+      .where(eq(pickupSlots.shopSlug, shopSlug))
+      .returning({ id: pickupSlots.id });
+    if (removed.length === 0) return ok("Nessuna fascia da eliminare.");
+
+    await logAudit({
+      actor,
+      action: "fulfilment.slot.delete_all",
+      entity: "pickup_slot",
+      entityId: shopSlug,
+      summary: `Fasce di ritiro di ${shop.name} eliminate: ${removed.length}`,
+      meta: { shopSlug, count: removed.length },
+    });
+    revalidateAll();
+    return ok(`${removed.length} fasce eliminate. Gli ordini già prenotati mantengono il loro orario.`);
+  });
+}
+
 /** Split "HH:MM" into minutes since midnight, and back. */
 const toMinutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 const toClock = (m: number) =>
@@ -240,9 +324,12 @@ const toClock = (m: number) =>
  *
  * Writing twenty windows by hand is the reason a feature like this goes
  * unconfigured, and the hours are already structured data (`shops.hoursStructured`,
- * added when "aperto adesso" stopped being parsed from prose). Re-running is an
- * upsert on (sede, giorno, inizio), so adjusting the length and generating again
- * corrects the schedule instead of duplicating it.
+ * added when "aperto adesso" stopped being parsed from prose).
+ *
+ * Generating *replaces* the shop's whole schedule. An upsert on (sede, giorno,
+ * inizio) looked gentler but left stubs: going from 30- to 60-minute windows
+ * updated the :00 rows and kept the :30 ones, so the customer was offered two
+ * overlapping windows. A schedule derived from the hours has to be exactly that.
  */
 export async function generatePickupSlots(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
@@ -292,29 +379,30 @@ export async function generatePickupSlots(_prev: ActionState, fd: FormData): Pro
       );
     }
 
-    await db
-      .insert(pickupSlots)
-      .values(rows)
-      .onConflictDoUpdate({
-        target: [pickupSlots.shopSlug, pickupSlots.weekday, pickupSlots.startTime],
-        set: {
-          endTime: sql`excluded.end_time`,
-          capacityOrders: sql`excluded.capacity_orders`,
-          cutoffHours: sql`excluded.cutoff_hours`,
-          active: sql`excluded.active`,
-        },
-      });
+    // One transaction: the old schedule must not be gone while the new one has
+    // yet to land, or a checkout in that instant sees a shop with no windows.
+    const replaced = await db.transaction(async (tx) => {
+      const old = await tx
+        .delete(pickupSlots)
+        .where(eq(pickupSlots.shopSlug, shopSlug))
+        .returning({ id: pickupSlots.id });
+      await tx.insert(pickupSlots).values(rows);
+      return old.length;
+    });
 
     await logAudit({
       actor,
       action: "fulfilment.slot.generate",
       entity: "pickup_slot",
       entityId: shopSlug,
-      summary: `Fasce di ritiro generate per ${shop.name}: ${rows.length} da ${minutes} min`,
-      meta: { shopSlug, minutes, capacityOrders, cutoffHours, count: rows.length },
+      summary: `Fasce di ritiro generate per ${shop.name}: ${rows.length} da ${minutes} min (${replaced} sostituite)`,
+      meta: { shopSlug, minutes, capacityOrders, cutoffHours, count: rows.length, replaced },
     });
     revalidateAll();
-    return ok(`${rows.length} fasce generate dagli orari di apertura di ${shop.name}.`);
+    return ok(
+      `${rows.length} fasce generate dagli orari di apertura di ${shop.name}` +
+        (replaced > 0 ? ` (${replaced} precedenti sostituite).` : "."),
+    );
   });
 }
 
@@ -353,6 +441,12 @@ export async function saveClosure(_prev: ActionState, fd: FormData): Promise<Act
       blocksReservations: d.blocksReservations,
       blocksPickup: d.blocksPickup,
     };
+
+    // The list only shows closures from today on, so one that already ended
+    // would be saved, confirmed, and then never seen again.
+    if (values.toDate < dateInRome()) {
+      throw new ActionError("La chiusura finisce nel passato: se non serve più, rimuovila.");
+    }
 
     const scope = d.shopSlug ? d.shopSlug : "tutte le sedi";
     const when =

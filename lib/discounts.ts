@@ -1,7 +1,7 @@
 import "server-only";
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { discountCodes, discountRedemptions, orders } from "@/lib/db/schema";
+import { discountCodes, discountRedemptions, orders, type DiscountCodeRow } from "@/lib/db/schema";
 
 export type AppliedDiscount = {
   id: string;
@@ -231,7 +231,7 @@ export async function releaseDiscountUseByCode(code: string, orderId: string): P
 }
 
 /** The orders a code was used on, newest first — the drill-down behind `timesUsed`. */
-export function getDiscountUses(code: string, limit = 100) {
+export function getDiscountUses(code: string, opts: { limit?: number; offset?: number } = {}) {
   return db
     .select({
       redemption: discountRedemptions,
@@ -242,6 +242,38 @@ export function getDiscountUses(code: string, limit = 100) {
     .from(discountRedemptions)
     .leftJoin(orders, eq(discountRedemptions.orderId, orders.id))
     .where(eq(discountRedemptions.discountCode, normalizeCode(code)))
-    .orderBy(desc(discountRedemptions.createdAt))
-    .limit(limit);
+    .orderBy(desc(discountRedemptions.createdAt), discountRedemptions.id)
+    .limit(opts.limit ?? 100)
+    .offset(opts.offset ?? 0);
+}
+
+/** Ledger rows and the money they represent, for a code's summary line. */
+export async function summarizeDiscountUses(code: string): Promise<{ count: number; amountCents: number }> {
+  const [row] = await db
+    .select({
+      count: sql<number>`count(*)`,
+      amountCents: sql<number>`coalesce(sum(${discountRedemptions.amountCents}), 0)`,
+    })
+    .from(discountRedemptions)
+    .where(eq(discountRedemptions.discountCode, normalizeCode(code)));
+  return { count: Number(row?.count ?? 0), amountCents: Number(row?.amountCents ?? 0) };
+}
+
+/**
+ * Why a code can (or cannot) be redeemed right now. One state per code, in the
+ * order `validateDiscount` refuses: switched off, past its end date, out of
+ * uses, not yet started — otherwise live. `discountsWhere` mirrors these rules
+ * in SQL so a code sits under exactly one status chip on the admin list.
+ */
+export type DiscountState = "inactive" | "expired" | "exhausted" | "scheduled" | "active";
+
+export function discountState(
+  row: Pick<DiscountCodeRow, "active" | "startsAt" | "endsAt" | "maxRedemptions" | "timesUsed">,
+  now: Date = new Date(),
+): DiscountState {
+  if (!row.active) return "inactive";
+  if (row.endsAt && now > row.endsAt) return "expired";
+  if (row.maxRedemptions != null && row.timesUsed >= row.maxRedemptions) return "exhausted";
+  if (row.startsAt && now < row.startsAt) return "scheduled";
+  return "active";
 }

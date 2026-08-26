@@ -1,31 +1,54 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { AdminHeader, Panel, BackLink, StatusBadge, euro, fmtDateTime } from "@/components/admin/ui";
+import {
+  AdminHeader,
+  Panel,
+  BackLink,
+  StatusBadge,
+  Pagination,
+  euro,
+  fmtDateTime,
+  statusLabel,
+} from "@/components/admin/ui";
 import { DiscountForm } from "@/components/admin/forms";
 import { adminGetDiscount, adminGetShops } from "@/lib/admin/queries";
-import { getDiscountUses } from "@/lib/discounts";
+import { discountState, getDiscountUses, summarizeDiscountUses } from "@/lib/discounts";
 import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
-export default async function EditDiscount({ params }: { params: Promise<{ id: string }> }) {
+/** Ledger rows per page. The list used to stop at 100 without saying so. */
+const USES_PAGE = 50;
+
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ page?: string }>;
+};
+
+export default async function EditDiscount({ params, searchParams }: Props) {
   if (!(await isAdmin())) redirect("/admin");
-  const { id } = await params;
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
   const discount = await adminGetDiscount(id);
   if (!discount) notFound();
 
-  const [shops, uses] = await Promise.all([adminGetShops(), getDiscountUses(discount.code)]);
-  const redeemedCents = uses.reduce((s, u) => s + u.redemption.amountCents, 0);
+  const [shops, summary] = await Promise.all([adminGetShops(), summarizeDiscountUses(discount.code)]);
+  const pageCount = Math.max(1, Math.ceil(summary.count / USES_PAGE));
+  const page = Math.min(pageCount, Math.max(1, Number(sp.page) || 1));
+  const uses = await getDiscountUses(discount.code, { limit: USES_PAGE, offset: (page - 1) * USES_PAGE });
+
+  const state = discountState(discount);
+  const subtitle = [
+    state === "active" ? "Utilizzabile" : statusLabel(state),
+    `usato ${discount.timesUsed} volte${discount.maxRedemptions != null ? ` su ${discount.maxRedemptions}` : ""}`,
+    summary.amountCents > 0 ? `${euro(summary.amountCents)} scontati` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div>
       <BackLink href="/admin/discounts">Codici sconto</BackLink>
-      <AdminHeader
-        title={`Codice ${discount.code}`}
-        subtitle={`Usato ${discount.timesUsed} volte${
-          discount.maxRedemptions != null ? ` su ${discount.maxRedemptions}` : ""
-        }${redeemedCents > 0 ? ` · ${euro(redeemedCents)} scontati` : ""}`}
-      />
+      <AdminHeader title={`Codice ${discount.code}`} subtitle={subtitle} />
       <Panel>
         <DiscountForm discount={discount} shops={shops} />
       </Panel>
@@ -33,7 +56,9 @@ export default async function EditDiscount({ params }: { params: Promise<{ id: s
       {/* The drill-down behind the counter. `timesUsed` alone couldn't answer
           "who used this and on what", which is the question a promotion that
           looks too popular always raises. */}
-      <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Utilizzi</h2>
+      <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">
+        Utilizzi{summary.count > 0 ? ` (${summary.count})` : ""}
+      </h2>
       {uses.length === 0 ? (
         <Panel>
           <p className="text-brown-800/70">
@@ -98,6 +123,7 @@ export default async function EditDiscount({ params }: { params: Promise<{ id: s
           </table>
         </Panel>
       )}
+      <Pagination basePath={`/admin/discounts/${discount.id}`} page={page} pageCount={pageCount} />
     </div>
   );
 }

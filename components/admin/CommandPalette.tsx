@@ -13,7 +13,7 @@ const COMMANDS: Cmd[] = [
   { label: "Calendario prenotazioni", href: "/admin/reservations/calendar", group: "Vai a", keywords: "settimana prenotazioni" },
   { label: "Ordini", href: "/admin/orders", group: "Vai a" },
   { label: "Ritiri e consegne di oggi", href: "/admin/fulfilment/oggi", group: "Vai a", keywords: "asporto consegna spedizione fasce oggi" },
-  { label: "Zone e fasce di ritiro", href: "/admin/fulfilment", group: "Vai a", adminOnly: true, keywords: "cap tariffe spedizione consegna slot" },
+  { label: "Zone e fasce", href: "/admin/fulfilment", group: "Vai a", adminOnly: true, keywords: "cap tariffe spedizione consegna ritiro slot orari" },
   { label: "Chiusure", href: "/admin/chiusure", group: "Vai a", adminOnly: true, keywords: "ferie festivi chiuso vacanze ferragosto natale" },
   { label: "Prodotti", href: "/admin/products", group: "Vai a", keywords: "catalogo giacenza" },
   { label: "Scadenze lotti", href: "/admin/products/scadenze", group: "Vai a", keywords: "lotti haccp scaduti magazzino" },

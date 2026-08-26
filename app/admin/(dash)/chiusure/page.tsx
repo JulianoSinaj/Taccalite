@@ -61,6 +61,9 @@ function ClosureForm({ closure, shops, today }: { closure?: ClosureWithBookings;
           type="date"
           name="fromDate"
           required
+          // An existing closure may already be under way, so only a new one is
+          // pinned to today onwards; the action refuses a past end either way.
+          min={closure ? undefined : today}
           defaultValue={closure?.fromDate ?? today}
           className={inputCls}
         />
@@ -74,6 +77,7 @@ function ClosureForm({ closure, shops, today }: { closure?: ClosureWithBookings;
           id={`to-${closure?.id ?? "new"}`}
           type="date"
           name="toDate"
+          min={closure?.fromDate ?? today}
           defaultValue={closure && closure.toDate !== closure.fromDate ? closure.toDate : ""}
           className={inputCls}
         />
@@ -170,7 +174,9 @@ export default async function AdminClosures() {
         subtitle={
           closures.length === 0
             ? "Nessuna chiusura programmata — tutti i giorni sono prenotabili"
-            : `${closures.length} chiusure da oggi in poi`
+            : closures.length === 1
+              ? "1 chiusura da oggi in poi"
+              : `${closures.length} chiusure da oggi in poi`
         }
       />
 
@@ -198,6 +204,9 @@ export default async function AdminClosures() {
           {closures.map((c) => {
             const days = dayCount(c.fromDate, c.toDate);
             const booked = c.reservationCount + c.pickupCount;
+            // The counts are scoped to the closure's shop, so the lists they
+            // open must be too — otherwise "3 prenotazioni" opened a page of 9.
+            const scope = c.shopSlug ? `&negozio=${encodeURIComponent(c.shopSlug)}` : "";
             return (
               <Panel key={c.id}>
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -237,7 +246,7 @@ export default async function AdminClosures() {
                         In queste date risultano già{" "}
                         {c.reservationCount > 0 && (
                           <Link
-                            href={`/admin/reservations?da=${c.fromDate}&a=${c.toDate}`}
+                            href={`/admin/reservations?da=${c.fromDate}&a=${c.toDate}${scope}`}
                             className="font-bold underline"
                           >
                             {c.reservationCount === 1
@@ -248,7 +257,7 @@ export default async function AdminClosures() {
                         {c.reservationCount > 0 && c.pickupCount > 0 ? " e " : ""}
                         {c.pickupCount > 0 && (
                           <Link
-                            href={`/admin/fulfilment/oggi?giorno=${c.fromDate}`}
+                            href={`/admin/fulfilment/oggi?giorno=${c.fromDate}${scope}`}
                             className="font-bold underline"
                           >
                             {c.pickupCount === 1 ? "1 ritiro" : `${c.pickupCount} ritiri`}

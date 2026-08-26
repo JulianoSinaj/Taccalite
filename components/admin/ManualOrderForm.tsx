@@ -187,15 +187,25 @@ export function ManualOrderForm({
   const [code, setCode] = useState("");
   const [couponResult, setCouponResult] = useState<{ key: string; result: Coupon } | null>(null);
 
-  // A code's applicability depends on the subtotal (minimum spend), so the check
-  // is keyed on both: any cart change re-validates. An empty key means there is
-  // nothing to check.
+  // A code's applicability depends on the subtotal (minimum spend), on who is
+  // buying (per-customer caps, first order only) and on where the goods change
+  // hands (a code scoped to one sede), so the check is keyed on all of them:
+  // any change re-validates with the exact rules `createManualOrder` prices
+  // by. The key doubles as the request body. Empty means nothing to check.
   const trimmedCode = code.trim().toUpperCase();
-  const couponKey = trimmedCode && subtotalCents > 0 ? `${trimmedCode}:${subtotalCents}` : "";
+  const couponKey =
+    trimmedCode && subtotalCents > 0
+      ? JSON.stringify({
+          code: trimmedCode,
+          subtotalCents,
+          email: contact.email.trim().toLowerCase() || undefined,
+          fulfilment,
+          shopSlug,
+        })
+      : "";
 
   useEffect(() => {
     if (!couponKey) return;
-    const [checkCode, checkSubtotal] = [couponKey.slice(0, couponKey.lastIndexOf(":")), subtotalCents];
     let cancelled = false;
     const timer = setTimeout(async () => {
       let result: Coupon;
@@ -203,7 +213,7 @@ export function ManualOrderForm({
         const res = await fetch("/api/discounts/validate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: checkCode, subtotalCents: checkSubtotal }),
+          body: couponKey,
         });
         const data = await res.json();
         result = data.ok
@@ -218,7 +228,7 @@ export function ManualOrderForm({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [couponKey, subtotalCents]);
+  }, [couponKey]);
 
   // Derived rather than stored, so a stale result never outlives its input:
   // anything other than a result for the *current* key reads as "checking".

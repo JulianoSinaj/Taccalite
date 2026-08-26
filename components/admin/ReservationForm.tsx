@@ -36,9 +36,9 @@ export function ReservationForm({
   defaultDate?: string;
   /** Rendered under the buttons — e.g. a "back to list" link on the create page. */
   onDone?: React.ReactNode;
-  /** Set by the dedicated create page so saving returns to the list. The copy of
-   *  this form embedded in each list row leaves it unset — it is already on the
-   *  list, and navigating would collapse the row the operator is working in. */
+  /** Set by the dedicated create page so saving returns to the list. The edit
+   *  copy on the booking's own page leaves it unset — the operator stays on the
+   *  page they were working in and sees the updated details. */
   redirectTo?: string;
 }) {
   const fid = useFieldIds();
@@ -154,8 +154,21 @@ export function ReservationForm({
       )}
 
       <div className="sm:col-span-2">
-        <label className={labelCls} htmlFor={fid("notes")}>Note del cliente</label>
-        <textarea id={fid("notes")} name="notes" rows={2} defaultValue={reservation?.notes ?? ""} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("notes")}>
+          {type === "order" ? "Cosa desidera ordinare" : "Note del cliente"}
+        </label>
+        {/* An ordine speciale is nothing but its description, so here the
+            notes are the booking — required, as on the public form. */}
+        <textarea
+          id={fid("notes")}
+          name="notes"
+          rows={2}
+          required={type === "order"}
+          maxLength={2000}
+          placeholder={type === "order" ? "es. 2 kg di ciauscolo per giovedì" : undefined}
+          defaultValue={reservation?.notes ?? ""}
+          className={inputCls}
+        />
       </div>
 
       {!editing && (

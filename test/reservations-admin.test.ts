@@ -10,6 +10,9 @@ import {
   porchettaAvailability,
 } from "@/lib/reservations";
 import { filterQuery } from "@/lib/admin/filters";
+import { getReservationsPage, getDepositsAwaitingOutcome, getHeldDeposits } from "@/lib/admin/queries";
+import { runReservationAutoClose } from "@/lib/automation";
+import { reservationCreateInput } from "@/lib/validation/admin";
 
 const SHOP = "cap-shop";
 const DATE = "2026-09-05"; // a Saturday, well clear of other fixtures
@@ -353,5 +356,109 @@ describe("checkSeatsCapacity", () => {
   it("ignores a booking with no time or no party size", async () => {
     expect(await checkSeatsCapacity(SEATED, DAY, null, 4)).toMatchObject({ exceeded: false });
     expect(await checkSeatsCapacity(SEATED, DAY, "20:00", null)).toMatchObject({ exceeded: false });
+  });
+});
+
+describe("reservationCreateInput (back office)", () => {
+  const base = { name: "Mario", phone: "3331234567", shopSlug: SHOP, date: DATE };
+
+  it("requires a description for an ordine speciale, as the public form does", () => {
+    expect(reservationCreateInput.safeParse({ ...base, type: "order" }).success).toBe(false);
+    expect(reservationCreateInput.safeParse({ ...base, type: "order", notes: "2 kg di ciauscolo" }).success).toBe(true);
+  });
+
+  it("still lets a table booking through without notes", () => {
+    expect(reservationCreateInput.safeParse({ ...base, type: "table", guests: "4" }).success).toBe(true);
+  });
+});
+
+describe("expired bookings", () => {
+  const past = "2020-01-10";
+  const seed = (status: "pending" | "confirmed" | "completed", date: string, extra: Record<string, unknown> = {}) =>
+    db.insert(reservations).values({
+      reference: `X-${Math.random().toString(36).slice(2, 8)}`,
+      type: "table",
+      name: "Past",
+      phone: "1",
+      date,
+      time: "20:00",
+      guests: 2,
+      shopSlug: SHOP,
+      status,
+      ...extra,
+    });
+
+  it("the autoclose job completes past confirmed bookings and nothing else", async () => {
+    await seed("confirmed", past);
+    await seed("pending", past);
+    await seed("confirmed", DATE); // future — must stay
+
+    const { closed } = await runReservationAutoClose(new Date("2026-08-26T09:00:00Z"));
+    expect(closed).toBe(1);
+
+    const rows = await db.select().from(reservations).where(eq(reservations.shopSlug, SHOP));
+    const byDate = (d: string, st: string) => rows.filter((r) => r.date === d && r.status === st).length;
+    expect(byDate(past, "completed")).toBe(1);
+    expect(byDate(past, "pending")).toBe(1);
+    expect(byDate(DATE, "confirmed")).toBe(1);
+  });
+
+  it("the «scadute» facet lists open bookings whose day has passed", async () => {
+    await seed("pending", past);
+    await seed("confirmed", past);
+    await seed("completed", past);
+    await seed("confirmed", DATE);
+
+    const { rows } = await getReservationsPage({ stato: "scadute", negozio: SHOP });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.date === past)).toBe(true);
+  });
+});
+
+describe("deposits on cancelled bookings", () => {
+  it("a paid deposit on a cancelled booking is neither held nor forgotten until decided", async () => {
+    const paid = new Date("2026-08-01T10:00:00Z");
+    await db.insert(reservations).values([
+      {
+        reference: "DEP-LIVE",
+        type: "table",
+        name: "A",
+        phone: "1",
+        date: DATE,
+        shopSlug: SHOP,
+        status: "confirmed",
+        depositCents: 2000,
+        depositPaidAt: paid,
+      },
+      {
+        reference: "DEP-CANC",
+        type: "table",
+        name: "B",
+        phone: "1",
+        date: DATE,
+        shopSlug: SHOP,
+        status: "cancelled",
+        depositCents: 3000,
+        depositPaidAt: paid,
+      },
+      {
+        reference: "DEP-REF",
+        type: "table",
+        name: "C",
+        phone: "1",
+        date: DATE,
+        shopSlug: SHOP,
+        status: "cancelled",
+        depositCents: 5000,
+        depositPaidAt: paid,
+        depositRefundedAt: paid,
+      },
+    ]);
+
+    const held = await getHeldDeposits(SHOP);
+    expect(held).toEqual({ cents: 2000, count: 1 });
+
+    const awaiting = await getDepositsAwaitingOutcome(SHOP);
+    expect(awaiting).toEqual({ cents: 3000, count: 1 });
   });
 });

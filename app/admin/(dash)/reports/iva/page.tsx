@@ -200,7 +200,9 @@ export default async function VatReport({ searchParams }: SP) {
               is outside the VAT base until it is applied to a price, and a
               forfeited one is compensation, so assigning either an aliquota here
               would be a guess dressed as a figure. */}
-          {(deposits.collected.count > 0 || deposits.forfeited.count > 0) && (
+          {(deposits.collected.count > 0 ||
+            deposits.forfeited.count > 0 ||
+            deposits.refunded.count > 0) && (
             <Panel>
               <h2 className="font-display mb-1 text-lg text-brown-950">
                 Acconti sulle prenotazioni
@@ -217,7 +219,7 @@ export default async function VatReport({ searchParams }: SP) {
                 </Link>{" "}
                 ha natura risarcitoria.
               </p>
-              <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="rounded-lg bg-cream/60 px-4 py-3">
                   <dt className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
                     Incassati nel periodo
@@ -239,6 +241,18 @@ export default async function VatReport({ searchParams }: SP) {
                     <span className="ml-2 text-xs font-normal text-brown-800/60">
                       su {deposits.forfeited.count}{" "}
                       {deposits.forfeited.count === 1 ? "prenotazione" : "prenotazioni"}
+                    </span>
+                  </dd>
+                </div>
+                <div className="rounded-lg bg-cream/60 px-4 py-3">
+                  <dt className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+                    Rimborsati (annullate)
+                  </dt>
+                  <dd className="font-display mt-1 text-xl font-bold tabular-nums text-brown-950">
+                    {euro(deposits.refunded.cents)}
+                    <span className="ml-2 text-xs font-normal text-brown-800/60">
+                      su {deposits.refunded.count}{" "}
+                      {deposits.refunded.count === 1 ? "prenotazione" : "prenotazioni"}
                     </span>
                   </dd>
                 </div>

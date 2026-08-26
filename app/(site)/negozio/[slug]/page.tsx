@@ -31,8 +31,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const product = await getProductBySlug(slug);
   if (!product || !product.active || !product.purchasable) return {};
   return {
-    title: product.name,
+    title: product.seoTitle || product.name,
     description:
+      product.seoDescription ||
       product.description ||
       `${product.name} — acquista online dalla Norcineria Taccalite con ritiro in bottega o spedizione.`,
   };
@@ -197,6 +198,39 @@ export default async function ProductDetailPage({ params }: Params) {
                 <p className="mt-7 text-lg leading-relaxed text-brown-700">
                   {product.description}
                 </p>
+              )}
+
+              {/* The label a customer reads at the counter. The gestionale
+                  collected all three and the page showed none; allergens in
+                  particular are what Reg. (UE) 1169/2011 wants stated at the
+                  point of sale, and a shop page is one. */}
+              {(product.origin || product.ingredients || product.allergens.length > 0) && (
+                <dl className="mt-7 grid grid-cols-1 gap-x-8 gap-y-3 border-t border-rule-strong pt-6 text-sm sm:grid-cols-[auto_1fr]">
+                  {product.origin && (
+                    <>
+                      <dt className="text-[0.625rem] font-bold tracking-[0.22em] text-taupe uppercase sm:pt-0.5">
+                        Provenienza
+                      </dt>
+                      <dd className="text-brown-700">{product.origin}</dd>
+                    </>
+                  )}
+                  {product.ingredients && (
+                    <>
+                      <dt className="text-[0.625rem] font-bold tracking-[0.22em] text-taupe uppercase sm:pt-0.5">
+                        Ingredienti
+                      </dt>
+                      <dd className="text-brown-700">{product.ingredients}</dd>
+                    </>
+                  )}
+                  {product.allergens.length > 0 && (
+                    <>
+                      <dt className="text-[0.625rem] font-bold tracking-[0.22em] text-taupe uppercase sm:pt-0.5">
+                        Allergeni
+                      </dt>
+                      <dd className="font-semibold text-brown-950">{product.allergens.join(", ")}</dd>
+                    </>
+                  )}
+                </dl>
               )}
 
               {shop && (

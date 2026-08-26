@@ -41,6 +41,7 @@ type SP = {
     q?: string;
     stato?: string;
     tipo?: string;
+    metodo?: string;
     da?: string;
     a?: string;
     data?: string;
@@ -66,6 +67,7 @@ const STATUS_CHIPS: { value: string; label: string }[] = [
 const DATE_CHIPS: { value: string; label: string }[] = [
   { value: "all", label: "Data ordine" },
   { value: "incasso", label: "Data incasso" },
+  { value: "ritiro", label: "Data ritiro" },
 ];
 
 const FULFILMENT_CHIPS: { value: string; label: string }[] = [
@@ -75,11 +77,20 @@ const FULFILMENT_CHIPS: { value: string; label: string }[] = [
   { value: "shipping", label: "Spedizione" },
 ];
 
+/** "Which contrassegni does the driver collect for today" had no answer here. */
+const METHOD_CHIPS: { value: string; label: string }[] = [
+  { value: "all", label: "Tutti i pagamenti" },
+  { value: "card", label: PAYMENT_METHOD_SHORT.card },
+  { value: "in_store", label: PAYMENT_METHOD_SHORT.in_store },
+  { value: "on_delivery", label: PAYMENT_METHOD_SHORT.on_delivery },
+  { value: "counter", label: PAYMENT_METHOD_SHORT.counter },
+];
+
 const BASE = "/admin/orders";
 
 export default async function AdminOrders({ searchParams }: SP) {
   const sp = await searchParams;
-  const { q, stato = "all", tipo = "all", da = "", a = "", page: pageStr } = sp;
+  const { q, stato = "all", tipo = "all", metodo = "all", da = "", a = "", page: pageStr } = sp;
   const page = Number(pageStr) || 1;
   // A staff account assigned to a location is *confined* to it: the facet is
   // forced here rather than merely pre-selected, so editing the query string
@@ -131,6 +142,7 @@ export default async function AdminOrders({ searchParams }: SP) {
     negozio: filters.negozio ?? "all",
     stato,
     tipo,
+    metodo,
     da,
     a,
     data: filters.data ?? "all",
@@ -198,6 +210,7 @@ export default async function AdminOrders({ searchParams }: SP) {
         facets={[
           { name: "negozio", label: "Sede", options: SHOP_CHIPS },
           { name: "tipo", label: "Consegna", options: FULFILMENT_CHIPS },
+          { name: "metodo", label: "Pagamento", options: METHOD_CHIPS },
           { name: "data", label: "Periodo su", options: DATE_CHIPS },
         ]}
       >
@@ -222,6 +235,7 @@ export default async function AdminOrders({ searchParams }: SP) {
           stato: { title: "Stato", format: labelFrom(STATUS_CHIPS) },
           negozio: { title: "Sede", format: labelFrom(SHOP_CHIPS) },
           tipo: { title: "Consegna", format: labelFrom(FULFILMENT_CHIPS) },
+          metodo: { title: "Pagamento", format: labelFrom(METHOD_CHIPS) },
           data: { title: "Periodo su", format: labelFrom(DATE_CHIPS) },
           da: { title: "Dal" },
           a: { title: "Al" },
@@ -240,10 +254,11 @@ export default async function AdminOrders({ searchParams }: SP) {
         label="ordini"
         options={[
           { value: "fulfilled", label: "Segna evasi" },
-          { value: "pending", label: "Rimetti in attesa" },
-          { value: "cancelled", label: "Annulla" },
+          // One gesture, two targets: paid → "da evadere", unpaid → "in attesa".
+          { value: "reopen", label: "Riporta da evadere" },
+          { value: "cancelled", label: "Annulla (solo non pagati)" },
         ]}
-        confirmTemplate="Applicare l'azione a {n} ordini? I clienti riceveranno le email previste."
+        confirmTemplate="Applicare l'azione a {n} ordini? I clienti riceveranno le email previste. Gli ordini per cui non è consentita vengono saltati."
       />
 
       {/* A sortable table, now that the detail page carries the heavy actions.
@@ -256,7 +271,7 @@ export default async function AdminOrders({ searchParams }: SP) {
         params={linkParams}
         sort={sort}
         empty={
-          q || stato !== "all" || tipo !== "all" || current.negozio !== "all"
+          q || stato !== "all" || tipo !== "all" || metodo !== "all" || current.negozio !== "all"
             ? "Nessun ordine corrisponde ai filtri."
             : "Nessun ordine ancora. Gli ordini dallo shop online compaiono qui."
         }

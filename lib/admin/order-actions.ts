@@ -14,6 +14,7 @@ import {
   orderDetailsInput,
   orderFiscalInput,
   orderNotesInput,
+  orderPricingInput,
 } from "@/lib/validation/admin";
 import {
   getShopBySlug,
@@ -28,6 +29,7 @@ import { getStripe } from "@/lib/payments/stripe";
 import {
   generateOrderNumber,
   finalizeOrder,
+  applyOrderStock,
   restockOrderItems,
   recalcOrderTotals,
   recordRefund,
@@ -276,6 +278,13 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
       email: d.email,
       shopSlug: d.fulfilment === "pickup" ? d.shopSlug : null,
     });
+    // The form previews the code live, but a submit with a refused code used to
+    // go through silently at full price. Refuse it, as checkout does.
+    if (d.discountCode?.trim() && !coupon) {
+      throw new ActionError(
+        `Il codice sconto ${d.discountCode.trim().toUpperCase()} non è valido o non è applicabile a questo ordine.`,
+      );
+    }
     // A negotiated counter reduction rides in the same field as a coupon, so it
     // is apportioned across VAT rates by the existing allocation instead of
     // needing a parallel path that could get the tax wrong.
@@ -315,8 +324,14 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
         .limit(1);
       if (!res) throw new ActionError("Prenotazione non trovata.");
       await requireShopScope(res.shopSlug);
-      if (res.type !== "order") {
-        throw new ActionError("Solo un ordine speciale si converte in ordine.");
+      // The two kinds that stand for a sale — the same pair the detail page
+      // offers "Converti in ordine" for. This used to admit only `order`, so a
+      // porchetta conversion failed at the very last click.
+      if (res.type !== "order" && res.type !== "porchetta") {
+        throw new ActionError("Solo un ordine speciale o una porchetta si converte in ordine.");
+      }
+      if (res.status === "cancelled") {
+        throw new ActionError("Una prenotazione annullata non si converte in ordine.");
       }
       const [already] = await db
         .select({ orderNumber: orders.orderNumber })
@@ -352,6 +367,10 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
           shippingCents,
           discountCode: discount?.code ?? null,
           discountCents,
+          // Stored raw so a later edit re-derives the same total instead of
+          // re-pricing from the coupon and the zone rules alone.
+          manualDiscountCents: manualDiscount,
+          shippingOverrideCents: d.shippingEuros,
           totalCents,
           paymentProvider: "manual",
           paymentMethod: "counter",
@@ -475,6 +494,8 @@ export async function updateOrderDetails(_prev: ActionState, fd: FormData): Prom
     if (d.fulfilment === "pickup") {
       if (!d.shopSlug) throw new ActionError("Scegli il negozio di ritiro.");
       if (!(await getShopBySlug(d.shopSlug))) throw new ActionError("Negozio di ritiro non valido.");
+      // Moving an order to another counter is that counter's business.
+      await requireShopScope(d.shopSlug);
       if (d.pickupSlot) {
         const resolved = resolvePickupSlot(await getPickupSlots(d.shopSlug), d.shopSlug, d.pickupSlot, {
           closures: await getClosures(),
@@ -502,9 +523,10 @@ export async function updateOrderDetails(_prev: ActionState, fd: FormData): Prom
         email: d.email ?? "",
         phone: d.phone ?? null,
         fulfilment: d.fulfilment,
-        // Left to `recalcOrderTotals` below, which re-matches the zone from the
-        // (possibly just-changed) CAP — setting it here would use the old one.
-        shopSlug: d.fulfilment === "pickup" ? d.shopSlug ?? null : null,
+        // For delivery/shipping the sede follows the zone, which
+        // `recalcOrderTotals` below re-matches from the (possibly just-changed)
+        // CAP. Writing null here used to leave the order with no sede at all.
+        shopSlug: d.fulfilment === "pickup" ? d.shopSlug ?? null : order.shopSlug,
         pickupSlotAt,
         shippingAddress: needsAddress(d.fulfilment)
           ? { address: d.address ?? "", city: d.city ?? "", zip: d.zip ?? "" }
@@ -639,9 +661,11 @@ export async function setOrderFiscalIdentity(_prev: ActionState, fd: FormData): 
 }
 
 /**
- * Rewrite an order's line items: change quantities, drop a line (quantity 0) or
- * add a product. Quantities arrive as `qty_<productSlug>` fields, matching the
- * manual-order form.
+ * Rewrite an order's line items: change quantities or kilos, drop a line (0) or
+ * add a product, and set the money knobs that go with them — coupon, negotiated
+ * reduction, carriage override. Lines arrive as `qty_<slug>` / `kg_<slug>` /
+ * `price_<slug>`, exactly as from the counter form, so a weighed line or a
+ * negotiated price is re-saved as what it is rather than as "1 × listino".
  *
  * Only for orders that aren't settled. Because stock is decremented at *payment*
  * (see `finalizeOrder`), an unpaid order holds no stock, so there is nothing to
@@ -651,8 +675,8 @@ export async function setOrderFiscalIdentity(_prev: ActionState, fd: FormData): 
 export async function updateOrderItems(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireAdmin();
-    const id = String(fd.get("id") ?? "").trim();
-    if (!id) throw new ActionError("Ordine non valido.");
+    const pricing = parseForm(orderPricingInput, fd);
+    const id = pricing.id;
 
     const order = await mustFindOrder(id);
     assertEditable(order);
@@ -681,6 +705,18 @@ export async function updateOrderItems(_prev: ActionState, fd: FormData): Promis
     await db.transaction(async (tx) => {
       await tx.delete(orderItems).where(eq(orderItems.orderId, id));
       await tx.insert(orderItems).values(lineValues(id, lines));
+      // The knobs are stored raw and applied by the re-price below, so they
+      // survive the next edit as well as this one. Only the fields actually
+      // posted are touched — a caller that sends lines alone changes no money.
+      await tx
+        .update(orders)
+        .set({
+          ...(fd.has("discountCode") ? { discountCode: pricing.discountCode?.toUpperCase() ?? null } : {}),
+          ...(fd.has("manualDiscountEuros") ? { manualDiscountCents: pricing.manualDiscountEuros ?? 0 } : {}),
+          ...(fd.has("shippingEuros") ? { shippingOverrideCents: pricing.shippingEuros } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(orders.id, id));
     });
 
     const recalc = await recalcOrderTotals(id);
@@ -724,6 +760,12 @@ export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promi
       );
     }
 
+    // A refunded order is closed: the money went back, the goods came back and
+    // the credit note has been cut. Nothing here can meaningfully reopen it.
+    if (order.status === "refunded" || order.paymentStatus === "refunded") {
+      throw new ActionError("Questo ordine è già stato rimborsato: il suo stato non si modifica più.");
+    }
+
     // Marking an unpaid order paid runs the full paid-order flow (stock decrement
     // + ledger, loyalty accrual, confirmation email) instead of a bare flip — and
     // it has to record HOW the money arrived, because that becomes the invoice's
@@ -735,6 +777,37 @@ export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promi
       );
     }
 
+    // The reverse flip was open, and it was the worse one: "da pagare" on an
+    // order whose points, coupon, stock and fiscal date were all already booked
+    // — and whose "Registra incasso" then came back, ready to book them twice.
+    if (d.paymentStatus === "unpaid" && order.paymentStatus === "paid") {
+      throw new ActionError(
+        'Questo ordine è già stato incassato e non può tornare "da pagare". Se il denaro è stato restituito usa "Rimborsa".',
+      );
+    }
+    // "In attesa" means awaiting payment. A paid order that has to go back in
+    // the queue goes back to "Pagato · da evadere", not to a state that hides it
+    // from the to-fulfil view and offers to collect its money again.
+    if (d.status === "pending" && order.paymentStatus === "paid") {
+      throw new ActionError(
+        'Un ordine incassato non torna "in attesa": per rimetterlo tra quelli da evadere scegli "Pagato".',
+      );
+    }
+
+    // A courier shipment is "evasa" when it is on its way, and the email that
+    // says so carries the tracking. Sending it without one told the customer to
+    // follow a parcel they had no way to follow.
+    if (
+      d.status === "fulfilled" &&
+      order.status !== "fulfilled" &&
+      order.fulfilment === "shipping" &&
+      !order.trackingNumber
+    ) {
+      throw new ActionError(
+        "Per segnare una spedizione come evasa inserisci prima corriere e numero di tracking: finiscono nell'email al cliente.",
+      );
+    }
+
     // Cancelling a settled order used to be allowed, and it moved the goods
     // without moving the money: the restock below ran, the coupon was released
     // and the customer was emailed a cancellation, while `paymentStatus` stayed
@@ -742,11 +815,10 @@ export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promi
     // in the IVA a debito of a period that may already have been declared. The
     // meat came back and the money did not. Same rule as `refunded` above: money
     // is returned through the one button that actually returns it.
+    // (A refunded order was already refused above, so only "paid" reaches here.)
     if (d.status === "cancelled" && order.paymentStatus !== "unpaid") {
       throw new ActionError(
-        order.paymentStatus === "refunded"
-          ? "Questo ordine è già stato rimborsato: non può essere annullato di nuovo."
-          : 'Questo ordine è già stato incassato: annullarlo rimetterebbe la merce a magazzino lasciando i soldi nei conti. Usa "Rimborsa" — restituisce il pagamento, ripristina la giacenza e avvisa il cliente.',
+        'Questo ordine è già stato incassato: annullarlo rimetterebbe la merce a magazzino lasciando i soldi nei conti. Usa "Rimborsa" — restituisce il pagamento, ripristina la giacenza e avvisa il cliente.',
       );
     }
 
@@ -765,6 +837,19 @@ export async function updateOrderStatus(_prev: ActionState, fd: FormData): Promi
       if (cur.paymentStatus === "paid" && order.discountCode) {
         await releaseDiscountUseByCode(order.discountCode, order.id);
       }
+    }
+
+    // Restoring a cancelled order re-makes the claim its own flow had made: an
+    // order to be paid on handover set its goods aside when it was placed, and
+    // the cancellation put them back. A card checkout never held any, and a
+    // counter draft takes them at the till — both are left to `finalizeOrder`.
+    if (
+      cur.status === "cancelled" &&
+      d.status !== "cancelled" &&
+      cur.paymentStatus === "unpaid" &&
+      settlesOnHandover(cur.paymentMethod)
+    ) {
+      await applyOrderStock(order.id, `Ripristino ordine ${order.orderNumber}`);
     }
 
     const statusChanged = d.status !== cur.status;
@@ -826,12 +911,24 @@ export async function bulkUpdateOrderStatus(_prev: ActionState, fd: FormData): P
       throw new ActionError("Questa operazione non è disponibile in blocco.");
     }
 
+    // "Reopen" is one gesture with two targets: a paid order goes back to the
+    // to-fulfil queue, an unpaid one back to awaiting payment. Posting "pending"
+    // to a paid order used to hide it from the queue instead.
+    const paidById = new Map(
+      (
+        await db
+          .select({ id: orders.id, paymentStatus: orders.paymentStatus })
+          .from(orders)
+          .where(inArray(orders.id, ids))
+      ).map((o) => [o.id, o.paymentStatus === "paid"]),
+    );
+
     let changed = 0;
     const failures: string[] = [];
     for (const id of ids) {
       const single = new FormData();
       single.set("id", id);
-      single.set("status", status);
+      single.set("status", status === "reopen" ? (paidById.get(id) ? "paid" : "pending") : status);
       const res = await updateOrderStatus({ status: "idle" }, single);
       if (res.status === "error") failures.push(res.message ?? id);
       else changed += 1;
@@ -849,8 +946,8 @@ export async function bulkUpdateOrderStatus(_prev: ActionState, fd: FormData): P
   });
 }
 
-/** The subset of order statuses that may be applied to a whole selection. */
-const BULK_ORDER_STATUSES = ["fulfilled", "cancelled", "pending"] as const;
+/** The transitions that may be applied to a whole selection. */
+const BULK_ORDER_STATUSES = ["fulfilled", "cancelled", "reopen"] as const;
 
 /**
  * Save carrier + tracking number on a shipping order. If the order is already
@@ -1053,6 +1150,11 @@ export async function refundOrder(_prev: ActionState, fd: FormData): Promise<Act
     const order = await mustFindOrder(id);
     if (order.status === "refunded" || order.paymentStatus === "refunded") {
       throw new ActionError("Questo ordine è già stato rimborsato.");
+    }
+    // The page never offers this on an unpaid order; the action refuses it too,
+    // because "refunding" money never taken would restock goods never sold.
+    if (order.paymentStatus !== "paid") {
+      throw new ActionError("Questo ordine non è stato incassato: non c'è nulla da rimborsare. Se va chiuso, annullalo.");
     }
 
     const remainingCents = order.totalCents - order.refundedCents;

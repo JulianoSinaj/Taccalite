@@ -202,9 +202,14 @@ export function OrderFiscalForm({ order }: { order: OrderRow }) {
 }
 
 /**
- * Line editor for an unpaid order. Shows the lines already on the order first,
- * then lets the operator add any other sellable product. Setting a quantity to 0
- * removes the line. The running total is a preview — the server re-prices from
+ * Line and price editor for an unpaid order.
+ *
+ * Posts the same three field families as the counter form — `qty_<slug>` for a
+ * product sold by the piece, `kg_<slug>` for one priced per kg, `price_<slug>`
+ * for a negotiated price — plus the coupon, the negotiated reduction and the
+ * carriage override. It used to post quantities only, so a "0,350 kg" line came
+ * back as "1 × listino" and a negotiated price snapped back to the catalogue on
+ * the first save. The running total is a preview — the server re-prices from
  * the catalogue and re-validates the coupon on save.
  */
 export function OrderItemsForm({
@@ -216,91 +221,298 @@ export function OrderItemsForm({
   items: OrderItemRow[];
   products: ProductRow[];
 }) {
-  // Current quantity per product slug, keyed the same way the form posts.
-  const initial: Record<string, number> = {};
-  for (const i of items) if (i.productSlug) initial[i.productSlug] = i.quantity;
-  const [qty, setQty] = useState<Record<string, number>>(initial);
+  const fid = useFieldIds();
+  type Entry = { amount: number; priceCents?: number };
 
   const sellable = products.filter((p) => p.active && p.priceCents != null);
-  const onOrder = sellable.filter((p) => (initial[p.slug] ?? 0) > 0);
-  const others = sellable.filter((p) => (initial[p.slug] ?? 0) === 0);
+  const bySlug = new Map(sellable.map((p) => [p.slug, p]));
 
-  const subtotal = sellable.reduce((sum, p) => sum + (p.priceCents ?? 0) * (qty[p.slug] ?? 0), 0);
+  // What the order holds today, keyed the way the form posts. A line already
+  // weighed stays a weight line whatever the catalogue flag says now; a new
+  // line follows the product.
+  const initial: Record<string, Entry> = {};
+  const weighed = new Set<string>();
+  for (const i of items) {
+    if (!i.productSlug || !bySlug.has(i.productSlug)) continue;
+    initial[i.productSlug] = {
+      amount: i.weightKg ?? i.quantity,
+      priceCents: i.priceOverridden ? i.unitPriceCents : undefined,
+    };
+    if (i.weightKg != null) weighed.add(i.productSlug);
+  }
+  const byWeight = (p: ProductRow) => weighed.has(p.slug) || p.soldByWeight;
+
+  const [cart, setCart] = useState<Record<string, Entry>>(initial);
+  const [search, setSearch] = useState("");
+  const [manualDiscount, setManualDiscount] = useState(
+    order.manualDiscountCents > 0 ? (order.manualDiscountCents / 100).toFixed(2) : "",
+  );
 
   // Lines whose product is gone from the catalogue can't be re-posted, so the
   // operator is told rather than silently losing them on save.
-  const orphaned = items.filter((i) => !i.productSlug || !sellable.some((p) => p.slug === i.productSlug));
+  const orphaned = items.filter((i) => !i.productSlug || !bySlug.has(i.productSlug));
 
-  function Row({ p }: { p: ProductRow }) {
-    return (
-      <div className="flex items-center gap-4 py-2">
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-brown-950">{p.name}</p>
-          <p className="text-xs text-brown-800/60">
-            {euro(p.priceCents)}
-            {p.unit ? ` / ${p.unit}` : ""} · IVA {vatRateLabel(p.vatRateBps)}
-            {p.stock != null ? ` · giacenza ${p.stock}` : ""}
-          </p>
-        </div>
-        <input
-          type="number"
-          name={`qty_${p.slug}`}
-          min={0}
-          max={p.stock ?? undefined}
-          value={qty[p.slug] ?? 0}
-          onChange={(e) => setQty((q) => ({ ...q, [p.slug]: Math.max(0, Number(e.target.value) || 0) }))}
-          className={`${inputCls} w-24`}
-          aria-label={`Quantità ${p.name}`}
-        />
-      </div>
-    );
+  function setAmount(slug: string, n: number) {
+    setCart((c) => {
+      const copy = { ...c };
+      if (!Number.isFinite(n) || n <= 0) delete copy[slug];
+      else copy[slug] = { ...copy[slug], amount: n };
+      return copy;
+    });
+  }
+  function setPrice(slug: string, euros: string) {
+    setCart((c) => {
+      const entry = c[slug];
+      if (!entry) return c;
+      const cents = euros.trim() === "" ? undefined : Math.round(Number(euros.replace(",", ".")) * 100);
+      return { ...c, [slug]: { ...entry, priceCents: Number.isFinite(cents as number) ? cents : undefined } };
+    });
   }
 
+  const lines = Object.entries(cart)
+    .map(([slug, entry]) => {
+      const p = bySlug.get(slug);
+      if (!p) return null;
+      const unitPriceCents = entry.priceCents ?? p.priceCents ?? 0;
+      return {
+        product: p,
+        amount: entry.amount,
+        byWeight: byWeight(p),
+        unitPriceCents,
+        overridden: entry.priceCents != null && entry.priceCents !== p.priceCents,
+        lineTotalCents: Math.round(unitPriceCents * entry.amount),
+      };
+    })
+    .filter((l): l is NonNullable<typeof l> => l !== null);
+
+  const subtotalCents = lines.reduce((s, l) => s + l.lineTotalCents, 0);
+  const manualDiscountCents = Math.min(
+    subtotalCents,
+    Math.max(0, Math.round(Number(manualDiscount.replace(",", ".")) * 100) || 0),
+  );
+
+  const q = search.trim().toLowerCase();
+  const addable = sellable
+    .filter((p) => !cart[p.slug])
+    .filter((p) => !q || `${p.name} ${p.category} ${p.slug}`.toLowerCase().includes(q))
+    .slice(0, q ? 8 : 40);
+
   return (
-    <ActionForm action={updateOrderItems}>
+    <ActionForm action={updateOrderItems} className="space-y-5">
       <input type="hidden" name="id" value={order.id} />
+      {/* Only the chosen lines travel; the server re-derives every amount. */}
+      {lines.map((l) => (
+        <div key={l.product.slug}>
+          <input type="hidden" name={`${l.byWeight ? "kg" : "qty"}_${l.product.slug}`} value={l.amount} />
+          {l.overridden && (
+            <input type="hidden" name={`price_${l.product.slug}`} value={(l.unitPriceCents / 100).toFixed(2)} />
+          )}
+        </div>
+      ))}
 
       {orphaned.length > 0 && (
-        <p className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-soft-fg">
+        <p className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-soft-fg">
           {orphaned.length === 1 ? "Una riga fa" : `${orphaned.length} righe fanno`} riferimento a un
-          prodotto non più a catalogo e verrà rimossa salvando:{" "}
-          {orphaned.map((i) => i.name).join(", ")}.
+          prodotto non più a catalogo e verrà rimossa salvando: {orphaned.map((i) => i.name).join(", ")}.
         </p>
       )}
 
-      {onOrder.length > 0 && (
+      {/* ── Lines ── */}
+      {lines.length === 0 ? (
+        <p className="text-sm text-brown-800/60">Nessun articolo: aggiungine uno qui sotto.</p>
+      ) : (
         <div className="divide-y divide-brown-900/10">
-          {onOrder.map((p) => (
-            <Row key={p.id} p={p} />
-          ))}
+          {lines.map((l) => {
+            // Weight products aren't counted in units, so on-hand can't be
+            // compared against kilos (see `stockUnitsForLine` on the server).
+            const short = !l.byWeight && l.product.stock != null && l.product.stock < l.amount;
+            return (
+              <div key={l.product.slug} className="flex flex-wrap items-center gap-3 py-2.5">
+                <div className="min-w-40 flex-1">
+                  <p className="text-sm font-semibold text-brown-950">
+                    {l.product.name}
+                    {l.byWeight && (
+                      <span className="ml-1.5 rounded-full bg-gold/25 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-brown-950 uppercase">
+                        a peso
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-brown-800/60">
+                    {euro(l.product.priceCents)}
+                    {l.product.unit ? ` / ${l.product.unit}` : l.byWeight ? " / kg" : ""} · IVA{" "}
+                    {vatRateLabel(l.product.vatRateBps)}
+                    {!l.byWeight && l.product.stock != null ? ` · giacenza ${l.product.stock}` : ""}
+                  </p>
+                  {short && (
+                    <p className="text-xs font-semibold text-danger">Quantità superiore alla giacenza disponibile.</p>
+                  )}
+                  {l.overridden && (
+                    <p className="text-xs font-semibold text-warn">
+                      Prezzo concordato ({euro(l.unitPriceCents)}
+                      {l.byWeight ? "/kg" : ""}) — diverso dal listino.
+                    </p>
+                  )}
+                </div>
+
+                {/* Fixed-width wrappers: `inputCls` is `w-full`, and a bare
+                    `w-24` beside it loses, stretching each field across the row. */}
+                <div className="flex shrink-0 items-center gap-1">
+                  <div className="w-24">
+                    <input
+                      type="number"
+                      min={l.byWeight ? 0.001 : 1}
+                      step={l.byWeight ? 0.001 : 1}
+                      value={l.amount}
+                      onChange={(e) => setAmount(l.product.slug, Number(e.target.value))}
+                      aria-label={l.byWeight ? `Peso in kg di ${l.product.name}` : `Quantità ${l.product.name}`}
+                      className={`${inputCls} text-center`}
+                    />
+                  </div>
+                  <span className="w-6 text-xs text-brown-800/50">{l.byWeight ? "kg" : "pz"}</span>
+                </div>
+
+                <div className="w-28 shrink-0">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    defaultValue={l.overridden ? (l.unitPriceCents / 100).toFixed(2) : ""}
+                    placeholder={l.product.priceCents != null ? (l.product.priceCents / 100).toFixed(2) : "prezzo"}
+                    onChange={(e) => setPrice(l.product.slug, e.target.value)}
+                    aria-label={`Prezzo concordato per ${l.product.name}${l.byWeight ? " al kg" : ""}`}
+                    title="Prezzo concordato (lascia vuoto per il listino)"
+                    className={inputCls}
+                  />
+                </div>
+
+                <span className="w-20 shrink-0 text-right text-sm font-semibold text-brown-950">
+                  {euro(l.lineTotalCents)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAmount(l.product.slug, 0)}
+                  aria-label={`Rimuovi ${l.product.name}`}
+                  className="flex size-11 items-center justify-center rounded-full text-lg text-brown-800/40 hover:bg-danger-soft hover:text-danger"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {others.length > 0 && (
-        <details className="mt-4 border-t border-brown-900/10 pt-3">
-          <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
-            Aggiungi un prodotto ({others.length})
-          </summary>
-          <div className="mt-2 max-h-80 divide-y divide-brown-900/10 overflow-y-auto">
-            {others.map((p) => (
-              <Row key={p.id} p={p} />
-            ))}
-          </div>
-        </details>
-      )}
+      {/* ── Add a product ── */}
+      <details className="border-t border-brown-900/10 pt-3">
+        <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+          Aggiungi un prodotto
+        </summary>
+        <div className="mt-3">
+          <label className={labelCls} htmlFor={fid("search")}>
+            Cerca nel catalogo
+          </label>
+          <input
+            id={fid("search")}
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Nome o categoria…"
+            className={inputCls}
+          />
+        </div>
+        <ul className="mt-2 max-h-80 divide-y divide-brown-900/10 overflow-y-auto">
+          {addable.map((p) => (
+            <li key={p.id} className="flex items-center justify-between gap-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-brown-950">{p.name}</p>
+                <p className="text-xs text-brown-800/60">
+                  {euro(p.priceCents)}
+                  {p.unit ? ` / ${p.unit}` : p.soldByWeight ? " / kg" : ""}
+                  {p.stock != null ? ` · giacenza ${p.stock}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAmount(p.slug, p.soldByWeight ? 0.5 : 1)}
+                className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-brown-900/10 px-3 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+              >
+                + Aggiungi
+              </button>
+            </li>
+          ))}
+          {addable.length === 0 && (
+            <li className="py-2 text-sm text-brown-800/60">Nessun prodotto corrisponde.</li>
+          )}
+        </ul>
+      </details>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-brown-900/10 pt-4">
+      {/* ── Money knobs ── */}
+      <div className="grid grid-cols-1 gap-4 border-t border-brown-900/10 pt-4 sm:grid-cols-3">
+        <div>
+          <label className={labelCls} htmlFor={fid("discountCode")}>
+            Codice sconto
+          </label>
+          <input
+            id={fid("discountCode")}
+            name="discountCode"
+            maxLength={40}
+            defaultValue={order.discountCode ?? ""}
+            placeholder="nessuno"
+            className={`${inputCls} uppercase`}
+          />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("manualDiscountEuros")}>
+            Sconto concordato (€)
+          </label>
+          <input
+            id={fid("manualDiscountEuros")}
+            name="manualDiscountEuros"
+            type="number"
+            step="0.01"
+            min={0}
+            value={manualDiscount}
+            onChange={(e) => setManualDiscount(e.target.value)}
+            placeholder="0,00"
+            className={inputCls}
+          />
+        </div>
+        {order.fulfilment !== "pickup" ? (
+          <div>
+            <label className={labelCls} htmlFor={fid("shippingEuros")}>
+              Spese di consegna (€)
+            </label>
+            <input
+              id={fid("shippingEuros")}
+              name="shippingEuros"
+              type="number"
+              step="0.01"
+              min={0}
+              defaultValue={order.shippingOverrideCents != null ? (order.shippingOverrideCents / 100).toFixed(2) : ""}
+              placeholder={`${(order.shippingCents / 100).toFixed(2)} (da zona)`}
+              className={inputCls}
+            />
+            <p className="mt-1 text-xs text-brown-800/60">Vuoto = tariffa della zona.</p>
+          </div>
+        ) : (
+          // Posted empty so a pickup order carries no stale override.
+          <input type="hidden" name="shippingEuros" value="" />
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-brown-900/10 pt-4">
         <p className="text-sm text-brown-800/70">
           Subtotale articoli:{" "}
-          <strong className="font-display text-lg text-brown-950">{euro(subtotal)}</strong>
-          <span className="ml-2 text-xs text-brown-800/50">
-            spedizione e sconto ricalcolati al salvataggio
-          </span>
+          <strong className="font-display text-lg text-brown-950">{euro(subtotalCents)}</strong>
+          {manualDiscountCents > 0 && (
+            <span className="ml-2 text-ok">− {euro(manualDiscountCents)} concordato</span>
+          )}
+          <span className="ml-2 text-xs text-brown-800/50">coupon e consegna ricalcolati al salvataggio</span>
         </p>
-        <PendingButton tone="dark">Salva articoli</PendingButton>
+        <PendingButton tone="dark">Salva articoli e importi</PendingButton>
       </div>
-      <p className="mt-2 text-xs text-brown-800/60">
-        Imposta 0 per togliere una riga. Prezzi e IVA sono sempre presi dall&apos;anagrafica prodotti.
+      <p className="text-xs text-brown-800/60">
+        Prezzi e IVA sono presi dall&apos;anagrafica prodotti, salvo prezzo concordato sulla riga.
       </p>
     </ActionForm>
   );

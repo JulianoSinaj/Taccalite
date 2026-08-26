@@ -12,6 +12,7 @@ import {
   reservationStatusEmail,
   reservationCustomerEmail,
   porchettaReadyEmail,
+  porchettaWaitlistEmail,
   type ReservationEmailData,
 } from "@/lib/mail/templates";
 import { logAudit } from "@/lib/audit";
@@ -26,6 +27,7 @@ import {
   parseForm,
   reservationStatusInput,
   reservationDepositInput,
+  reservationDepositOutcomeInput,
   reservationCreateInput,
   reservationDetailsInput,
 } from "@/lib/validation/admin";
@@ -120,7 +122,13 @@ async function capacityWarning(
   // The public form refuses a closed day outright; here it is a note, because
   // the operator may well be taking a booking for the day the shop reopens and
   // has simply not tidied the closure yet.
-  const closure = closureFor(await getClosures(), input.shopSlug, input.date, "reservations");
+  const closure = closureFor(
+    await getClosures(),
+    input.shopSlug,
+    input.date,
+    "reservations",
+    input.time || undefined,
+  );
   if (closure) {
     parts.push(`il ${input.date} risulta chiuso${closure.reason ? ` (${closure.reason})` : ""}`);
   }
@@ -218,6 +226,7 @@ export async function updateReservationDetails(_prev: ActionState, fd: FormData)
     const shop = await getShopBySlug(d.shopSlug);
     if (!shop) throw new ActionError("Negozio non valido.");
 
+    const dateChanged = res.date !== d.date;
     const next = {
       type: d.type,
       name: d.name,
@@ -229,10 +238,18 @@ export async function updateReservationDetails(_prev: ActionState, fd: FormData)
       quantityKg: d.type === "porchetta" ? d.quantityKg : null,
       shopSlug: d.shopSlug,
       notes: d.notes ?? null,
+      // The stamps describe the booking *as it was*. A reminder sent for the
+      // old date is no reminder for the new one, so the cron must be free to
+      // send again; a porchetta marked ready for last Saturday is not ready for
+      // next; and a booking that stops being a porchetta cannot be on the
+      // porchetta waitlist.
+      remindedAt: dateChanged ? null : res.remindedAt,
+      readyAt: dateChanged || d.type !== "porchetta" ? null : res.readyAt,
+      waitlisted: d.type === "porchetta" ? res.waitlisted : false,
       updatedAt: new Date(),
     };
 
-    const moved = res.date !== next.date || res.time !== next.time;
+    const moved = dateChanged || res.time !== next.time;
     await db.update(reservations).set(next).where(eq(reservations.id, d.id));
 
     if (d.notifyCustomer) {
@@ -268,11 +285,20 @@ export async function updateReservationStatus(_prev: ActionState, fd: FormData):
     const data = parseForm(reservationStatusInput, fd);
     const res = await mustFindReservation(data.id);
 
-    // A no-show is the one state that forfeits a deposit the shop already holds.
-    // Moving the booking back out of no_show releases the forfeit again, so an
-    // operator who mis-clicked isn't left with money marked as kept.
-    const forfeiting = data.status === "no_show" && res.depositPaidAt != null;
-    const depositForfeitedAt = forfeiting ? res.depositForfeitedAt ?? new Date() : null;
+    // A paid deposit the shop still holds: received, and neither kept nor
+    // given back yet.
+    const held =
+      res.depositCents > 0 && res.depositPaidAt != null && res.depositRefundedAt == null;
+    // A no-show forfeits a held deposit outright. A cancellation keeps whatever
+    // was already decided about it (`resolveCancelledDeposit` records that).
+    // Any active state releases the forfeit again, so an operator who
+    // mis-clicked isn't left with money marked as kept.
+    const forfeiting = data.status === "no_show" && held;
+    const depositForfeitedAt = forfeiting
+      ? res.depositForfeitedAt ?? new Date()
+      : data.status === "cancelled"
+        ? res.depositForfeitedAt
+        : null;
 
     await db
       .update(reservations)
@@ -306,9 +332,15 @@ export async function updateReservationStatus(_prev: ActionState, fd: FormData):
     });
 
     revalidateReservations();
+    revalidatePath(`/admin/reservations/${res.id}`);
     if (forfeiting) {
       return ok(
         `Prenotazione segnata come non presentata. Caparra di ${(res.depositCents / 100).toFixed(2)} € trattenuta.`,
+      );
+    }
+    if (data.status === "cancelled" && held && !depositForfeitedAt) {
+      return ok(
+        `Prenotazione annullata. Acconto di ${(res.depositCents / 100).toFixed(2)} € incassato: segna se rimborsato o trattenuto.`,
       );
     }
     return ok("Prenotazione aggiornata.");
@@ -386,18 +418,79 @@ export async function setReservationDeposit(_prev: ActionState, fd: FormData): P
   });
 }
 
+/**
+ * What became of a paid deposit on a booking that did not go ahead.
+ *
+ * Cancelling a booking used to do nothing at all with its caparra: the money
+ * dropped out of the held-deposits total (which only counted live bookings)
+ * and out of every report, without anyone saying whether it had been handed
+ * back or kept. Either outcome is now an explicit, audited click.
+ */
+export async function resolveCancelledDeposit(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const d = parseForm(reservationDepositOutcomeInput, fd);
+    const res = await mustFindReservation(d.id);
+
+    if (res.status !== "cancelled" && res.status !== "no_show") {
+      throw new ActionError("L'acconto si definisce solo su una prenotazione annullata o non presentata.");
+    }
+    if (res.depositCents <= 0 || res.depositPaidAt == null) {
+      throw new ActionError("Nessun acconto incassato su questa prenotazione.");
+    }
+
+    const now = new Date();
+    const refund = d.esito === "rimborsato";
+    await db
+      .update(reservations)
+      .set(
+        refund
+          ? { depositRefundedAt: res.depositRefundedAt ?? now, depositForfeitedAt: null, updatedAt: now }
+          : { depositForfeitedAt: res.depositForfeitedAt ?? now, depositRefundedAt: null, updatedAt: now },
+      )
+      .where(eq(reservations.id, res.id));
+
+    const amount = `${(res.depositCents / 100).toFixed(2)} €`;
+    await logAudit({
+      actor,
+      action: refund ? "reservation.deposit_refund" : "reservation.deposit_forfeit",
+      entity: "reservation",
+      entityId: res.id,
+      summary: `Acconto ${amount} ${refund ? "rimborsato" : "trattenuto"} (${res.reference}, ${res.status})`,
+      meta: { depositCents: res.depositCents, outcome: d.esito, status: res.status },
+    });
+
+    revalidateReservations();
+    revalidatePath(`/admin/reservations/${res.id}`);
+    return ok(refund ? `Acconto di ${amount} segnato come rimborsato.` : `Acconto di ${amount} trattenuto.`);
+  });
+}
+
 /** Note which table a party was seated at. Free text — see the schema comment. */
 export async function setReservationTable(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireAdmin();
+    const actor = await requireAdmin();
     const id = String(fd.get("id") ?? "").trim();
     const tableNumber = String(fd.get("tableNumber") ?? "").trim().slice(0, 40) || null;
     const res = await mustFindReservation(id);
+    if ((res.tableNumber ?? null) === tableNumber) return ok("Nessuna modifica.");
 
     await db
       .update(reservations)
       .set({ tableNumber, updatedAt: new Date() })
       .where(eq(reservations.id, res.id));
+
+    // Every other change to a booking leaves an audit line; the table did not.
+    await logAudit({
+      actor,
+      action: "reservation.table",
+      entity: "reservation",
+      entityId: res.id,
+      summary: tableNumber
+        ? `Prenotazione ${res.reference}: tavolo ${tableNumber}`
+        : `Prenotazione ${res.reference}: tavolo rimosso`,
+      meta: { from: res.tableNumber, to: tableNumber },
+    });
 
     revalidateReservations();
     revalidatePath(`/admin/reservations/${res.id}`);
@@ -426,7 +519,15 @@ export async function resendReservationEmail(_prev: ActionState, fd: FormData): 
     // (pending, completed, no-show) wants the original receipt, because the
     // thing the customer actually lost is the reference code on it.
     let what: string;
-    if (res.readyAt && res.type === "porchetta") {
+    if (res.waitlisted && res.type === "porchetta" && res.status !== "cancelled") {
+      // Still on the waitlist: the notice that explains it, not a receipt that
+      // reads as if the kilos were booked.
+      await sendMail({
+        to: res.email,
+        ...porchettaWaitlistEmail(res.name, res.date, res.quantityKg),
+      });
+      what = "avviso di lista d'attesa";
+    } else if (res.readyAt && res.type === "porchetta") {
       const shop = await getShopBySlug(res.shopSlug);
       await sendMail({
         to: res.email,
@@ -454,7 +555,7 @@ export async function resendReservationEmail(_prev: ActionState, fd: FormData): 
       entity: "reservation",
       entityId: res.id,
       summary: `Email reinviata per ${res.reference} (${what}) → ${res.email}`,
-      meta: { status: res.status, ready: res.readyAt != null, kind: what },
+      meta: { status: res.status, ready: res.readyAt != null, waitlisted: res.waitlisted, kind: what },
     });
 
     revalidateReservations();

@@ -7,18 +7,20 @@ import {
   gt,
   gte,
   inArray,
+  isNotNull,
   isNull,
   like,
   lt,
   lte,
   ne,
+  not,
   or,
   sql,
   type AnyColumn,
   type SQL,
 } from "drizzle-orm";
 import { ftsMatch, type FtsTable } from "@/lib/admin/search";
-import { instantInRome } from "@/lib/time";
+import { instantInRome, dateInRome } from "@/lib/time";
 import {
   orders,
   reservations,
@@ -178,6 +180,9 @@ export type OrderFilters = {
   negozio?: string;
   stato?: string;
   tipo?: string;
+  /** Payment method (`orders.paymentMethod`): the contrassegni the driver has
+   *  to collect for, the counter sales, the card orders. */
+  metodo?: string;
   q?: string;
   /** Inclusive date bounds (yyyy-mm-dd), on the column `data` selects. */
   da?: string;
@@ -201,6 +206,7 @@ export function orderFilters(p: ParamBag): OrderFilters {
     negozio: facet(p, "negozio"),
     stato: facet(p, "stato"),
     tipo: facet(p, "tipo"),
+    metodo: facet(p, "metodo"),
     q: read(p, "q"),
     da: read(p, "da"),
     a: read(p, "a"),
@@ -233,12 +239,19 @@ export function ordersWhere(f: OrderFilters): SQL | undefined {
     }
   }
   if (isSet(f.tipo)) conds.push(eq(orders.fulfilment, f.tipo as "pickup"));
+  if (isSet(f.metodo)) conds.push(eq(orders.paymentMethod, f.metodo as "card"));
   if (f.data === "incasso") {
     // Compared as raw milliseconds, like `getVatReport` does: the left-hand side
     // is an expression, not a column, so there is no driver mapper to turn a
     // Date into the integer the column actually stores.
     if (f.da) conds.push(sql`${ORDER_SETTLED_AT} >= ${romeDayStart(f.da).getTime()}`);
     if (f.a) conds.push(sql`${ORDER_SETTLED_AT} < ${romeDayAfter(f.a).getTime()}`);
+  } else if (f.data === "ritiro") {
+    // The appointment rather than the order: "who is coming to collect between
+    // the 10th and the 24th" — the question the closures page links here with.
+    conds.push(isNotNull(orders.pickupSlotAt));
+    if (f.da) conds.push(gte(orders.pickupSlotAt, romeDayStart(f.da)));
+    if (f.a) conds.push(lt(orders.pickupSlotAt, romeDayAfter(f.a)));
   } else {
     if (f.da) conds.push(gte(orders.createdAt, romeDayStart(f.da)));
     if (f.a) conds.push(lt(orders.createdAt, romeDayAfter(f.a)));
@@ -284,6 +297,12 @@ export function reservationsWhere(f: ReservationFilters): SQL | undefined {
   if (f.stato === "waitlist") {
     conds.push(eq(reservations.waitlisted, true));
     conds.push(sql`${reservations.status} != 'cancelled'`);
+  } else if (f.stato === "scadute") {
+    // Past its day and still open — nobody said whether it happened. The
+    // autoclose job completes past *confirmed* bookings; a *pending* one is
+    // left here for the operator, who alone knows whether the party came.
+    conds.push(sql`${reservations.date} < ${dateInRome()}`);
+    conds.push(inArray(reservations.status, ["pending", "confirmed"]));
   } else if (isSet(f.stato)) {
     conds.push(eq(reservations.status, f.stato as "pending"));
   }
@@ -437,7 +456,9 @@ export function productsWhere(f: ProductFilters, lowStockThreshold: number): SQL
   }
   if (f.stato === "attivi") conds.push(eq(products.active, true));
   if (f.stato === "disattivati") conds.push(eq(products.active, false));
-  if (f.stato === "shop") conds.push(eq(products.purchasable, true));
+  // "In vendita online" is what the storefront shows, and it shows nothing
+  // inactive — a switched-off product with the flag still on is not for sale.
+  if (f.stato === "shop") conds.push(and(eq(products.purchasable, true), eq(products.active, true))!);
   // `stock IS NULL` means unlimited / made-to-order, so it is never "low". A
   // product's own reorder point wins over the shop-wide threshold.
   if (f.scorte === "basse") {
@@ -453,6 +474,9 @@ export function productsWhere(f: ProductFilters, lowStockThreshold: number): SQL
         like(sql`${products.name}`, term(f.q)),
         like(sql`${products.slug}`, term(f.q)),
         like(sql`${products.category}`, term(f.q)),
+        // A delivery note names a code and a supplier, not a product.
+        like(sql`${products.sku}`, term(f.q)),
+        like(sql`${products.supplier}`, term(f.q)),
       )!,
     );
   }
@@ -479,7 +503,13 @@ export function blogWhere(f: BlogFilters, today?: string): SQL | undefined {
     conds.push(gt(blogPosts.date, today ?? ""));
   }
   if (f.stato === "bozze") conds.push(eq(blogPosts.published, false));
-  if (isSet(f.categoria)) conds.push(eq(blogPosts.category, f.categoria));
+  if (f.categoria === "non-assegnata") {
+    // Same residue the Categorie page counts for news: a free-text category
+    // that matches no entry in the taxonomy.
+    conds.push(and(isNull(blogPosts.categoryId), ne(blogPosts.category, ""))!);
+  } else if (isSet(f.categoria)) {
+    conds.push(eq(blogPosts.category, f.categoria));
+  }
   if (f.q) {
     conds.push(
       or(
@@ -530,15 +560,34 @@ export function discountFilters(p: ParamBag): DiscountFilters {
   return { stato: facet(p, "stato"), tipo: facet(p, "tipo"), q: read(p, "q") };
 }
 
-export function discountsWhere(f: DiscountFilters): SQL | undefined {
+/**
+ * The status chips mirror `discountState` in `lib/discounts`, in the same
+ * order of precedence, so every code sits under exactly one of them. "Attivi"
+ * therefore means redeemable now — switched on, inside its dates, under its
+ * cap — not merely `active = true`, which used to list expired codes as live.
+ */
+export function discountsWhere(f: DiscountFilters, now: Date = new Date()): SQL | undefined {
   const conds: SQL[] = [];
-  if (f.stato === "attivi") conds.push(eq(discountCodes.active, true));
-  if (f.stato === "disattivati") conds.push(eq(discountCodes.active, false));
-  // A capped code that has reached its limit: still "active" but unusable.
-  if (f.stato === "esauriti") {
-    conds.push(
-      sql`${discountCodes.maxRedemptions} is not null and ${discountCodes.timesUsed} >= ${discountCodes.maxRedemptions}`,
-    );
+  const on = eq(discountCodes.active, true);
+  const expired = sql`(${discountCodes.endsAt} is not null and ${discountCodes.endsAt} < ${now.getTime()})`;
+  const exhausted = sql`(${discountCodes.maxRedemptions} is not null and ${discountCodes.timesUsed} >= ${discountCodes.maxRedemptions})`;
+  const scheduled = sql`(${discountCodes.startsAt} is not null and ${discountCodes.startsAt} > ${now.getTime()})`;
+  switch (f.stato) {
+    case "disattivati":
+      conds.push(eq(discountCodes.active, false));
+      break;
+    case "scaduti":
+      conds.push(on, expired);
+      break;
+    case "esauriti":
+      conds.push(on, not(expired), exhausted);
+      break;
+    case "programmati":
+      conds.push(on, not(expired), not(exhausted), scheduled);
+      break;
+    case "attivi":
+      conds.push(on, not(expired), not(exhausted), not(scheduled));
+      break;
   }
   if (isSet(f.tipo)) conds.push(eq(discountCodes.type, f.tipo as "percent"));
   if (f.q) conds.push(like(sql`${discountCodes.code}`, term(f.q)));

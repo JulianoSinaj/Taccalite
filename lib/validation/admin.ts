@@ -110,6 +110,8 @@ export const productInput = z
       .refine((v) => v == null || (Number.isFinite(v) && v >= 0), "Costo non valido"),
     sku: optionalText(60),
     supplier: optionalText(200),
+    seoTitle: optionalText(70),
+    seoDescription: optionalText(200),
     purchasable: checkbox,
     featured: checkbox,
     active: checkbox,
@@ -142,11 +144,16 @@ export const categoryInput = z.object({
     .refine((v) => v == null || (Number.isFinite(v) && v >= 0 && v <= 10000), "Aliquota IVA non valida"),
   accent: optionalText(40),
   description: optionalText(2000),
-  image: optionalText(1000),
   seoTitle: optionalText(200),
   seoDescription: optionalText(400),
   sortOrder: z.coerce.number().int().default(0),
   active: checkbox,
+});
+
+/** Nudge one category up or down among its siblings (same kind, same parent). */
+export const categoryMoveInput = z.object({
+  id: z.string().trim().min(1, "Categoria mancante"),
+  direction: z.enum(["up", "down"], { message: "Direzione non valida" }),
 });
 
 /** Fold one category into another — the cleanup tool for a typo that forked the
@@ -263,7 +270,34 @@ export const discountInput = z.object({
   startsAt: optionalText(20),
   endsAt: optionalText(20),
   active: checkbox,
-});
+})
+  .superRefine((d, ctx) => {
+    // The value has to mean something for its type. 150% used to be clamped
+    // to 100 without a word, and 0 was accepted for a code that then took
+    // nothing off.
+    if (d.type === "percent" && (!Number.isInteger(d.value) || d.value < 1 || d.value > 100)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["value"],
+        message: "La percentuale deve essere un numero intero tra 1 e 100.",
+      });
+    }
+    if (d.type === "fixed" && d.value <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["value"],
+        message: "L'importo dello sconto deve essere maggiore di zero.",
+      });
+    }
+    // ISO dates compare as strings.
+    if (d.startsAt && d.endsAt && d.endsAt < d.startsAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endsAt"],
+        message: "La data di fine non può precedere quella di inizio.",
+      });
+    }
+  });
 
 export const manualOrderInput = z.object({
   name: z.string().trim().min(1, "Il nome è obbligatorio").max(200),
@@ -307,6 +341,19 @@ export const manualOrderInput = z.object({
 export const orderSettleInput = z.object({
   id: z.string().trim().min(1),
   paidWith: z.enum(SETTLEMENT_INSTRUMENTS),
+});
+
+/**
+ * The day sheet's one gesture: take the money, if still owed, and hand over.
+ * `paidWith` is only needed when there is something to collect, and only the
+ * action knows that — so it is optional here and demanded there.
+ */
+export const orderHandOverInput = z.object({
+  id: z.string().trim().min(1),
+  paidWith: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.enum(SETTLEMENT_INSTRUMENTS).optional(),
+  ),
 });
 
 // ── Fulfilment: delivery zones & pickup windows ──────────────────────────────
@@ -370,38 +417,95 @@ export const pickupSlotInput = z
     }
   });
 
+/** A real calendar day, not just the shape of one. */
+function isRealDate(value: string): boolean {
+  const [y, m, d] = value.split("-").map(Number);
+  const probe = new Date(Date.UTC(y, m - 1, d));
+  return probe.getUTCFullYear() === y && probe.getUTCMonth() === m - 1 && probe.getUTCDate() === d;
+}
+
 /** ISO `yyyy-mm-dd`. The DB CHECK enforces the shape; this gives a sentence. */
 const isoDate = z
   .string()
   .trim()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data non valida");
 
+/** `HH:MM` from a `<input type="time">`, or blank. */
+const optionalClock = z
+  .union([z.string().trim().regex(/^\d{2}:\d{2}$/, "Orario non valido"), z.literal("")])
+  .optional()
+  .transform((v) => (v ? v : null));
+
+/** The flags and scope every closure form posts, shared with the holiday preset. */
+const closureScope = {
+  /** Blank = every location. */
+  shopSlug: optionalText(80),
+  blocksReservations: checkbox,
+  blocksPickup: checkbox,
+};
+
+/** A closure that stops nothing is a note to self, and would sit in the list
+ *  looking as though it were doing something. */
+function requireSomethingBlocked(
+  d: { blocksReservations: boolean; blocksPickup: boolean },
+  ctx: z.RefinementCtx,
+): void {
+  if (!d.blocksReservations && !d.blocksPickup) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Scegli almeno una cosa da sospendere.",
+      path: ["blocksReservations"],
+    });
+  }
+}
+
 export const shopClosureInput = z
   .object({
     id: optionalText(40),
-    /** Blank = every location. */
-    shopSlug: optionalText(80),
+    ...closureScope,
     fromDate: isoDate,
     /** Blank means a single day, which is the common case — see the action. */
     toDate: z.union([isoDate, z.literal("")]).optional(),
     reason: optionalText(200),
-    blocksReservations: checkbox,
-    blocksPickup: checkbox,
+    /** Both or neither: a window inside each day, or the whole day. */
+    startTime: optionalClock,
+    endTime: optionalClock,
   })
   .superRefine((d, ctx) => {
+    // The regex accepts "2026-02-31"; the DB CHECK does too. Stored, it would
+    // never match a real day and the closure would silently do nothing.
+    for (const [key, v] of [["fromDate", d.fromDate], ["toDate", d.toDate]] as const) {
+      if (v && !isRealDate(v)) {
+        ctx.addIssue({ code: "custom", message: "Data non valida.", path: [key] });
+      }
+    }
     if (d.toDate && d.toDate < d.fromDate) {
       ctx.addIssue({ code: "custom", message: "La fine deve venire dopo l'inizio.", path: ["toDate"] });
     }
-    // A closure that stops nothing is a note to self, and would sit in the list
-    // looking as though it were doing something.
-    if (!d.blocksReservations && !d.blocksPickup) {
+    if (!!d.startTime !== !!d.endTime) {
       ctx.addIssue({
         code: "custom",
-        message: "Scegli almeno una cosa da sospendere.",
-        path: ["blocksReservations"],
+        message: "Per una chiusura parziale indica sia l'ora di inizio che quella di fine.",
+        path: [d.startTime ? "endTime" : "startTime"],
       });
+    } else if (d.startTime && d.endTime && d.endTime <= d.startTime) {
+      ctx.addIssue({ code: "custom", message: "L'orario di fine deve venire dopo l'inizio.", path: ["endTime"] });
     }
+    requireSomethingBlocked(d, ctx);
   });
+
+/**
+ * The holiday checklist: which of a year's national holidays to close on. The
+ * dates are validated against the calendar by the action, which also knows
+ * their names.
+ */
+export const holidayClosuresInput = z
+  .object({
+    year: z.coerce.number().int().min(2000).max(2100),
+    dates: z.array(isoDate).min(1, "Scegli almeno una festività."),
+    ...closureScope,
+  })
+  .superRefine(requireSomethingBlocked);
 
 export const reservationDepositInput = z.object({
   id: z.string().trim().min(1),
@@ -434,6 +538,12 @@ export const stockAdjustInput = z
       ctx.addIssue({ code: "custom", message: "La giacenza contata non può essere negativa", path: ["delta"] });
     }
   });
+
+/** What became of a paid deposit once its booking was cancelled (or missed). */
+export const reservationDepositOutcomeInput = z.object({
+  id: z.string().trim().min(1),
+  esito: z.enum(["rimborsato", "trattenuto"]),
+});
 
 export const reservationStatusInput = z.object({
   id: z.string().trim().min(1),
@@ -480,11 +590,17 @@ const reservationDetailFields = {
 
 /** Per-type requirements applied to both create and reschedule. */
 const requireByType = (
-  d: { type: string; quantityKg: number | null },
+  d: { type: string; quantityKg: number | null; notes?: string },
   ctx: z.RefinementCtx,
 ) => {
   if (d.type === "porchetta" && d.quantityKg == null) {
     ctx.addIssue({ code: "custom", message: "Indica i kg di porchetta", path: ["quantityKg"] });
+  }
+  // An "ordine speciale" *is* its description — the public form has always
+  // required it, and the back office let one through with nothing at all to
+  // say what the customer wanted.
+  if (d.type === "order" && !d.notes) {
+    ctx.addIssue({ code: "custom", message: "Descrivi cosa desidera ordinare", path: ["notes"] });
   }
 };
 
@@ -572,6 +688,18 @@ export const orderStatusInput = z.object({
   id: z.string().trim().min(1),
   status: z.enum(["pending", "paid", "fulfilled", "cancelled", "refunded"]),
   paymentStatus: z.enum(["unpaid", "paid", "refunded"]).optional(),
+});
+
+/**
+ * The money knobs of an unpaid order, posted with its lines: coupon, negotiated
+ * reduction and carriage override. Same fields as the counter form, so an order
+ * rung up with them can be corrected with them.
+ */
+export const orderPricingInput = z.object({
+  id: z.string().trim().min(1),
+  discountCode: optionalText(40),
+  manualDiscountEuros: optionalEuros("Sconto concordato non valido"),
+  shippingEuros: optionalEuros("Spese di spedizione non valide"),
 });
 
 export const redemptionStatusInput = z.object({
@@ -662,9 +790,7 @@ export const userProfileInput = z.object({
     .optional()
     .or(z.literal("").transform(() => undefined)),
   name: z.string().trim().min(1, "Il nome è obbligatorio").max(200),
-  marketingConsent: z
-    .union([z.string(), z.null(), z.undefined()])
-    .transform((v) => v === "on" || v === "true" || v === "1"),
+  marketingConsent: checkbox,
   email: z
     .string()
     .trim()

@@ -105,7 +105,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
       // The ledger a stocktake is reconciled against.
       body = streamCsv(
         ["timestamp", "prodotto", "sku", "sede", "delta", "giacenzaDopo", "motivo", "operatore"],
-        (limit, offset) => getStockMovementsForExport(limit, offset),
+        (limit, offset) => getStockMovementsForExport(limit, offset, params.get("prodotto") || undefined),
         (m) => [
           iso(m.createdAt), m.productName, m.sku ?? "", m.shopSlug ?? "",
           m.delta, m.stockAfter, m.reason, m.actor ?? "",

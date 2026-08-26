@@ -55,6 +55,16 @@ export const checkoutSchema = z
       if (!d.city) ctx.addIssue({ code: "custom", message: "Inserisci la città", path: ["city"] });
       if (!d.zip) ctx.addIssue({ code: "custom", message: "Inserisci il CAP", path: ["zip"] });
     }
+    // Whoever drives the round has to be able to call — a wrong bell, a closed
+    // gate, nobody home — and a contrassegno is a doorstep transaction
+    // whichever way it travels. A courier shipment paid online can do without.
+    if ((d.fulfilment === "delivery" || d.paymentMethod === "on_delivery") && !d.phone) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Inserisci un numero di telefono: serve a chi consegna",
+        path: ["phone"],
+      });
+    }
   });
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>;

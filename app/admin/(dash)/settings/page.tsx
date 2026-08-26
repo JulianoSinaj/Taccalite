@@ -128,7 +128,7 @@ const KNOWN: {
   {
     key: "store.shippingCents",
     label: "Costo di spedizione di riserva (centesimi)",
-    help: "Superato dalle zone di spedizione: si applica solo a un CAP che nessuna zona copre (e agli ordini creati prima che le zone esistessero). Le tariffe per zona si impostano in «Ritiri e consegne».",
+    help: "Vale solo quando un ordine esistente viene ricalcolato dal back office e nessuna zona copre più il suo CAP (es. ordini creati prima delle zone). Al checkout non fa da riserva: un CAP senza zona viene rifiutato. Le tariffe si impostano in «Zone e fasce».",
     control: "number",
     default: 700,
     min: 0,
@@ -137,7 +137,7 @@ const KNOWN: {
   {
     key: "store.freeShippingThresholdCents",
     label: "Soglia spedizione gratuita di riserva (centesimi)",
-    help: "Come sopra: vale solo dove nessuna zona copre il CAP. Ogni zona ha la sua soglia «gratis oltre». Imposta 0 per disattivare.",
+    help: "Come sopra: solo nei ricalcoli dal back office senza zona. Ogni zona ha la sua soglia «gratis oltre». Imposta 0 per disattivare.",
     control: "number",
     default: 0,
     min: 0,

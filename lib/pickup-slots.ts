@@ -98,7 +98,9 @@ export function pickupSlotOptions(
       // The schedule recurs weekly and so cannot know about the calendar; a
       // window generated from Thursday's opening hours would otherwise be
       // offered on the Thursday of the August shutdown.
-      if (isClosed(closures, s.shopSlug, date, "pickup")) continue;
+      // The whole window is tested, not just its start: a 12:00–14:00 slot is
+      // no use when the shop shuts at 13:00 for the afternoon.
+      if (isClosed(closures, s.shopSlug, date, "pickup", { start: s.startTime, end: s.endTime })) continue;
       const at = instantInRome(date, s.startTime);
       const atMs = at.getTime();
       // The cut-off is measured from the moment the window opens, not from the

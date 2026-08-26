@@ -2,9 +2,18 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { users, newsletterSubscribers } from "@/lib/db/schema";
+import { users, newsletterSubscribers, reservations } from "@/lib/db/schema";
+import { getShopBySlug } from "@/lib/db/queries";
+import { sendMail } from "@/lib/mail/mailer";
+import {
+  reservationCancelledByCustomerEmail,
+  reservationCustomerCancelledOwnerEmail,
+  type ReservationEmailData,
+} from "@/lib/mail/templates";
+import { env } from "@/lib/env";
+import { dateInRome } from "@/lib/time";
 import { requireUser, deleteOtherUserSessions } from "@/lib/auth/session";
 import {
   startEnrolment,
@@ -302,6 +311,93 @@ export async function requestOwnErasure(_prev: ActionState, fd: FormData): Promi
     revalidatePath(ACCOUNT_PATH);
     return ok(
       "Richiesta registrata. Ti ricontattiamo entro 30 giorni: gli ordini restano per obblighi fiscali.",
+    );
+  });
+}
+
+// ── Reservations ─────────────────────────────────────────────────────────────
+/**
+ * Cancel one of the customer's own upcoming bookings.
+ *
+ * Every cancellation used to be a phone call the shop then had to act on by
+ * hand. The customer can do it from their account — for their own bookings
+ * only (looked up by owner, never by id alone), and only while there is still
+ * something to cancel: a booking already closed, or whose day has passed, is
+ * history, and what became of it is for the shop to record.
+ *
+ * A paid deposit is left exactly as it is: the shop decides whether it goes
+ * back or is kept, on the booking's page in the back office.
+ */
+export async function cancelOwnReservation(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireUser();
+    const id = String(fd.get("id") ?? "").trim();
+    if (!id) throw new ActionError("Prenotazione non trovata.");
+
+    const [res] = await db
+      .select()
+      .from(reservations)
+      .where(and(eq(reservations.id, id), eq(reservations.userId, actor.id)))
+      .limit(1);
+    if (!res) throw new ActionError("Prenotazione non trovata.");
+    if (res.status === "cancelled") return ok("Questa prenotazione è già annullata.");
+    if (res.status !== "pending" && res.status !== "confirmed") {
+      throw new ActionError("Questa prenotazione è già chiusa e non si può annullare.");
+    }
+    if (res.date < dateInRome()) {
+      throw new ActionError("La data è già passata: per qualsiasi cosa contatta la bottega.");
+    }
+
+    await db
+      .update(reservations)
+      .set({ status: "cancelled", updatedAt: new Date() })
+      .where(eq(reservations.id, res.id));
+
+    const shop = await getShopBySlug(res.shopSlug);
+    const data: ReservationEmailData = {
+      reference: res.reference,
+      type: res.type,
+      name: res.name,
+      phone: res.phone,
+      email: res.email,
+      date: res.date,
+      time: res.time,
+      guests: res.guests,
+      quantityKg: res.quantityKg,
+      shopName: shop?.name ?? res.shopSlug,
+      notes: res.notes,
+    };
+    // The shop must hear about it — a freed Saturday table or two kilos of
+    // porchetta are worth re-selling — and the customer gets it in writing.
+    // Neither email may fail the cancellation, which is already saved.
+    const jobs: Promise<unknown>[] = [
+      sendMail({ to: env.ownerEmail, ...reservationCustomerCancelledOwnerEmail(data) }),
+    ];
+    if (res.email) jobs.push(sendMail({ to: res.email, ...reservationCancelledByCustomerEmail(data) }));
+    await Promise.allSettled(jobs);
+
+    await logAudit({
+      actor,
+      action: "reservation.cancel_by_customer",
+      entity: "reservation",
+      entityId: res.id,
+      summary: `Prenotazione ${res.reference} annullata dal cliente (${res.date}${res.time ? ` ${res.time}` : ""})`,
+      meta: {
+        from: res.status,
+        type: res.type,
+        date: res.date,
+        depositCents: res.depositCents,
+        depositPaid: res.depositPaidAt != null,
+      },
+    });
+
+    revalidatePath("/account");
+    revalidatePath("/admin/reservations");
+    revalidatePath("/admin");
+    return ok(
+      res.depositCents > 0 && res.depositPaidAt
+        ? "Prenotazione annullata. Per l'acconto versato ti contatteremo noi."
+        : "Prenotazione annullata.",
     );
   });
 }

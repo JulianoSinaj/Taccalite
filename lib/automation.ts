@@ -44,6 +44,7 @@ import { sweepOrphanedMedia } from "@/lib/media";
 export type CronJobKey =
   | "porchetta-reminders"
   | "table-reminders"
+  | "reservations-autoclose"
   | "maintenance"
   | "points-expiry"
   | "owner-digest"
@@ -202,6 +203,32 @@ export async function runTableReminders(now = new Date()): Promise<{ sent: numbe
     }),
   );
   return { sent };
+}
+
+/**
+ * Close the bookings whose day has passed.
+ *
+ * A confirmed booking stayed "confermata" for ever unless somebody remembered
+ * to flip it, so the open-bookings counts drifted upwards and the customer's
+ * own account page kept showing last month's dinner as still to come. The
+ * day after, a confirmed booking that nobody marked missed is taken to have
+ * happened. A *pending* one is deliberately left alone: it was never agreed,
+ * and only the operator knows whether the party turned up anyway, was turned
+ * away, or never came — the list's "Scadute" facet is where that is decided.
+ */
+export async function runReservationAutoClose(now = new Date()): Promise<{ closed: number }> {
+  const today = dateInRome(now);
+  const closed = await db
+    .update(reservations)
+    .set({ status: "completed", updatedAt: now })
+    .where(
+      and(
+        eq(reservations.status, "confirmed"),
+        sql`${reservations.date} < ${today}`,
+      ),
+    )
+    .returning({ id: reservations.id });
+  return { closed: closed.length };
 }
 
 /**
@@ -557,6 +584,13 @@ export const CRON_JOBS: CronJob[] = [
     label: "Promemoria tavoli",
     description: "Ricorda ai clienti il tavolo prenotato per il giorno dopo, così una disdetta arriva in tempo per rivendere il posto.",
     run: (now) => runTableReminders(now),
+  },
+  {
+    key: "reservations-autoclose",
+    label: "Chiusura prenotazioni",
+    description:
+      "Segna completate le prenotazioni confermate il giorno dopo la data. Quelle ancora in attesa restano da decidere nell'elenco, filtro «Scadute».",
+    run: (now) => runReservationAutoClose(now),
   },
   {
     key: "owner-digest",

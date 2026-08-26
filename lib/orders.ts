@@ -14,7 +14,12 @@ import {
 } from "@/lib/db/queries";
 import { quoteFulfilment, billableWeightKg, needsAddress, type ZoneLike } from "@/lib/fulfilment";
 import { resolvePickupSlot, formatSlotLabel } from "@/lib/pickup-slots";
-import { validateDiscount, recordDiscountUseByCode, releaseDiscountUseByCode } from "@/lib/discounts";
+import {
+  validateDiscount,
+  recordDiscountUseByCode,
+  releaseDiscountUseByCode,
+  normalizeCode,
+} from "@/lib/discounts";
 import { sendMail } from "@/lib/mail/mailer";
 import {
   orderCustomerEmail,
@@ -219,6 +224,16 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
     email: input.email,
     shopSlug: input.fulfilment === "pickup" ? input.shopSlug : null,
   });
+  // A code the customer typed and saw accepted must not vanish at the till.
+  // The preview runs the same rules, but a last use can be taken or a
+  // first-order code disqualified between the two; refusing here puts the
+  // reason in front of the customer instead of charging full price under a
+  // "codice applicato" they were still looking at.
+  if (input.discountCode?.trim() && !discount) {
+    throw new Error(
+      `Il codice sconto ${normalizeCode(input.discountCode)} non è valido o non è più applicabile a questo ordine. Rimuovilo e riprova.`,
+    );
+  }
   const discountCents = discount?.discountCents ?? 0;
 
   // Carriage comes from the zone serving the CAP. Gates are enforced here (and
@@ -368,12 +383,21 @@ export async function recalcOrderTotals(orderId: string): Promise<RecalcResult> 
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
   const subtotalCents = items.reduce((sum, i) => sum + i.lineTotalCents, 0);
 
-  // Re-validate the coupon against the new subtotal. A code that no longer
+  // Re-validate the coupon against the new subtotal, for the same customer the
+  // sale is for (per-customer caps, first-order-only). A code that no longer
   // qualifies is dropped rather than carried over at its old value.
   const discount = order.discountCode
-    ? await validateDiscount(order.discountCode, subtotalCents)
+    ? await validateDiscount(order.discountCode, subtotalCents, {
+        userId: order.userId,
+        email: order.email || undefined,
+        shopSlug: order.fulfilment === "pickup" ? order.shopSlug : null,
+      })
     : null;
-  const discountCents = discount?.discountCents ?? 0;
+  // The counter's negotiated reduction rides with the coupon, exactly as at
+  // creation — and is capped the same way, so an edit that shrinks the basket
+  // cannot leave a discount larger than the goods.
+  const manualDiscountCents = Math.min(order.manualDiscountCents, subtotalCents);
+  const discountCents = Math.min(subtotalCents, (discount?.discountCents ?? 0) + manualDiscountCents);
   const droppedDiscountCode = order.discountCode && !discount ? order.discountCode : undefined;
 
   // Re-quote carriage from the order's own CAP, with the gates off: the operator
@@ -392,7 +416,12 @@ export async function recalcOrderTotals(orderId: string): Promise<RecalcResult> 
     })),
     freeShippingCoupon: discount?.freeShipping,
   });
-  const shippingCents = carriage.feeCents;
+  // An explicit figure typed by the operator wins over the rules, here as at
+  // creation — otherwise the first edit silently put the flat rate back. A
+  // pickup carries nothing, override or not: an order switched to pickup must
+  // not keep paying the courier fee it was typed with.
+  const shippingCents =
+    order.fulfilment === "pickup" ? carriage.feeCents : order.shippingOverrideCents ?? carriage.feeCents;
 
   const totalCents = Math.max(0, subtotalCents - discountCents + shippingCents);
 
@@ -401,9 +430,14 @@ export async function recalcOrderTotals(orderId: string): Promise<RecalcResult> 
     .set({
       subtotalCents,
       discountCents,
+      manualDiscountCents,
       discountCode: discount?.code ?? null,
       shippingCents,
       deliveryZoneId: carriage.zone?.id ?? null,
+      // A delivery/shipping order belongs to the sede whose zone serves it,
+      // exactly as `createOrder` records it. Left alone for a pickup, whose
+      // sede is the counter the customer chose.
+      ...(order.fulfilment === "pickup" ? {} : { shopSlug: carriage.zone?.shopSlug ?? null }),
       totalCents,
       updatedAt: new Date(),
     })
@@ -621,7 +655,10 @@ export async function finalizeOrder(
   const [claimed] = await db
     .update(orders)
     .set({
-      status: "paid",
+      // An order already handed over (goods first, money after — the normal
+      // rhythm in bottega) stays "evaso"; flipping it back to "pagato" put it
+      // back in the to-fulfil queue the moment the money came in.
+      status: sql`case when ${orders.status} = 'fulfilled' then 'fulfilled' else 'paid' end`,
       paymentStatus: "paid",
       paidAt: now,
       updatedAt: now,

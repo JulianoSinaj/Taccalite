@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { PrivacyNote } from "@/components/site/PrivacyNote";
 import Link from "next/link";
 import { Minus, Plus, Trash2 } from "lucide-react";
@@ -89,19 +89,25 @@ export default function CheckoutClient({
   const slotsForShop = slotOptions.filter((o) => o.shopSlug === shopSlug);
   const chosenSlot = slotsForShop.some((o) => o.value === pickupSlot) ? pickupSlot : "";
 
-  // Discount code (optional). The preview amount is validated server-side; the
-  // order endpoint re-validates authoritatively on submit. The applied preview
-  // captures the subtotal it was computed for — a later cart change (a percent
-  // code depends on the subtotal) makes it stale, so we derive `coupon` as valid
-  // only while the subtotal still matches, no reset-effect needed.
+  // Discount code (optional). The preview amount is validated server-side, with
+  // the same customer and sede the order will be priced for; the order endpoint
+  // re-validates authoritatively on submit. The applied preview captures the
+  // inputs it was computed for — the subtotal (a percent code depends on it),
+  // the fulfilment and the sede (a code can be scoped to one counter). Any
+  // change makes it stale, so `coupon` is derived as valid only while they
+  // still match, no reset-effect needed; the note below asks for a re-apply
+  // rather than silently pricing without it.
+  const couponContext = `${subtotalCents}|${fulfilment}|${shopSlug}`;
+  const emailRef = useRef<HTMLInputElement>(null);
   const [couponInput, setCouponInput] = useState("");
   const [applied, setApplied] = useState<
-    { code: string; discountCents: number; freeShipping: boolean; atSubtotalCents: number } | null
+    { code: string; discountCents: number; freeShipping: boolean; context: string } | null
   >(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponBusy, setCouponBusy] = useState(false);
 
-  const coupon = applied && applied.atSubtotalCents === subtotalCents ? applied : null;
+  const coupon = applied && applied.context === couponContext ? applied : null;
+  const couponStale = applied != null && coupon == null;
 
   async function applyCoupon() {
     const code = couponInput.trim();
@@ -112,7 +118,13 @@ export default function CheckoutClient({
       const res = await fetch("/api/discounts/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, subtotalCents }),
+        body: JSON.stringify({
+          code,
+          subtotalCents,
+          fulfilment,
+          shopSlug,
+          email: emailRef.current?.value.trim() || undefined,
+        }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Codice non valido");
@@ -120,7 +132,7 @@ export default function CheckoutClient({
         code: json.code,
         discountCents: json.discountCents,
         freeShipping: json.freeShipping,
-        atSubtotalCents: subtotalCents,
+        context: couponContext,
       });
     } catch (err) {
       setApplied(null);
@@ -362,6 +374,11 @@ export default function CheckoutClient({
               </button>
             </div>
             {couponError && <p className="mt-2 text-xs font-medium text-red-700">{couponError}</p>}
+            {couponStale && !couponError && (
+              <p className="mt-2 text-xs font-medium text-amber-700">
+                L’ordine è cambiato: premi «Applica» per ricontrollare il codice {applied.code}.
+              </p>
+            )}
             {coupon && (
               <p className="mt-2 flex items-center justify-between text-xs font-medium text-emerald-700">
                 <span>Codice {coupon.code} applicato ✓</span>
@@ -399,7 +416,9 @@ export default function CheckoutClient({
               <p className="text-xs text-taupe">
                 {quote.zone.name}
                 {quote.zone.note ? ` · ${quote.zone.note}` : ""}
-                {quote.zone.leadTimeHours > 0 ? ` · consegna in ${quote.zone.leadTimeHours} h` : ""}
+                {quote.zone.leadTimeHours > 0
+                  ? ` · ordina con almeno ${quote.zone.leadTimeHours} h di anticipo`
+                  : ""}
               </p>
             )}
             <div className="flex justify-between pt-2 font-display text-xl font-bold text-brown-950">
@@ -417,13 +436,32 @@ export default function CheckoutClient({
               <input id="name" name="name" required defaultValue={user?.name ?? ""} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls} htmlFor="phone">Telefono</label>
-              <input id="phone" name="phone" type="tel" defaultValue={user?.phone ?? ""} className={inputCls} />
+              <label className={labelCls} htmlFor="phone">
+                Telefono{fulfilment === "delivery" || payMethod === "on_delivery" ? "" : " (facoltativo)"}
+              </label>
+              {/* Required exactly when the server will refuse without it (see
+                  `checkoutSchema`): someone has to be reachable at the door. */}
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                required={fulfilment === "delivery" || payMethod === "on_delivery"}
+                defaultValue={user?.phone ?? ""}
+                className={inputCls}
+              />
             </div>
           </div>
           <div>
             <label className={labelCls} htmlFor="email">Email</label>
-            <input id="email" name="email" type="email" required defaultValue={user?.email ?? ""} className={inputCls} />
+            <input
+              ref={emailRef}
+              id="email"
+              name="email"
+              type="email"
+              required
+              defaultValue={user?.email ?? ""}
+              className={inputCls}
+            />
           </div>
 
           <div>

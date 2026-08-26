@@ -34,7 +34,11 @@ export default async function AdminBlog({ searchParams }: SP) {
   const today = dateInRome();
   const { rows: posts, total, pageCount, categories } = await getBlogPage({ ...filters, page });
   const filtered = Object.values(filters).some((v) => v && v !== "all");
-  const CATEGORY_CHIPS = chipsFrom(categories, "Tutte le categorie");
+  const CATEGORY_CHIPS = [
+    ...chipsFrom(categories, "Tutte le categorie"),
+    // The rows the Categorie page counts as "scritte a mano" for news.
+    { value: "non-assegnata", label: "Senza categoria valida" },
+  ];
 
   return (
     <div>

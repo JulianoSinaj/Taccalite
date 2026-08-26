@@ -189,6 +189,10 @@ export const products = sqliteTable(
     costCents: integer("cost_cents"),
     sku: text("sku"),
     supplier: text("supplier"),
+    // Search-snippet overrides, as on the news diary: a shelf description is
+    // not always the sentence a result page should show. Blank = derived.
+    seoTitle: text("seo_title"),
+    seoDescription: text("seo_description"),
     // When a low-stock alert was last emailed to the owner; cleared when restocked
     // above the threshold, so a single dip doesn't spam repeat alerts.
     lowStockNotifiedAt: integer("low_stock_notified_at", { mode: "timestamp_ms" }),
@@ -612,6 +616,11 @@ export const reservations = sqliteTable(
     // `depositPaidAt` so the money is still traceable as received-then-forfeit
     // rather than silently disappearing from the booking.
     depositForfeitedAt: integer("deposit_forfeited_at", { mode: "timestamp_ms" }),
+    // Set when a paid deposit was given back after a cancellation. A cancelled
+    // booking with a paid deposit is money the shop still holds until one of
+    // the two stamps says what became of it; without this the caparra simply
+    // fell out of every total the moment the booking was cancelled.
+    depositRefundedAt: integer("deposit_refunded_at", { mode: "timestamp_ms" }),
     // Which table the party was seated at. Free text on purpose: the shop calls
     // them "1", "vetrina", "sala grande" — a table registry would be more
     // structure than two rooms need. Capacity is enforced on seats, not tables.
@@ -843,6 +852,21 @@ export const shopClosures = sqliteTable(
     blocksReservations: integer("blocks_reservations", { mode: "boolean" }).notNull().default(true),
     /** Offer no pickup or delivery window on these days. */
     blocksPickup: integer("blocks_pickup", { mode: "boolean" }).notNull().default(true),
+    /**
+     * Part of the day only — "chiusi il pomeriggio per inventario". Both set
+     * (HH:MM, `startTime` < `endTime`, applied to every day of the range) or
+     * both null for the whole day. A partial closure only refuses a booking
+     * that has a time inside the window; it never greys the day out.
+     */
+    startTime: text("start_time"),
+    endTime: text("end_time"),
+    /**
+     * When "avvisa i clienti" last ran and how many it reached. A second run
+     * only writes to bookings taken since, so the button can never send the
+     * same customer the same notice twice.
+     */
+    notifiedAt: integer("notified_at", { mode: "timestamp_ms" }),
+    notifiedCount: integer("notified_count").notNull().default(0),
     createdAt: createdAt(),
   },
   (t) => [
@@ -853,6 +877,10 @@ export const shopClosures = sqliteTable(
     check(
       "shop_closures_date_ck",
       sql`${t.fromDate} like '____-__-__' and ${t.toDate} like '____-__-__'`,
+    ),
+    check(
+      "shop_closures_time_ck",
+      sql`(${t.startTime} is null and ${t.endTime} is null) or (${t.startTime} like '__:__' and ${t.endTime} like '__:__' and ${t.endTime} > ${t.startTime})`,
     ),
   ],
 );
@@ -898,6 +926,13 @@ export const orders = sqliteTable(
     // Applied coupon (if any) and the amount it took off the subtotal.
     discountCode: text("discount_code"),
     discountCents: integer("discount_cents").notNull().default(0),
+    // A reduction the operator agreed at the counter, kept apart from the
+    // coupon so an edit can re-derive `discountCents` (coupon + this) instead of
+    // wiping it — which is what re-pricing from the coupon alone used to do.
+    manualDiscountCents: integer("manual_discount_cents").notNull().default(0),
+    // An explicit carriage fee typed by the operator. Null = priced by the zone
+    // rules; set, it survives every re-price for the same reason as above.
+    shippingOverrideCents: integer("shipping_override_cents"),
     totalCents: integer("total_cents").notNull().default(0),
     currency: text("currency").notNull().default("eur"),
     paymentProvider: text("payment_provider").default("stripe"),
@@ -962,6 +997,16 @@ export const orders = sqliteTable(
     // Shipping fulfilment tracking, set by the owner when an order ships.
     carrier: text("carrier"),
     trackingNumber: text("tracking_number"),
+    // When the customer was told the order is ready: "pronto per il ritiro" for
+    // a pickup, "in consegna" for a van delivery. Null until then, and never
+    // set for a courier shipment, whose equivalent moment is the tracking email.
+    //
+    // `fulfilled` means handed over, and it used to double as this: the only
+    // button that could say "come and collect" was the one that closed the
+    // order, so the notice went out as the customer walked away with the bag,
+    // and an order ready on the shelf looked exactly like one nobody had
+    // started.
+    readyAt: integer("ready_at", { mode: "timestamp_ms" }),
     // The booking this order was rung up from, when it started life as an
     // "ordine speciale" reservation ("mi tenga 2 kg di ciauscolo per giovedì").
     //
@@ -1026,6 +1071,7 @@ export const orders = sqliteTable(
       sql`${t.subtotalCents} >= 0 and ${t.shippingCents} >= 0 and ${t.totalCents} >= 0`,
     ),
     check("orders_refunded_ck", sql`${t.refundedCents} >= 0`),
+    // NB: no CHECK on the two columns above — see the note on `paymentMethod`.
   ],
 );
 

@@ -4,6 +4,7 @@ import {
   asc,
   desc,
   eq,
+  getTableColumns,
   gte,
   inArray,
   isNotNull,
@@ -118,10 +119,19 @@ export async function getDashboardStats(scope: string | null = null) {
   const resShop = inShop(reservations.shopSlug, scope);
   const ordShop = inShop(orders.shopSlug, scope);
 
+  // Upcoming only: a request whose day has already passed is not "in attesa"
+  // of a decision anyone can still make — it is expired, and the list's
+  // "Scadute" facet is where those are dealt with.
   const [pendingRes] = await db
     .select({ n: sql<number>`count(*)` })
     .from(reservations)
-    .where(and(eq(reservations.status, "pending"), resShop));
+    .where(
+      and(
+        eq(reservations.status, "pending"),
+        sql`${reservations.date} >= ${dateInRome()}`,
+        resShop,
+      ),
+    );
   const [totalRes] = await db
     .select({ n: sql<number>`count(*)` })
     .from(reservations)
@@ -362,6 +372,7 @@ export async function getHeldDeposits(scope: string | null = null): Promise<Depo
       and(
         isNotNull(reservations.depositPaidAt),
         isNull(reservations.depositForfeitedAt),
+        isNull(reservations.depositRefundedAt),
         inArray(reservations.status, ["pending", "confirmed"]),
         inShop(reservations.shopSlug, scope),
       ),
@@ -369,12 +380,54 @@ export async function getHeldDeposits(scope: string | null = null): Promise<Depo
   return { cents: row?.cents ?? 0, count: row?.count ?? 0 };
 }
 
-/** Deposits collected and forfeited inside a window, by the date each happened. */
+/**
+ * Paid deposits on bookings that did not go ahead and nobody has yet said
+ * whether the money was returned or kept. Cancelled only: a no-show forfeits
+ * automatically, so it never sits in this limbo.
+ */
+export async function getDepositsAwaitingOutcome(
+  scope: string | null = null,
+): Promise<DepositTotals> {
+  const [row] = await db
+    .select({
+      cents: sql<number>`coalesce(sum(${reservations.depositCents}), 0)`,
+      count: sql<number>`count(*)`,
+    })
+    .from(reservations)
+    .where(
+      and(
+        sql`${reservations.depositCents} > 0`,
+        isNotNull(reservations.depositPaidAt),
+        isNull(reservations.depositForfeitedAt),
+        isNull(reservations.depositRefundedAt),
+        eq(reservations.status, "cancelled"),
+        inShop(reservations.shopSlug, scope),
+      ),
+    );
+  return { cents: row?.cents ?? 0, count: row?.count ?? 0 };
+}
+
+/** Open bookings whose day has passed — the list's "Scadute" facet, counted. */
+export async function countExpiredReservations(scope: string | null = null): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(reservations)
+    .where(
+      and(
+        sql`${reservations.date} < ${dateInRome()}`,
+        inArray(reservations.status, ["pending", "confirmed"]),
+        inShop(reservations.shopSlug, scope),
+      ),
+    );
+  return row?.n ?? 0;
+}
+
+/** Deposits collected, forfeited and refunded inside a window, by the date each happened. */
 export async function getDepositMovements(
   from: Date,
   toExclusive: Date,
   scope: string | null = null,
-): Promise<{ collected: DepositTotals; forfeited: DepositTotals }> {
+): Promise<{ collected: DepositTotals; forfeited: DepositTotals; refunded: DepositTotals }> {
   const between = (col: AnyColumn) =>
     and(
       isNotNull(col),
@@ -392,11 +445,12 @@ export async function getDepositMovements(
       .where(where);
     return { cents: row?.cents ?? 0, count: row?.count ?? 0 };
   };
-  const [collected, forfeited] = await Promise.all([
+  const [collected, forfeited, refunded] = await Promise.all([
     sum(between(reservations.depositPaidAt)),
     sum(between(reservations.depositForfeitedAt)),
+    sum(between(reservations.depositRefundedAt)),
   ]);
-  return { collected, forfeited };
+  return { collected, forfeited, refunded };
 }
 
 /** Paginated reservations list for the given filters (see `lib/admin/filters`). */
@@ -624,7 +678,7 @@ export async function countUnfiled(kind: "product" | "post"): Promise<number> {
  * Paginated catalogue list. Also returns the distinct categories present in the
  * whole table (not just this page) so the category filter can offer them.
  */
-export const PRODUCT_SORTS = ["nome", "prezzo", "giacenza", "categoria", "ordine"] as const;
+export const PRODUCT_SORTS = ["nome", "prezzo", "giacenza", "categoria", "negozio", "ordine"] as const;
 
 export async function getProductsPage(
   opts: ProductFilters & { page?: number; lowStockThreshold: number; sort?: SortSpec },
@@ -639,6 +693,7 @@ export async function getProductsPage(
           prezzo: products.priceCents,
           giacenza: products.stock,
           categoria: products.category,
+          negozio: products.shopSlug,
           ordine: products.sortOrder,
         },
         products.sortOrder,
@@ -653,7 +708,13 @@ export async function getProductsPage(
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
     db.select({ total: sql<number>`count(*)` }).from(products).where(where),
-    db.selectDistinct({ category: products.category }).from(products).orderBy(products.category),
+    // Chips for the live catalogue: a category that survives only on archived
+    // rows is a filter that matches nothing.
+    db
+      .selectDistinct({ category: products.category })
+      .from(products)
+      .where(isNull(products.archivedAt))
+      .orderBy(products.category),
   ]);
   return {
     rows,
@@ -662,6 +723,25 @@ export async function getProductsPage(
     pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
     categories: categories.map((c) => c.category).filter(Boolean),
   };
+}
+
+/**
+ * How many rows sit in each stock state under the current facets — the numbers
+ * the scorte chips carry, so "Scorte basse" says how much reordering there is
+ * before anyone clicks it. Counted across the whole filtered catalogue, not the
+ * page, and ignoring the scorte facet itself.
+ */
+export async function countProductStockStates(
+  f: ProductFilters,
+  lowStockThreshold: number,
+): Promise<{ basse: number; esaurite: number }> {
+  const count = (scorte: string) =>
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(products)
+      .where(productsWhere({ ...f, scorte }, lowStockThreshold));
+  const [[low], [out]] = await Promise.all([count("basse"), count("esaurite")]);
+  return { basse: low?.n ?? 0, esaurite: out?.n ?? 0 };
 }
 
 /** Paginated news list, with the distinct categories for the filter chips. */
@@ -729,9 +809,12 @@ export async function getRewardsPage(opts: RewardFilters & { page?: number; now?
 export async function getDiscountsPage(opts: DiscountFilters & { page?: number }) {
   const page = Math.max(1, opts.page ?? 1);
   const where = discountsWhere(opts);
+  // What each code has cost so far, from the redemption ledger. The list used
+  // to show a bare use count, which says nothing about what a campaign cost.
+  const redeemedCents = sql<number>`coalesce((select sum(${discountRedemptions.amountCents}) from ${discountRedemptions} where ${discountRedemptions.discountCode} = ${discountCodes.code}), 0)`;
   const [rows, [{ total }]] = await Promise.all([
     db
-      .select()
+      .select({ ...getTableColumns(discountCodes), redeemedCents })
       .from(discountCodes)
       .where(where)
       .orderBy(desc(discountCodes.createdAt))
@@ -1076,7 +1159,7 @@ export const getOrderItemsForExport = (f: OrderFilters, limit: number, offset: n
  * that could explain a discrepancy. It was readable twenty rows at a time on a
  * product page and could not be taken anywhere.
  */
-export const getStockMovementsForExport = (limit: number, offset: number) =>
+export const getStockMovementsForExport = (limit: number, offset: number, productId?: string) =>
   db
     .select({
       createdAt: stockMovements.createdAt,
@@ -1091,6 +1174,8 @@ export const getStockMovementsForExport = (limit: number, offset: number) =>
     .from(stockMovements)
     .innerJoin(products, eq(stockMovements.productId, products.id))
     .leftJoin(users, eq(stockMovements.createdByUserId, users.id))
+    // One product's full ledger, for the page that can only show its last 20.
+    .where(productId ? eq(stockMovements.productId, productId) : undefined)
     .orderBy(desc(stockMovements.createdAt), stockMovements.id)
     .limit(limit)
     .offset(offset);
@@ -1331,10 +1416,6 @@ export async function getProductSales(
     orders: row?.orders ?? 0,
   };
 }
-
-/** All discount codes, newest first. */
-export const adminGetDiscounts = () =>
-  db.select().from(discountCodes).orderBy(desc(discountCodes.createdAt));
 
 /** One discount code by id (or null). */
 export async function adminGetDiscount(id: string) {

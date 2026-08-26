@@ -29,6 +29,7 @@ import {
   markPorchettaReady,
   setReservationTable,
   resendReservationEmail,
+  resolveCancelledDeposit,
 } from "@/lib/admin/reservation-actions";
 import { assertShopScope } from "@/lib/admin/scope";
 import { isAdmin } from "@/lib/auth/session";
@@ -68,6 +69,18 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
     .reduce((s, x) => s + (x.quantityKg ?? 0), 0);
   const seatsBooked = r.time ? seatsBookedInSlot(sameDay, r.time) : 0;
   const seatsCap = shop?.seatsCapacity ?? null;
+  // This booking's own share of the day — none once it is cancelled, exactly
+  // as the capacity checks count it. (A no-show still counts: the porchetta
+  // was roasted and the table was held.)
+  const ownKg = r.status === "cancelled" ? 0 : r.quantityKg ?? 0;
+  const ownGuests = r.status === "cancelled" ? 0 : r.guests ?? 0;
+
+  // The deposit, in one word. Paid money on a booking that did not go ahead is
+  // "da definire" until the shop says whether it went back or was kept.
+  const depositPaid = r.depositCents > 0 && r.depositPaidAt != null;
+  const depositOpen = depositPaid && !r.depositForfeitedAt && !r.depositRefundedAt;
+  const depositUndecided = depositOpen && r.status === "cancelled";
+  const depositEditable = !r.depositForfeitedAt && !r.depositRefundedAt;
 
   return (
     <div>
@@ -311,7 +324,16 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
                 </ActionForm>
                 <p className="mt-2 text-xs text-brown-800/60">
                   Rimanda l&apos;ultima comunicazione utile (
-                  {r.readyAt ? "avviso di ritiro" : "riepilogo della prenotazione"}) a {r.email}.
+                  {r.waitlisted && r.type === "porchetta" && r.status !== "cancelled"
+                    ? "avviso di lista d'attesa"
+                    : r.readyAt
+                      ? "avviso di ritiro"
+                      : r.status === "confirmed"
+                        ? "conferma"
+                        : r.status === "cancelled"
+                          ? "avviso di annullamento"
+                          : "riepilogo della prenotazione"}
+                  ) a {r.email}.
                 </p>
               </div>
             )}
@@ -325,10 +347,10 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
                 <div>
                   <dt className="text-brown-800/60">Porchetta</dt>
                   <dd className="font-display text-lg text-brown-950">
-                    {kgBooked + (r.quantityKg ?? 0)}
+                    {kgBooked + ownKg}
                     {capacity > 0 ? ` / ${capacity}` : ""} kg
                   </dd>
-                  {capacity > 0 && kgBooked + (r.quantityKg ?? 0) > capacity && (
+                  {capacity > 0 && kgBooked + ownKg > capacity && (
                     <p className="text-xs font-semibold text-danger">Oltre la capacità della sede.</p>
                   )}
                 </div>
@@ -337,10 +359,10 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
                 <div>
                   <dt className="text-brown-800/60">Coperti alle {r.time}</dt>
                   <dd className="font-display text-lg text-brown-950">
-                    {seatsBooked + (r.guests ?? 0)}
+                    {seatsBooked + ownGuests}
                     {seatsCap != null ? ` / ${seatsCap}` : ""}
                   </dd>
-                  {seatsCap != null && seatsBooked + (r.guests ?? 0) > seatsCap && (
+                  {seatsCap != null && seatsBooked + ownGuests > seatsCap && (
                     <p className="text-xs font-semibold text-danger">
                       Oltre i coperti disponibili in questa fascia.
                     </p>
@@ -369,43 +391,80 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
 
           <Panel>
             <h3 className="font-display mb-3 text-lg text-brown-950">Acconto</h3>
-            <ActionForm action={setReservationDeposit} className="space-y-2">
-              <input type="hidden" name="id" value={r.id} />
-              <div className="flex items-center gap-2">
-                <input
-                  name="depositEuros"
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  defaultValue={r.depositCents ? (r.depositCents / 100).toFixed(2) : ""}
-                  placeholder="€"
-                  aria-label="Importo dell'acconto in euro"
-                  className={`${inputCls} w-28`}
-                />
-                <label className="flex items-center gap-1.5 text-xs font-medium text-brown-900">
+            {/* Amount and receipt are editable until the money has left the
+                booking one way or the other; from then on the panel is a record. */}
+            {depositEditable && (
+              <ActionForm action={setReservationDeposit} className="space-y-2">
+                <input type="hidden" name="id" value={r.id} />
+                <div className="flex items-center gap-2">
                   <input
-                    type="checkbox"
-                    name="paid"
-                    defaultChecked={!!r.depositPaidAt}
-                    className="h-4 w-4 rounded accent-brown-950"
+                    name="depositEuros"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    defaultValue={r.depositCents ? (r.depositCents / 100).toFixed(2) : ""}
+                    placeholder="€"
+                    aria-label="Importo dell'acconto in euro"
+                    className={`${inputCls} w-28`}
                   />
-                  Incassato
-                </label>
-                <PendingButton tone="dark">Salva</PendingButton>
-              </div>
-            </ActionForm>
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-brown-900">
+                    <input
+                      type="checkbox"
+                      name="paid"
+                      defaultChecked={!!r.depositPaidAt}
+                      className="h-4 w-4 rounded accent-brown-950"
+                    />
+                    Incassato
+                  </label>
+                  <PendingButton tone="dark">Salva</PendingButton>
+                </div>
+              </ActionForm>
+            )}
             {r.depositCents > 0 && (
               <p
                 className={`mt-2 text-xs ${
-                  r.depositForfeitedAt ? "font-medium text-warn" : "text-brown-800/60"
+                  r.depositRefundedAt
+                    ? "text-brown-800/60"
+                    : r.depositForfeitedAt || depositUndecided
+                      ? "font-medium text-warn"
+                      : "text-brown-800/60"
                 }`}
               >
-                {r.depositForfeitedAt
-                  ? `⚠ Acconto di ${euro(r.depositCents)} trattenuto (non presentato)`
-                  : r.depositPaidAt
-                    ? `✓ ${euro(r.depositCents)} incassati il ${fmtDate(r.depositPaidAt)}`
-                    : `${euro(r.depositCents)} da incassare`}
+                {r.depositRefundedAt
+                  ? `↩ ${euro(r.depositCents)} rimborsati il ${fmtDate(r.depositRefundedAt)}`
+                  : r.depositForfeitedAt
+                    ? `⚠ Acconto di ${euro(r.depositCents)} trattenuto (${
+                        r.status === "no_show" ? "non presentato" : "annullata"
+                      })`
+                    : depositUndecided
+                      ? `⚠ ${euro(r.depositCents)} incassati il ${fmtDate(r.depositPaidAt!)} su una prenotazione annullata — da definire`
+                      : r.depositPaidAt
+                        ? `✓ ${euro(r.depositCents)} incassati il ${fmtDate(r.depositPaidAt)}`
+                        : `${euro(r.depositCents)} da incassare`}
               </p>
+            )}
+            {/* A cancelled booking's paid deposit is still the shop's problem:
+                say what happened to it. A no-show forfeits on its own, but a
+                refund can still be granted afterwards. */}
+            {depositPaid && (r.status === "cancelled" || r.status === "no_show") && (
+              <div className="mt-3 flex flex-wrap gap-2 border-t border-brown-900/10 pt-3">
+                {!r.depositRefundedAt && (
+                  <ActionForm action={resolveCancelledDeposit}>
+                    <input type="hidden" name="id" value={r.id} />
+                    <input type="hidden" name="esito" value="rimborsato" />
+                    <PendingButton tone="dark">Rimborsato al cliente</PendingButton>
+                  </ActionForm>
+                )}
+                {!r.depositForfeitedAt && (
+                  <ActionForm action={resolveCancelledDeposit}>
+                    <input type="hidden" name="id" value={r.id} />
+                    <input type="hidden" name="esito" value="trattenuto" />
+                    <PendingButton tone="danger" confirm="Trattenere l'acconto? Resta registrato come incassato e non restituito.">
+                      Trattenuto
+                    </PendingButton>
+                  </ActionForm>
+                )}
+              </div>
             )}
           </Panel>
         </div>

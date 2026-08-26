@@ -308,10 +308,38 @@ export function ProductForm({
         <label className={labelCls} htmlFor={fid("ingredients")}>Ingredienti</label>
         <textarea id={fid("ingredients")} name="ingredients" rows={2} defaultValue={product?.ingredients ?? ""} className={inputCls} />
       </div>
+
+      {/* SEO, as on the news diary: the description is a shelf label, not
+          always the sentence a search result should show. */}
+      <div>
+        <label className={labelCls} htmlFor={fid("seoTitle")}>Titolo SEO (opzionale)</label>
+        <input
+          id={fid("seoTitle")}
+          name="seoTitle"
+          maxLength={70}
+          defaultValue={product?.seoTitle ?? ""}
+          placeholder={product?.name ?? "Usa il nome del prodotto"}
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label className={labelCls} htmlFor={fid("seoDescription")}>Descrizione SEO (opzionale)</label>
+        <textarea
+          id={fid("seoDescription")}
+          name="seoDescription"
+          rows={2}
+          maxLength={200}
+          defaultValue={product?.seoDescription ?? ""}
+          placeholder="Se vuota viene usata la descrizione."
+          className={inputCls}
+        />
+      </div>
       <div className="flex flex-wrap items-center gap-6 pt-6 sm:col-span-2">
         <Toggle name="purchasable" label="Acquistabile online" defaultChecked={product?.purchasable} />
         <Toggle name="soldByWeight" label="Venduto a peso" defaultChecked={product?.soldByWeight} />
-        <Toggle name="featured" label="In evidenza" defaultChecked={product?.featured ?? true} />
+        {/* Off by default: "in evidenza" is the homepage strip, and every new
+            product used to land there until somebody noticed. */}
+        <Toggle name="featured" label="In evidenza" defaultChecked={product?.featured ?? false} />
         <Toggle name="active" label="Attivo" defaultChecked={product?.active ?? true} />
       </div>
       <div className="sm:col-span-2">
@@ -574,12 +602,22 @@ export function DiscountForm({
   shops?: ShopRow[];
 }) {
   const fid = useFieldIds();
-  // `value` is shown in its human form: whole percent, or euros for a fixed code.
-  const valueDefault = discount
-    ? discount.type === "fixed"
-      ? (discount.value / 100).toFixed(2)
-      : String(discount.value)
-    : "";
+  // The value field follows the type: a whole percent, euros for a fixed code,
+  // nothing at all for free shipping — the server ignores it there, and
+  // showing it invited a number that did nothing. Prefilled only while the
+  // type is the stored one; "10" is not a sensible default for a code just
+  // switched from 10% to a fixed amount.
+  const [type, setType] = useState<DiscountCodeRow["type"]>(discount?.type ?? "percent");
+  const valueDefault =
+    discount && discount.type === type
+      ? discount.type === "fixed"
+        ? (discount.value / 100).toFixed(2)
+        : String(discount.value)
+      : "";
+  // A used code's name is the key of its redemption ledger, so renaming it
+  // would orphan the history. The field locks once the counter has moved; the
+  // server refuses the rename regardless.
+  const locked = (discount?.timesUsed ?? 0) > 0;
   return (
     <ActionForm
       action={saveDiscount}
@@ -593,23 +631,53 @@ export function DiscountForm({
           id={fid("code")}
           name="code"
           required
+          readOnly={locked}
+          aria-describedby={locked ? fid("code-hint") : undefined}
           defaultValue={discount?.code}
           placeholder="es. BENVENUTO10"
-          className={`${inputCls} uppercase`}
+          className={`${inputCls} uppercase ${locked ? "opacity-70" : ""}`}
         />
+        {locked && (
+          <p id={fid("code-hint")} className="mt-1 text-xs text-brown-800/60">
+            Usato {discount!.timesUsed} volte: il nome non si può più cambiare. Per un nome nuovo crea un
+            altro codice e disattiva questo.
+          </p>
+        )}
       </div>
       <div>
         <label className={labelCls} htmlFor={fid("type")}>Tipo</label>
-        <select id={fid("type")} name="type" defaultValue={discount?.type ?? "percent"} className={inputCls}>
+        <select
+          id={fid("type")}
+          name="type"
+          value={type}
+          onChange={(e) => setType(e.target.value as DiscountCodeRow["type"])}
+          className={inputCls}
+        >
           <option value="percent">Percentuale (%)</option>
           <option value="fixed">Importo fisso (€)</option>
           <option value="free_shipping">Spedizione gratuita</option>
         </select>
       </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("value")}>Valore (% o € — ignorato per spedizione gratuita)</label>
-        <input id={fid("value")} name="value" type="number" step="0.01" min={0} defaultValue={valueDefault} className={inputCls} />
-      </div>
+      {type !== "free_shipping" && (
+        <div>
+          <label className={labelCls} htmlFor={fid("value")}>
+            {type === "percent" ? "Sconto (%)" : "Sconto (€)"}
+          </label>
+          <input
+            key={type}
+            id={fid("value")}
+            name="value"
+            type="number"
+            required
+            min={type === "percent" ? 1 : 0.01}
+            max={type === "percent" ? 100 : undefined}
+            step={type === "percent" ? 1 : 0.01}
+            defaultValue={valueDefault}
+            placeholder={type === "percent" ? "es. 10" : "es. 5.00"}
+            className={inputCls}
+          />
+        </div>
+      )}
       <div>
         <label className={labelCls} htmlFor={fid("minSubtotalEuros")}>Spesa minima (€)</label>
         <input
@@ -866,24 +934,37 @@ export function RewardForm({ reward }: { reward?: RewardRow | null }) {
  * product list would silently re-file every post under it, and the slug
  * uniqueness is per kind — so the switch is a create-time decision.
  */
+/**
+ * Category editor.
+ *
+ * Product categories are pages on the storefront (`/negozio/categoria/<slug>`)
+ * and colour the shop rail, so they carry colour, description, SEO and an
+ * optional parent. News categories are only a label on the article — the blog
+ * reads the name and nothing else — so they get name, slug, order and
+ * visibility, and no fields that would silently go nowhere.
+ */
 export function CategoryForm({
   category,
   kind,
   parents = [],
+  hasChildren = false,
 }: {
   category?: CategoryRow | null;
   /** For a new category; ignored when editing (the row's own kind wins). */
   kind?: "product" | "post";
   /** Candidate parents: same kind, top level, excluding this row. */
   parents?: CategoryRow[];
+  /** A category that already groups others stays top level (one level only). */
+  hasChildren?: boolean;
 }) {
   const fid = useFieldIds();
   const effectiveKind = category?.kind ?? kind ?? "product";
+  const isProduct = effectiveKind === "product";
 
   return (
     <ActionForm
       action={saveCategory}
-      redirectTo={`/admin/categories${effectiveKind === "post" ? "?kind=post" : ""}`}
+      redirectTo={`/admin/categories${isProduct ? "" : "?kind=post"}`}
       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       {category && <input type="hidden" name="id" value={category.id} />}
@@ -903,23 +984,41 @@ export function CategoryForm({
           className={inputCls}
         />
         <p className="mt-1 text-xs text-brown-800/60">
-          {effectiveKind === "product"
+          {isProduct
             ? "Usato nell'indirizzo pubblico: /negozio/categoria/<slug>."
-            : "Usato per raggruppare gli articoli."}
+            : "Identificativo interno; sul sito compare solo il nome."}
         </p>
       </div>
 
-      <div>
-        <label className={labelCls} htmlFor={fid("parentId")}>Categoria superiore</label>
-        <select id={fid("parentId")} name="parentId" defaultValue={category?.parentId ?? ""} className={inputCls}>
-          <option value="">— Nessuna (primo livello) —</option>
-          {parents.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {isProduct && (
+        <div>
+          <label className={labelCls} htmlFor={fid("parentId")}>Categoria superiore</label>
+          {hasChildren ? (
+            <>
+              {/* No field at all: the server would refuse it, and a disabled
+                  <select> is never posted anyway. */}
+              <p className={`${inputCls} text-brown-800/60`}>— Nessuna (primo livello) —</p>
+              <p className="mt-1 text-xs text-brown-800/60">
+                Raggruppa già altre categorie, quindi resta al primo livello.
+              </p>
+            </>
+          ) : (
+            <>
+              <select id={fid("parentId")} name="parentId" defaultValue={category?.parentId ?? ""} className={inputCls}>
+                <option value="">— Nessuna (primo livello) —</option>
+                {parents.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-brown-800/60">
+                Solo per ordinare il gestionale: sul sito le categorie sono tutte allo stesso livello.
+              </p>
+            </>
+          )}
+        </div>
+      )}
       <div>
         <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
         <input
@@ -929,78 +1028,80 @@ export function CategoryForm({
           defaultValue={category?.sortOrder ?? 0}
           className={inputCls}
         />
-        <p className="mt-1 text-xs text-brown-800/60">Numero più basso = più in alto nell&apos;elenco.</p>
+        <p className="mt-1 text-xs text-brown-800/60">
+          Numero più basso = più in alto. Dall&apos;elenco puoi anche usare le frecce ↑ ↓.
+        </p>
       </div>
 
-      {effectiveKind === "product" && (
-        <div>
-          <label className={labelCls} htmlFor={fid("defaultVatRate")}>Aliquota IVA predefinita</label>
-          <select
-            id={fid("defaultVatRate")}
-            name="defaultVatRate"
-            defaultValue={
-              category?.defaultVatRateBps != null ? String(category.defaultVatRateBps / 100) : ""
-            }
-            className={inputCls}
-          >
-            <option value="">— Nessuna —</option>
-            {VAT_RATES_BPS.map((bps) => (
-              <option key={bps} value={String(bps / 100)}>
-                {vatRateLabel(bps)}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-brown-800/60">
-            Proposta ai nuovi prodotti di questa categoria. Non cambia i prodotti già salvati.
-          </p>
-        </div>
+      {isProduct && (
+        <>
+          <div>
+            <label className={labelCls} htmlFor={fid("defaultVatRate")}>Aliquota IVA predefinita</label>
+            <select
+              id={fid("defaultVatRate")}
+              name="defaultVatRate"
+              defaultValue={
+                category?.defaultVatRateBps != null ? String(category.defaultVatRateBps / 100) : ""
+              }
+              className={inputCls}
+            >
+              <option value="">— Nessuna —</option>
+              {VAT_RATES_BPS.map((bps) => (
+                <option key={bps} value={String(bps / 100)}>
+                  {vatRateLabel(bps)}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-brown-800/60">
+              Proposta ai nuovi prodotti di questa categoria. Non cambia i prodotti già salvati.
+            </p>
+          </div>
+
+          <div>
+            <label className={labelCls} htmlFor={fid("accent")}>Colore</label>
+            <select id={fid("accent")} name="accent" defaultValue={category?.accent ?? ""} className={inputCls}>
+              <option value="">— Automatico (dal nome) —</option>
+              {CATEGORY_ACCENTS.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-brown-800/60">
+              Il colore usato sul sito per questa categoria.
+            </p>
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className={labelCls} htmlFor={fid("description")}>Descrizione</label>
+            <textarea
+              id={fid("description")}
+              name="description"
+              rows={3}
+              defaultValue={category?.description}
+              className={inputCls}
+            />
+            <p className="mt-1 text-xs text-brown-800/60">
+              Mostrata in cima alla pagina della categoria sul sito.
+            </p>
+          </div>
+
+          <div>
+            <label className={labelCls} htmlFor={fid("seoTitle")}>Titolo SEO</label>
+            <input id={fid("seoTitle")} name="seoTitle" maxLength={200} defaultValue={category?.seoTitle ?? ""} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls} htmlFor={fid("seoDescription")}>Descrizione SEO</label>
+            <input
+              id={fid("seoDescription")}
+              name="seoDescription"
+              maxLength={400}
+              defaultValue={category?.seoDescription ?? ""}
+              className={inputCls}
+            />
+          </div>
+        </>
       )}
-
-      <div>
-        <label className={labelCls} htmlFor={fid("accent")}>Colore</label>
-        <select id={fid("accent")} name="accent" defaultValue={category?.accent ?? ""} className={inputCls}>
-          <option value="">— Automatico (dal nome) —</option>
-          {CATEGORY_ACCENTS.map((a) => (
-            <option key={a.value} value={a.value}>
-              {a.label}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-brown-800/60">
-          Il colore usato sul sito per questa categoria.
-        </p>
-      </div>
-
-      <div className="sm:col-span-2">
-        <label className={labelCls} htmlFor={fid("description")}>Descrizione</label>
-        <textarea
-          id={fid("description")}
-          name="description"
-          rows={3}
-          defaultValue={category?.description}
-          className={inputCls}
-        />
-        <p className="mt-1 text-xs text-brown-800/60">
-          Mostrata in cima alla pagina della categoria sul sito.
-        </p>
-      </div>
-
-      <ImageField current={category?.image} />
-
-      <div>
-        <label className={labelCls} htmlFor={fid("seoTitle")}>Titolo SEO</label>
-        <input id={fid("seoTitle")} name="seoTitle" maxLength={200} defaultValue={category?.seoTitle ?? ""} className={inputCls} />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("seoDescription")}>Descrizione SEO</label>
-        <input
-          id={fid("seoDescription")}
-          name="seoDescription"
-          maxLength={400}
-          defaultValue={category?.seoDescription ?? ""}
-          className={inputCls}
-        />
-      </div>
 
       <div className="sm:col-span-2 flex flex-wrap items-center gap-6">
         <Toggle name="active" label="Mostra sul sito" defaultChecked={category?.active ?? true} />

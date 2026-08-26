@@ -13,28 +13,32 @@ import {
 } from "@/lib/admin/queries";
 import { BatchPanel } from "@/components/admin/BatchPanel";
 import { dateInRome } from "@/lib/time";
-import { adjustStock, archiveProduct, deleteProduct } from "@/lib/admin/actions";
+import { adjustStock, archiveProduct, deleteProduct, duplicateProduct } from "@/lib/admin/actions";
 import { listPendingStockNotifications } from "@/lib/stock-notify";
 import { notifyStockWaitlist } from "@/lib/admin/batch-actions";
 import { margin } from "@/lib/inventory";
-import { assertShopScope } from "@/lib/admin/scope";
+import { assertShopScope, shopScope } from "@/lib/admin/scope";
 import { isAdmin } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditProduct({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [product, shops, categories, admin] = await Promise.all([
+  const [product, allShops, categories, admin, scope] = await Promise.all([
     adminGetProduct(id),
     adminGetShops(),
     adminGetCategories("product"),
     isAdmin(),
+    shopScope(),
   ]);
   if (!product) notFound();
   // A filtered list is not access control: without this, another location
   // 's record is one typed URL away. `notFound` rather than a message —
   // "it exists but is not yours" is itself information.
   await assertShopScope(product.shopSlug);
+  // A confined operator may not move a product to another sede either — the
+  // action refuses, so the select offers only what would save.
+  const shops = allShops.filter((s) => !scope || s.slug === scope);
 
   const productMargin = margin(product);
 
@@ -82,9 +86,27 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                 Vedi sul sito ↗
               </a>
             )}
+            {/* A variant shares almost every field with its sibling. The copy
+                is created switched off and opens for editing. */}
+            <ActionForm action={duplicateProduct} className="inline-flex">
+              <input type="hidden" name="id" value={product.id} />
+              <PendingButton
+                tone="dark"
+                confirm={`Creare una copia di "${product.name}"? Nasce disattivata, non in vendita e senza giacenza, pronta da modificare.`}
+              >
+                Duplica
+              </PendingButton>
+            </ActionForm>
           </div>
         }
       />
+      {product.archivedAt && (
+        <p className="mb-4 rounded-lg border border-brown-900/10 bg-brown-900/5 px-4 py-3 text-sm text-brown-800/80">
+          Prodotto archiviato il {fmtDate(product.archivedAt)}. Le modifiche si salvano, ma resta
+          fuori dal catalogo e dal sito — e gli interruttori «Attivo», «Acquistabile online» e «In
+          evidenza» restano spenti — finché non lo ripristini in fondo alla pagina.
+        </p>
+      )}
       <Panel>
         <ProductForm product={product} shops={shops} categories={categories} />
       </Panel>
@@ -152,10 +174,12 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
           </p>
           <p className="font-display mt-1 text-xl text-brown-950">
             {/* Days of stock left at the last 30 days' rate — the figure that
-                turns "we have 12" into "that is four days". */}
-            {product.stock == null || sales30.units + sales30.weightKg === 0
+                turns "we have 12" into "that is four days". Pieces only: a
+                line sold by weight does not consume stock (lib/stock.ts), so
+                kilos do not belong in the divisor. */}
+            {product.stock == null || sales30.units === 0
               ? "—"
-              : `${Math.round((product.stock / ((sales30.units + sales30.weightKg) / 30)) * 10) / 10} gg`}
+              : `${Math.round((product.stock / (sales30.units / 30)) * 10) / 10} gg`}
           </p>
         </div>
       </Panel>
@@ -302,15 +326,18 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                 <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
                   Ultimi {movements.length} movimenti
                 </p>
-                {/* The ledger is capped and said so nowhere, and the only full
-                    view is a global download. At least point at it. */}
-                <a
-                  href="/api/admin/export/stock-movements"
-                  download
-                  className="text-[12px] font-bold tracking-widest text-gold-deep uppercase hover:underline"
-                >
-                  Storico completo CSV
-                </a>
+                {/* The ledger here is capped; this product's full one is a
+                    download. Export is admin-only server-side, so the link is
+                    only shown where it works. */}
+                {admin && (
+                  <a
+                    href={`/api/admin/export/stock-movements?prodotto=${encodeURIComponent(product.id)}`}
+                    download
+                    className="text-[12px] font-bold tracking-widest text-gold-deep uppercase hover:underline"
+                  >
+                    Storico completo di questo prodotto (CSV)
+                  </a>
+                )}
               </div>
             <div className="scroll-x">
               <table className="w-full text-sm">
@@ -361,7 +388,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
           </p>
           <p className="mt-1 text-xs text-brown-800/60">
             {product.archivedAt
-              ? `Archiviato il ${fmtDate(product.archivedAt)}: non compare nel catalogo né sul sito, ma storico, movimenti e righe d'ordine restano consultabili.`
+              ? `Archiviato il ${fmtDate(product.archivedAt)}: non compare nel catalogo né sul sito, ma storico, movimenti e righe d'ordine restano consultabili. Ripristinandolo torna attivo nel catalogo; vendita online ed evidenza restano da riattivare dalla scheda.`
               : "Sparisce dal catalogo, dai selettori e dal sito. Storico, movimenti e righe d'ordine restano: è la scelta giusta per qualsiasi cosa sia mai stata venduta."}
           </p>
           {!deletable && (

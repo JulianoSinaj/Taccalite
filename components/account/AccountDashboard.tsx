@@ -8,6 +8,8 @@ import { ChevronRight, User } from "lucide-react";
 import LoyaltyCard from "@/components/LoyaltyCard";
 import StatusChip, { TONE, type Tone } from "@/components/account/StatusChip";
 import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
+import { AccountForm, AccountSubmit } from "@/components/account/AccountForm";
+import { cancelOwnReservation } from "@/lib/account/actions";
 import { FULFILMENT_SHORT, type FulfilmentMode } from "@/lib/fulfilment";
 
 type Reward = {
@@ -44,6 +46,9 @@ type Reservation = {
   time: string | null;
   quantityKg: number | null;
   name: string;
+  /** Still open and not yet past its day — decided on the server, so the
+   *  button never depends on the visitor's clock. */
+  cancellable: boolean;
 };
 type Redemption = {
   id: string;
@@ -530,6 +535,20 @@ export default function AccountDashboard({
                             <ChevronRight className="size-4 shrink-0 text-taupe transition-transform group-hover:translate-x-0.5 group-hover:text-brown-700" />
                           </div>
                         </Link>
+                        {/* Outside the link — a form cannot live inside an
+                            anchor — and only while there is something left to
+                            cancel. Cancelling used to be a phone call. */}
+                        {r.cancellable && (
+                          <AccountForm action={cancelOwnReservation} className="pb-3">
+                            <input type="hidden" name="id" value={r.id} />
+                            <AccountSubmit
+                              tone="quiet"
+                              confirm="Annullare questa prenotazione? Avviseremo la bottega."
+                            >
+                              Annulla prenotazione
+                            </AccountSubmit>
+                          </AccountForm>
+                        )}
                       </li>
                     );
                   })}

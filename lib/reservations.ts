@@ -497,7 +497,9 @@ export async function createReservation(
 
     // Closed days. The weekly schedule cannot express them, so without this the
     // form happily books Ferragosto.
-    const closure = closureFor(await getClosures(), input.shop, date, "reservations");
+    // The time goes along too, so a closure of just the afternoon refuses the
+    // 15:00 table and takes the 20:00 one.
+    const closure = closureFor(await getClosures(), input.shop, date, "reservations", input.time || undefined);
     if (closure) throw new ReservationNotAllowedError(closureMessage(closure, date));
 
     // The ordering deadline for that week's roast. `porchettaPickupDays` greys

@@ -1,6 +1,17 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, euro, fmtDate, inputCls, labelCls, BackLink, HistoryLink } from "@/components/admin/ui";
+import {
+  AdminHeader,
+  Panel,
+  StatusBadge,
+  euro,
+  fmtDate,
+  fmtDateTime,
+  inputCls,
+  labelCls,
+  BackLink,
+  HistoryLink,
+} from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import {
   adminGetOrder,
@@ -26,6 +37,7 @@ import {
   PAYMENT_METHOD_LABEL,
   PAYMENT_INSTRUMENT_LABEL,
   SETTLEMENT_INSTRUMENTS,
+  settlesOnHandover,
 } from "@/lib/payments/methods";
 import { formatSlotLabel } from "@/lib/pickup-slots";
 import { getDeliveryZones, getPickupSlots, getPickupSlotCounts, getClosures } from "@/lib/db/queries";
@@ -81,11 +93,37 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   // Money still owed on an order that was never charged online. Staff can take
   // it, not just admins — collecting at the counter is the job.
   const canSettle = order.paymentStatus === "unpaid" && order.status !== "cancelled";
-  // Only an order nobody has paid for can be cancelled outright. Once the money
-  // is in, cancelling would restock the goods and leave the takings untouched,
-  // so the way back is a refund — `updateOrderStatus` refuses it server-side and
-  // this stops the option being offered in the first place.
-  const canCancel = order.paymentStatus === "unpaid";
+  // Only the transitions `updateOrderStatus` will accept, so the dropdown never
+  // offers a state the server then refuses. Money moves through "Registra
+  // incasso" and "Rimborsa" only: once it is in, cancelling would restock the
+  // goods and leave the takings untouched, and "in attesa" would hide the
+  // order from the to-fulfil queue while offering to collect it twice.
+  const statusOptions: { value: string; label: string }[] =
+    order.status === "refunded"
+      ? []
+      : order.paymentStatus === "paid"
+        ? [
+            { value: "paid", label: "Pagato · da evadere" },
+            { value: "fulfilled", label: "Evaso" },
+          ]
+        : order.status === "cancelled"
+          ? [
+              { value: "pending", label: "In attesa (ripristina)" },
+              { value: "cancelled", label: "Annullato" },
+            ]
+          : [
+              { value: "pending", label: "In attesa" },
+              { value: "fulfilled", label: "Evaso" },
+              { value: "cancelled", label: "Annullato" },
+            ];
+  const statusHint =
+    order.paymentStatus === "paid"
+      ? "Il pagamento si modifica solo con «Rimborsa»."
+      : order.status === "cancelled"
+        ? settlesOnHandover(order.paymentMethod)
+          ? "Ripristinando l'ordine la merce viene di nuovo messa da parte."
+          : "Ripristinando l'ordine torna tra quelli da pagare."
+        : "Il pagamento si registra con «Registra incasso», nel riquadro Pagamento.";
   // A caparra taken on the booking this order came from is part payment against
   // it. The total stays whole (that is what the invoice and the VAT are built
   // on); what it changes is the number the counter has to ask for.
@@ -160,7 +198,15 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               </div>
               {order.discountCents > 0 && (
                 <div className="flex justify-between text-ok">
-                  <span>Sconto{order.discountCode ? ` (${order.discountCode})` : ""}</span>
+                  <span>
+                    Sconto
+                    {order.discountCode ? ` (${order.discountCode})` : ""}
+                    {order.manualDiscountCents > 0
+                      ? order.discountCode
+                        ? ` + concordato ${euro(Math.min(order.manualDiscountCents, order.discountCents))}`
+                        : " concordato"
+                      : ""}
+                  </span>
                   <span>−{euro(order.discountCents)}</span>
                 </div>
               )}
@@ -217,7 +263,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
 
           {editable && (
             <Panel>
-              <h3 className="font-display mb-1 text-lg text-brown-950">Modifica articoli</h3>
+              <h3 className="font-display mb-1 text-lg text-brown-950">Modifica articoli e importi</h3>
               <p className="mb-4 text-xs text-brown-800/60">
                 Disponibile finché l&apos;ordine non è pagato.
               </p>
@@ -350,48 +396,56 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               <StatusBadge status={order.status} />
               <StatusBadge status={order.paymentStatus} />
             </div>
-            <ActionForm action={updateOrderStatus} className="space-y-3">
-              <input type="hidden" name="id" value={order.id} />
-              <div>
-                <label className={labelCls} htmlFor="order-status">
-                  Stato ordine
-                </label>
-                {/* "Pagato" is not offered while the order is unpaid: settling
-                    goes through "Registra incasso" above, which is the only
-                    path that records what the money arrived on. Still listed
-                    once it IS paid, so the state can be read back. */}
-                <select
-                  id="order-status"
-                  name="status"
-                  defaultValue={order.status}
-                  className={inputCls}
-                >
-                  <option value="pending">In attesa</option>
-                  {!canSettle && <option value="paid">Pagato</option>}
-                  <option value="fulfilled">Evaso</option>
-                  {(canCancel || order.status === "cancelled") && (
-                    <option value="cancelled">Annullato</option>
-                  )}
-                  {order.status === "refunded" && <option value="refunded">Rimborsato</option>}
-                </select>
+            {statusOptions.length > 0 ? (
+              <ActionForm action={updateOrderStatus} className="space-y-3">
+                <input type="hidden" name="id" value={order.id} />
+                <div>
+                  <label className={labelCls} htmlFor="order-status">
+                    Stato ordine
+                  </label>
+                  <select id="order-status" name="status" defaultValue={order.status} className={inputCls}>
+                    {statusOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <PendingButton tone="dark">Aggiorna stato</PendingButton>
+                <p className="text-xs text-brown-800/60">{statusHint}</p>
+              </ActionForm>
+            ) : (
+              <p className="text-xs text-brown-800/60">Ordine rimborsato: lo stato è definitivo.</p>
+            )}
+
+            {/* The dates the books are kept on, next to the state they produced. */}
+            <dl className="mt-4 space-y-1 border-t border-brown-900/10 pt-3 text-xs text-brown-800/70">
+              <div className="flex justify-between gap-3">
+                <dt>Creato</dt>
+                <dd className="text-brown-950">{fmtDateTime(order.createdAt)}</dd>
               </div>
-              <div>
-                <label className={labelCls} htmlFor="order-payment-status">
-                  Stato pagamento
-                </label>
-                <select
-                  id="order-payment-status"
-                  name="paymentStatus"
-                  defaultValue={order.paymentStatus}
-                  className={inputCls}
-                >
-                  <option value="unpaid">Da pagare</option>
-                  {!canSettle && <option value="paid">Pagato</option>}
-                  {order.paymentStatus === "refunded" && <option value="refunded">Rimborsato</option>}
-                </select>
+              {order.paidAt && (
+                <div className="flex justify-between gap-3">
+                  <dt>Incassato</dt>
+                  <dd className="text-brown-950">
+                    {fmtDateTime(order.paidAt)}
+                    {order.paidWith ? ` · ${PAYMENT_INSTRUMENT_LABEL[order.paidWith]}` : ""}
+                  </dd>
+                </div>
+              )}
+              {order.refundedAt && order.refundedCents > 0 && (
+                <div className="flex justify-between gap-3">
+                  <dt>Rimborsato</dt>
+                  <dd className="text-brown-950">
+                    {fmtDateTime(order.refundedAt)} · {euro(order.refundedCents)}
+                  </dd>
+                </div>
+              )}
+              <div className="flex justify-between gap-3">
+                <dt>Ultima modifica</dt>
+                <dd className="text-brown-950">{fmtDateTime(order.updatedAt)}</dd>
               </div>
-              <PendingButton tone="dark">Aggiorna ordine</PendingButton>
-            </ActionForm>
+            </dl>
 
             {order.email && (
               <div className="mt-4 border-t border-brown-900/10 pt-4">
@@ -417,12 +471,15 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               <ActionForm action={setOrderTracking} className="space-y-3">
                 <input type="hidden" name="id" value={order.id} />
                 <div>
-                  <label className={labelCls}>Corriere</label>
+                  <label className={labelCls} htmlFor="order-carrier">
+                    Corriere
+                  </label>
                   {/* A suggestion list, not a closed select: the couriers come
                       from a setting, and a one-off shipment must not be blocked
                       by a name nobody has added yet. Typing "brt" still matches
                       the preset's tracking URL — the lookup is case-insensitive. */}
                   <input
+                    id="order-carrier"
                     name="carrier"
                     list="order-carriers"
                     defaultValue={order.carrier ?? ""}
@@ -436,8 +493,11 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   </datalist>
                 </div>
                 <div>
-                  <label className={labelCls}>Numero di tracking</label>
+                  <label className={labelCls} htmlFor="order-tracking">
+                    Numero di tracking
+                  </label>
                   <input
+                    id="order-tracking"
                     name="trackingNumber"
                     defaultValue={order.trackingNumber ?? ""}
                     placeholder="Codice di spedizione"
@@ -457,7 +517,9 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   </p>
                 )}
                 <p className="text-xs text-brown-800/60">
-                  Se l&apos;ordine è già evaso, salvando il tracking l&apos;email di spedizione viene reinviata al cliente.
+                  {order.status === "fulfilled"
+                    ? "Salvando il tracking l'email di spedizione viene reinviata al cliente."
+                    : "Il tracking è necessario per segnare la spedizione come evasa: è quello che il cliente riceve nell'email."}
                 </p>
                 <PendingButton tone="dark">Salva tracking</PendingButton>
               </ActionForm>
@@ -507,7 +569,10 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 </ActionForm>
                 <p className="mt-2 text-xs text-brown-800/60">
                   Registra il pagamento, accredita i punti fedeltà e conta l&apos;eventuale codice
-                  sconto. La giacenza è già stata scalata quando l&apos;ordine è stato accettato.
+                  sconto.{" "}
+                  {order.stockAppliedAt
+                    ? "La giacenza è già stata scalata quando l'ordine è stato accettato."
+                    : "La giacenza viene scalata al momento dell'incasso."}
                 </p>
               </div>
             )}
