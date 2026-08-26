@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { inputCls, labelCls } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
 import { HoursEditor } from "./HoursEditor";
@@ -19,6 +19,25 @@ import type {
   DiscountCodeRow,
   CategoryRow,
 } from "@/lib/db/schema";
+
+/**
+ * Per-field ids, unique to this instance of the component.
+ *
+ * The forms in here paired a `<label>` with the control *below* it and never
+ * connected the two: no `htmlFor`, no `id`, no wrapping. Clicking a field's
+ * label did nothing, and a screen reader announced every one of them as an
+ * unnamed edit box — 103 controls across the gestionale's four form components.
+ *
+ * Ids come from `useId` rather than the field name because the same form is
+ * rendered many times on one page: `/admin/reservations` mounts a
+ * `ReservationForm` per row, so `id="name"` would repeat down the page and the
+ * browser would bind every label to the first one — the original bug wearing a
+ * different hat. `useId` is per instance, so each row gets its own namespace.
+ */
+export function useFieldIds(): (name: string) => string {
+  const uid = useId();
+  return (name: string) => `${uid}-${name}`;
+}
 
 /** yyyy-mm-dd for a date input default, or "" for null. */
 function dateValue(d: Date | null | undefined): string {
@@ -40,6 +59,7 @@ function Toggle({ name, label, defaultChecked }: { name: string; label: string; 
  * `applyImageUpload` in the save actions.
  */
 function ImageField({ current }: { current?: string | null }) {
+  const fid = useFieldIds();
   const [url, setUrl] = useState(current ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -51,12 +71,13 @@ function ImageField({ current }: { current?: string | null }) {
 
   return (
     <div className="sm:col-span-2">
-      <label className={labelCls}>Immagine</label>
+      <label className={labelCls} htmlFor={fid("image")}>Immagine</label>
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element -- simple admin preview
         <img src={url} alt="" className="mb-2 h-24 w-24 rounded-lg object-cover ring-1 ring-brown-900/10" />
       ) : null}
       <input
+        id={fid("image")}
         name="image"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
@@ -67,6 +88,7 @@ function ImageField({ current }: { current?: string | null }) {
         ref={fileRef}
         name="imageFile"
         type="file"
+        aria-label="Carica un'immagine dal dispositivo"
         accept="image/png,image/jpeg,image/webp,image/avif"
         className="mt-2 block text-sm text-brown-800 file:mr-3 file:rounded-full file:border-0 file:bg-brown-900/10 file:px-4 file:py-2 file:text-xs file:font-bold file:tracking-widest file:uppercase hover:file:bg-brown-900/15"
       />
@@ -99,6 +121,7 @@ export function ProductForm({
    *  let one mistyped "Formaggio" fork the catalogue with nothing to warn you. */
   categories?: CategoryRow[];
 }) {
+  const fid = useFieldIds();
   // For a NEW product, choosing a category adopts the rate that category
   // declares. An existing product keeps its stored rate — changing a saved
   // product's category must not silently restate its VAT.
@@ -118,12 +141,13 @@ export function ProductForm({
     >
       {product && <input type="hidden" name="id" value={product.id} />}
       <div>
-        <label className={labelCls}>Nome</label>
-        <input name="name" required defaultValue={product?.name} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("name")}>Nome</label>
+        <input id={fid("name")} name="name" required defaultValue={product?.name} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Slug</label>
+        <label className={labelCls} htmlFor={fid("slug")}>Slug</label>
         <input
+          id={fid("slug")}
           name="slug"
           defaultValue={product?.slug}
           placeholder="auto dal nome se vuoto"
@@ -131,8 +155,8 @@ export function ProductForm({
         />
       </div>
       <div>
-        <label className={labelCls}>Negozio</label>
-        <select name="shopSlug" defaultValue={product?.shopSlug} className={inputCls}>
+        <label className={labelCls} htmlFor={fid("shopSlug")}>Negozio</label>
+        <select id={fid("shopSlug")} name="shopSlug" defaultValue={product?.shopSlug} className={inputCls}>
           {shops.map((s) => (
             <option key={s.slug} value={s.slug}>
               {s.name}
@@ -141,8 +165,9 @@ export function ProductForm({
         </select>
       </div>
       <div>
-        <label className={labelCls}>Categoria</label>
+        <label className={labelCls} htmlFor={fid("categoryId")}>Categoria</label>
         <select
+          id={fid("categoryId")}
           name="categoryId"
           defaultValue={product?.categoryId ?? ""}
           onChange={(e) => onCategoryChange(e.target.value)}
@@ -166,21 +191,22 @@ export function ProductForm({
         </p>
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Descrizione</label>
-        <textarea name="description" rows={3} defaultValue={product?.description} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("description")}>Descrizione</label>
+        <textarea id={fid("description")} name="description" rows={3} defaultValue={product?.description} className={inputCls} />
       </div>
       <ImageField current={product?.image} />
       <div>
-        <label className={labelCls}>Etichetta immagine</label>
-        <input name="imageLabel" defaultValue={product?.imageLabel} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("imageLabel")}>Etichetta immagine</label>
+        <input id={fid("imageLabel")} name="imageLabel" defaultValue={product?.imageLabel} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Ordine</label>
-        <input name="sortOrder" type="number" defaultValue={product?.sortOrder ?? 0} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
+        <input id={fid("sortOrder")} name="sortOrder" type="number" defaultValue={product?.sortOrder ?? 0} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Prezzo (€)</label>
+        <label className={labelCls} htmlFor={fid("priceEuros")}>Prezzo (€)</label>
         <input
+          id={fid("priceEuros")}
           name="priceEuros"
           type="number"
           step="0.01"
@@ -189,8 +215,9 @@ export function ProductForm({
         />
       </div>
       <div>
-        <label className={labelCls}>Unità (kg, pezzo…)</label>
+        <label className={labelCls} htmlFor={fid("unit")}>Unità (kg, pezzo…)</label>
         <input
+          id={fid("unit")}
           name="unit"
           defaultValue={product?.unit ?? ""}
           placeholder="auto: kg se venduto a peso"
@@ -198,8 +225,9 @@ export function ProductForm({
         />
       </div>
       <div>
-        <label className={labelCls}>Aliquota IVA</label>
+        <label className={labelCls} htmlFor={fid("vatRate")}>Aliquota IVA</label>
         <select
+          id={fid("vatRate")}
           name="vatRate"
           value={String(vatBps / 100)}
           onChange={(e) => setVatBps(Math.round(Number(e.target.value) * 100))}
@@ -218,12 +246,13 @@ export function ProductForm({
         )}
       </div>
       <div>
-        <label className={labelCls}>Giacenza (vuoto = illimitata)</label>
-        <input name="stock" type="number" min={0} defaultValue={product?.stock ?? ""} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("stock")}>Giacenza (vuoto = illimitata)</label>
+        <input id={fid("stock")} name="stock" type="number" min={0} defaultValue={product?.stock ?? ""} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Soglia di riordino</label>
+        <label className={labelCls} htmlFor={fid("reorderPoint")}>Soglia di riordino</label>
         <input
+          id={fid("reorderPoint")}
           name="reorderPoint"
           type="number"
           min={0}
@@ -233,8 +262,9 @@ export function ProductForm({
         />
       </div>
       <div>
-        <label className={labelCls}>Costo d&apos;acquisto (€, senza IVA)</label>
+        <label className={labelCls} htmlFor={fid("costEuros")}>Costo d&apos;acquisto (€, senza IVA)</label>
         <input
+          id={fid("costEuros")}
           name="costEuros"
           type="number"
           step="0.01"
@@ -246,17 +276,18 @@ export function ProductForm({
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <label className={labelCls}>Codice / SKU</label>
-          <input name="sku" defaultValue={product?.sku ?? ""} className={inputCls} />
+          <label className={labelCls} htmlFor={fid("sku")}>Codice / SKU</label>
+          <input id={fid("sku")} name="sku" defaultValue={product?.sku ?? ""} className={inputCls} />
         </div>
         <div>
-          <label className={labelCls}>Fornitore</label>
-          <input name="supplier" defaultValue={product?.supplier ?? ""} className={inputCls} />
+          <label className={labelCls} htmlFor={fid("supplier")}>Fornitore</label>
+          <input id={fid("supplier")} name="supplier" defaultValue={product?.supplier ?? ""} className={inputCls} />
         </div>
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Provenienza / tracciabilità</label>
+        <label className={labelCls} htmlFor={fid("origin")}>Provenienza / tracciabilità</label>
         <input
+          id={fid("origin")}
           name="origin"
           defaultValue={product?.origin ?? ""}
           placeholder="es. Suino nazionale — Marche"
@@ -264,8 +295,9 @@ export function ProductForm({
         />
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Allergeni (separati da virgola)</label>
+        <label className={labelCls} htmlFor={fid("allergens")}>Allergeni (separati da virgola)</label>
         <input
+          id={fid("allergens")}
           name="allergens"
           defaultValue={product?.allergens?.join(", ") ?? ""}
           placeholder="es. glutine, latte, frutta a guscio"
@@ -273,8 +305,8 @@ export function ProductForm({
         />
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Ingredienti</label>
-        <textarea name="ingredients" rows={2} defaultValue={product?.ingredients ?? ""} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("ingredients")}>Ingredienti</label>
+        <textarea id={fid("ingredients")} name="ingredients" rows={2} defaultValue={product?.ingredients ?? ""} className={inputCls} />
       </div>
       <div className="flex flex-wrap items-center gap-6 pt-6 sm:col-span-2">
         <Toggle name="purchasable" label="Acquistabile online" defaultChecked={product?.purchasable} />
@@ -299,6 +331,7 @@ export function BlogForm({
    *  filters. */
   categories?: CategoryRow[];
 }) {
+  const fid = useFieldIds();
   return (
     <ActionForm
       action={saveBlogPost}
@@ -307,20 +340,20 @@ export function BlogForm({
     >
       {post && <input type="hidden" name="id" value={post.id} />}
       <div className="sm:col-span-2">
-        <label className={labelCls}>Titolo</label>
-        <input name="title" required defaultValue={post?.title} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("title")}>Titolo</label>
+        <input id={fid("title")} name="title" required defaultValue={post?.title} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Slug</label>
-        <input name="slug" defaultValue={post?.slug} placeholder="auto se vuoto" className={inputCls} />
+        <label className={labelCls} htmlFor={fid("slug")}>Slug</label>
+        <input id={fid("slug")} name="slug" defaultValue={post?.slug} placeholder="auto se vuoto" className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Data</label>
-        <input name="date" type="date" defaultValue={post?.date} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("date")}>Data</label>
+        <input id={fid("date")} name="date" type="date" defaultValue={post?.date} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Categoria</label>
-        <select name="categoryId" defaultValue={post?.categoryId ?? ""} className={inputCls}>
+        <label className={labelCls} htmlFor={fid("categoryId")}>Categoria</label>
+        <select id={fid("categoryId")} name="categoryId" defaultValue={post?.categoryId ?? ""} className={inputCls}>
           <option value="">— Nessuna categoria —</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
@@ -338,12 +371,12 @@ export function BlogForm({
         </p>
       </div>
       <div>
-        <label className={labelCls}>Ordine</label>
-        <input name="sortOrder" type="number" defaultValue={post?.sortOrder ?? 0} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
+        <input id={fid("sortOrder")} name="sortOrder" type="number" defaultValue={post?.sortOrder ?? 0} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Estratto</label>
-        <textarea name="excerpt" rows={2} defaultValue={post?.excerpt} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("excerpt")}>Estratto</label>
+        <textarea id={fid("excerpt")} name="excerpt" rows={2} defaultValue={post?.excerpt} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
         <label className={labelCls} htmlFor="post-content">
@@ -359,8 +392,8 @@ export function BlogForm({
       </div>
       <ImageField current={post?.image} />
       <div>
-        <label className={labelCls}>Etichetta immagine</label>
-        <input name="imageLabel" defaultValue={post?.imageLabel} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("imageLabel")}>Etichetta immagine</label>
+        <input id={fid("imageLabel")} name="imageLabel" defaultValue={post?.imageLabel} className={inputCls} />
       </div>
 
       {/* SEO. The excerpt doubles as the meta description when none is given,
@@ -417,6 +450,7 @@ export function BlogForm({
 }
 
 export function ShopForm({ shop }: { shop?: ShopRow | null }) {
+  const fid = useFieldIds();
   return (
     <ActionForm
       action={saveShop}
@@ -425,12 +459,13 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
     >
       {shop && <input type="hidden" name="id" value={shop.id} />}
       <div>
-        <label className={labelCls}>Nome</label>
-        <input name="name" required defaultValue={shop?.name} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("name")}>Nome</label>
+        <input id={fid("name")} name="name" required defaultValue={shop?.name} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Slug (identificativo URL)</label>
+        <label className={labelCls} htmlFor={fid("slug")}>Slug (identificativo URL)</label>
         <input
+          id={fid("slug")}
           name="slug"
           defaultValue={shop?.slug}
           placeholder="es. centro"
@@ -439,44 +474,44 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
         />
       </div>
       <div>
-        <label className={labelCls}>Specialità</label>
-        <input name="specialty" defaultValue={shop?.specialty} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("specialty")}>Specialità</label>
+        <input id={fid("specialty")} name="specialty" defaultValue={shop?.specialty} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Ordine</label>
-        <input name="sortOrder" type="number" defaultValue={shop?.sortOrder ?? 0} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
+        <input id={fid("sortOrder")} name="sortOrder" type="number" defaultValue={shop?.sortOrder ?? 0} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Tagline</label>
-        <input name="tagline" defaultValue={shop?.tagline} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("tagline")}>Tagline</label>
+        <input id={fid("tagline")} name="tagline" defaultValue={shop?.tagline} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Descrizione</label>
-        <textarea name="description" rows={3} defaultValue={shop?.description} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("description")}>Descrizione</label>
+        <textarea id={fid("description")} name="description" rows={3} defaultValue={shop?.description} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Telefono</label>
-        <input name="phone" defaultValue={shop?.phone} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("phone")}>Telefono</label>
+        <input id={fid("phone")} name="phone" defaultValue={shop?.phone} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Email</label>
-        <input name="email" defaultValue={shop?.email} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("email")}>Email</label>
+        <input id={fid("email")} name="email" defaultValue={shop?.email} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Indirizzo</label>
-        <input name="address" defaultValue={shop?.address} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("address")}>Indirizzo</label>
+        <input id={fid("address")} name="address" defaultValue={shop?.address} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
         <HoursEditor shop={shop} />
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Punti di forza (uno per riga)</label>
-        <textarea name="highlights" rows={3} defaultValue={shop?.highlights.join("\n")} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("highlights")}>Punti di forza (uno per riga)</label>
+        <textarea id={fid("highlights")} name="highlights" rows={3} defaultValue={shop?.highlights.join("\n")} className={inputCls} />
       </div>
       <ImageField current={shop?.image} />
       <div>
-        <label className={labelCls}>Etichetta immagine</label>
-        <input name="imageLabel" defaultValue={shop?.imageLabel} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("imageLabel")}>Etichetta immagine</label>
+        <input id={fid("imageLabel")} name="imageLabel" defaultValue={shop?.imageLabel} className={inputCls} />
       </div>
       <div className="flex flex-wrap items-center gap-6 pt-6 sm:col-span-2">
         <Toggle name="addressConfirmed" label="Indirizzo confermato" defaultChecked={shop?.addressConfirmed ?? true} />
@@ -538,6 +573,7 @@ export function DiscountForm({
   discount?: DiscountCodeRow | null;
   shops?: ShopRow[];
 }) {
+  const fid = useFieldIds();
   // `value` is shown in its human form: whole percent, or euros for a fixed code.
   const valueDefault = discount
     ? discount.type === "fixed"
@@ -552,8 +588,9 @@ export function DiscountForm({
     >
       {discount && <input type="hidden" name="id" value={discount.id} />}
       <div>
-        <label className={labelCls}>Codice</label>
+        <label className={labelCls} htmlFor={fid("code")}>Codice</label>
         <input
+          id={fid("code")}
           name="code"
           required
           defaultValue={discount?.code}
@@ -562,20 +599,21 @@ export function DiscountForm({
         />
       </div>
       <div>
-        <label className={labelCls}>Tipo</label>
-        <select name="type" defaultValue={discount?.type ?? "percent"} className={inputCls}>
+        <label className={labelCls} htmlFor={fid("type")}>Tipo</label>
+        <select id={fid("type")} name="type" defaultValue={discount?.type ?? "percent"} className={inputCls}>
           <option value="percent">Percentuale (%)</option>
           <option value="fixed">Importo fisso (€)</option>
           <option value="free_shipping">Spedizione gratuita</option>
         </select>
       </div>
       <div>
-        <label className={labelCls}>Valore (% o € — ignorato per spedizione gratuita)</label>
-        <input name="value" type="number" step="0.01" min={0} defaultValue={valueDefault} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("value")}>Valore (% o € — ignorato per spedizione gratuita)</label>
+        <input id={fid("value")} name="value" type="number" step="0.01" min={0} defaultValue={valueDefault} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Spesa minima (€)</label>
+        <label className={labelCls} htmlFor={fid("minSubtotalEuros")}>Spesa minima (€)</label>
         <input
+          id={fid("minSubtotalEuros")}
           name="minSubtotalEuros"
           type="number"
           step="0.01"
@@ -585,15 +623,16 @@ export function DiscountForm({
         />
       </div>
       <div>
-        <label className={labelCls}>Utilizzi massimi (vuoto = illimitati)</label>
-        <input name="maxRedemptions" type="number" min={1} defaultValue={discount?.maxRedemptions ?? ""} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("maxRedemptions")}>Utilizzi massimi (vuoto = illimitati)</label>
+        <input id={fid("maxRedemptions")} name="maxRedemptions" type="number" min={1} defaultValue={discount?.maxRedemptions ?? ""} className={inputCls} />
       </div>
       {/* Scoping. Without these a code was all-or-nothing: one customer could
           use a "benvenuto" code every week, and a code meant for one shop
           worked at both. */}
       <div>
-        <label className={labelCls}>Utilizzi per cliente (vuoto = illimitati)</label>
+        <label className={labelCls} htmlFor={fid("maxPerCustomer")}>Utilizzi per cliente (vuoto = illimitati)</label>
         <input
+          id={fid("maxPerCustomer")}
           name="maxPerCustomer"
           type="number"
           min={1}
@@ -602,8 +641,8 @@ export function DiscountForm({
         />
       </div>
       <div>
-        <label className={labelCls}>Valido solo per la sede</label>
-        <select name="shopSlug" defaultValue={discount?.shopSlug ?? ""} className={inputCls}>
+        <label className={labelCls} htmlFor={fid("shopSlug")}>Valido solo per la sede</label>
+        <select id={fid("shopSlug")} name="shopSlug" defaultValue={discount?.shopSlug ?? ""} className={inputCls}>
           <option value="">Tutte le sedi</option>
           {shops.map((s) => (
             <option key={s.slug} value={s.slug}>
@@ -614,12 +653,12 @@ export function DiscountForm({
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <label className={labelCls}>Valido dal</label>
-          <input name="startsAt" type="date" defaultValue={dateValue(discount?.startsAt)} className={inputCls} />
+          <label className={labelCls} htmlFor={fid("startsAt")}>Valido dal</label>
+          <input id={fid("startsAt")} name="startsAt" type="date" defaultValue={dateValue(discount?.startsAt)} className={inputCls} />
         </div>
         <div>
-          <label className={labelCls}>Valido al</label>
-          <input name="endsAt" type="date" defaultValue={dateValue(discount?.endsAt)} className={inputCls} />
+          <label className={labelCls} htmlFor={fid("endsAt")}>Valido al</label>
+          <input id={fid("endsAt")} name="endsAt" type="date" defaultValue={dateValue(discount?.endsAt)} className={inputCls} />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-6 pt-6 sm:col-span-2">
@@ -640,6 +679,7 @@ export function DiscountForm({
 /** New-account form. Editing an existing account's details lives on the users
  *  list (role, password and active state each have their own guarded action). */
 export function UserForm({ shops = [] }: { shops?: { slug: string; name: string }[] }) {
+  const fid = useFieldIds();
   return (
     <ActionForm
       action={createUser}
@@ -647,8 +687,9 @@ export function UserForm({ shops = [] }: { shops?: { slug: string; name: string 
       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       <div>
-        <label className={labelCls}>Username</label>
+        <label className={labelCls} htmlFor={fid("username")}>Username</label>
         <input
+          id={fid("username")}
           name="username"
           required
           minLength={3}
@@ -658,24 +699,24 @@ export function UserForm({ shops = [] }: { shops?: { slug: string; name: string 
         />
       </div>
       <div>
-        <label className={labelCls}>Nome</label>
-        <input name="name" required maxLength={200} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("name")}>Nome</label>
+        <input id={fid("name")} name="name" required maxLength={200} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Email (facoltativa)</label>
-        <input name="email" type="email" maxLength={200} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("email")}>Email (facoltativa)</label>
+        <input id={fid("email")} name="email" type="email" maxLength={200} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Ruolo</label>
-        <select name="role" defaultValue="customer" className={inputCls}>
+        <label className={labelCls} htmlFor={fid("role")}>Ruolo</label>
+        <select id={fid("role")} name="role" defaultValue="customer" className={inputCls}>
           <option value="customer">Cliente</option>
           <option value="staff">Staff</option>
           <option value="admin">Amministratore</option>
         </select>
       </div>
       <div>
-        <label className={labelCls}>Sede (solo staff)</label>
-        <select name="shopSlug" defaultValue="" className={inputCls}>
+        <label className={labelCls} htmlFor={fid("shopSlug")}>Sede (solo staff)</label>
+        <select id={fid("shopSlug")} name="shopSlug" defaultValue="" className={inputCls}>
           <option value="">Tutte le sedi</option>
           {shops.map((s) => (
             <option key={s.slug} value={s.slug}>
@@ -689,8 +730,9 @@ export function UserForm({ shops = [] }: { shops?: { slug: string; name: string 
         </p>
       </div>
       <div>
-        <label className={labelCls}>Password</label>
+        <label className={labelCls} htmlFor={fid("password")}>Password</label>
         <input
+          id={fid("password")}
           name="password"
           type="text"
           required
@@ -707,6 +749,7 @@ export function UserForm({ shops = [] }: { shops?: { slug: string; name: string 
 }
 
 export function RewardForm({ reward }: { reward?: RewardRow | null }) {
+  const fid = useFieldIds();
   return (
     <ActionForm
       action={saveReward}
@@ -715,24 +758,24 @@ export function RewardForm({ reward }: { reward?: RewardRow | null }) {
     >
       {reward && <input type="hidden" name="id" value={reward.id} />}
       <div>
-        <label className={labelCls}>Nome</label>
-        <input name="name" required defaultValue={reward?.name} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("name")}>Nome</label>
+        <input id={fid("name")} name="name" required defaultValue={reward?.name} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Slug</label>
-        <input name="slug" defaultValue={reward?.slug} placeholder="auto se vuoto" className={inputCls} />
+        <label className={labelCls} htmlFor={fid("slug")}>Slug</label>
+        <input id={fid("slug")} name="slug" defaultValue={reward?.slug} placeholder="auto se vuoto" className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Punti richiesti</label>
-        <input name="points" type="number" min={0} required defaultValue={reward?.points ?? 0} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("points")}>Punti richiesti</label>
+        <input id={fid("points")} name="points" type="number" min={0} required defaultValue={reward?.points ?? 0} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Ordine</label>
-        <input name="sortOrder" type="number" defaultValue={reward?.sortOrder ?? 0} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
+        <input id={fid("sortOrder")} name="sortOrder" type="number" defaultValue={reward?.sortOrder ?? 0} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Descrizione</label>
-        <textarea name="description" rows={2} defaultValue={reward?.description} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("description")}>Descrizione</label>
+        <textarea id={fid("description")} name="description" rows={2} defaultValue={reward?.description} className={inputCls} />
       </div>
 
       {/* Availability: how many exist, how often one customer may claim it, and
@@ -823,6 +866,7 @@ export function CategoryForm({
   /** Candidate parents: same kind, top level, excluding this row. */
   parents?: CategoryRow[];
 }) {
+  const fid = useFieldIds();
   const effectiveKind = category?.kind ?? kind ?? "product";
 
   return (
@@ -835,12 +879,13 @@ export function CategoryForm({
       <input type="hidden" name="kind" value={effectiveKind} />
 
       <div>
-        <label className={labelCls}>Nome</label>
-        <input name="name" required maxLength={120} defaultValue={category?.name} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("name")}>Nome</label>
+        <input id={fid("name")} name="name" required maxLength={120} defaultValue={category?.name} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Slug</label>
+        <label className={labelCls} htmlFor={fid("slug")}>Slug</label>
         <input
+          id={fid("slug")}
           name="slug"
           defaultValue={category?.slug}
           placeholder="auto dal nome se vuoto"
@@ -854,8 +899,8 @@ export function CategoryForm({
       </div>
 
       <div>
-        <label className={labelCls}>Categoria superiore</label>
-        <select name="parentId" defaultValue={category?.parentId ?? ""} className={inputCls}>
+        <label className={labelCls} htmlFor={fid("parentId")}>Categoria superiore</label>
+        <select id={fid("parentId")} name="parentId" defaultValue={category?.parentId ?? ""} className={inputCls}>
           <option value="">— Nessuna (primo livello) —</option>
           {parents.map((p) => (
             <option key={p.id} value={p.id}>
@@ -865,8 +910,9 @@ export function CategoryForm({
         </select>
       </div>
       <div>
-        <label className={labelCls}>Ordine</label>
+        <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
         <input
+          id={fid("sortOrder")}
           name="sortOrder"
           type="number"
           defaultValue={category?.sortOrder ?? 0}
@@ -877,8 +923,9 @@ export function CategoryForm({
 
       {effectiveKind === "product" && (
         <div>
-          <label className={labelCls}>Aliquota IVA predefinita</label>
+          <label className={labelCls} htmlFor={fid("defaultVatRate")}>Aliquota IVA predefinita</label>
           <select
+            id={fid("defaultVatRate")}
             name="defaultVatRate"
             defaultValue={
               category?.defaultVatRateBps != null ? String(category.defaultVatRateBps / 100) : ""
@@ -899,8 +946,8 @@ export function CategoryForm({
       )}
 
       <div>
-        <label className={labelCls}>Colore</label>
-        <select name="accent" defaultValue={category?.accent ?? ""} className={inputCls}>
+        <label className={labelCls} htmlFor={fid("accent")}>Colore</label>
+        <select id={fid("accent")} name="accent" defaultValue={category?.accent ?? ""} className={inputCls}>
           <option value="">— Automatico (dal nome) —</option>
           {CATEGORY_ACCENTS.map((a) => (
             <option key={a.value} value={a.value}>
@@ -914,8 +961,9 @@ export function CategoryForm({
       </div>
 
       <div className="sm:col-span-2">
-        <label className={labelCls}>Descrizione</label>
+        <label className={labelCls} htmlFor={fid("description")}>Descrizione</label>
         <textarea
+          id={fid("description")}
           name="description"
           rows={3}
           defaultValue={category?.description}
@@ -929,12 +977,13 @@ export function CategoryForm({
       <ImageField current={category?.image} />
 
       <div>
-        <label className={labelCls}>Titolo SEO</label>
-        <input name="seoTitle" maxLength={200} defaultValue={category?.seoTitle ?? ""} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("seoTitle")}>Titolo SEO</label>
+        <input id={fid("seoTitle")} name="seoTitle" maxLength={200} defaultValue={category?.seoTitle ?? ""} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Descrizione SEO</label>
+        <label className={labelCls} htmlFor={fid("seoDescription")}>Descrizione SEO</label>
         <input
+          id={fid("seoDescription")}
           name="seoDescription"
           maxLength={400}
           defaultValue={category?.seoDescription ?? ""}

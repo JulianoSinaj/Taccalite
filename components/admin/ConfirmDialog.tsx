@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 
 /**
@@ -33,6 +33,11 @@ export function ConfirmDialog({
   onCancel: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // One of these is mounted per confirmable control, so a list page carries
+  // dozens. With a hard-coded id every `aria-labelledby` resolved to the *first*
+  // heading in the document, and a screen reader announced some other row's
+  // question over this row's dialog.
+  const titleId = useId();
 
   useEffect(() => {
     const el = ref.current;
@@ -61,7 +66,7 @@ export function ConfirmDialog({
       // i clienti riceveranno le email previste") overflowed a small phone with
       // no way to reach the buttons. `dvh`, so the browser chrome is excluded.
       className="max-h-[85dvh] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-2xl border border-brown-900/10 bg-surface p-0 text-brown-950 shadow-xl backdrop:bg-brown-950/40"
-      aria-labelledby="confirm-title"
+      aria-labelledby={titleId}
     >
       <div className="p-6">
         <div className="flex gap-3">
@@ -70,7 +75,7 @@ export function ConfirmDialog({
             aria-hidden
           />
           <div>
-            <h2 id="confirm-title" className="font-display text-lg text-brown-950">
+            <h2 id={titleId} className="font-display text-lg text-brown-950">
               {title}
             </h2>
             <div className="mt-1.5 text-sm leading-relaxed text-brown-800/80">{message}</div>

@@ -283,17 +283,37 @@ function SlotRow({ slot }: { slot: PickupSlotRow }) {
         <span className="w-24 pb-3 text-sm font-semibold text-brown-950 capitalize">
           {WEEKDAY_NAME[slot.weekday]}
         </span>
+        {/* One of these rows per slot, so the ids carry the slot's own id:
+            a bare id="startTime" would repeat down the page and every label
+            would focus the first row's field. */}
         <div>
-          <label className={labelCls}>Dalle</label>
-          <input name="startTime" defaultValue={slot.startTime} className={`${inputCls} w-24`} />
-        </div>
-        <div>
-          <label className={labelCls}>Alle</label>
-          <input name="endTime" defaultValue={slot.endTime} className={`${inputCls} w-24`} />
-        </div>
-        <div>
-          <label className={labelCls}>Ordini max</label>
+          <label className={labelCls} htmlFor={`slot-${slot.id}-start`}>
+            Dalle
+          </label>
           <input
+            id={`slot-${slot.id}-start`}
+            name="startTime"
+            defaultValue={slot.startTime}
+            className={`${inputCls} w-24`}
+          />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={`slot-${slot.id}-end`}>
+            Alle
+          </label>
+          <input
+            id={`slot-${slot.id}-end`}
+            name="endTime"
+            defaultValue={slot.endTime}
+            className={`${inputCls} w-24`}
+          />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={`slot-${slot.id}-capacity`}>
+            Ordini max
+          </label>
+          <input
+            id={`slot-${slot.id}-capacity`}
             name="capacityOrders"
             type="number"
             min={1}
@@ -303,8 +323,11 @@ function SlotRow({ slot }: { slot: PickupSlotRow }) {
           />
         </div>
         <div>
-          <label className={labelCls}>Preavviso (h)</label>
+          <label className={labelCls} htmlFor={`slot-${slot.id}-cutoff`}>
+            Preavviso (h)
+          </label>
           <input
+            id={`slot-${slot.id}-cutoff`}
             name="cutoffHours"
             type="number"
             min={0}
@@ -420,8 +443,15 @@ export default async function AdminFulfilment({ searchParams }: SP) {
                   <ActionForm action={savePickupSlot} className="mt-3 flex flex-wrap items-end gap-3">
                     <input type="hidden" name="shopSlug" value={shop.slug} />
                     <div>
-                      <label className={labelCls}>Giorno</label>
-                      <select name="weekday" defaultValue="6" className={inputCls}>
+                      <label className={labelCls} htmlFor={`new-${shop.slug}-weekday`}>
+                        Giorno
+                      </label>
+                      <select
+                        id={`new-${shop.slug}-weekday`}
+                        name="weekday"
+                        defaultValue="6"
+                        className={inputCls}
+                      >
                         {[1, 2, 3, 4, 5, 6, 7].map((d) => (
                           <option key={d} value={d} className="capitalize">
                             {WEEKDAY_NAME[d]}
@@ -430,16 +460,33 @@ export default async function AdminFulfilment({ searchParams }: SP) {
                       </select>
                     </div>
                     <div>
-                      <label className={labelCls}>Dalle</label>
-                      <input name="startTime" defaultValue="09:00" className={`${inputCls} w-24`} />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Alle</label>
-                      <input name="endTime" defaultValue="10:00" className={`${inputCls} w-24`} />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Ordini max</label>
+                      <label className={labelCls} htmlFor={`new-${shop.slug}-start`}>
+                        Dalle
+                      </label>
                       <input
+                        id={`new-${shop.slug}-start`}
+                        name="startTime"
+                        defaultValue="09:00"
+                        className={`${inputCls} w-24`}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls} htmlFor={`new-${shop.slug}-end`}>
+                        Alle
+                      </label>
+                      <input
+                        id={`new-${shop.slug}-end`}
+                        name="endTime"
+                        defaultValue="10:00"
+                        className={`${inputCls} w-24`}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls} htmlFor={`new-${shop.slug}-capacity`}>
+                        Ordini max
+                      </label>
+                      <input
+                        id={`new-${shop.slug}-capacity`}
                         name="capacityOrders"
                         type="number"
                         min={1}
@@ -448,8 +495,11 @@ export default async function AdminFulfilment({ searchParams }: SP) {
                       />
                     </div>
                     <div>
-                      <label className={labelCls}>Preavviso (h)</label>
+                      <label className={labelCls} htmlFor={`new-${shop.slug}-cutoff`}>
+                        Preavviso (h)
+                      </label>
                       <input
+                        id={`new-${shop.slug}-cutoff`}
                         name="cutoffHours"
                         type="number"
                         min={0}
@@ -480,8 +530,15 @@ export default async function AdminFulfilment({ searchParams }: SP) {
                   >
                     <input type="hidden" name="shopSlug" value={shop.slug} />
                     <div>
-                      <label className={labelCls}>Durata fascia</label>
-                      <select name="minutes" defaultValue="60" className={inputCls}>
+                      <label className={labelCls} htmlFor={`gen-${shop.slug}-minutes`}>
+                        Durata fascia
+                      </label>
+                      <select
+                        id={`gen-${shop.slug}-minutes`}
+                        name="minutes"
+                        defaultValue="60"
+                        className={inputCls}
+                      >
                         <option value="30">30 minuti</option>
                         <option value="60">1 ora</option>
                         <option value="120">2 ore</option>
@@ -498,8 +555,11 @@ export default async function AdminFulfilment({ searchParams }: SP) {
                       />
                     </div>
                     <div>
-                      <label className={labelCls}>Preavviso (h)</label>
+                      <label className={labelCls} htmlFor={`gen-${shop.slug}-cutoff`}>
+                        Preavviso (h)
+                      </label>
                       <input
+                        id={`gen-${shop.slug}-cutoff`}
                         name="cutoffHours"
                         type="number"
                         min={0}

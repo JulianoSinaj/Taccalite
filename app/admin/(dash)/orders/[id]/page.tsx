@@ -353,12 +353,19 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             <ActionForm action={updateOrderStatus} className="space-y-3">
               <input type="hidden" name="id" value={order.id} />
               <div>
-                <label className={labelCls}>Stato ordine</label>
+                <label className={labelCls} htmlFor="order-status">
+                  Stato ordine
+                </label>
                 {/* "Pagato" is not offered while the order is unpaid: settling
                     goes through "Registra incasso" above, which is the only
                     path that records what the money arrived on. Still listed
                     once it IS paid, so the state can be read back. */}
-                <select name="status" defaultValue={order.status} className={inputCls}>
+                <select
+                  id="order-status"
+                  name="status"
+                  defaultValue={order.status}
+                  className={inputCls}
+                >
                   <option value="pending">In attesa</option>
                   {!canSettle && <option value="paid">Pagato</option>}
                   <option value="fulfilled">Evaso</option>
@@ -369,8 +376,15 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Stato pagamento</label>
-                <select name="paymentStatus" defaultValue={order.paymentStatus} className={inputCls}>
+                <label className={labelCls} htmlFor="order-payment-status">
+                  Stato pagamento
+                </label>
+                <select
+                  id="order-payment-status"
+                  name="paymentStatus"
+                  defaultValue={order.paymentStatus}
+                  className={inputCls}
+                >
                   <option value="unpaid">Da pagare</option>
                   {!canSettle && <option value="paid">Pagato</option>}
                   {order.paymentStatus === "refunded" && <option value="refunded">Rimborsato</option>}

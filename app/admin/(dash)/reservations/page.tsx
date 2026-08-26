@@ -323,7 +323,12 @@ export default async function AdminReservations({ searchParams }: SP) {
 
                   <ActionForm action={updateReservationStatus} className="space-y-2">
                     <input type="hidden" name="id" value={r.id} />
-                    <select name="status" defaultValue={r.status} className={inputCls}>
+                    <select
+                      name="status"
+                      aria-label={`Stato della prenotazione ${r.reference}`}
+                      defaultValue={r.status}
+                      className={inputCls}
+                    >
                       <option value="pending">In attesa</option>
                       <option value="confirmed">Confermata</option>
                       <option value="completed">Completata</option>

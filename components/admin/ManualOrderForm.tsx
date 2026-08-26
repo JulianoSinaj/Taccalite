@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useFieldIds } from "@/components/admin/forms";
 import { Search, X } from "lucide-react";
 import { Panel, euro, inputCls, labelCls } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
@@ -89,6 +90,7 @@ export function ManualOrderForm({
   pricing: PricingSettings;
   booking?: BookingPrefill | null;
 }) {
+  const fid = useFieldIds();
   const sellable = useMemo(
     () => products.filter((p) => p.active && p.priceCents != null),
     [products],
@@ -590,8 +592,9 @@ export function ManualOrderForm({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={labelCls}>Nome</label>
+            <label className={labelCls} htmlFor={fid("name")}>Nome</label>
             <input
+              id={fid("name")}
               name="name"
               required
               value={contact.name}
@@ -601,8 +604,9 @@ export function ManualOrderForm({
             />
           </div>
           <div>
-            <label className={labelCls}>Telefono</label>
+            <label className={labelCls} htmlFor={fid("phone")}>Telefono</label>
             <input
+              id={fid("phone")}
               name="phone"
               value={contact.phone}
               onChange={(e) => setContact((c) => ({ ...c, phone: e.target.value }))}
@@ -610,8 +614,9 @@ export function ManualOrderForm({
             />
           </div>
           <div className="sm:col-span-2">
-            <label className={labelCls}>Email (opzionale)</label>
+            <label className={labelCls} htmlFor={fid("email")}>Email (opzionale)</label>
             <input
+              id={fid("email")}
               name="email"
               type="email"
               value={contact.email}
@@ -627,8 +632,9 @@ export function ManualOrderForm({
         <h3 className="font-display mb-4 text-lg text-brown-950">Evasione e pagamento</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={labelCls}>Tipo</label>
+            <label className={labelCls} htmlFor={fid("fulfilment")}>Tipo</label>
             <select
+              id={fid("fulfilment")}
               name="fulfilment"
               value={fulfilment}
               onChange={(e) => setFulfilment(e.target.value as FulfilmentMode)}
@@ -645,8 +651,9 @@ export function ManualOrderForm({
           {fulfilment === "pickup" ? (
             <>
               <div>
-                <label className={labelCls}>Negozio</label>
+                <label className={labelCls} htmlFor={fid("shopSlug")}>Negozio</label>
                 <select
+                  id={fid("shopSlug")}
                   name="shopSlug"
                   value={shopSlug}
                   onChange={(e) => setShopSlug(e.target.value)}
@@ -664,8 +671,9 @@ export function ManualOrderForm({
                   paperwork for its own sake. */}
               {slotsForShop.length > 0 && (
                 <div>
-                  <label className={labelCls}>Fascia di ritiro (facoltativa)</label>
+                  <label className={labelCls} htmlFor={fid("pickupSlot")}>Fascia di ritiro (facoltativa)</label>
                   <select
+                    id={fid("pickupSlot")}
                     name="pickupSlot"
                     value={chosenSlot}
                     onChange={(e) => setPickupSlot(e.target.value)}
@@ -684,8 +692,9 @@ export function ManualOrderForm({
           ) : (
             <>
               <div>
-                <label className={labelCls}>CAP</label>
+                <label className={labelCls} htmlFor={fid("zip")}>CAP</label>
                 <input
+                  id={fid("zip")}
                   name="zip"
                   value={address.zip}
                   onChange={(e) => setAddress((a) => ({ ...a, zip: e.target.value }))}
@@ -693,8 +702,9 @@ export function ManualOrderForm({
                 />
               </div>
               <div>
-                <label className={labelCls}>Indirizzo</label>
+                <label className={labelCls} htmlFor={fid("address")}>Indirizzo</label>
                 <input
+                  id={fid("address")}
                   name="address"
                   value={address.address}
                   onChange={(e) => setAddress((a) => ({ ...a, address: e.target.value }))}
@@ -702,8 +712,9 @@ export function ManualOrderForm({
                 />
               </div>
               <div>
-                <label className={labelCls}>Città</label>
+                <label className={labelCls} htmlFor={fid("city")}>Città</label>
                 <input
+                  id={fid("city")}
                   name="city"
                   value={address.city}
                   onChange={(e) => setAddress((a) => ({ ...a, city: e.target.value }))}
@@ -714,8 +725,9 @@ export function ManualOrderForm({
           )}
 
           <div>
-            <label className={labelCls}>Codice sconto (opzionale)</label>
+            <label className={labelCls} htmlFor={fid("discountCode")}>Codice sconto (opzionale)</label>
             <input
+              id={fid("discountCode")}
               name="discountCode"
               value={code}
               onChange={(e) => setCode(e.target.value)}
@@ -780,8 +792,9 @@ export function ManualOrderForm({
           )}
 
           <div className="sm:col-span-2">
-            <label className={labelCls}>Note</label>
+            <label className={labelCls} htmlFor={fid("notes")}>Note</label>
             <textarea
+              id={fid("notes")}
               name="notes"
               rows={2}
               defaultValue={

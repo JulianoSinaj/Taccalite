@@ -1459,6 +1459,19 @@ html:has(.admin-shell) {
   .admin-shell label:has(> input[type="radio"]) {
     min-height: 2.75rem;
   }
+
+  /* The disclosure summaries are the last control the density rules had not
+   * reached: "Importa listino da CSV", "+ Aggiungi una fascia", "Modifica /
+   * sposta prenotazione" and the newsletter's three are each a line of 11px
+   * uppercase type — an 18px target, and the only way into the section behind
+   * them. Same treatment as the toggles above, and touch-only for the same
+   * reason: on a desktop these sit in dense panels where 44px of dead space
+   * per summary would push the content they reveal off the screen. */
+  .admin-shell summary {
+    display: flex;
+    align-items: center;
+    min-height: 2.75rem;
+  }
 }
 
 /* ── Horizontal scrollers ────────────────────────────────────────────────────
@@ -1500,6 +1513,35 @@ html:has(.admin-shell) {
   background-position: left center, right center, left center, right center;
   background-repeat: no-repeat;
   background-size: 2.5rem 100%, 2.5rem 100%, 1rem 100%, 1rem 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* The same trick turned on its side, for the sidebar's own scroller.
+ *
+ * The gestionale has 26 destinations in one column. On a 1440x768 laptop that
+ * column overflows by ~774px — more than half the menu, and the half that is
+ * hidden is all of "Sistema": the cash-up, the VAT report, the invoice
+ * register, statistics, users, security, settings. The list cut off cleanly
+ * mid-item with nothing to say it continued, so a new operator could conclude
+ * the gestionale simply has no settings page. The command palette is a way
+ * round it only for someone who already knows the palette exists.
+ *
+ * Vertical gradients, `--surface` as the ground (the aside's own background,
+ * not a panel's), and the same local/scroll pairing: the cover moves with the
+ * content and the shadow stays pinned, so each shadow hides itself at its end
+ * of the travel. No JS, no measurement, invisible when everything fits.
+ */
+.scroll-y {
+  overflow-y: auto;
+  --scroll-ground: var(--surface);
+  background-image:
+    linear-gradient(to bottom, var(--scroll-ground), rgba(0, 0, 0, 0)),
+    linear-gradient(to top, var(--scroll-ground), rgba(0, 0, 0, 0)),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-brown-950) 18%, transparent), rgba(0, 0, 0, 0)),
+    linear-gradient(to top, color-mix(in oklab, var(--color-brown-950) 18%, transparent), rgba(0, 0, 0, 0));
+  background-position: center top, center bottom, center top, center bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 1.75rem, 100% 1.75rem, 100% 0.75rem, 100% 0.75rem;
   background-attachment: local, local, scroll, scroll;
 }
 

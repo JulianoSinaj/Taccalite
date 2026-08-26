@@ -347,7 +347,13 @@ function SettingField({
     return (
       <>
         <input type="hidden" name="valueType" value="text" />
-        <input type="text" name="value" defaultValue={current} className={`${inputCls} max-w-md`} />
+        <input
+          type="text"
+          name="value"
+          aria-label={def.label}
+          defaultValue={current}
+          className={`${inputCls} max-w-md`}
+        />
       </>
     );
   }
@@ -360,6 +366,7 @@ function SettingField({
         <input type="hidden" name="valueType" value="text" />
         <textarea
           name="value"
+          aria-label={def.label}
           rows={6}
           defaultValue={current}
           spellCheck={false}
@@ -372,7 +379,12 @@ function SettingField({
     // Stored as a whole percent (22), rendered from the canonical bps rates.
     const current = typeof value === "number" ? value : Number(def.default);
     return (
-      <select name="value" defaultValue={String(current)} className={`${inputCls} max-w-xs`}>
+      <select
+        name="value"
+        aria-label={def.label}
+        defaultValue={String(current)}
+        className={`${inputCls} max-w-xs`}
+      >
         {VAT_RATES_BPS.map((bps) => (
           <option key={bps} value={String(bps / 100)}>
             {vatRateLabel(bps)}
@@ -384,7 +396,12 @@ function SettingField({
   if (def.control === "day") {
     const current = typeof value === "string" ? value : String(def.default);
     return (
-      <select name="value" defaultValue={current} className={`${inputCls} max-w-xs`}>
+      <select
+        name="value"
+        aria-label={def.label}
+        defaultValue={current}
+        className={`${inputCls} max-w-xs`}
+      >
         {DAYS.map((d) => (
           <option key={d.value} value={d.value}>
             {d.label}
@@ -399,6 +416,7 @@ function SettingField({
     <input
       type="number"
       name="value"
+      aria-label={def.label}
       required
       min={def.min}
       step={def.step ?? 1}
@@ -523,8 +541,17 @@ export default async function AdminSettings() {
           </p>
           <ActionForm action={sendTestEmail} className="mt-4 flex items-end gap-2">
             <div className="flex-1">
-              <label className={labelCls}>Invia email di prova a</label>
-              <input name="to" type="email" required defaultValue={env.ownerEmail} className={inputCls} />
+              <label className={labelCls} htmlFor="mail-test-to">
+                Invia email di prova a
+              </label>
+              <input
+                id="mail-test-to"
+                name="to"
+                type="email"
+                required
+                defaultValue={env.ownerEmail}
+                className={inputCls}
+              />
             </div>
             <PendingButton tone="dark">Invia prova</PendingButton>
           </ActionForm>
@@ -658,8 +685,15 @@ export default async function AdminSettings() {
                 <ActionForm action={saveSetting} className="flex w-full flex-col gap-2 sm:flex-row sm:items-end">
                   <input type="hidden" name="key" value={s.key} />
                   <div className="flex-1">
-                    <label className={labelCls}>{s.key}</label>
-                    <input name="value" defaultValue={JSON.stringify(s.value)} className={inputCls} />
+                    <label className={labelCls} htmlFor={`extra-${s.key}`}>
+                      {s.key}
+                    </label>
+                    <input
+                      id={`extra-${s.key}`}
+                      name="value"
+                      defaultValue={JSON.stringify(s.value)}
+                      className={inputCls}
+                    />
                   </div>
                   <PendingButton tone="dark">Salva</PendingButton>
                 </ActionForm>

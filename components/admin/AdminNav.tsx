@@ -160,7 +160,7 @@ export default function AdminNav({
   }
 
   const nav = (
-    <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
+    <nav className="scroll-y flex flex-1 flex-col gap-4 p-3">
       {groups.map((group, gi) => (
         <div key={group.title ?? `g${gi}`}>
           {group.title && (

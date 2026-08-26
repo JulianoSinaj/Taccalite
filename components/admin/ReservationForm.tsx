@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useFieldIds } from "@/components/admin/forms";
 import { inputCls, labelCls, RESERVATION_TYPES } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
 import { createAdminReservation, updateReservationDetails } from "@/lib/admin/reservation-actions";
@@ -40,6 +41,7 @@ export function ReservationForm({
    *  list, and navigating would collapse the row the operator is working in. */
   redirectTo?: string;
 }) {
+  const fid = useFieldIds();
   const editing = !!reservation;
   const [type, setType] = useState<string>(reservation?.type ?? "table");
 
@@ -52,8 +54,9 @@ export function ReservationForm({
       {editing && <input type="hidden" name="id" value={reservation.id} />}
 
       <div>
-        <label className={labelCls}>Tipo</label>
+        <label className={labelCls} htmlFor={fid("type")}>Tipo</label>
         <select
+          id={fid("type")}
           name="type"
           value={type}
           onChange={(e) => setType(e.target.value)}
@@ -68,8 +71,8 @@ export function ReservationForm({
       </div>
 
       <div>
-        <label className={labelCls}>Negozio</label>
-        <select name="shopSlug" defaultValue={reservation?.shopSlug ?? shops[0]?.slug} className={inputCls}>
+        <label className={labelCls} htmlFor={fid("shopSlug")}>Negozio</label>
+        <select id={fid("shopSlug")} name="shopSlug" defaultValue={reservation?.shopSlug ?? shops[0]?.slug} className={inputCls}>
           {shops.map((s) => (
             <option key={s.slug} value={s.slug}>
               {s.name}
@@ -79,18 +82,19 @@ export function ReservationForm({
       </div>
 
       <div>
-        <label className={labelCls}>Nome cliente</label>
-        <input name="name" required maxLength={120} defaultValue={reservation?.name} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("name")}>Nome cliente</label>
+        <input id={fid("name")} name="name" required maxLength={120} defaultValue={reservation?.name} className={inputCls} />
       </div>
 
       <div>
-        <label className={labelCls}>Telefono</label>
-        <input name="phone" required maxLength={40} defaultValue={reservation?.phone} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("phone")}>Telefono</label>
+        <input id={fid("phone")} name="phone" required maxLength={40} defaultValue={reservation?.phone} className={inputCls} />
       </div>
 
       <div className="sm:col-span-2">
-        <label className={labelCls}>Email (facoltativa)</label>
+        <label className={labelCls} htmlFor={fid("email")}>Email (facoltativa)</label>
         <input
+          id={fid("email")}
           name="email"
           type="email"
           maxLength={200}
@@ -101,8 +105,9 @@ export function ReservationForm({
       </div>
 
       <div>
-        <label className={labelCls}>Data</label>
+        <label className={labelCls} htmlFor={fid("date")}>Data</label>
         <input
+          id={fid("date")}
           name="date"
           type="date"
           required
@@ -112,14 +117,15 @@ export function ReservationForm({
       </div>
 
       <div>
-        <label className={labelCls}>Ora {type === "porchetta" ? "(ritiro, facoltativa)" : ""}</label>
-        <input name="time" type="time" defaultValue={reservation?.time ?? ""} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("time")}>Ora {type === "porchetta" ? "(ritiro, facoltativa)" : ""}</label>
+        <input id={fid("time")} name="time" type="time" defaultValue={reservation?.time ?? ""} className={inputCls} />
       </div>
 
       {type === "table" && (
         <div>
-          <label className={labelCls}>Ospiti</label>
+          <label className={labelCls} htmlFor={fid("guests")}>Ospiti</label>
           <input
+            id={fid("guests")}
             name="guests"
             type="number"
             min={1}
@@ -132,8 +138,9 @@ export function ReservationForm({
 
       {type === "porchetta" && (
         <div>
-          <label className={labelCls}>Quantità (kg)</label>
+          <label className={labelCls} htmlFor={fid("quantityKg")}>Quantità (kg)</label>
           <input
+            id={fid("quantityKg")}
             name="quantityKg"
             type="number"
             step="0.5"
@@ -147,22 +154,22 @@ export function ReservationForm({
       )}
 
       <div className="sm:col-span-2">
-        <label className={labelCls}>Note del cliente</label>
-        <textarea name="notes" rows={2} defaultValue={reservation?.notes ?? ""} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("notes")}>Note del cliente</label>
+        <textarea id={fid("notes")} name="notes" rows={2} defaultValue={reservation?.notes ?? ""} className={inputCls} />
       </div>
 
       {!editing && (
         <>
           <div>
-            <label className={labelCls}>Stato iniziale</label>
-            <select name="status" defaultValue="confirmed" className={inputCls}>
+            <label className={labelCls} htmlFor={fid("status")}>Stato iniziale</label>
+            <select id={fid("status")} name="status" defaultValue="confirmed" className={inputCls}>
               <option value="confirmed">Confermata</option>
               <option value="pending">In attesa</option>
             </select>
           </div>
           <div className="sm:col-span-2">
-            <label className={labelCls}>Note interne</label>
-            <input name="adminNotes" maxLength={2000} className={inputCls} />
+            <label className={labelCls} htmlFor={fid("adminNotes")}>Note interne</label>
+            <input id={fid("adminNotes")} name="adminNotes" maxLength={2000} className={inputCls} />
           </div>
         </>
       )}

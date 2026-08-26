@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useFieldIds } from "@/components/admin/forms";
 import { euro, inputCls, labelCls } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
 import {
@@ -27,6 +28,7 @@ export function OrderDetailsForm({
   /** Bookable windows, already filtered by cut-off and remaining capacity. */
   slotOptions?: { value: string; shopSlug: string; label: string }[];
 }) {
+  const fid = useFieldIds();
   const [fulfilment, setFulfilment] = useState(order.fulfilment);
   const [shopSlug, setShopSlug] = useState(order.shopSlug ?? shops[0]?.slug ?? "");
   const addr = order.shippingAddress ?? {};
@@ -37,21 +39,22 @@ export function OrderDetailsForm({
       <input type="hidden" name="id" value={order.id} />
 
       <div>
-        <label className={labelCls}>Nome</label>
-        <input name="name" required maxLength={200} defaultValue={order.name} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("name")}>Nome</label>
+        <input id={fid("name")} name="name" required maxLength={200} defaultValue={order.name} className={inputCls} />
       </div>
       <div>
-        <label className={labelCls}>Telefono</label>
-        <input name="phone" maxLength={40} defaultValue={order.phone ?? ""} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("phone")}>Telefono</label>
+        <input id={fid("phone")} name="phone" maxLength={40} defaultValue={order.phone ?? ""} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
-        <label className={labelCls}>Email</label>
-        <input name="email" type="email" maxLength={200} defaultValue={order.email} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("email")}>Email</label>
+        <input id={fid("email")} name="email" type="email" maxLength={200} defaultValue={order.email} className={inputCls} />
       </div>
 
       <div>
-        <label className={labelCls}>Evasione</label>
+        <label className={labelCls} htmlFor={fid("fulfilment")}>Evasione</label>
         <select
+          id={fid("fulfilment")}
           name="fulfilment"
           value={fulfilment}
           onChange={(e) => setFulfilment(e.target.value as typeof fulfilment)}
@@ -68,8 +71,9 @@ export function OrderDetailsForm({
       {fulfilment === "pickup" ? (
         <>
           <div>
-            <label className={labelCls}>Negozio di ritiro</label>
+            <label className={labelCls} htmlFor={fid("shopSlug")}>Negozio di ritiro</label>
             <select
+              id={fid("shopSlug")}
               name="shopSlug"
               value={shopSlug}
               onChange={(e) => setShopSlug(e.target.value)}
@@ -84,10 +88,10 @@ export function OrderDetailsForm({
           </div>
           {slotsForShop.length > 0 && (
             <div>
-              <label className={labelCls}>Fascia di ritiro</label>
+              <label className={labelCls} htmlFor={fid("pickupSlot")}>Fascia di ritiro</label>
               {/* Blank keeps whatever window the customer already booked — an
                   edit to the phone number must not silently move their slot. */}
-              <select name="pickupSlot" defaultValue="" className={inputCls}>
+              <select id={fid("pickupSlot")} name="pickupSlot" defaultValue="" className={inputCls}>
                 <option value="">Lascia invariata</option>
                 {slotsForShop.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -101,23 +105,23 @@ export function OrderDetailsForm({
       ) : (
         <>
           <div>
-            <label className={labelCls}>CAP</label>
-            <input name="zip" maxLength={20} defaultValue={addr.zip ?? ""} className={inputCls} />
+            <label className={labelCls} htmlFor={fid("zip")}>CAP</label>
+            <input id={fid("zip")} name="zip" maxLength={20} defaultValue={addr.zip ?? ""} className={inputCls} />
           </div>
           <div>
-            <label className={labelCls}>Indirizzo</label>
-            <input name="address" maxLength={200} defaultValue={addr.address ?? ""} className={inputCls} />
+            <label className={labelCls} htmlFor={fid("address")}>Indirizzo</label>
+            <input id={fid("address")} name="address" maxLength={200} defaultValue={addr.address ?? ""} className={inputCls} />
           </div>
           <div>
-            <label className={labelCls}>Città</label>
-            <input name="city" maxLength={120} defaultValue={addr.city ?? ""} className={inputCls} />
+            <label className={labelCls} htmlFor={fid("city")}>Città</label>
+            <input id={fid("city")} name="city" maxLength={120} defaultValue={addr.city ?? ""} className={inputCls} />
           </div>
         </>
       )}
 
       <div className="sm:col-span-2">
-        <label className={labelCls}>Note del cliente</label>
-        <textarea name="notes" rows={2} defaultValue={order.notes ?? ""} className={inputCls} />
+        <label className={labelCls} htmlFor={fid("notes")}>Note del cliente</label>
+        <textarea id={fid("notes")} name="notes" rows={2} defaultValue={order.notes ?? ""} className={inputCls} />
       </div>
       {/* Internal notes moved out of this form: they are the one field that
           stays editable after the money settles (see `setOrderInternalNotes`),
@@ -138,13 +142,15 @@ export function OrderDetailsForm({
  * they've already paid, and this changes no amounts.
  */
 export function OrderFiscalForm({ order }: { order: OrderRow }) {
+  const fid = useFieldIds();
   return (
     <ActionForm action={setOrderFiscalIdentity} className="space-y-3">
       <input type="hidden" name="id" value={order.id} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <label className={labelCls}>Codice fiscale</label>
+          <label className={labelCls} htmlFor={fid("customerTaxCode")}>Codice fiscale</label>
           <input
+            id={fid("customerTaxCode")}
             name="customerTaxCode"
             maxLength={20}
             defaultValue={order.customerTaxCode ?? ""}
@@ -153,8 +159,9 @@ export function OrderFiscalForm({ order }: { order: OrderRow }) {
           />
         </div>
         <div>
-          <label className={labelCls}>Partita IVA</label>
+          <label className={labelCls} htmlFor={fid("customerVatNumber")}>Partita IVA</label>
           <input
+            id={fid("customerVatNumber")}
             name="customerVatNumber"
             maxLength={20}
             defaultValue={order.customerVatNumber ?? ""}
@@ -163,8 +170,9 @@ export function OrderFiscalForm({ order }: { order: OrderRow }) {
           />
         </div>
         <div>
-          <label className={labelCls}>Codice destinatario SdI</label>
+          <label className={labelCls} htmlFor={fid("customerSdiCode")}>Codice destinatario SdI</label>
           <input
+            id={fid("customerSdiCode")}
             name="customerSdiCode"
             maxLength={10}
             defaultValue={order.customerSdiCode ?? ""}
@@ -173,8 +181,9 @@ export function OrderFiscalForm({ order }: { order: OrderRow }) {
           />
         </div>
         <div>
-          <label className={labelCls}>PEC</label>
+          <label className={labelCls} htmlFor={fid("customerPec")}>PEC</label>
           <input
+            id={fid("customerPec")}
             name="customerPec"
             type="email"
             maxLength={200}
