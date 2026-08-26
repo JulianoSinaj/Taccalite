@@ -64,6 +64,9 @@ export default function AuthForms() {
         }
         throw new Error(json.error ?? "Errore imprevisto");
       }
+      // Tells the header's account badge — mounted once in the layout, not
+      // reached by this page's `router.refresh()` — to re-check who's signed in.
+      window.dispatchEvent(new Event("taccalite:auth-changed"));
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Errore imprevisto");
@@ -124,7 +127,7 @@ export default function AuthForms() {
             )}
 
             {mode === "login" ? (
-              <div className="space-y-2">
+              <div key="login" className="space-y-2">
                 <label className="eyebrow eyebrow-dark block" htmlFor="identifier">
                   Email
                 </label>
@@ -147,7 +150,7 @@ export default function AuthForms() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div key="register" className="space-y-2">
                 <label className="eyebrow eyebrow-dark block" htmlFor="email">
                   Email
                 </label>
