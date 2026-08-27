@@ -177,8 +177,7 @@ export async function seedBaseData(db: Db, log: (msg: string) => void = console.
       name: "Tagliere della casa",
       points: 500,
       description: "Una selezione dei nostri migliori salumi e formaggi per 2 persone.",
-      image:
-        "https://images.unsplash.com/photo-1541529086526-db283c563270?auto=format&fit=crop&q=80&w=800",
+      image: "/images/salumi-appesi-stagionatura.jpg",
     },
     {
       slug: "verdicchio-abbinamento",
@@ -193,8 +192,7 @@ export async function seedBaseData(db: Db, log: (msg: string) => void = console.
       name: "Porchetta per la famiglia",
       points: 1200,
       description: "1kg della nostra porchetta calda artigianale, pronta per te il sabato mattina.",
-      image:
-        "https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&q=80&w=800",
+      image: "/images/gastronomia-teglie-forno.jpg",
     },
   ];
   for (const [i, r] of rewards.entries()) {

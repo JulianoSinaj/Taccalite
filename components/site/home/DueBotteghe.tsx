@@ -48,7 +48,7 @@ export default function DueBotteghe({ shops }: { shops: Shop[] }) {
               className="group relative flex min-h-[26rem] flex-1 items-end overflow-hidden transition-[flex-grow] duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)] focus-visible:outline-none lg:hover:grow-[1.35] lg:focus-visible:grow-[1.35]"
             >
               <Image
-                src={shop.image || "/images/home-hero-gastronomia.jpg"}
+                src={shop.image || "/images/salumi-appesi-stagionatura.jpg"}
                 alt={shop.imageLabel || shop.name}
                 fill
                 sizes="(max-width: 1024px) 100vw, 55vw"

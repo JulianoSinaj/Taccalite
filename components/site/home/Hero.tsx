@@ -115,8 +115,8 @@ export default function Hero({ openNow, facts }: HeroProps) {
               distance={56}
             >
               <Image
-                src="/images/coppa-finocchio-bottega.jpg"
-                alt="Coppa al finocchietto affettata sul tagliere, in bottega"
+                src="/images/banco-carni-macinati.jpg"
+                alt="Il banco delle carni: macinati, braciole e coppa di maiale al taglio"
                 fill
                 preload
                 sizes="(max-width: 1024px) 90vw, 40vw"
@@ -153,7 +153,7 @@ export default function Hero({ openNow, facts }: HeroProps) {
                 Al banco oggi
               </span>
               <span className="mt-1 block text-[0.8125rem] leading-snug text-brown-700">
-                Coppa al finocchietto, tagliata al momento
+                Macinati del giorno e braciole, tagliate al momento
               </span>
             </div>
           </div>

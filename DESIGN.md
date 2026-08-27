@@ -189,7 +189,7 @@ reason.
 
 ## Brand & content rules
 - Wordmark is text: "Taccalite" in Playfair Display (no logo file); pair with "NORCINERIA DAL 1946" tagline
-- Real photos limited to: home-hero-gastronomia.jpg, negozio-centro-formaggi.jpg, negozio-carni-prosciutto.jpg, shop-shelves-prodotti.jpg — everything else uses labelled placeholders
+- Every photograph in `public/images/` is a real shot of the bottega, carried over from the shop's previous site: banco-carni-macinati, banco-carni-bovino, banco-carni-vetrina, salumi-appesi-stagionatura, gastronomia-teglie-forno, spiedini-verdure-banco, lonza-suino-brado, pasta-artigianale-bottega. Anything without one uses a labelled placeholder — never stock photography
 - E-commerce not live: products show "Disponibile in negozio · online a breve"
 - Reservation = request, not confirmation ("Ti ricontatteremo per confermare")
 - Loyalty area is a simulated preview (state the disclaimer)

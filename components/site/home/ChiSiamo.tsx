@@ -22,12 +22,12 @@ export default function ChiSiamo() {
             <ParallaxMedia className="aspect-[5/6] bg-paper" distance={64}>
               {/* The counter itself, not another studio still life. It is the
                   only photograph on file with the shop's real colour in it —
-                  the trays, the price cards, the crowd of things — and it was
-                  going unused while the same prosciutto-by-the-fire shot ran
-                  three times on this page. */}
+                  the trays, the herbs, the crowd of things — shot in the bottega
+                  rather than bought from a stock library like everything that
+                  used to run on this page. */}
               <Image
-                src="/images/home-hero-gastronomia.jpg"
-                alt="Il banco della gastronomia: teglie, olive all'ascolana e prosciutto al taglio"
+                src="/images/gastronomia-teglie-forno.jpg"
+                alt="Le teglie della gastronomia: pollo e coniglio conditi con olive, peperoni ed erbe, pronti per il forno"
                 fill
                 sizes="(max-width: 1024px) 90vw, 40vw"
                 className="object-cover"

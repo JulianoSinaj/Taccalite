@@ -242,8 +242,8 @@ export default async function PorchettaPage() {
                   ahead of DOMContentLoaded, where lazy had it at 722ms — and all
                   three of Next's warnings on this image are gone. */}
               <Image
-                src="/images/selezione-prosciutto-camino.jpg"
-                alt="Porchetta Taccalite dal 1946"
+                src="/images/lonza-suino-brado.jpg"
+                alt="Lonza di suino brado stagionata, in bottega da Taccalite"
                 fill
                 sizes="(min-width: 1024px) 24rem, 1px"
                 loading="eager"
@@ -535,8 +535,8 @@ export default async function PorchettaPage() {
           <Reveal delay={0.15} className="relative flex justify-center">
             <div className="cinematic-shadow relative z-10 h-[480px] w-full overflow-hidden sm:h-[600px] lg:w-[480px]">
               <Image
-                src="https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?auto=format&fit=crop&q=80&w=800"
-                alt="Gli ingredienti della ricetta"
+                src="/images/spiedini-verdure-banco.jpg"
+                alt="Spiedini di carne, zucchine e peperoni preparati a mano al banco"
                 fill
                 className="object-cover"
                 sizes="(max-width: 1024px) 100vw, 480px"
@@ -586,8 +586,8 @@ export default async function PorchettaPage() {
           <Reveal>
             <div className="cinematic-shadow group relative h-[480px] overflow-hidden sm:h-[600px]">
               <Image
-                src="https://images.unsplash.com/photo-1541529086526-db283c563270?auto=format&fit=crop&q=90&w=2000"
-                alt="Il tagliere di specialità Taccalite"
+                src="/images/salumi-appesi-stagionatura.jpg"
+                alt="Culatte, capocolli e pancette appesi in stagionatura in bottega"
                 fill
                 className="object-cover opacity-80 transition-transform duration-[3s] group-hover:scale-105"
                 sizes="100vw"

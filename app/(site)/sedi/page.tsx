@@ -234,8 +234,8 @@ export default async function NegoziPage() {
               <div className="relative m-1.5 border border-rule">
                 <div className="relative aspect-[16/10]">
                   <Image
-                    src="/images/coppa-finocchio-bottega.jpg"
-                    alt="Coppa artigianale con finocchio, aglio e semi di finocchio sul banco della bottega"
+                    src="/images/salumi-appesi-stagionatura.jpg"
+                    alt="Culatte, capocolli e pancette appesi in stagionatura nella bottega"
                     fill
                     preload
                     className="object-cover"

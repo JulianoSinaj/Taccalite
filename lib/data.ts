@@ -37,8 +37,8 @@ export const shops: Shop[] = [
       "Formaggio di fossa e stagionature lunghe",
       "Gastronomia pronta e degustazioni in negozio",
     ],
-    imageLabel: "Gli scaffali della bottega di Piazza Kennedy",
-    image: "/images/shop-shelves-prodotti.jpg",
+    imageLabel: "Pasta artigianale e specialità sugli scaffali della bottega",
+    image: "/images/pasta-artigianale-bottega.jpg",
   },
   {
     slug: "carni",
@@ -61,8 +61,8 @@ export const shops: Shop[] = [
       "Salumi artigianali di produzione propria",
       "Preparazioni pronte per grigliata e brace",
     ],
-    imageLabel: "Prosciutto stagionato accanto al camino",
-    image: "/images/selezione-prosciutto-camino.jpg",
+    imageLabel: "Salumi appesi in stagionatura al Mercato del Piano",
+    image: "/images/salumi-appesi-stagionatura.jpg",
   },
 ];
 
@@ -84,9 +84,8 @@ export const featuredProducts: Product[] = [
     category: "Specialità della casa",
     description:
       "La nostra porchetta, cotta lentamente secondo la ricetta di famiglia: pelle croccante e carne morbida, aromatizzata con le erbe delle Marche.",
-    imageLabel: "Foto porchetta intera sul banco",
-    image:
-      "https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&q=80&w=800",
+    imageLabel: "Le teglie pronte per il forno, condite con le erbe di casa",
+    image: "/images/gastronomia-teglie-forno.jpg",
   },
   {
     slug: "ciauscolo-igp",
@@ -95,8 +94,8 @@ export const featuredProducts: Product[] = [
     category: "Salumi",
     description:
       "Il salame morbido e spalmabile tipico marchigiano, prodotto secondo la tradizione norcina di famiglia.",
-    imageLabel: "Foto ciauscolo affettato",
-    image: "/images/negozio-carni-prosciutto.jpg",
+    imageLabel: "Salumi di produzione propria appesi in bottega",
+    image: "/images/salumi-appesi-stagionatura.jpg",
   },
   {
     slug: "pecorino-di-fossa",
@@ -116,9 +115,8 @@ export const featuredProducts: Product[] = [
     category: "Carni",
     description:
       "Carne di razza marchigiana, frollata e tagliata al momento su richiesta dal nostro banco carni.",
-    imageLabel: "Foto bistecca sul tagliere",
-    image:
-      "https://images.unsplash.com/photo-1615937657715-bc7b4b7962c1?auto=format&fit=crop&q=80&w=800",
+    imageLabel: "Il banco carni: filetto, roastbeef e fettine di scottona",
+    image: "/images/banco-carni-bovino.jpg",
   },
 ];
 
@@ -145,8 +143,8 @@ export const blogPosts: BlogPost[] = [
       "Ogni sabato mattina, il profumo della porchetta appena cotta invade il negozio di Piazza Kennedy. È un appuntamento che si tramanda in famiglia da generazioni, e che continua a richiamare habitué e curiosi.",
       "Per evitare la fila, è possibile prenotare la propria porchetta direttamente al negozio o telefonicamente entro il venerdì.",
     ],
-    imageLabel: "Foto porchetta calda appena sfornata",
-    image: "https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&q=80&w=800",
+    imageLabel: "Le preparazioni pronte per il forno del sabato",
+    image: "/images/gastronomia-teglie-forno.jpg",
   },
   {
     slug: "nuovi-formaggi-stagionati",
@@ -159,8 +157,8 @@ export const blogPosts: BlogPost[] = [
       "Il nostro banco formaggi si arricchisce di nuove selezioni: taleggio, gorgonzola, roquefort e la delicata nuvola di capra, da abbinare alle nostre confetture e ai mieli in bottega.",
       "Passate a trovarci in Piazza Kennedy per una degustazione guidata dal nostro staff.",
     ],
-    imageLabel: "Foto nuovo banco formaggi",
-    image: "/images/negozio-centro-formaggi.jpg",
+    imageLabel: "Le specialità in bottega al negozio Centro",
+    image: "/images/pasta-artigianale-bottega.jpg",
   },
   {
     slug: "orari-festivi",
@@ -173,7 +171,7 @@ export const blogPosts: BlogPost[] = [
       "In occasione delle prossime festività, i nostri negozi osserveranno orari straordinari.",
       "Vi invitiamo a consultare questa pagina per gli aggiornamenti, o a contattarci direttamente.",
     ],
-    imageLabel: "Foto vetrina negozio decorata",
-    image: "/images/shop-shelves-prodotti.jpg",
+    imageLabel: "La vetrina del banco carni",
+    image: "/images/banco-carni-vetrina.jpg",
   },
 ];

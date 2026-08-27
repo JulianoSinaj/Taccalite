@@ -103,9 +103,8 @@ const shopContent: Record<
   centro: {
     heroLead: "Il paradiso",
     heroItalic: "dei formaggi",
-    storyImage:
-      "https://images.unsplash.com/photo-1624806992066-5ffcf7ca186b?auto=format&fit=crop&q=80&w=1200",
-    storyImageAlt: "Il banco dei formaggi",
+    storyImage: "/images/pasta-artigianale-bottega.jpg",
+    storyImageAlt: "Pasta artigianale e specialità sul banco del negozio Centro",
     pullQuote:
       "Una forma si sceglie con le mani e con il naso: qui le assaggiamo prima noi, una a una.",
     features: [
@@ -118,9 +117,8 @@ const shopContent: Record<
   carni: {
     heroLead: "Il cuore della",
     heroItalic: "tradizione norcina",
-    storyImage:
-      "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?auto=format&fit=crop&q=80&w=1200",
-    storyImageAlt: "La lavorazione artigianale delle carni",
+    storyImage: "/images/banco-carni-bovino.jpg",
+    storyImageAlt: "Il banco delle carni al Mercato del Piano, con i cartellini scritti a mano",
     pullQuote:
       "Il mercato apre presto: alle sette il banco è già pronto, e la porchetta esce dal forno il sabato.",
     features: [

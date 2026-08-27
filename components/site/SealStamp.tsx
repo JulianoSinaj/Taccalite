@@ -68,10 +68,10 @@ export default function SealStamp({ className, uid = "stamp" }: SealStampProps) 
             upside down under it.
 
             The radii are set by what the type does either side of the baseline,
-            not by eye. On the top arc the caps grow *outward*: at 11.5 that is
-            r=69 + ~8.3, so 77.3 — which has to clear the thin ring at r=79.5.
+            not by eye. On the top arc the caps grow *outward*: at 12 that is
+            r=69 + ~8.6, so 77.6 — which has to clear the thin ring at r=79.5.
             On the bottom arc "up" is toward the middle, so its caps grow
-            *inward*: r=58 − ~7.2 = 50.8, which has to clear the inner ring at
+            *inward*: r=58 − ~8.2 = 49.8, which has to clear the inner ring at
             r=47. First pass had the top arc at r=72 against a ring at r=80 and
             the two collided; the ring text came out sliced. */}
         <path
@@ -82,6 +82,16 @@ export default function SealStamp({ className, uid = "stamp" }: SealStampProps) 
         <path
           id={`${uid}-arc-bottom`}
           d="M100,100 m-58,0 a58,58 0 1,0 116,0"
+          fill="none"
+        />
+        {/* `DAL 1946` sits *below* `ANCONA` on the shop's own mark, which on a
+            `1,0` sweep means a *larger* radius, not a smaller one. At r=74 the
+            caps grow inward to ~67.8, so there is a clear band of 10 between
+            this line and the one above it, and the baseline still sits inside
+            the thin ring at 79.5. */}
+        <path
+          id={`${uid}-arc-bottom-outer`}
+          d="M100,100 m-74,0 a74,74 0 1,0 148,0"
           fill="none"
         />
 
@@ -154,73 +164,65 @@ export default function SealStamp({ className, uid = "stamp" }: SealStampProps) 
             proportionally more of themselves and 10px type turns to lace. */}
         <text
           fontFamily="var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif"
-          fontSize="11.5"
+          fontSize="12"
           fontWeight="600"
-          letterSpacing="2.6"
+          letterSpacing="7"
           strokeWidth="0.5"
         >
           <textPath href={`#${uid}-arc-top`} startOffset="50%" textAnchor="middle">
-            NORCINERIA TACCALITE
+            NORCINERIA
           </textPath>
         </text>
         <text
           fontFamily="var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif"
-          fontSize="9.5"
+          fontSize="11.5"
           fontWeight="600"
-          letterSpacing="3.4"
-          strokeWidth="0.4"
+          letterSpacing="7"
+          strokeWidth="0.5"
         >
           <textPath href={`#${uid}-arc-bottom`} startOffset="50%" textAnchor="middle">
-            ANCONA · MARCHE
+            ANCONA
+          </textPath>
+        </text>
+        <text
+          fontFamily="var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif"
+          fontSize="8.5"
+          fontWeight="600"
+          letterSpacing="3"
+          strokeWidth="0.35"
+        >
+          <textPath href={`#${uid}-arc-bottom-outer`} startOffset="50%" textAnchor="middle">
+            DAL 1946
           </textPath>
         </text>
 
-        {/* `DAL` is the label and `1946` is the fact, so they are not the same
-            size. Set as two lines with no rule between them: a hairline at the
-            optical centre lands exactly on the cap line of `1946` and reads as
-            a strikethrough. The centre band is carried by the pair of lozenges
-            below instead, which sit out in the annulus where there is room. */}
-        {/* `DAL` is the label and `1946` is the fact, so they are not the same
-            size. No rule between them: a hairline at the optical centre lands
-            exactly on the cap line of `1946` and reads as a strikethrough.
+        {/* The name is the centrepiece — that is the whole shape of the shop's
+            own mark (`public/logo-taccalite.png`), where `DAL 1946` is a footnote
+            on the bottom rim rather than the thing in the middle. It runs wide
+            enough to cross the inner ring, which is why that ring is drawn above
+            this and not below it: same ink, and group opacity composites the
+            layer once, so the overlap merges instead of double-printing.
 
-            `1946` at 31 is about 72 wide, and the inner ring is 82 across at that
-            height — the widest the date can be set and still keep air either side
-            of it. The two baselines put the block's centre on 100. */}
+            `textLength` rather than a hoped-for font size. `--font-fraunces` is a
+            variable face and its fallback is Georgia; nine capitals differ by
+            more than a dozen units between the two, which is the difference
+            between clearing the thin ring and printing through it. 148 puts the
+            ends at r=74 — inside 79.5 with air to spare — in either face. */}
         <text
           x="100"
-          y="89"
+          y="100"
           textAnchor="middle"
+          dominantBaseline="central"
           stroke="none"
           fontFamily="var(--font-fraunces), Georgia, serif"
-          fontSize="15"
-          fontWeight="600"
-          letterSpacing="3.2"
-          style={{ fontVariationSettings: '"SOFT" 20, "WONK" 1' }}
-        >
-          DAL
-        </text>
-        <text
-          x="100"
-          y="123"
-          textAnchor="middle"
-          stroke="none"
-          fontFamily="var(--font-fraunces), Georgia, serif"
-          fontSize="31"
+          fontSize="30"
           fontWeight="700"
+          textLength="148"
+          lengthAdjust="spacingAndGlyphs"
           style={{ fontVariationSettings: '"SOFT" 20, "WONK" 1' }}
         >
-          1946
+          TACCALITE
         </text>
-
-        {/* Three and nine o'clock, on the same radius as the upper ring text.
-            Measured rather than eyeballed: "NORCINERIA TACCALITE" occupies 173
-            of the 217 units of its semicircle, so each end of that arc stops
-            about 18° short of the horizontal and this band is empty there.
-            Setting them as ◆ characters inside the text instead filled the arc
-            to 0.1° of clear — the two ends met at the horizontal. */}
-        <path d="M27 100 l4 -4 4 4 -4 4 z" stroke="none" />
-        <path d="M165 100 l4 -4 4 4 -4 4 z" stroke="none" />
       </g>
     </svg>
   );

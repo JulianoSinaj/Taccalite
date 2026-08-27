@@ -65,8 +65,8 @@ export default async function StoriaPage() {
         <div className="relative mx-auto max-w-[88rem]">
           <div className="relative aspect-[16/9] overflow-hidden bg-paper-warm">
             <Image
-              src="/images/home-hero-gastronomia.jpg"
-              alt="Il banco della gastronomia Taccalite, pieno di preparazioni pronte"
+              src="/images/banco-carni-vetrina.jpg"
+              alt="Il banco delle carni della norcineria Taccalite, con i cartellini scritti a mano"
               fill
               preload
               sizes="100vw"

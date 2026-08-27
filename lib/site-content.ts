@@ -147,9 +147,9 @@ export const SITE_CONTENT: ContentDef[] = [
     type: "records",
     fields: ["title", "text", "image", "alt"],
     default: [
-      "La selezione | Scegliamo solo carne di suino di alta qualità, lavorata a mano dai nostri norcini. | /images/negozio-carni-prosciutto.jpg | La selezione della carne",
-      "L'aromatizzazione | Rosmarino, aglio, finocchietto selvatico e le spezie della ricetta di famiglia, custodita da tre generazioni. | https://images.unsplash.com/photo-1486887396153-fa416526c108?auto=format&fit=crop&q=80&w=800 | La lavorazione artigianale a mano",
-      "La cottura lenta | Cotta lentamente in forno, fino a raggiungere la pelle croccante e la carne morbidissima all'interno. | https://images.unsplash.com/photo-1615937657715-bc7b4b7962c1?auto=format&fit=crop&q=80&w=800 | La cottura lenta in forno",
+      "La selezione | Scegliamo solo carne di suino di alta qualità, lavorata a mano dai nostri norcini. | /images/banco-carni-bovino.jpg | La selezione della carne al banco",
+      "L'aromatizzazione | Rosmarino, aglio, finocchietto selvatico e le spezie della ricetta di famiglia, custodita da tre generazioni. | /images/spiedini-verdure-banco.jpg | La lavorazione artigianale a mano",
+      "La cottura lenta | Cotta lentamente in forno, fino a raggiungere la pelle croccante e la carne morbidissima all'interno. | /images/gastronomia-teglie-forno.jpg | Le teglie pronte per il forno",
     ].join("\n"),
   },
   {
@@ -161,10 +161,10 @@ export const SITE_CONTENT: ContentDef[] = [
     type: "records",
     fields: ["src", "alt"],
     default: [
-      "/images/home-hero-gastronomia.jpg | Il banco gastronomia",
-      "/images/negozio-carni-prosciutto.jpg | Il banco carni e salumi",
-      "/images/negozio-centro-formaggi.jpg | Il banco formaggi",
-      "/images/shop-shelves-prodotti.jpg | Gli scaffali della bottega",
+      "/images/gastronomia-teglie-forno.jpg | Il banco gastronomia",
+      "/images/salumi-appesi-stagionatura.jpg | I salumi in stagionatura",
+      "/images/banco-carni-bovino.jpg | Il banco carni",
+      "/images/pasta-artigianale-bottega.jpg | Le specialità in bottega",
     ].join("\n"),
   },
   {

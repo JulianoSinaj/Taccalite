@@ -44,20 +44,25 @@ export default function SealSvg({ className, uid = "seal" }: SealSvgProps) {
         fontFamily="Georgia, 'Times New Roman', serif"
       >
         <textPath href={`#${uid}-ring`} startOffset="50%" textAnchor="middle">
-          NORCINERIA TACCALITE · ANCONA · DAL 1946
+          NORCINERIA · ANCONA · DAL 1946
         </textPath>
       </text>
+      {/* The name across the middle, crossing the inner ring, rather than a
+          monogram: the shop's mark has never been a `T`. `textLength` because
+          the ends have to land inside the r=82 ring whichever serif resolves. */}
       <text
         x="100"
         y="100"
         textAnchor="middle"
         dominantBaseline="central"
         fill="#2a1a10"
-        fontSize="62"
-        fontWeight="600"
+        fontSize="28"
+        fontWeight="700"
+        textLength="140"
+        lengthAdjust="spacingAndGlyphs"
         fontFamily="Georgia, 'Times New Roman', serif"
       >
-        T
+        TACCALITE
       </text>
     </svg>
   );
