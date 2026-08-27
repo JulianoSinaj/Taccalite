@@ -1164,7 +1164,7 @@ export async function removeSubscriber(_prev: ActionState, fd: FormData): Promis
     const id = (fd.get("id") ?? "").toString();
     const [row] = await db
       .update(newsletterSubscribers)
-      .set({ status: "unsubscribed" })
+      .set({ status: "unsubscribed", unsubscribedAt: new Date() })
       .where(eq(newsletterSubscribers.id, id))
       .returning({ email: newsletterSubscribers.email });
     // Removing someone from a marketing list on their behalf is a consent

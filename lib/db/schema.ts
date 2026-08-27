@@ -655,6 +655,9 @@ export const newsletterSubscribers = sqliteTable(
     token: text("token").notNull(),
     source: text("source").default("footer"),
     confirmedAt: integer("confirmed_at", { mode: "timestamp_ms" }),
+    // When the address left the list — by its own link, from the back office,
+    // from the account page or through a GDPR erasure. Null while subscribed.
+    unsubscribedAt: integer("unsubscribed_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
   },
   (t) => [

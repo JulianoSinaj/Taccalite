@@ -72,7 +72,7 @@ export async function anonymizeUser(userId: string): Promise<boolean> {
   if (user.email) {
     await db
       .update(newsletterSubscribers)
-      .set({ status: "unsubscribed" })
+      .set({ status: "unsubscribed", unsubscribedAt: new Date() })
       .where(eq(newsletterSubscribers.email, user.email));
   }
 

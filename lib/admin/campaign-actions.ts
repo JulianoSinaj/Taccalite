@@ -14,6 +14,7 @@ import { logAudit } from "@/lib/audit";
 import { campaignBodyHtml, deliverCampaign, getCampaign } from "@/lib/newsletter-campaigns";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import { parseForm } from "@/lib/validation/admin";
+import { instantInRome } from "@/lib/time";
 
 /**
  * Newsletter campaigns and audiences — full admins only.
@@ -51,6 +52,30 @@ const campaignInput = z.object({
     .transform((v) => (v ? v : undefined)),
 });
 
+/** `yyyy-mm-ddThh:mm` (from `datetime-local`) as the instant it names in Europe/Rome. */
+function parseRomeDateTime(v: string): Date {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(v);
+  if (!m) return new Date(NaN);
+  return instantInRome(m[1], m[2]);
+}
+
+const fmtRome = (d: Date) =>
+  d.toLocaleString("it-IT", { timeZone: "Europe/Rome", dateStyle: "short", timeStyle: "short" });
+
+/** "al segmento «X»" / "all'origine Y" / "a tutti gli iscritti confermati". */
+async function describeAudience(c: { segmentId: string | null; segment: string | null }): Promise<string> {
+  if (c.segmentId) {
+    const [seg] = await db
+      .select({ name: customerSegments.name })
+      .from(customerSegments)
+      .where(eq(customerSegments.id, c.segmentId))
+      .limit(1);
+    return `al segmento «${seg?.name ?? "eliminato"}»`;
+  }
+  if (c.segment) return `all'origine ${c.segment}`;
+  return "a tutti gli iscritti confermati";
+}
+
 /** Load a campaign that is still editable, or explain why it isn't. */
 async function mustBeEditable(id: string) {
   const campaign = await getCampaign(id);
@@ -68,9 +93,22 @@ export async function saveCampaign(_prev: ActionState, fd: FormData): Promise<Ac
     const d = parseForm(campaignInput, fd);
     if (d.id) await mustBeEditable(d.id);
 
-    const scheduledFor = d.scheduledFor ? new Date(d.scheduledFor) : null;
+    // `datetime-local` carries no zone. Read it as the shop's wall clock: on the
+    // server (UTC) `new Date("…T09:00")` would have meant 11:00 in Ancona.
+    const scheduledFor = d.scheduledFor ? parseRomeDateTime(d.scheduledFor) : null;
     if (scheduledFor && Number.isNaN(scheduledFor.getTime())) {
       throw new ActionError("Data di programmazione non valida.");
+    }
+    if (scheduledFor && scheduledFor.getTime() < Date.now() - 60_000) {
+      throw new ActionError("La data di programmazione è già passata: scegli un momento futuro o lascia vuoto.");
+    }
+    if (d.segmentId) {
+      const [seg] = await db
+        .select({ id: customerSegments.id })
+        .from(customerSegments)
+        .where(eq(customerSegments.id, d.segmentId))
+        .limit(1);
+      if (!seg) throw new ActionError("Il segmento scelto non esiste più.");
     }
 
     const values = {
@@ -105,15 +143,19 @@ export async function saveCampaign(_prev: ActionState, fd: FormData): Promise<Ac
       entity: "campaign",
       entityId: campaignId,
       summary: scheduledFor
-        ? `Newsletter "${d.subject}" programmata per il ${scheduledFor.toLocaleString("it-IT")}`
+        ? `Newsletter "${d.subject}" programmata per il ${fmtRome(scheduledFor)}`
         : `Bozza newsletter "${d.subject}" salvata`,
-      meta: { segment: d.segment ?? null, scheduledFor: scheduledFor?.toISOString() ?? null },
+      meta: {
+        segment: d.segment ?? null,
+        segmentId: d.segmentId ?? null,
+        scheduledFor: scheduledFor?.toISOString() ?? null,
+      },
     });
 
     revalidatePath("/admin/newsletter");
     return ok(
       scheduledFor
-        ? `Campagna programmata per il ${scheduledFor.toLocaleString("it-IT")}.`
+        ? `Campagna programmata per il ${fmtRome(scheduledFor)}. Partirà al primo passaggio delle automazioni dopo quell'ora.`
         : "Bozza salvata.",
     );
   });
@@ -126,18 +168,17 @@ export async function sendCampaignNow(_prev: ActionState, fd: FormData): Promise
     const id = String(fd.get("id") ?? "").trim();
     const campaign = await mustBeEditable(id);
 
+    const audience = await describeAudience(campaign);
     const { sent, queued } = await deliverCampaign(id);
     if (!sent) return ok("Campagna già inviata.");
 
     await logAudit({
       actor,
-      action: "campaign.send",
+      action: campaign.status === "failed" ? "campaign.retry" : "campaign.send",
       entity: "campaign",
       entityId: id,
-      summary: `Newsletter "${campaign.subject}" inviata a ${queued} iscritti${
-        campaign.segment ? ` (segmento ${campaign.segment})` : ""
-      }`,
-      meta: { queued, segment: campaign.segment },
+      summary: `Newsletter "${campaign.subject}" inviata ${audience}: ${queued} iscritti`,
+      meta: { queued, segment: campaign.segment, segmentId: campaign.segmentId },
     });
 
     revalidatePath("/admin/newsletter");
@@ -149,18 +190,20 @@ export async function sendCampaignNow(_prev: ActionState, fd: FormData): Promise
 /** Email the composed campaign to the owner alone, before the real send. */
 export async function sendCampaignTest(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
-    await requireRole("admin");
+    const actor = await requireRole("admin");
     const id = String(fd.get("id") ?? "").trim();
     const campaign = await getCampaign(id);
     if (!campaign) throw new ActionError("Campagna non trovata.");
 
+    // "Invia prova a me" — to whoever is at the keyboard, not always the owner.
+    const to = actor.email || env.ownerEmail;
     await sendMail({
-      to: env.ownerEmail,
+      to,
       ...newsletterBroadcast(`[PROVA] ${campaign.subject}`, campaignBodyHtml(campaign.body), "#"),
     });
 
     revalidatePath("/admin/outbox");
-    return ok(`Email di prova inviata a ${env.ownerEmail}.`);
+    return ok(`Email di prova inviata a ${to}.`);
   });
 }
 
@@ -175,12 +218,22 @@ export async function duplicateCampaign(_prev: ActionState, fd: FormData): Promi
       subject: campaign.subject,
       body: campaign.body,
       segment: campaign.segment,
+      // Both targeting fields travel: dropping `segmentId` made a copied
+      // segment campaign silently address everyone.
+      segmentId: campaign.segmentId,
       status: "draft",
       createdByUserId: actor.id,
     });
 
+    await logAudit({
+      actor,
+      action: "campaign.duplicate",
+      entity: "campaign",
+      entityId: campaign.id,
+      summary: `Bozza creata dalla campagna "${campaign.subject}"`,
+    });
     revalidatePath("/admin/newsletter");
-    return ok("Bozza creata da questa campagna.");
+    return ok("Bozza creata da questa campagna: la trovi fra le comunicazioni.");
   });
 }
 

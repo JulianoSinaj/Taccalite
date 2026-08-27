@@ -1,9 +1,27 @@
 import "server-only";
 import { cache } from "react";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { siteContent } from "@/lib/db/schema";
+import { users } from "@/lib/db/schema";
 import { siteConfig } from "@/lib/site";
+import {
+  applyTokensWith,
+  parseLines,
+  parseRecords,
+  parseBlocks,
+  type ContentRecord,
+} from "@/lib/site-content-parse";
+
+export {
+  parseLines,
+  parseRecords,
+  parseBlocks,
+  incompleteRecordLines,
+  hasDraftMarkers,
+  type ContentRecord,
+  type ContentTokens,
+} from "@/lib/site-content-parse";
 
 /**
  * Every piece of storefront copy the shop can change without a deploy.
@@ -36,15 +54,14 @@ export type ContentDef = {
   help?: string;
   /** Which public page it appears on — how `/admin/contenuti` is grouped. */
   group: string;
+  /** The public path where this text is rendered — the "Vedi la pagina" link. */
+  page: string;
   type: ContentType;
   /** Field names for a `records` entry, in the order they are separated by `|`. */
   fields?: string[];
   /** Exactly what the page renders today. */
   default: string;
 };
-
-/** One record parsed out of a `records` value. */
-export type ContentRecord = Record<string, string>;
 
 const HOME = "Home";
 const STORIA = "La nostra storia";
@@ -54,6 +71,7 @@ const LEGAL = "Note legali";
 export const SITE_CONTENT: ContentDef[] = [
   {
     key: "home.hero.facts",
+    page: "/",
     label: "Home — dati in evidenza",
     help: "Le tre note sotto il titolo della home. Una per riga.",
     group: HOME,
@@ -62,6 +80,7 @@ export const SITE_CONTENT: ContentDef[] = [
   },
   {
     key: "home.servizi",
+    page: "/",
     label: "Home — i nostri servizi",
     help: "Un servizio per riga: titolo | testo | link | testo del link | colore.",
     group: HOME,
@@ -77,6 +96,7 @@ export const SITE_CONTENT: ContentDef[] = [
   },
   {
     key: "home.porchetta.ricetta",
+    page: "/",
     label: "Home — la ricetta in breve",
     help: "Un ingrediente per riga: nome | nota.",
     group: HOME,
@@ -91,6 +111,7 @@ export const SITE_CONTENT: ContentDef[] = [
   },
   {
     key: "storia.capitoli",
+    page: "/la-nostra-storia",
     label: "Storia — i capitoli",
     help: "Un capitolo per riga: etichetta | titolo | testo.",
     group: STORIA,
@@ -105,6 +126,7 @@ export const SITE_CONTENT: ContentDef[] = [
   },
   {
     key: "storia.pilastri",
+    page: "/la-nostra-storia",
     label: "Storia — come lavoriamo",
     help: "Un punto per riga: titolo | testo.",
     group: STORIA,
@@ -118,6 +140,7 @@ export const SITE_CONTENT: ContentDef[] = [
   },
   {
     key: "porchetta.steps",
+    page: "/porchetta",
     label: "Porchetta — come si fa",
     help: "Un passaggio per riga: titolo | testo | immagine | testo alternativo.",
     group: PORCHETTA,
@@ -131,6 +154,7 @@ export const SITE_CONTENT: ContentDef[] = [
   },
   {
     key: "porchetta.gallery",
+    page: "/porchetta",
     label: "Porchetta — galleria",
     help: "Un'immagine per riga: percorso | testo alternativo.",
     group: PORCHETTA,
@@ -145,6 +169,7 @@ export const SITE_CONTENT: ContentDef[] = [
   },
   {
     key: "legal.privacy.updated",
+    page: "/privacy",
     label: "Privacy — ultimo aggiornamento",
     group: LEGAL,
     type: "text",
@@ -152,6 +177,7 @@ export const SITE_CONTENT: ContentDef[] = [
   },
   {
     key: "legal.privacy.body",
+    page: "/privacy",
     label: "Privacy — testo",
     help:
       "Usa «## » per un titolo di sezione, «- » per un elenco, «**testo**» per il grassetto e " +
@@ -194,6 +220,7 @@ Questo documento è un modello di base fornito con la piattaforma e va verificat
   },
   {
     key: "legal.cookie.updated",
+    page: "/cookie",
     label: "Cookie — ultimo aggiornamento",
     group: LEGAL,
     type: "text",
@@ -201,6 +228,7 @@ Questo documento è un modello di base fornito con la piattaforma e va verificat
   },
   {
     key: "legal.cookie.body",
+    page: "/cookie",
     label: "Cookie — testo",
     help: "Stesse regole della privacy policy.",
     group: LEGAL,
@@ -230,6 +258,7 @@ Per maggiori informazioni sul trattamento dei dati consulta la [privacy policy](
   },
   {
     key: "legal.terms.updated",
+    page: "/termini",
     label: "Condizioni di vendita — ultimo aggiornamento",
     group: LEGAL,
     type: "text",
@@ -237,6 +266,7 @@ Per maggiori informazioni sul trattamento dei dati consulta la [privacy policy](
   },
   {
     key: "legal.terms.body",
+    page: "/termini",
     label: "Condizioni di vendita — testo",
     help:
       "Stesse regole della privacy policy. ATTENZIONE: è un documento contrattuale — " +
@@ -342,10 +372,33 @@ export const getStoredContent = cache(async (keys: string[]): Promise<Map<string
  * through six paragraphs of a privacy policy. Substituted at read time and left
  * verbatim in the editor, where the placeholder is the point.
  */
+export const CONTENT_TOKENS = { legalName: siteConfig.legalName, email: siteConfig.email };
+
 export function applyTokens(raw: string): string {
-  return raw
-    .replaceAll("{legalName}", siteConfig.legalName)
-    .replaceAll("{email}", siteConfig.email);
+  return applyTokensWith(raw, CONTENT_TOKENS);
+}
+
+/** Who last saved each stored key and when — what the editor shows next to "Modificato". */
+export type ContentMeta = { updatedAt: Date | null; updatedBy: string | null };
+
+export async function getContentMeta(keys: string[]): Promise<Map<string, ContentMeta>> {
+  if (keys.length === 0) return new Map();
+  const rows = await db
+    .select({
+      key: siteContent.key,
+      updatedAt: siteContent.updatedAt,
+      name: users.name,
+      username: users.username,
+    })
+    .from(siteContent)
+    .leftJoin(users, eq(users.id, siteContent.updatedByUserId))
+    .where(inArray(siteContent.key, keys));
+  return new Map(
+    rows.map((r) => [
+      r.key,
+      { updatedAt: r.updatedAt ? new Date(r.updatedAt) : null, updatedBy: r.name || r.username || null },
+    ]),
+  );
 }
 
 /** The raw text for one key: what the shop stored, or the built-in default. */
@@ -360,38 +413,6 @@ export async function contentRaw(key: string): Promise<string> {
   const def = BY_KEY.get(key);
   const stored = await getStoredContent([key]);
   return stored.get(key) ?? def?.default ?? "";
-}
-
-/** Non-empty lines. */
-export function parseLines(raw: string): string[] {
-  return raw
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-}
-
-/**
- * Pipe-separated records, one per line.
- *
- * A row with fewer fields than declared keeps the missing ones empty rather than
- * being dropped: a half-typed line should render as a half-filled card the owner
- * can see and finish, not vanish silently.
- */
-export function parseRecords(raw: string, fields: string[]): ContentRecord[] {
-  return parseLines(raw).map((line) => {
-    const parts = line.split("|").map((p) => p.trim());
-    const rec: ContentRecord = {};
-    fields.forEach((f, i) => (rec[f] = parts[i] ?? ""));
-    return rec;
-  });
-}
-
-/** Paragraph blocks, split on blank lines (the shape `RichText` renders). */
-export function parseBlocks(raw: string): string[] {
-  return raw
-    .split(/\n\s*\n/)
-    .map((b) => b.trim())
-    .filter(Boolean);
 }
 
 /** One line of copy. */

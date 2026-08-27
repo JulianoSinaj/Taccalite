@@ -21,7 +21,7 @@ import { contentDef, contentRaw } from "@/lib/site-content";
  * state rather than a copy of the original that then drifts.
  */
 
-const PATHS = ["/", "/la-nostra-storia", "/porchetta", "/privacy", "/cookie", "/admin/contenuti"];
+const PATHS = ["/", "/la-nostra-storia", "/porchetta", "/privacy", "/cookie", "/termini", "/admin/contenuti"];
 
 export async function saveSiteContent(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {

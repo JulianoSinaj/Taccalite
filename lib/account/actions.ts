@@ -164,7 +164,7 @@ export async function setMarketingConsent(_prev: ActionState, fd: FormData): Pro
       } else {
         await db
           .update(newsletterSubscribers)
-          .set({ status: "unsubscribed" })
+          .set({ status: "unsubscribed", unsubscribedAt: new Date() })
           .where(eq(sql`lower(${newsletterSubscribers.email})`, actor.email.toLowerCase()));
       }
     }
