@@ -881,25 +881,22 @@ export function RewardForm({ reward }: { reward?: RewardRow | null }) {
       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       {reward && <input type="hidden" name="id" value={reward.id} />}
+      {/* The slug never appears in a public URL (rewards live only inside the
+          account dashboard), so it is not editable: generated from the name on
+          create, kept as-is on edit so a rename doesn't churn it. */}
+      {reward && <input type="hidden" name="slug" value={reward.slug} />}
       <div>
         <label className={labelCls} htmlFor={fid("name")}>Nome</label>
-        <input id={fid("name")} name="name" required defaultValue={reward?.name} className={inputCls} />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("slug")}>Slug</label>
-        <input id={fid("slug")} name="slug" defaultValue={reward?.slug} placeholder="auto se vuoto" className={inputCls} />
+        <input id={fid("name")} name="name" required maxLength={200} defaultValue={reward?.name} className={inputCls} />
       </div>
       <div>
         <label className={labelCls} htmlFor={fid("points")}>Punti richiesti</label>
-        <input id={fid("points")} name="points" type="number" min={0} required defaultValue={reward?.points ?? 0} className={inputCls} />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
-        <input id={fid("sortOrder")} name="sortOrder" type="number" defaultValue={reward?.sortOrder ?? 0} className={inputCls} />
+        <input id={fid("points")} name="points" type="number" min={0} step={1} required defaultValue={reward?.points ?? 0} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
         <label className={labelCls} htmlFor={fid("description")}>Descrizione</label>
-        <textarea id={fid("description")} name="description" rows={2} defaultValue={reward?.description} className={inputCls} />
+        <textarea id={fid("description")} name="description" rows={2} maxLength={2000} defaultValue={reward?.description} className={inputCls} />
+        <p className="mt-1 text-xs text-brown-800/60">Mostrata al cliente nel catalogo fedeltà.</p>
       </div>
 
       {/* Availability: how many exist, how often one customer may claim it, and
@@ -962,8 +959,13 @@ export function RewardForm({ reward }: { reward?: RewardRow | null }) {
       </div>
 
       <ImageField current={reward?.image} />
-      <div className="flex items-center pt-6">
-        <Toggle name="active" label="Attivo" defaultChecked={reward?.active ?? true} />
+      <div>
+        <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
+        <input id={fid("sortOrder")} name="sortOrder" type="number" step={1} defaultValue={reward?.sortOrder ?? 0} className={inputCls} />
+        <p className="mt-1 text-xs text-brown-800/60">Numero più basso = mostrato prima.</p>
+      </div>
+      <div className="flex items-center sm:col-span-2">
+        <Toggle name="active" label="Attivo (visibile e riscattabile dai clienti)" defaultChecked={reward?.active ?? true} />
       </div>
       <div className="sm:col-span-2">
         <PendingButton>{reward ? "Salva premio" : "Crea premio"}</PendingButton>

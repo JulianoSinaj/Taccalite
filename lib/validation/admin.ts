@@ -243,7 +243,14 @@ export const rewardInput = z
         path: ["availableUntil"],
       });
     }
-  });
+  })
+  // "Fino al 6 gennaio" means the whole 6th: the <input type="date"> posts
+  // midnight, which would expire the reward one minute into its last day.
+  .transform((d) =>
+    d.availableUntil
+      ? { ...d, availableUntil: new Date(d.availableUntil.getTime() + 86_400_000 - 1) }
+      : d,
+  );
 
 export const discountInput = z.object({
   id: optionalText(40),

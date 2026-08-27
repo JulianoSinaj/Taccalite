@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   if (token) {
     await db
       .update(newsletterSubscribers)
-      .set({ status: "unsubscribed" })
+      .set({ status: "unsubscribed", unsubscribedAt: new Date() })
       .where(eq(newsletterSubscribers.token, token));
   }
   return NextResponse.redirect(absoluteUrl("/newsletter?stato=disiscritto"));

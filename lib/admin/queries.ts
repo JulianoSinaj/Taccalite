@@ -817,7 +817,13 @@ export async function getRewardsPage(opts: RewardFilters & { page?: number; now?
   const where = rewardsWhere(opts, now);
   const [rows, [{ total }]] = await Promise.all([
     db
-      .select()
+      .select({
+        ...getTableColumns(rewards),
+        // Outstanding pickups and lifetime claims: the first is what blocks a
+        // delete, the second is the only measure of whether a reward works.
+        pendingRedemptions: sql<number>`(select count(*) from ${redemptions} where ${redemptions.rewardId} = ${rewards.id} and ${redemptions.status} = 'pending')`,
+        totalRedemptions: sql<number>`(select count(*) from ${redemptions} where ${redemptions.rewardId} = ${rewards.id} and ${redemptions.status} <> 'cancelled')`,
+      })
       .from(rewards)
       .where(where)
       .orderBy(rewards.sortOrder, rewards.name)
@@ -878,6 +884,23 @@ export const adminGetShop = (id: string) =>
 export const adminGetRewards = () => db.select().from(rewards).orderBy(rewards.sortOrder);
 export const adminGetReward = (id: string) =>
   db.select().from(rewards).where(eq(rewards.id, id)).limit(1).then((r) => r[0] ?? null);
+
+/** Redemption tallies for one reward's edit page. */
+export async function adminGetRewardStats(id: string) {
+  const [row] = await db
+    .select({
+      pending: sql<number>`sum(case when ${redemptions.status} = 'pending' then 1 else 0 end)`,
+      fulfilled: sql<number>`sum(case when ${redemptions.status} = 'fulfilled' then 1 else 0 end)`,
+      cancelled: sql<number>`sum(case when ${redemptions.status} = 'cancelled' then 1 else 0 end)`,
+    })
+    .from(redemptions)
+    .where(eq(redemptions.rewardId, id));
+  return {
+    pending: Number(row?.pending ?? 0),
+    fulfilled: Number(row?.fulfilled ?? 0),
+    cancelled: Number(row?.cancelled ?? 0),
+  };
+}
 
 export async function adminGetOrder(id: string) {
   const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
@@ -1093,7 +1116,7 @@ export async function getLoyaltyTxForUser(userId: string, opts: { all?: boolean 
 
 /** Paginated newsletter subscribers list. `confirmed` is the full-table count of
  *  confirmed subscribers (used by the broadcast form / subtitle), independent of paging. */
-export const SUBSCRIBER_SORTS = ["email", "stato", "origine", "iscritto"] as const;
+export const SUBSCRIBER_SORTS = ["email", "stato", "origine", "iscritto", "confermato"] as const;
 
 export async function getSubscribersPage(opts: SubscriberFilters & { page?: number; sort?: SortSpec }) {
   const page = Math.max(1, opts.page ?? 1);
@@ -1106,6 +1129,7 @@ export async function getSubscribersPage(opts: SubscriberFilters & { page?: numb
           stato: newsletterSubscribers.status,
           origine: newsletterSubscribers.source,
           iscritto: newsletterSubscribers.createdAt,
+          confermato: newsletterSubscribers.confirmedAt,
         },
         newsletterSubscribers.createdAt,
       )

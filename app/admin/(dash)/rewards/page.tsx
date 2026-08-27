@@ -138,10 +138,26 @@ export default async function AdminRewards({ searchParams }: SP) {
         <div className="space-y-3">
           {rewards.map((r) => (
             <Panel key={r.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <div>
+              <div className="flex min-w-0 items-center gap-3">
+                {r.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail, any host
+                  <img
+                    src={r.image}
+                    alt=""
+                    className="size-12 shrink-0 rounded-lg object-cover ring-1 ring-brown-900/10"
+                  />
+                ) : (
+                  <span
+                    aria-hidden
+                    title="Senza immagine"
+                    className="size-12 shrink-0 rounded-lg bg-brown-900/5 ring-1 ring-brown-900/10"
+                  />
+                )}
+                <div className="min-w-0">
                   <p className="font-display flex flex-wrap items-center gap-1.5 text-lg text-brown-950">
-                    {r.name}
+                    <Link href={`/admin/rewards/${r.id}`} className="hover:underline">
+                      {r.name}
+                    </Link>
                     {/* Stock, window and per-customer cap are all enforced at
                         redemption and none of them were visible here, so a
                         reward with nothing left looked exactly like one with
@@ -160,12 +176,25 @@ export default async function AdminRewards({ searchParams }: SP) {
                       ? ` · max ${r.maxPerCustomer} a cliente`
                       : ""}
                     {windowLabel(r) ? ` · ${windowLabel(r)}` : ""}
-                    {r.description ? ` · ${r.description}` : ""}
+                    {" · "}
+                    {Number(r.pendingRedemptions) > 0 ? (
+                      <Link
+                        href={`/admin/loyalty?rq=${encodeURIComponent(r.name)}&rstato=pending`}
+                        className="font-bold text-warn-soft-fg hover:underline"
+                      >
+                        {r.pendingRedemptions} da consegnare
+                      </Link>
+                    ) : (
+                      `${r.totalRedemptions} riscatti`
+                    )}
                   </p>
+                  {r.description && (
+                    <p className="line-clamp-1 text-xs text-brown-800/50">{r.description}</p>
+                  )}
                 </div>
                 {!r.active && <StatusBadge status="cancelled" />}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <ActionForm action={toggleRewardActive} className="inline-flex">
                   <input type="hidden" name="id" value={r.id} />
                   <input type="hidden" name="active" value={r.active ? "false" : "true"} />
