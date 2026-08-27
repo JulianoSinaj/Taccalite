@@ -124,18 +124,33 @@ test("reservation submits and returns a booking reference", async ({ page }) => 
   await page.fill('input[name="phone"]', "3387654321");
   await page.fill('input[name="email"]', `e2e-resv-${RUN}@example.com`).catch(() => {});
 
-  // A date the shop is open on: walk forward until the form stops objecting.
-  for (let offset = 2; offset <= 9; offset++) {
-    const d = new Date();
-    d.setDate(d.getDate() + offset);
-    await page.fill('input[name="date"]', d.toISOString().slice(0, 10));
-    await page.waitForTimeout(600);
-    const time = page.locator('select[name="time"]');
-    if ((await time.count()) && (await time.locator("option").count()) > 1) {
-      await time.selectOption({ index: 1 });
-      break;
+  // The day and the hour are the app's own pickers now (`components/ui/
+  // DateField.tsx`, `SelectField.tsx`) rather than a native `input[type=date]`
+  // and a `<select>`, so there is nothing to `fill` or `selectOption`: this is
+  // the sequence a customer actually performs. It is also a stronger assertion
+  // than the old one — the calendar strikes out the days the sede is shut, so
+  // "a day the form will accept" is now something the UI states rather than
+  // something the test discovers by trial.
+  let booked = false;
+  for (let attempt = 0; attempt < 5 && !booked; attempt++) {
+    await page.locator("#date").click();
+    const openDays = page.locator(".pop-day:not([data-blocked]):not([data-outside])");
+    await expect(openDays.first()).toBeVisible();
+    const available = await openDays.count();
+    // Not the first: that is today, and a table an hour from now is the case
+    // most likely to be refused for reasons that have nothing to do with this.
+    await openDays.nth(Math.min(attempt + 1, available - 1)).click();
+
+    await page.locator("#time").click();
+    const slots = page.locator(".pop-option:not([data-blocked])");
+    if (await slots.count()) {
+      await slots.first().click();
+      booked = true;
+    } else {
+      await page.keyboard.press("Escape");
     }
   }
+  expect(booked).toBe(true);
 
   await page.getByRole("button", { name: /conferma prenotazione/i }).first().click();
 

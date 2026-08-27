@@ -5,6 +5,7 @@ import { PrivacyNote } from "@/components/site/PrivacyNote";
 import Link from "next/link";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { useCart } from "./cart";
+import SelectField from "@/components/ui/SelectField";
 import { formatEuro } from "@/lib/format";
 import {
   FULFILMENT_MODES,
@@ -487,17 +488,14 @@ export default function CheckoutClient({
             <div className="grid grid-cols-1 gap-5">
               <div>
                 <label className={labelCls} htmlFor="shopSlug">Negozio di ritiro</label>
-                <select
+                <SelectField
                   id="shopSlug"
                   name="shopSlug"
                   value={shopSlug}
-                  onChange={(e) => setShopSlug(e.target.value)}
+                  onChange={setShopSlug}
+                  options={shops.map((s) => ({ value: s.slug, label: s.name }))}
                   className={inputCls}
-                >
-                  {shops.map((s) => (
-                    <option key={s.slug} value={s.slug}>{s.name}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               {/* Only rendered where the shop has published windows. A location
@@ -507,21 +505,23 @@ export default function CheckoutClient({
               {slotsForShop.length > 0 && (
                 <div>
                   <label className={labelCls} htmlFor="pickupSlot">Quando passi a ritirare</label>
-                  <select
+                  {/* "ultimi 2 posti" was an em-dash clause on the end of a
+                      native option, where it was the first thing to be
+                      truncated on a phone — exactly the part a customer needs
+                      to see. It is the option's second line now. */}
+                  <SelectField
                     id="pickupSlot"
                     value={chosenSlot}
-                    onChange={(e) => setPickupSlot(e.target.value)}
+                    onChange={setPickupSlot}
                     required
+                    placeholder="Scegli un orario…"
+                    options={slotsForShop.map((o) => ({
+                      value: o.value,
+                      label: o.label,
+                      hint: o.remaining != null && o.remaining <= 3 ? `Ultimi ${o.remaining} posti` : undefined,
+                    }))}
                     className={inputCls}
-                  >
-                    <option value="">Scegli un orario…</option>
-                    {slotsForShop.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                        {o.remaining != null && o.remaining <= 3 ? ` — ultimi ${o.remaining} posti` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
               )}
             </div>

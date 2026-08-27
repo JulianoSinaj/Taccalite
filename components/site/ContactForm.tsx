@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { PrivacyNote } from "@/components/site/PrivacyNote";
 import { Check, Loader2 } from "lucide-react";
+import SelectField from "@/components/ui/SelectField";
 
 const TOPICS = ["Informazioni", "Catering", "Consegna a domicilio", "Richiesta speciale"];
 
@@ -15,6 +16,9 @@ const labelClass =
 export default function ContactForm() {
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
+  // Controlled now that the menu is ours; the default is what the uncontrolled
+  // `defaultValue={TOPICS[0]}` posted before.
+  const [topic, setTopic] = useState(TOPICS[0]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -114,13 +118,14 @@ export default function ContactForm() {
           <label className={labelClass} htmlFor="contact-topic">
             Motivo
           </label>
-          <select id="contact-topic" name="topic" defaultValue={TOPICS[0]} className={fieldClass}>
-            {TOPICS.map((topic) => (
-              <option key={topic} value={topic}>
-                {topic}
-              </option>
-            ))}
-          </select>
+          <SelectField
+            id="contact-topic"
+            name="topic"
+            value={topic}
+            onChange={setTopic}
+            options={TOPICS.map((t) => ({ value: t, label: t }))}
+            className={fieldClass}
+          />
         </div>
       </div>
 

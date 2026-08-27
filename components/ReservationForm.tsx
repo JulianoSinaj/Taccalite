@@ -4,6 +4,8 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { PrivacyNote } from "@/components/site/PrivacyNote";
 import { useSearchParams } from "next/navigation";
 import { Check, Flame, Minus, Plus, Users, UtensilsCrossed } from "lucide-react";
+import DateField from "@/components/ui/DateField";
+import SelectField from "@/components/ui/SelectField";
 // Deliberately the same module the server refuses with, so the message shown
 // beside the date field and the one the API would return cannot disagree.
 import {
@@ -145,9 +147,34 @@ export default function ReservationForm({
   const hitClosure = date
     ? closureFor(closures, activeShop, date, "reservations", type === "table" && time ? time : undefined)
     : null;
-  // Said up front, because a native date picker cannot grey days out: the
-  // customer reads "chiusi dal 10 al 24 agosto" before choosing, instead of
-  // choosing and being refused.
+  /**
+   * Which days the calendar refuses to hand out.
+   *
+   * This used to be impossible: a native `<input type="date">` takes `min` and
+   * `max` and nothing else, so a closure could only be *described* — the
+   * "Giorni di chiusura: 10–24 agosto" line further down exists because there
+   * was nowhere inside the picker to put it. Now the shut days are struck
+   * through in the grid, where the choice is actually made.
+   *
+   * Whole-day closures only. `closureFor` is called without a time, and a
+   * partial closure answers "open" to a date-only question by design — an
+   * afternoon shutdown still leaves the morning bookable, and the hour select
+   * below is where that gets decided.
+   */
+  function dayState(iso: string) {
+    const closure = closureFor(closures, activeShop, iso, "reservations");
+    if (closure) return { disabled: true, note: closure.reason || "Chiuso" };
+    // A sede that never opens on a Monday is as unbookable as one on holiday,
+    // and the customer used to find that out only after picking the day.
+    if (type === "table") {
+      const slots = slotsFor(reservationShops.find((s) => s.slug === tableShop), iso);
+      if (slots != null && slots.length === 0) return { disabled: true, note: "Sede chiusa" };
+    }
+    return null;
+  }
+
+  // Still said in prose as well: a range reads as one fact ("chiusi dal 10 al
+  // 24 agosto"), where fifteen struck-through squares read as fifteen.
   const upcomingClosures = closures
     .filter(
       (c) =>
@@ -286,46 +313,40 @@ export default function ReservationForm({
       {type === "table" && (
         <>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {/* Neither field carries a leading icon: the date input draws its
-                own calendar button (styled in `globals.css`) and the select
-                draws its own chevron, so a glyph at the other end was a
-                duplicate on one and a second arrow on the other. */}
+            {/* Neither field carries a leading icon: each draws its own trailing
+                glyph — a calendar, a chevron — so a second one at the other end
+                was a duplicate on one and a stray arrow on the other. */}
             <Field label="Data" htmlFor="date">
-              <input
+              <DateField
                 id="date"
                 name="date"
-                type="date"
                 required
                 // The picker used to accept any date at all, including
                 // yesterday's.
                 min={today}
+                today={today}
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
-                aria-invalid={hitClosure ? true : undefined}
-                aria-describedby={hitClosure ? "date-closed" : undefined}
+                onChange={setDate}
+                dayState={dayState}
+                invalid={Boolean(hitClosure)}
+                describedBy={hitClosure ? "date-closed" : undefined}
                 className={inputClasses}
               />
             </Field>
             <Field label="Ora" htmlFor="time">
-              <select
+              <SelectField
                 id="time"
                 name="time"
                 required
+                numeric
                 value={timeValue}
-                onChange={(e) => setTime(e.target.value)}
+                onChange={setTime}
                 disabled={closedWeekday}
-                aria-describedby={closedWeekday ? "time-closed" : undefined}
+                placeholder={closedWeekday ? "Chiuso" : "--:--"}
+                options={timeSlots.map((slot) => ({ value: slot, label: slot }))}
+                describedBy={closedWeekday ? "time-closed" : undefined}
                 className={inputClasses}
-              >
-                <option value="" disabled>
-                  {closedWeekday ? "Chiuso" : "--:--"}
-                </option>
-                {timeSlots.map((slot) => (
-                  <option key={slot} value={slot}>
-                    {slot}
-                  </option>
-                ))}
-              </select>
+              />
               {closedWeekday && !hitClosure && (
                 <p id="time-closed" role="status" className="text-sm font-medium text-red-700">
                   In questo giorno della settimana la sede è chiusa. Scegli un&apos;altra data.
@@ -358,20 +379,22 @@ export default function ReservationForm({
               </div>
             </Field>
             <Field label="Negozio" htmlFor="shop">
-              <select
+              {/* The speciality is a second line now rather than an em-dash
+                  clause: "Centro — formaggi e salumi stagionati" was one long
+                  string a native option truncated in the middle. */}
+              <SelectField
                 id="shop"
                 name="shop"
                 required
                 value={tableShop}
-                onChange={(e) => setTableShop(e.target.value)}
+                onChange={setTableShop}
+                options={reservationShops.map((shop) => ({
+                  value: shop.slug,
+                  label: shop.name,
+                  hint: shop.specialty,
+                }))}
                 className={inputClasses}
-              >
-                {reservationShops.map((shop) => (
-                  <option key={shop.slug} value={shop.slug}>
-                    {shop.name} — {shop.specialty}
-                  </option>
-                ))}
-              </select>
+              />
             </Field>
           </div>
           <div className="space-y-4">
@@ -402,34 +425,34 @@ export default function ReservationForm({
           </div>
           {porchettaShops.length > 1 && (
             <Field label="Negozio di ritiro" htmlFor="porchetta-shop">
-              <select
+              <SelectField
                 id="porchetta-shop"
                 name="shop"
                 required
                 value={porchettaShop}
-                onChange={(e) => setPorchettaShop(e.target.value)}
+                onChange={setPorchettaShop}
+                options={porchettaShops.map((shop) => ({
+                  value: shop.slug,
+                  label: shop.name,
+                  hint: shop.specialty,
+                }))}
                 className={inputClasses}
-              >
-                {porchettaShops.map((shop) => (
-                  <option key={shop.slug} value={shop.slug}>
-                    {shop.name} — {shop.specialty}
-                  </option>
-                ))}
-              </select>
+              />
             </Field>
           )}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <Field label="Sabato di ritiro" htmlFor="date">
-              <input
+              <DateField
                 id="date"
                 name="date"
-                type="date"
                 required
                 min={today}
+                today={today}
                 value={date || (today ? nextSaturdayIso(today) : "")}
-                onChange={(e) => setDate(e.target.value)}
-                aria-invalid={hitClosure ? true : undefined}
-                aria-describedby={hitClosure ? "date-closed" : undefined}
+                onChange={setDate}
+                dayState={dayState}
+                invalid={Boolean(hitClosure)}
+                describedBy={hitClosure ? "date-closed" : undefined}
                 className={inputClasses}
               />
             </Field>
@@ -465,13 +488,23 @@ export default function ReservationForm({
 
       {type === "order" && (
         <Field label="Negozio" htmlFor="shop">
-          <select id="shop" name="shop" required className={inputClasses}>
-            {reservationShops.map((shop) => (
-              <option key={shop.slug} value={shop.slug}>
-                {shop.name} — {shop.specialty}
-              </option>
-            ))}
-          </select>
+          {/* Shares `tableShop` rather than keeping its own uncontrolled value:
+              `activeShop` already tests an order's closures against that state,
+              so an uncontrolled select here meant changing the sede on this tab
+              left the closure check pointed at the previous one. */}
+          <SelectField
+            id="shop"
+            name="shop"
+            required
+            value={tableShop}
+            onChange={setTableShop}
+            options={reservationShops.map((shop) => ({
+              value: shop.slug,
+              label: shop.name,
+              hint: shop.specialty,
+            }))}
+            className={inputClasses}
+          />
         </Field>
       )}
 
