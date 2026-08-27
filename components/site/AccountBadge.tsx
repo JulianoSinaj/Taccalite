@@ -39,17 +39,27 @@ export default function AccountBadge({ className }: { className?: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((data: Me) => {
-        if (!cancelled) setMe(data);
-      })
-      .catch(() => {
-        // A failed probe leaves the signed-out shell in place, which is the
-        // safe default — never claim someone is logged in on a network error.
-      });
+    function load() {
+      fetch("/api/auth/me")
+        .then((r) => r.json())
+        .then((data: Me) => {
+          if (!cancelled) setMe(data);
+        })
+        .catch(() => {
+          // A failed probe leaves the signed-out shell in place, which is the
+          // safe default — never claim someone is logged in on a network error.
+        });
+    }
+    load();
+    // `AuthForms` lives on `/account`, this badge lives in the layout that
+    // wraps it — a `router.refresh()` after login re-renders that page's
+    // server tree but doesn't touch this already-mounted client component,
+    // so without this listener the badge stayed on its signed-out shell
+    // (a plain link, no menu) until a full page reload.
+    window.addEventListener("taccalite:auth-changed", load);
     return () => {
       cancelled = true;
+      window.removeEventListener("taccalite:auth-changed", load);
     };
   }, []);
 

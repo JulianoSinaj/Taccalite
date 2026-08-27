@@ -24,6 +24,13 @@ COPY . .
 # build workers on a fresh empty DB).
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_* is inlined into the client bundle by `npm run build`, so it has to be
+# present in the environment of THIS stage, not the runner. Coolify injects an ARG for
+# it automatically when it builds; declaring it explicitly means the same image comes
+# out of a plain `docker build` or CI, which is what the GitHub Actions pipeline needs.
+# Verified: the value appears 14 times in /app/.next of a correctly built image.
+ARG NEXT_PUBLIC_SITE_URL
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 RUN npm run build && npm run db:compile-seed && npm run db:compile-reset
 
 # ── Runner: minimal image ──────────────────────────────────────────────────────

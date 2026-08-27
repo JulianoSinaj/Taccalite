@@ -7,12 +7,6 @@ import { ActionForm, PendingButton } from "./ActionForm";
 import { createAdminReservation, updateReservationDetails } from "@/lib/admin/reservation-actions";
 import type { ReservationRow, ShopRow } from "@/lib/db/schema";
 
-/** Today as yyyy-mm-dd, for the default booking date on a new reservation. */
-function todayValue(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 /**
  * Create or reschedule a booking from the back-office.
  *
@@ -111,7 +105,7 @@ export function ReservationForm({
           name="date"
           type="date"
           required
-          defaultValue={reservation?.date ?? defaultDate ?? todayValue()}
+          defaultValue={reservation?.date ?? defaultDate}
           className={inputCls}
         />
       </div>

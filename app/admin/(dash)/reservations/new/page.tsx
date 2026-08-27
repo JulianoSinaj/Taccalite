@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { AdminHeader, Panel } from "@/components/admin/ui";
 import { ReservationForm } from "@/components/admin/ReservationForm";
 import { adminGetShops } from "@/lib/admin/queries";
+import { dateInRome } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,9 @@ type SP = { searchParams: Promise<{ data?: string }> };
  *  link here, and re-picking the day you just clicked is pure friction. */
 export default async function NewReservation({ searchParams }: SP) {
   const { data } = await searchParams;
-  const defaultDate = data && /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : undefined;
+  // Resolved here rather than left to the form's own fallback, so the date
+  // field's default never depends on the operator's own browser clock.
+  const defaultDate = data && /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : dateInRome();
   const shops = await adminGetShops();
 
   return (

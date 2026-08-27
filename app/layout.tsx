@@ -108,6 +108,10 @@ export default function RootLayout({
   return (
     <html
       lang="it"
+      // The storefront's inline intro-gate script (`lib/intro.ts`) sets
+      // `data-intro` on this element before hydration, outside React's
+      // control, so the SSR/client attributes never match here by design.
+      suppressHydrationWarning
       className={cn(
         playfair.variable,
         openSans.variable,

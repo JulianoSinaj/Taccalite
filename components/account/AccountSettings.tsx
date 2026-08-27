@@ -48,7 +48,13 @@ export type SettingsProps = {
 
 function fmt(d: Date | null): string {
   if (!d) return "—";
-  return new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  // Pinned to Rome: server is UTC, this renders client-side too — see the
+  // same fix in AccountDashboard.tsx.
+  return new Intl.DateTimeFormat("it-IT", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Europe/Rome",
+  }).format(d);
 }
 
 /**

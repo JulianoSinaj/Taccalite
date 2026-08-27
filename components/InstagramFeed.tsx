@@ -28,7 +28,14 @@ type Props = {
 const SPRING = { stiffness: 220, damping: 24, mass: 0.6 };
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("it-IT", { day: "numeric", month: "short" });
+  // Pinned: the server runs UTC, customers are in Europe/Rome, and this runs
+  // client-side too — an unpinned zone lets the two sides disagree on the
+  // calendar day for the ~1-2h/day they're on opposite sides of midnight.
+  return new Date(iso).toLocaleDateString("it-IT", {
+    day: "numeric",
+    month: "short",
+    timeZone: "Europe/Rome",
+  });
 }
 
 /**
