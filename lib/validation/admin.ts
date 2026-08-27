@@ -163,6 +163,14 @@ export const categoryMergeInput = z.object({
   targetId: z.string().trim().min(1, "Scegli la categoria di destinazione"),
 });
 
+/** Drop the full sibling group (same kind, same parent) in its new order —
+ *  the drag-and-drop list on the categories page. */
+export const categoryReorderInput = z.object({
+  kind: z.enum(["product", "post"], { message: "Tipo di categoria non valido" }),
+  parentId: z.string().trim().min(1).nullable(),
+  ids: z.array(z.string().trim().min(1)).min(1, "Elenco vuoto"),
+});
+
 export const blogInput = z.object({
   id: optionalText(40),
   title: z.string().trim().min(1, "Il titolo è obbligatorio").max(300),

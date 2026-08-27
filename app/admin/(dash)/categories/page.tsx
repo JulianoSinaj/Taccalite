@@ -1,43 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AdminHeader, Panel, StatusBadge, NewButton, SearchBox, inputCls, labelCls } from "@/components/admin/ui";
-import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
+import { AdminHeader, Panel, NewButton, SearchBox, inputCls, labelCls } from "@/components/admin/ui";
+import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
+import CategoryOrderList from "@/components/admin/CategoryOrderList";
 import { adminGetCategoriesWithUsage, countUnfiled, type CategoryWithUsage } from "@/lib/admin/queries";
-import {
-  toggleCategoryActive,
-  deleteCategory,
-  mergeCategories,
-  moveCategory,
-} from "@/lib/admin/category-actions";
+import { mergeCategories } from "@/lib/admin/category-actions";
+import { KINDS, countOf, type Kind } from "@/lib/admin/category-kinds";
 import { isAdmin } from "@/lib/auth/session";
-import { vatRateLabel } from "@/lib/fiscal";
 
 export const dynamic = "force-dynamic";
 
 const BASE = "/admin/categories";
 
-/* ----------------------------------------------------------------------------
- * The two vocabularies
- *
- * Separate lists on purpose: the shop files products under "Formaggi" and posts
- * under "Formaggi" too, and they are not the same thing. Product categories are
- * pages on the storefront; news categories are a label on the article.
- * ------------------------------------------------------------------------- */
-
-const KINDS = [
-  { value: "product", label: "Prodotti", one: "prodotto", many: "prodotti", listHref: "/admin/products" },
-  { value: "post", label: "News", one: "articolo", many: "articoli", listHref: "/admin/blog" },
-] as const;
-
-type KindMeta = (typeof KINDS)[number];
-type Kind = KindMeta["value"];
 type SP = { searchParams: Promise<{ kind?: string; q?: string }> };
 
 const listHref = (kind: Kind) => (kind === "product" ? BASE : `${BASE}?kind=${kind}`);
-const countOf = (n: number, k: KindMeta) => `${n} ${n === 1 ? k.one : k.many}`;
-
-const pillCls =
-  "inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15";
 
 /* ----------------------------------------------------------------------------
  * Ordering and search
@@ -84,13 +61,14 @@ function tree(rows: CategoryWithUsage[]): CategoryWithUsage[] {
 
 /**
  * Where each row sits among its siblings, computed on the *unfiltered* list so
- * the ↑ ↓ arrows mean the same thing whether or not a search is active.
+ * the ↑ ↓ arrows mean the same thing whether or not a search is active. A plain
+ * object (not a `Map`) because this crosses into the client component below.
  */
-function positions(all: CategoryWithUsage[]): Map<string, { first: boolean; last: boolean }> {
+function positions(all: CategoryWithUsage[]): Record<string, { first: boolean; last: boolean }> {
   const groups = [all.filter((r) => !r.parentId), ...childrenByParent(all).values()];
-  const out = new Map<string, { first: boolean; last: boolean }>();
+  const out: Record<string, { first: boolean; last: boolean }> = {};
   for (const g of groups) {
-    g.forEach((r, i) => out.set(r.id, { first: i === 0, last: i === g.length - 1 }));
+    g.forEach((r, i) => (out[r.id] = { first: i === 0, last: i === g.length - 1 }));
   }
   return out;
 }
@@ -119,6 +97,7 @@ export default async function AdminCategories({ searchParams }: SP) {
   const ordered = tree(rows);
   const pos = positions(all);
   const children = childrenByParent(all);
+  const childCounts = Object.fromEntries(all.filter((c) => !c.parentId).map((c) => [c.id, children.get(c.id)?.length ?? 0]));
   // The merge picker deliberately ignores the search: reconciling a doubled-up
   // vocabulary means choosing between two rows that, by definition, are spelled
   // differently — a filter narrow enough to surface the typo would usually hide
@@ -201,123 +180,11 @@ export default async function AdminCategories({ searchParams }: SP) {
           </p>
         </Panel>
       ) : (
-        <div className="space-y-3">
-          {ordered.map((c) => (
-            <CategoryCard
-              key={c.id}
-              c={c}
-              kind={active}
-              position={pos.get(c.id) ?? { first: true, last: true }}
-              childCount={children.get(c.id)?.length ?? 0}
-            />
-          ))}
-        </div>
+        <CategoryOrderList kind={active} rows={ordered} childCounts={childCounts} positions={pos} searching={!!q} />
       )}
 
       {all.length > 1 && <MergePanel rows={allOrdered} />}
     </div>
-  );
-}
-
-/* ----------------------------------------------------------------------------
- * One category
- * ------------------------------------------------------------------------- */
-
-function CategoryCard({
-  c,
-  kind,
-  position,
-  childCount,
-}: {
-  c: CategoryWithUsage;
-  kind: KindMeta;
-  position: { first: boolean; last: boolean };
-  /** Sub-categories filed under this one. */
-  childCount: number;
-}) {
-  // The public page 404s on a hidden category, so the link is only offered
-  // when it would open.
-  const liveOnSite = kind.value === "product" && c.active;
-  const usageHref = `${kind.listHref}?categoria=${encodeURIComponent(c.name)}`;
-
-  return (
-    <Panel className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-3">
-        <div>
-          <p className="font-display text-lg text-brown-950">
-            {c.parentId && <span className="text-brown-800/40">↳ </span>}
-            {c.name}
-          </p>
-          <p className="text-xs text-brown-800/60">
-            <code>/{c.slug}</code>
-            {" · "}
-            {c.usage > 0 ? (
-              <Link href={usageHref} className="font-semibold underline">
-                {countOf(c.usage, kind)}
-              </Link>
-            ) : (
-              countOf(c.usage, kind)
-            )}
-            {childCount > 0 &&
-              ` · ${childCount} ${childCount === 1 ? "sottocategoria" : "sottocategorie"}`}
-            {c.defaultVatRateBps != null && ` · IVA ${vatRateLabel(c.defaultVatRateBps)}`}
-            {` · ordine ${c.sortOrder}`}
-          </p>
-        </div>
-        {!c.active && <StatusBadge status="hidden" />}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {/* Order among siblings; the same order the shop rail and the pickers use. */}
-        <ActionForm action={moveCategory} className="inline-flex">
-          <input type="hidden" name="id" value={c.id} />
-          <input type="hidden" name="direction" value="up" />
-          <PendingButton tone="dark" disabled={position.first}>
-            <span aria-hidden="true">↑</span>
-            <span className="sr-only">Sposta su</span>
-          </PendingButton>
-        </ActionForm>
-        <ActionForm action={moveCategory} className="inline-flex">
-          <input type="hidden" name="id" value={c.id} />
-          <input type="hidden" name="direction" value="down" />
-          <PendingButton tone="dark" disabled={position.last}>
-            <span aria-hidden="true">↓</span>
-            <span className="sr-only">Sposta giù</span>
-          </PendingButton>
-        </ActionForm>
-
-        <ActionForm action={toggleCategoryActive} className="inline-flex">
-          <input type="hidden" name="id" value={c.id} />
-          <input type="hidden" name="active" value={c.active ? "false" : "true"} />
-          <PendingButton tone="dark">{c.active ? "Nascondi" : "Mostra"}</PendingButton>
-        </ActionForm>
-
-        <Link href={`${BASE}/${c.id}`} className={pillCls}>
-          Modifica
-        </Link>
-
-        {liveOnSite && (
-          <Link href={`/negozio/categoria/${c.slug}`} target="_blank" rel="noopener" className={pillCls}>
-            Sito ↗
-          </Link>
-        )}
-
-        {/* Deleting a category in use is refused by the foreign key itself.
-            Hiding the button when it cannot succeed keeps the list honest — the
-            merge tool below is the way out. */}
-        {c.usage === 0 && (
-          <DeleteForm
-            action={deleteCategory}
-            id={c.id}
-            confirm={
-              childCount > 0
-                ? `Eliminare la categoria "${c.name}"? Le sue ${childCount} sottocategorie passeranno al primo livello.`
-                : `Eliminare la categoria "${c.name}"?`
-            }
-          />
-        )}
-      </div>
-    </Panel>
   );
 }
 

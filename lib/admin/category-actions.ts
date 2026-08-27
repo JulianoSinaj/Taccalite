@@ -13,6 +13,7 @@ import {
   categoryInput,
   categoryMergeInput,
   categoryMoveInput,
+  categoryReorderInput,
 } from "@/lib/validation/admin";
 
 /**
@@ -235,6 +236,58 @@ export async function moveCategory(_prev: ActionState, fd: FormData): Promise<Ac
       meta: { direction: d.direction, position: to },
     });
     revalidateCategoryViews(row.kind);
+    return ok("Ordine aggiornato.");
+  });
+}
+
+/**
+ * Drop a whole sibling group (same kind, same parent) in its new order — the
+ * batch counterpart to `moveCategory`, called directly (not via a `<form>`)
+ * from the drag-and-drop list. One transaction renumbers everyone 0, 10, 20…
+ * instead of one round trip per step, which is what dragging a row from the
+ * bottom to the top of a long list would otherwise cost.
+ */
+export async function reorderCategories(
+  kind: Kind,
+  parentId: string | null,
+  ids: string[],
+): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireRole("admin");
+    const d = categoryReorderInput.parse({ kind, parentId, ids });
+    if (d.ids.length < 2) return ok("Ordine aggiornato.");
+
+    // Trust the dropped order only if it names exactly the current sibling set —
+    // a stale client (a row created, deleted or reparented elsewhere mid-drag)
+    // must not silently renumber the wrong rows.
+    const siblings = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(
+        and(
+          eq(categories.kind, d.kind),
+          d.parentId ? eq(categories.parentId, d.parentId) : isNull(categories.parentId),
+        ),
+      );
+    const siblingIds = new Set(siblings.map((s) => s.id));
+    if (d.ids.length !== siblingIds.size || d.ids.some((id) => !siblingIds.has(id))) {
+      throw new ActionError("L'elenco è cambiato: ricarica la pagina e riprova.");
+    }
+
+    await db.transaction(async (tx) => {
+      for (const [i, id] of d.ids.entries()) {
+        await tx.update(categories).set({ sortOrder: i * 10 }).where(eq(categories.id, id));
+      }
+    });
+    await logAudit({
+      actor,
+      action: "category.reorder",
+      entity: "category",
+      entityId: d.parentId ?? "root",
+      summary: `Ordine categorie aggiornato trascinando (${d.ids.length})`,
+      meta: { kind: d.kind, parentId: d.parentId, ids: d.ids },
+    });
+    revalidateCategoryViews(d.kind);
     return ok("Ordine aggiornato.");
   });
 }
