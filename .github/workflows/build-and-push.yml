@@ -5,12 +5,15 @@ name: Build and push image
 # app whose build exhausted host memory on 2026-08-24 and got an unrelated project's
 # MySQL killed 9 times by the kernel OOM killer. Building here costs the server nothing.
 #
-# TRIGGER IS MANUAL FOR NOW. Coolify still builds this app from source on every push.
-# Adding `on: push` before Coolify is switched to the Docker Image build pack would
-# build each commit twice and publish an image nothing pulls - the waste that got the
-# autolux-auto pilot disabled on 2026-08-26. Flip it once Coolify pulls this image.
+# Coolify is on the Docker Image build pack for this app and pulls
+# ghcr.io/julianosinaj/taccalite:latest, so this workflow is the only thing producing a
+# deployable artifact and the deploy job below is what ships it. Coolify auto-deploy is
+# OFF here on purpose: with it on, its webhook fires the instant you push and pulls the
+# PREVIOUS :latest, because this build has not finished yet.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -80,3 +83,25 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------- deploy
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Coolify deploy
+        # Secrets are read via env and tested in the shell, never in a step-level `if:`.
+        # The secrets context is not allowed there and using it makes the whole workflow
+        # file invalid - every run fails in 0s. Do not "tidy" this into an if:.
+        env:
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.testdemo.it' }}
+          COOLIFY_APP_UUID: ${{ vars.COOLIFY_APP_UUID || 'x2e39se3vrnh7ckodhetmn9p' }}
+        run: |
+          if [ -z "$COOLIFY_TOKEN" ]; then
+            echo "::warning::COOLIFY_TOKEN not set - the image is published but nothing deployed it. Click Deploy on taccalite in Coolify, or add the secret to make this automatic."
+            exit 0
+          fi
+          echo "Triggering deploy of $COOLIFY_APP_UUID at $COOLIFY_URL"
+          curl -fsSL -X GET -H "Authorization: Bearer $COOLIFY_TOKEN" "$COOLIFY_URL/api/v1/deploy?uuid=$COOLIFY_APP_UUID&force=false"
+          echo "Deploy requested."
