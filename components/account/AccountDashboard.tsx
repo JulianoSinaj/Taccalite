@@ -671,7 +671,7 @@ export default function AccountDashboard({
                       </span>
                     )}
                   </div>
-                  <h4 className="font-display mb-2 text-2xl text-cream">{reward.name}</h4>
+                  <h3 className="font-display mb-2 text-2xl text-cream">{reward.name}</h3>
                   <p className="mb-6 flex-1 text-sm leading-relaxed text-cream/70">{reward.description}</p>
                   <button
                     type="button"

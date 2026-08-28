@@ -31,9 +31,13 @@ export default function LoyaltyCard({
       </div>
 
       <div className="relative z-10">
-        <h3 className="font-display text-2xl font-bold tracking-[-0.028em] text-brown-950 uppercase sm:text-3xl">
+        {/* The wordmark printed on the card, not a section heading: as an h3 it
+            was the first heading after the page's h1 and broke the outline,
+            while announcing "Taccalite" to a screen reader as though it named
+            something. */}
+        <p className="font-display text-2xl font-bold tracking-[-0.028em] text-brown-950 uppercase sm:text-3xl">
           Taccalite
-        </h3>
+        </p>
         <p className="text-[11px] font-bold tracking-[0.2em] text-brown-950/70 uppercase">
           Cliente · Norcineria dal 1946
         </p>

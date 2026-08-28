@@ -78,7 +78,7 @@ export default function WeekBars({
               key={m}
               className={cn(
                 "absolute right-0 -translate-y-1/2 text-[0.5625rem] font-semibold tracking-[0.1em] tabular-nums",
-                dark ? "text-cream/40" : "text-taupe"
+                dark ? "text-cream/55" : "text-taupe"
               )}
               style={{ top: `${pct(m)}%` }}
             >
@@ -161,7 +161,7 @@ export default function WeekBars({
                       aria-hidden
                       className={cn(
                         "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[0.5rem] font-bold tracking-[0.1em] uppercase",
-                        dark ? "text-cream/40" : "text-taupe"
+                        dark ? "text-cream/55" : "text-taupe"
                       )}
                     >
                       n.d.
@@ -219,7 +219,7 @@ export default function WeekBars({
                       ? "bg-gold text-brown-950"
                       : "bg-brown-950 text-cream"
                     : dark
-                      ? "text-cream/45"
+                      ? "text-cream/55"
                       : "text-taupe"
                 )}
               >

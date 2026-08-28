@@ -266,6 +266,7 @@ export default async function StorePage({ searchParams }: SearchParams) {
                 <div className="grid grid-cols-2 gap-x-3.5 gap-y-10 sm:gap-x-7 sm:gap-y-14 lg:grid-cols-4">
                   {filtered.map((p) => (
                     <ProductTile
+                      headingLevel={2}
                       key={p.id}
                       product={{
                         slug: p.slug,

@@ -62,7 +62,7 @@ export default function Porchetta({ ricetta }: { ricetta: Ingrediente[] }) {
                 <span className="font-display text-[1.375rem] leading-none font-semibold tracking-[-0.02em] text-cream">
                   {step.name}
                 </span>
-                <span className="ml-auto text-right text-[0.8125rem] text-cream/45">
+                <span className="ml-auto text-right text-[0.8125rem] text-cream/60">
                   {step.note}
                 </span>
               </li>

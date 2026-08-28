@@ -83,6 +83,19 @@ never *"look here"*:
   full strength is for small type, hairlines and marks only.
 - The page must still read brown-and-gold from across the room. The old "no
   pinks, purples, neons, blues" rule stands — every accent is a pantry colour.
+- **Every accent must clear 4.5:1 as type**, because full strength *is* type:
+  each eyebrow, category tag and filter chip is `text-[var(--acc)]` at 9–10px.
+  The grounds to check are the three paper steps and the accent's own 14% tint
+  (the diary tag and the shop's active chip sit on it). Never soften an accent
+  with alpha where it is type — `color-mix(… 72%, transparent)` put the sedi
+  captions between 2.8 and 4.3:1, undoing the one case full strength exists for.
+- Never put `text-taupe` on an accent tint. Taupe is tuned for the plain paper
+  bands (4.6–5.4:1) and drops to ~4.1 on a ticket; `text-brown-700` holds 7.4.
+
+Two of the seven failed this and were struck deeper: zafferano `#a8791f → #856018`
+and house gold `#b08428 → #81611d`. `casa` matters most — it is the fallback for
+any category `lib/categories.ts` does not recognise, so it was the most-used of
+the seven and the weakest at 3.27:1 on paper, 2.83 on its own tint.
 
 ### Plates — the fallback when there is no photograph
 Twenty of the twenty-four products have no image, so this is the majority of the

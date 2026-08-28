@@ -56,14 +56,25 @@
    * one hard rule the brand had. They are used as *tints* (8–14% over paper)
    * for grounds and at full strength only for small type and hairlines, so the
    * page still reads brown-and-gold from across the room.
+   *
+   * Because full strength lands on *type* — every eyebrow, category tag and
+   * filter chip is `text-[var(--acc)]` at 9–10px — each of these has to clear
+   * 4.5:1 on the three paper steps AND on its own 14% tint, which is the ground
+   * the diary's category tag and the shop's active chip put it on. Five always
+   * did. The two yellows did not: zafferano measured 3.72 on paper and 3.18 on
+   * its own tint, house gold 3.27 and 2.83 — and `casa` is also the *fallback*
+   * for any category the keyword pass does not recognise, so it was the most
+   * used of the seven. Both are struck deeper here, by the least that clears
+   * the floor; the pair stay as close to each other as they always were (they
+   * differ by 1.14:1, which is the point — zafferano and oro are neighbours).
    */
   --acc-salumi: #8f2f3b;        /* rosso salame */
   --acc-carni: #a4472a;         /* terracotta */
-  --acc-formaggi: #a8791f;      /* zafferano */
+  --acc-formaggi: #856018;      /* zafferano */
   --acc-gastronomia: #4e6135;   /* oliva */
   --acc-cantina: #6b2438;       /* vinaccia */
   --acc-regalo: #2f5340;        /* verde bottiglia */
-  --acc-casa: #b08428;          /* la casa: gold, struck deeper */
+  --acc-casa: #81611d;          /* la casa: gold, struck deeper */
 
   /* ── Semantic surfaces & status ───────────────────────────────────────────
    *

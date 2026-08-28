@@ -50,10 +50,24 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <IntroLoader />
         <SmoothScroll />
         <ScrollProgress />
+        {/* The first thing a keyboard reaches, and invisible until it is
+            reached. The header carries ten destinations plus the account badge
+            and the cart, and every one of them stood between Tab and the page
+            on every page. Ahead of the header in the DOM, because that is the
+            only position from which it can skip it. */}
+        <a
+          href="#contenuto"
+          className="sr-only left-4 top-4 z-[100] rounded-full bg-brown-950 px-5 py-3 text-xs font-bold tracking-widest text-cream uppercase focus:not-sr-only focus:fixed"
+        >
+          Salta al contenuto
+        </a>
         <SiteHeader
           shops={shops.map((shop) => ({ slug: shop.slug, name: shop.name, phone: shop.phone }))}
         />
-        <main className="flex-1">
+        {/* `tabIndex={-1}` so the skip link can actually move focus here: a
+            <main> is not focusable on its own, and without it the jump moves the
+            scroll position but leaves the next Tab back in the header. */}
+        <main id="contenuto" tabIndex={-1} className="flex-1 focus:outline-none">
           {/* Replaces the old Framer AnimatePresence fade: that animated the DOM
               while the browser was trying to snapshot it for the transition, so
               the two fought. `default` names the transition class the CSS in

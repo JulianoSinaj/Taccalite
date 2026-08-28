@@ -55,8 +55,19 @@ function MaybeMorph({
 export default function ProductTile({
   product,
   morph = true,
+  headingLevel = 3,
 }: {
   product: ProductTileData;
+  /**
+   * The tile's name is a heading, and its level depends on where the grid sits.
+   *
+   * Under a section heading — the homepage rail, the related products on a
+   * product page, a shop's own selection — it is an h3. On `/negozio` and on a
+   * category listing the grid *is* the page's content, with no h2 above it (the
+   * only ones there belong to the empty states), so the outline jumped from the
+   * h1 straight to h3.
+   */
+  headingLevel?: 2 | 3;
   /**
    * Take part in the shared-element morph into the product page.
    *
@@ -67,6 +78,7 @@ export default function ProductTile({
    */
   morph?: boolean;
 }) {
+  const Heading = headingLevel === 2 ? "h2" : "h3";
   const buyable = product.purchasable && product.priceCents != null;
   const soldOut = product.stock === 0;
   const lowStock =
@@ -143,7 +155,7 @@ export default function ProductTile({
           <span aria-hidden className="size-[5px] rotate-45 bg-[var(--acc)]" />
           {product.category}
         </p>
-        <h3 className="font-display mt-1.5 text-[1.0625rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950 sm:mt-2 sm:text-xl">
+        <Heading className="font-display mt-1.5 text-[1.0625rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950 sm:mt-2 sm:text-xl">
           <Link
             href={`/negozio/${product.slug}`}
             // `inline-block` + vertical padding: as an inline link the name was a
@@ -154,7 +166,7 @@ export default function ProductTile({
           >
             {product.name}
           </Link>
-        </h3>
+        </Heading>
 
         {product.origin && <p className="mt-1.5 text-[0.8125rem] text-taupe">{product.origin}</p>}
 
@@ -165,7 +177,7 @@ export default function ProductTile({
             // it was previously the quietest mark on the card.
             <p className="ticket bg-[color-mix(in_oklab,var(--acc)_11%,var(--paper-warm))] px-2.5 py-1 text-[0.9375rem] font-semibold text-brown-950 tabular-nums">
               {formatEuro(product.priceCents)}
-              {product.unit && <span className="font-normal text-taupe"> / {product.unit}</span>}
+              {product.unit && <span className="font-normal text-brown-700"> / {product.unit}</span>}
             </p>
           ) : (
             <p className="text-[0.8125rem] text-taupe">Al banco, su richiesta</p>

@@ -174,7 +174,7 @@ export default async function ProductDetailPage({ params }: Params) {
                 <span className="font-display text-3xl font-semibold text-brown-950 tabular-nums">
                   {formatEuro(product.priceCents ?? 0)}
                 </span>
-                {product.unit && <span className="text-base text-taupe">/ {product.unit}</span>}
+                {product.unit && <span className="text-base text-brown-700">/ {product.unit}</span>}
               </div>
 
               {/* Availability */}

@@ -8,7 +8,7 @@ import SelectField from "@/components/ui/SelectField";
 const TOPICS = ["Informazioni", "Catering", "Consegna a domicilio", "Richiesta speciale"];
 
 const fieldClass =
-  "w-full border-b border-rule bg-transparent py-3 text-[0.9375rem] text-brown-950 placeholder:text-tan transition-colors focus:border-gold-deep focus:outline-none";
+  "w-full border-b border-rule bg-transparent py-3 text-[0.9375rem] text-brown-950 placeholder:text-taupe transition-colors focus:border-gold-deep focus:outline-none";
 
 const labelClass =
   "block text-[0.625rem] font-semibold tracking-[0.22em] text-taupe uppercase";

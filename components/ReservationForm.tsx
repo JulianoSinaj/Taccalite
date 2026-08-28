@@ -403,7 +403,7 @@ export default function ReservationForm({
               {PREFERENCES.map((pref) => (
                 <label key={pref} className="group flex cursor-pointer items-center gap-3 py-1.5">
                   <input type="checkbox" name="preferences" value={pref} className="h-5 w-5 rounded accent-brown-950" />
-                  <span className="text-sm text-brown-900 transition-colors group-hover:text-gold-dark">{pref}</span>
+                  <span className="text-sm text-brown-900 transition-colors group-hover:text-gold-deep">{pref}</span>
                 </label>
               ))}
             </div>

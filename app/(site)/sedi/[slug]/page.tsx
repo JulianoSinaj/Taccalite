@@ -579,13 +579,23 @@ export default async function ShopDetailPage({ params }: Params) {
                       className={`plate absolute inset-0 block ${plateEngraving(`${shop.slug}-${feature.title}`)}`}
                     />
                     <div className="relative flex h-full flex-col items-center justify-center gap-4 px-4 text-center">
-                      <span className="flex size-12 items-center justify-center rounded-full border border-[color-mix(in_oklab,var(--acc)_45%,transparent)] bg-paper/70 text-[color-mix(in_oklab,var(--acc)_85%,transparent)] transition-transform duration-700 group-hover:-translate-y-1">
+                      {/* The glyph carries the feature as much as the caption
+                          does, so it is a meaningful graphic and owes 3:1. At
+                          85% the lighter accents sat at 3.5 — fine — but the
+                          ring around it was at 45%, well under. Both at full
+                          strength now; the ring reads as a hairline either way. */}
+                      <span className="flex size-12 items-center justify-center rounded-full border border-[var(--acc)]/60 bg-paper/70 text-[var(--acc)] transition-transform duration-700 group-hover:-translate-y-1">
                         <Icon className="size-5" />
                       </span>
                       <h3 className="font-display text-lg leading-tight font-semibold text-brown-950 sm:text-xl">
                         {feature.title}
                       </h3>
-                      <p className="text-[0.5625rem] font-semibold tracking-[0.2em] text-[color-mix(in_oklab,var(--acc)_72%,transparent)] uppercase sm:text-[0.625rem]">
+                      {/* Full strength, not 72%: this is 9px type, and the
+                          softening put every accent between 2.8 and 4.3:1 on
+                          the plate under it. The accents are already reserved
+                          for small type at full strength — the alpha was
+                          undoing the one case the rule exists for. */}
+                      <p className="text-[0.5625rem] font-semibold tracking-[0.2em] text-[var(--acc)] uppercase sm:text-[0.625rem]">
                         {feature.caption}
                       </p>
                     </div>
