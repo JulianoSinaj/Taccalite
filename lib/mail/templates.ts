@@ -20,12 +20,62 @@ function esc(v: string | number | null | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Brand-styled responsive email shell (inline styles for client compatibility). */
+/**
+ * The quiet ink — row labels, footnotes, the "if this wasn't you" line.
+ *
+ * `#807868` (the storefront's old taupe) measured 3.93:1 on the card and 3.48
+ * on the outer ground, and it carries 11–14px type, so the large-text exemption
+ * never applied. Deepened to clear 4.5:1 on all three light grounds this shell
+ * uses. It must not be put on the dark header/footer band, where it is 3.11 —
+ * that band has `#cbb89b` (9.33:1).
+ */
+const MUTED = "#6b6557";
+
+/**
+ * A call to action that survives Outlook.
+ *
+ * A padded `<a>` is the obvious way to draw one, and it is what these used to
+ * be — but Outlook on Windows renders through Word, which ignores padding on an
+ * inline element. The gold pill collapsed to gold text on the page ground: no
+ * shape, no target, and the one thing the message is asking you to do stops
+ * looking like a button. A single-cell table gets its padding honoured
+ * everywhere, and the `<a>` inside keeps the whole cell clickable.
+ */
+function button(href: string, label: string): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px 0 0;">
+    <tr><td bgcolor="#e1be64" style="background:#e1be64;border-radius:999px;">
+      <a href="${href}" style="display:inline-block;padding:13px 24px;font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#2a1a10;text-decoration:none;border-radius:999px;">${label}</a>
+    </td></tr>
+  </table>`;
+}
+
+/**
+ * Brand-styled responsive email shell (inline styles for client compatibility).
+ *
+ * The preheader is not optional in practice, only in the signature. A client
+ * with no hidden preheader to read previews the first text in the body — and
+ * the first text in this body is the letterhead, so twelve of these previewed
+ * in the inbox as "Taccalite Norcineria dal 1946" and spent the one line the
+ * reader sees before opening on the sender's own name. Callers that have
+ * something better to say still pass it; the rest fall back to the opening of
+ * their own copy, which is never worse than the letterhead.
+ */
 function layout(opts: { heading: string; body: string; preheader?: string }): string {
+  const preheader = opts.preheader ?? htmlToText(opts.body).split("\n")[0].slice(0, 140);
   return `<!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(opts.heading)}</title>
+<!-- Declared light-only on purpose. Apple Mail and Outlook.com re-colour an
+     email that does not say what it supports, and their automatic inversion
+     turns this composition inside out: the cream card goes muddy and the ink on
+     the gold button — which stays gold, because it is a background colour they
+     keep — is lightened to near-invisible. Saying "light" leaves it alone. -->
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<style>:root{color-scheme:light;supported-color-schemes:light;}</style>
+</head>
 <body style="margin:0;background:#efe4d2;font-family:Helvetica,Arial,sans-serif;color:#2a1a10;">
-  ${opts.preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${opts.preheader}</div>` : ""}
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(preheader)}</div>` : ""}
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#efe4d2;padding:24px 0;">
     <tr><td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#f8f2e8;border-radius:20px;overflow:hidden;box-shadow:0 20px 50px -20px rgba(42,26,16,.35);">
@@ -74,11 +124,21 @@ function fmtPickupIt(at: Date): string {
   });
 }
 
+/**
+ * One label/value pair of a detail table.
+ *
+ * A `<th scope="row">`, not a second `<td>`: these tables are the substance of
+ * the message — the booking, the order, the message from the contact form — and
+ * a screen reader that knows the first cell names the second reads "Telefono,
+ * 071 663 5605" instead of two loose values. The tables that hold them are data
+ * tables and therefore carry no `role="presentation"`; the ones that only push
+ * pixels around, in `layout` and `button`, still do.
+ */
 function row(label: string, value: string): string {
   if (!value) return "";
   // `label` is a hard-coded constant; `value` is often user-supplied → escape it.
   return `<tr>
-    <td style="padding:8px 0;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#807868;width:150px;vertical-align:top;">${label}</td>
+    <th scope="row" align="left" style="padding:8px 0;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:${MUTED};width:150px;vertical-align:top;font-weight:400;">${label}</th>
     <td style="padding:8px 0;font-size:15px;color:#2a1a10;">${esc(value)}</td>
   </tr>`;
 }
@@ -104,7 +164,7 @@ const TYPE_LABEL: Record<ReservationEmailData["type"], string> = {
 };
 
 function reservationDetailTable(d: ReservationEmailData): string {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 4px;">
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 4px;">
     ${row("Riferimento", d.reference)}
     ${row("Tipo", TYPE_LABEL[d.type])}
     ${row("Negozio", d.shopName)}
@@ -128,10 +188,8 @@ export function reservationCustomerEmail(d: ReservationEmailData): Built {
       contattandoti ai recapiti che ci hai lasciato. Ecco il riepilogo:
     </p>
     ${reservationDetailTable(d)}
-    <p style="margin:20px 0 0;">
-      <a href="${absoluteUrl(`/traccia?ref=${encodeURIComponent(d.reference)}`)}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Segui lo stato della richiesta</a>
-    </p>
-    <p style="font-size:13px;line-height:1.7;color:#807868;margin:18px 0 0;">
+      ${button(absoluteUrl(`/traccia?ref=${encodeURIComponent(d.reference)}`), "Segui lo stato della richiesta")}
+    <p style="font-size:13px;line-height:1.7;color:${MUTED};margin:18px 0 0;">
       Conserva il riferimento <strong>${d.reference}</strong>. Per modifiche chiamaci in negozio.
     </p>`;
   return {
@@ -142,7 +200,9 @@ export function reservationCustomerEmail(d: ReservationEmailData): Built {
       `Tipo: ${TYPE_LABEL[d.type]}\nNegozio: ${d.shopName}\nData: ${fmtDateIt(d.date)}` +
       `${d.time ? ` ${d.time}` : ""}\n${d.guests != null ? `Ospiti: ${d.guests}\n` : ""}` +
       `${d.quantityKg != null ? `Quantità: ${d.quantityKg} kg\n` : ""}` +
-      `Ti contatteremo per confermare. — Norcineria Taccalite`,
+      `Ti contatteremo per confermare.\n` +
+      `Segui lo stato della richiesta: ${absoluteUrl(`/traccia?ref=${encodeURIComponent(d.reference)}`)}\n` +
+      `— Norcineria Taccalite`,
   };
 }
 
@@ -170,7 +230,11 @@ function orderItemsTable(d: OrderEmailData): string {
         `<td style="padding:6px 0;font-size:14px;color:#2a1a10;text-align:right;">${euro(i.lineTotalCents)}</td></tr>`,
     )
     .join("");
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0;border-top:1px solid #e6d9c7;">
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0;border-top:1px solid #e6d9c7;">
+    <tr>
+      <th scope="col" align="left" style="padding:8px 0 6px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:${MUTED};font-weight:400;">Articolo</th>
+      <th scope="col" align="right" style="padding:8px 0 6px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:${MUTED};font-weight:400;">Totale</th>
+    </tr>
     ${rows}
     <tr><td style="padding:10px 0 0;font-weight:700;border-top:1px solid #e6d9c7;">Totale</td>
     <td style="padding:10px 0 0;font-weight:700;text-align:right;border-top:1px solid #e6d9c7;">${euro(d.totalCents)}</td></tr>
@@ -195,7 +259,7 @@ export function orderCustomerEmail(d: OrderEmailData): Built {
       Ciao ${esc(d.name)}, grazie per il tuo ordine <strong>${esc(d.orderNumber)}</strong>.
     </p>
     ${orderItemsTable(d)}
-    <p style="font-size:13px;color:#807868;margin:14px 0 0;">${fulfil}</p>`;
+    <p style="font-size:13px;color:${MUTED};margin:14px 0 0;">${fulfil}</p>`;
   return {
     subject: `Ordine confermato · ${d.orderNumber} — Norcineria Taccalite`,
     html: layout({ heading: "Ordine confermato", body, preheader: `Ordine ${d.orderNumber}` }),
@@ -237,9 +301,9 @@ export function orderAwaitingPaymentEmail(
     ${orderItemsTable(d)}
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:16px 0 0;padding:14px 16px;background:#f6efe3;border-left:3px solid #e1be64;">
       <strong>Da pagare ${where}: ${euro(d.totalCents)}</strong><br />
-      <span style="font-size:13px;color:#807868;">Puoi pagare in contanti o con il POS. Nessun addebito è stato effettuato online.</span>
+      <span style="font-size:13px;color:${MUTED};">Puoi pagare in contanti o con il POS. Nessun addebito è stato effettuato online.</span>
     </p>
-    <p style="font-size:13px;color:#807868;margin:14px 0 0;">${esc(fulfil)}</p>`;
+    <p style="font-size:13px;color:${MUTED};margin:14px 0 0;">${esc(fulfil)}</p>`;
   return {
     subject: `Ordine ricevuto · ${d.orderNumber} — Norcineria Taccalite`,
     html: layout({
@@ -275,15 +339,14 @@ export function orderOwnerEmail(d: OrderEmailData, opts: { toCollectCents?: numb
     </p>
     ${orderItemsTable(d)}
     ${collect}
-    <p style="margin:20px 0 0;">
-      <a href="${absoluteUrl("/admin/orders")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Apri nel gestionale</a>
-    </p>`;
+      ${button(absoluteUrl("/admin/orders"), "Apri nel gestionale")}`;
   return {
     subject: `Nuovo ordine · ${d.orderNumber}${opts.toCollectCents != null ? " (da incassare)" : ""}`,
     html: layout({ heading: "Nuovo ordine", body }),
     text:
       `Nuovo ordine ${d.orderNumber} da ${d.name} (${d.email}). Totale ${euro(d.totalCents)}.` +
-      (opts.toCollectCents != null ? ` Da incassare: ${euro(opts.toCollectCents)}.` : ""),
+      (opts.toCollectCents != null ? ` Da incassare: ${euro(opts.toCollectCents)}.` : "") +
+      `\n\nApri nel gestionale: ${absoluteUrl("/admin/orders")}`,
   };
 }
 
@@ -309,10 +372,8 @@ export function paymentIssueOwnerEmail(d: {
     : `Il pagamento dell'ordine <strong>${esc(d.orderNumber)}</strong> non è andato a buon fine. L'ordine resta in attesa e la merce non è stata consegnata.`;
   const body = `
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 16px;">${lead}</p>
-    ${d.detail ? `<p style="font-size:13px;color:#807868;margin:0 0 16px;">${esc(d.detail)}</p>` : ""}
-    <p style="margin:20px 0 0;">
-      <a href="${absoluteUrl(`/admin/orders/${d.orderId}`)}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Apri l'ordine</a>
-    </p>`;
+    ${d.detail ? `<p style="font-size:13px;color:${MUTED};margin:0 0 16px;">${esc(d.detail)}</p>` : ""}
+      ${button(absoluteUrl(`/admin/orders/${d.orderId}`), "Apri l'ordine")}`;
   return {
     subject: `${heading} · ${d.orderNumber}`,
     html: layout({ heading, body }),
@@ -346,17 +407,79 @@ export function porchettaReminderEmail(
   };
 }
 
+/**
+ * HTML → the plain-text part, for a body this module did not write.
+ *
+ * Every other template writes its two parts by hand. The newsletter cannot: its
+ * body is composed in the gestionale, so the text part has to be derived — and
+ * `replace(/<[^>]+>/g, "")` derived it badly. It ran paragraphs together into
+ * one line, left `&amp;` and `&nbsp;` sitting there as literals, and dropped
+ * every link, so a message whose whole point was "here is the new opening time,
+ * book here" arrived as prose with nothing to act on.
+ *
+ * Links keep their destination in the form most mail readers linkify. Block
+ * elements become blank lines, `<br>` a single one, and runs of three or more
+ * are collapsed so an airy body doesn't arrive full of holes.
+ */
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, "")
+    .replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href, label) => {
+      const text = label.replace(/<[^>]+>/g, "").trim();
+      // A link whose text is already the URL doesn't want it twice.
+      return !text || text === href ? href : `${text} (${href})`;
+    })
+    .replace(/<br\s*\/?>/gi, "\n")
+    // A list is one block: its items want single breaks between them, not the
+    // blank line every other block element earns.
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6]|tr|blockquote|ul|ol)>/gi, "\n\n")
+    .replace(/<li\b[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, "")
+    // `&amp;` last of the named ones, so "&amp;lt;" decodes to "&lt;" and not to
+    // "<" — the usual double-decode trap.
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&(?:mdash|ndash);/gi, "—")
+    .replace(/&(?:lsquo|rsquo|#8217);/gi, "'")
+    .replace(/&(?:ldquo|rdquo);/gi, '"')
+    .replace(/&hellip;/gi, "…")
+    // The vowels an Italian body actually carries, for a composer who pasted
+    // from a word processor rather than typing into the box. Grave and acute
+    // are separate accents and not interchangeable here — "perché" takes the
+    // acute, and rendering it "perchè" is a spelling mistake, not a near miss.
+    .replace(/&([aeiouAEIOU])(grave|acute);/g, (_m, v: string, accent: string) => {
+      const grave: Record<string, string> = { a: "à", e: "è", i: "ì", o: "ò", u: "ù", A: "À", E: "È", I: "Ì", O: "Ò", U: "Ù" };
+      const acute: Record<string, string> = { a: "á", e: "é", i: "í", o: "ó", u: "ú", A: "Á", E: "É", I: "Í", O: "Ó", U: "Ú" };
+      return (accent === "acute" ? acute : grave)[v] ?? _m;
+    })
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&#(\d+);/g, (_m, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_m, code) => String.fromCodePoint(parseInt(code, 16)))
+    .replace(/&amp;/gi, "&")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** Newsletter broadcast wrapper (admin-composed). */
 export function newsletterBroadcast(subject: string, bodyHtml: string, unsubUrl: string): Built {
+  const notice =
+    "Ricevi questa email perché ti sei iscritto agli aggiornamenti di Norcineria Taccalite.";
   const body = `${bodyHtml}
-    <p style="font-size:11px;color:#807868;margin:24px 0 0;">
-      Ricevi questa email perché ti sei iscritto agli aggiornamenti di Norcineria Taccalite.
-      <a href="${unsubUrl}" style="color:#807868;">Annulla iscrizione</a>.
+    <p style="font-size:11px;color:${MUTED};margin:24px 0 0;">
+      ${notice}
+      <a href="${unsubUrl}" style="color:${MUTED};">Annulla iscrizione</a>.
     </p>`;
   return {
     subject,
-    html: layout({ heading: subject, body }),
-    text: bodyHtml.replace(/<[^>]+>/g, ""),
+    html: layout({ heading: subject, body, preheader: subject }),
+    // The unsubscribe link was added to `body`, not `bodyHtml`, so the text part
+    // never carried one at all — the one link a marketing message must have in
+    // both parts.
+    text: `${htmlToText(bodyHtml)}\n\n—\n${notice}\nAnnulla iscrizione: ${unsubUrl}`,
   };
 }
 
@@ -372,9 +495,7 @@ export function welcomeEmail(name: string, welcomePoints: number): Built {
       Presenta la tua scheda in negozio ad ogni acquisto per accumulare punti e riscattare
       i premi del club: taglieri, Verdicchio e la nostra porchetta.
     </p>
-    <p style="margin:22px 0 0;">
-      <a href="${absoluteUrl("/account")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Vai alla tua area personale</a>
-    </p>`;
+      ${button(absoluteUrl("/account"), "Vai alla tua area personale")}`;
   return {
     subject: "Benvenuto nel Club Taccalite",
     html: layout({ heading, body, preheader: `${welcomePoints} punti di benvenuto ti aspettano` }),
@@ -391,9 +512,7 @@ export function backInStockEmail(productName: string, productSlug: string): Buil
       Buone notizie! <strong>${esc(productName)}</strong> è di nuovo disponibile nel nostro
       negozio online.
     </p>
-    <p style="margin:22px 0 0;">
-      <a href="${url}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Vai al prodotto</a>
-    </p>`;
+      ${button(url, "Vai al prodotto")}`;
   return {
     subject: `${productName} è di nuovo disponibile`,
     html: layout({ heading, body, preheader: `${productName} è tornato disponibile` }),
@@ -451,9 +570,7 @@ export function redemptionStatusEmail(
       <strong>${esc(rewardName)}</strong>. Ti abbiamo riaccreditato i
       <strong>${points} punti</strong>: puoi usarli subito per un altro premio.
     </p>
-    <p style="margin:22px 0 0;">
-      <a href="${absoluteUrl("/account")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Vedi i premi disponibili</a>
-    </p>`;
+      ${button(absoluteUrl("/account"), "Vedi i premi disponibili")}`;
   return {
     subject: done ? "Il tuo premio è stato consegnato" : "Premio non disponibile — punti riaccreditati",
     html: layout({
@@ -484,9 +601,7 @@ export function rewardUnlockedEmail(
       fedeltà puoi ora riscattare:
     </p>
     <ul style="padding-left:18px;margin:0 0 16px;">${items}</ul>
-    <p style="margin:22px 0 0;">
-      <a href="${absoluteUrl("/account")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Riscatta nel tuo Club</a>
-    </p>`;
+      ${button(absoluteUrl("/account"), "Riscatta nel tuo Club")}`;
   return {
     subject: "Hai sbloccato un nuovo premio fedeltà",
     html: layout({ heading: "Un premio ti aspetta", body, preheader: `${balance} punti disponibili` }),
@@ -506,10 +621,8 @@ export function newsletterConfirmEmail(confirmUrl: string): Built {
       indirizzo per ricevere gli inviti alle degustazioni e l&apos;avviso quando la porchetta del
       sabato esce dal forno.
     </p>
-    <p style="margin:22px 0 0;">
-      <a href="${confirmUrl}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Conferma iscrizione</a>
-    </p>
-    <p style="font-size:12px;color:#807868;margin:18px 0 0;">Se non sei stato tu, ignora questa email.</p>`;
+      ${button(confirmUrl, "Conferma iscrizione")}
+    <p style="font-size:12px;color:${MUTED};margin:18px 0 0;">Se non sei stato tu, ignora questa email.</p>`;
   return {
     subject: "Conferma la tua iscrizione — Norcineria Taccalite",
     html: layout({ heading, body }),
@@ -548,9 +661,7 @@ export function reservationCustomerCancelledOwnerEmail(d: ReservationEmailData):
       ${esc(d.name)} ha annullato la prenotazione dal proprio account. Dettagli:
     </p>
     ${reservationDetailTable(d)}
-    <p style="margin:22px 0 0;">
-      <a href="${absoluteUrl("/admin/reservations")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Apri nel gestionale</a>
-    </p>`;
+      ${button(absoluteUrl("/admin/reservations"), "Apri nel gestionale")}`;
   return {
     subject: `Annullata dal cliente · ${TYPE_LABEL[d.type]} · ${d.reference}`,
     html: layout({ heading, body }),
@@ -561,7 +672,8 @@ Nome: ${d.name}
 ` +
       `Telefono: ${d.phone}
 Negozio: ${d.shopName}
-Data: ${fmtDateIt(d.date)}${d.time ? ` ${d.time}` : ""}`,
+Data: ${fmtDateIt(d.date)}${d.time ? ` ${d.time}` : ""}` +
+      `\n\nApri nel gestionale: ${absoluteUrl("/admin/reservations")}`,
   };
 }
 
@@ -573,9 +685,7 @@ export function reservationOwnerEmail(d: ReservationEmailData): Built {
       È arrivata una nuova richiesta dal sito. Dettagli:
     </p>
     ${reservationDetailTable(d)}
-    <p style="margin:22px 0 0;">
-      <a href="${absoluteUrl("/admin/reservations")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Apri nel gestionale</a>
-    </p>`;
+      ${button(absoluteUrl("/admin/reservations"), "Apri nel gestionale")}`;
   return {
     subject: `Nuova prenotazione · ${TYPE_LABEL[d.type]} · ${d.reference}`,
     html: layout({ heading, body }),
@@ -585,7 +695,8 @@ export function reservationOwnerEmail(d: ReservationEmailData): Built {
       `Data: ${fmtDateIt(d.date)}${d.time ? ` ${d.time}` : ""}\n` +
       `${d.guests != null ? `Ospiti: ${d.guests}\n` : ""}` +
       `${d.quantityKg != null ? `Quantità: ${d.quantityKg} kg\n` : ""}` +
-      `Note: ${d.notes ?? "-"}`,
+      `Note: ${d.notes ?? "-"}\n\n` +
+      `Apri nel gestionale: ${absoluteUrl("/admin/reservations")}`,
   };
 }
 
@@ -766,9 +877,7 @@ export function lowStockOwnerEmail(items: { name: string; stock: number }[]): Bu
       Alcuni prodotti stanno per esaurirsi:
     </p>
     <ul style="padding-left:18px;margin:0 0 16px;">${rows}</ul>
-    <p style="margin:20px 0 0;">
-      <a href="${absoluteUrl("/admin/products")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Gestisci le scorte</a>
-    </p>`;
+      ${button(absoluteUrl("/admin/products"), "Gestisci le scorte")}`;
   return {
     subject: `Scorte in esaurimento · ${items.length} prodott${items.length === 1 ? "o" : "i"}`,
     html: layout({ heading: "Scorte in esaurimento", body }),
@@ -786,33 +895,31 @@ export type OwnerDigestData = {
 /** (I2) Daily digest to the owner: today's reservations + recent orders + low stock. */
 export function ownerDigestEmail(d: OwnerDigestData): Built {
   const section = (title: string, inner: string) =>
-    `<p style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#807868;margin:20px 0 6px;">${title}</p>${inner}`;
+    `<p style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:${MUTED};margin:20px 0 6px;">${title}</p>${inner}`;
   const resHtml = d.reservations.length
     ? `<ul style="padding-left:18px;margin:0;">${d.reservations
         .map(
           (r) =>
-            `<li style="margin:0 0 4px;font-size:14px;">${esc(TYPE_LABEL[r.type])} · ${esc(r.name)}${r.time ? ` · ${esc(r.time)}` : ""}${r.quantityKg != null ? ` · ${r.quantityKg} kg` : ""} <span style="color:#807868;">(${esc(r.reference)})</span></li>`,
+            `<li style="margin:0 0 4px;font-size:14px;">${esc(TYPE_LABEL[r.type])} · ${esc(r.name)}${r.time ? ` · ${esc(r.time)}` : ""}${r.quantityKg != null ? ` · ${r.quantityKg} kg` : ""} <span style="color:${MUTED};">(${esc(r.reference)})</span></li>`,
         )
         .join("")}</ul>`
-    : `<p style="font-size:14px;color:#807868;margin:0;">Nessuna prenotazione per oggi.</p>`;
+    : `<p style="font-size:14px;color:${MUTED};margin:0;">Nessuna prenotazione per oggi.</p>`;
   const ordHtml = d.orders.length
     ? `<ul style="padding-left:18px;margin:0;">${d.orders
         .map((o) => `<li style="margin:0 0 4px;font-size:14px;">${esc(o.orderNumber)} · ${esc(o.name)} · ${euro(o.totalCents)}</li>`)
         .join("")}</ul>`
-    : `<p style="font-size:14px;color:#807868;margin:0;">Nessun ordine nelle ultime 24 ore.</p>`;
+    : `<p style="font-size:14px;color:${MUTED};margin:0;">Nessun ordine nelle ultime 24 ore.</p>`;
   const lowHtml = d.lowStock.length
     ? `<ul style="padding-left:18px;margin:0;">${d.lowStock
         .map((p) => `<li style="margin:0 0 4px;font-size:14px;">${esc(p.name)} — ${p.stock} rimasti</li>`)
         .join("")}</ul>`
-    : `<p style="font-size:14px;color:#807868;margin:0;">Scorte a posto.</p>`;
+    : `<p style="font-size:14px;color:${MUTED};margin:0;">Scorte a posto.</p>`;
   const body = `
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0 0 4px;">Riepilogo del ${esc(fmtDateIt(d.date))}.</p>
     ${section("Prenotazioni di oggi", resHtml)}
     ${section("Ordini (ultime 24h)", ordHtml)}
     ${section("Scorte in esaurimento", lowHtml)}
-    <p style="margin:22px 0 0;">
-      <a href="${absoluteUrl("/admin")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Apri il gestionale</a>
-    </p>`;
+      ${button(absoluteUrl("/admin"), "Apri il gestionale")}`;
   return {
     subject: `Riepilogo giornaliero · ${fmtDateIt(d.date)}`,
     html: layout({ heading: "Il tuo riepilogo", body, preheader: `${d.reservations.length} prenotazioni · ${d.orders.length} ordini` }),
@@ -923,17 +1030,15 @@ export type ContactEmailData = {
  */
 export function contactOwnerEmail(d: ContactEmailData): Built {
   const body = `
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+    <table width="100%" cellpadding="0" cellspacing="0">
       ${row("Nome", d.name)}
       ${row("Email", d.email)}
       ${row("Telefono", d.phone ?? "")}
       ${row("Motivo", d.topic)}
     </table>
-    <p style="margin:22px 0 6px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#807868;">Messaggio</p>
+    <p style="margin:22px 0 6px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:${MUTED};">Messaggio</p>
     <p style="font-size:15px;line-height:1.7;color:#41281b;margin:0;white-space:pre-wrap;">${esc(d.message)}</p>
-    <p style="margin:22px 0 0;">
-      <a href="mailto:${esc(d.email)}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Rispondi a ${esc(d.name)}</a>
-    </p>`;
+      ${button(`mailto:${esc(d.email)}`, "Rispondi a ${esc(d.name)}")}`;
   return {
     subject: `Nuovo messaggio dal sito — ${d.topic}`,
     html: layout({
@@ -963,10 +1068,8 @@ export function passwordResetEmail(resetUrl: string, minutes: number): Built {
       Hai chiesto di reimpostare la password del tuo account Taccalite. Il link qui sotto
       resta valido per <strong>${minutes} minuti</strong> e può essere usato una volta sola.
     </p>
-    <p style="margin:22px 0 0;">
-      <a href="${resetUrl}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Scegli una nuova password</a>
-    </p>
-    <p style="font-size:12px;color:#807868;margin:18px 0 0;">
+      ${button(resetUrl, "Scegli una nuova password")}
+    <p style="font-size:12px;color:${MUTED};margin:18px 0 0;">
       Se non sei stato tu, puoi ignorare questa email: la password attuale resta valida e
       nessuno può accedere senza questo link.
     </p>`;
@@ -1028,10 +1131,8 @@ export function verifyEmailEmail(verifyUrl: string, name: string, claimable = 0)
       ordini e a rimettere in piedi l&apos;accesso se un giorno dimentichi la password.
     </p>
     ${claim}
-    <p style="margin:22px 0 0;">
-      <a href="${verifyUrl}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Conferma il mio indirizzo</a>
-    </p>
-    <p style="font-size:12px;color:#807868;margin:18px 0 0;">
+      ${button(verifyUrl, "Conferma il mio indirizzo")}
+    <p style="font-size:12px;color:${MUTED};margin:18px 0 0;">
       Il link resta valido 24 ore. Se non hai creato tu questo account, ignora questa email.
     </p>`;
   return {
@@ -1058,9 +1159,7 @@ export function ordersClaimedEmail(name: string, count: number, points: number):
           : ""
       }
     </p>
-    <p style="margin:22px 0 0;">
-      <a href="${absoluteUrl("/account")}" style="display:inline-block;background:#e1be64;color:#2a1a10;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">Vedi i tuoi ordini</a>
-    </p>`;
+      ${button(absoluteUrl("/account"), "Vedi i tuoi ordini")}`;
   return {
     subject: "Abbiamo ritrovato i tuoi ordini — Norcineria Taccalite",
     html: layout({
