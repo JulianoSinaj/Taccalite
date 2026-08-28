@@ -232,7 +232,7 @@ export default function IntroLoader() {
         type="button"
         onClick={handleSkip}
         aria-label="Salta l'introduzione"
-        className="intro-skip tap absolute right-6 bottom-6 text-xs font-medium tracking-wide text-cream/75 hover:text-cream focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none sm:right-10 sm:bottom-10"
+        className="intro-skip absolute right-3 bottom-3 p-3 text-xs font-medium tracking-wide text-cream/75 hover:text-cream focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none sm:right-7 sm:bottom-7"
       >
         <span aria-hidden>Salta →</span>
       </button>

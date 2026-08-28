@@ -44,6 +44,10 @@ const CSP = [
   // it must never reach production.
   isProd ? "script-src 'self' 'unsafe-inline'" : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "connect-src 'self'",
+  // The locator on /sedi embeds Google Maps (`components/ShopLocator.tsx`);
+  // without this, `default-src 'self'` blocks the iframe and the map renders
+  // as a broken frame. The embed redirects between these two hosts.
+  "frame-src 'self' https://maps.google.com https://www.google.com",
   // Browsers exempt localhost, but `next dev` is routinely opened on the LAN
   // address it prints at startup — where this would rewrite every asset request
   // to https:// against a server that only speaks http.
