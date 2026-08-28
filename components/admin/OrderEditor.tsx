@@ -192,7 +192,7 @@ export function OrderFiscalForm({ order }: { order: OrderRow }) {
           />
         </div>
       </div>
-      <p className="text-xs text-brown-800/60">
+      <p className="text-xs text-brown-800/70">
         Senza codice destinatario si usa <code>0000000</code>: valido per i privati e per chi riceve
         via PEC o portale.
       </p>
@@ -319,7 +319,7 @@ export function OrderItemsForm({
 
       {/* ── Lines ── */}
       {lines.length === 0 ? (
-        <p className="text-sm text-brown-800/60">Nessun articolo: aggiungine uno qui sotto.</p>
+        <p className="text-sm text-brown-800/70">Nessun articolo: aggiungine uno qui sotto.</p>
       ) : (
         <div className="divide-y divide-brown-900/10">
           {lines.map((l) => {
@@ -337,7 +337,7 @@ export function OrderItemsForm({
                       </span>
                     )}
                   </p>
-                  <p className="text-xs text-brown-800/60">
+                  <p className="text-xs text-brown-800/70">
                     {euro(l.product.priceCents)}
                     {l.product.unit ? ` / ${l.product.unit}` : l.byWeight ? " / kg" : ""} · IVA{" "}
                     {vatRateLabel(l.product.vatRateBps)}
@@ -368,7 +368,7 @@ export function OrderItemsForm({
                       className={`${inputCls} text-center`}
                     />
                   </div>
-                  <span className="w-6 text-xs text-brown-800/50">{l.byWeight ? "kg" : "pz"}</span>
+                  <span className="w-6 text-xs text-brown-800/70">{l.byWeight ? "kg" : "pz"}</span>
                 </div>
 
                 <div className="w-28 shrink-0">
@@ -392,7 +392,7 @@ export function OrderItemsForm({
                   type="button"
                   onClick={() => setAmount(l.product.slug, 0)}
                   aria-label={`Rimuovi ${l.product.name}`}
-                  className="flex size-11 items-center justify-center rounded-full text-lg text-brown-800/40 hover:bg-danger-soft hover:text-danger"
+                  className="flex size-11 items-center justify-center rounded-full text-lg text-brown-800/70 hover:bg-danger-soft hover:text-danger"
                 >
                   ×
                 </button>
@@ -404,7 +404,7 @@ export function OrderItemsForm({
 
       {/* ── Add a product ── */}
       <details className="border-t border-brown-900/10 pt-3">
-        <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+        <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950">
           Aggiungi un prodotto
         </summary>
         <div className="mt-3">
@@ -425,7 +425,7 @@ export function OrderItemsForm({
             <li key={p.id} className="flex items-center justify-between gap-3 py-2">
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-brown-950">{p.name}</p>
-                <p className="text-xs text-brown-800/60">
+                <p className="text-xs text-brown-800/70">
                   {euro(p.priceCents)}
                   {p.unit ? ` / ${p.unit}` : p.soldByWeight ? " / kg" : ""}
                   {p.stock != null ? ` · giacenza ${p.stock}` : ""}
@@ -441,7 +441,7 @@ export function OrderItemsForm({
             </li>
           ))}
           {addable.length === 0 && (
-            <li className="py-2 text-sm text-brown-800/60">Nessun prodotto corrisponde.</li>
+            <li className="py-2 text-sm text-brown-800/70">Nessun prodotto corrisponde.</li>
           )}
         </ul>
       </details>
@@ -492,7 +492,7 @@ export function OrderItemsForm({
               placeholder={`${(order.shippingCents / 100).toFixed(2)} (da zona)`}
               className={inputCls}
             />
-            <p className="mt-1 text-xs text-brown-800/60">Vuoto = tariffa della zona.</p>
+            <p className="mt-1 text-xs text-brown-800/70">Vuoto = tariffa della zona.</p>
           </div>
         ) : (
           // Posted empty so a pickup order carries no stale override.
@@ -507,11 +507,11 @@ export function OrderItemsForm({
           {manualDiscountCents > 0 && (
             <span className="ml-2 text-ok">− {euro(manualDiscountCents)} concordato</span>
           )}
-          <span className="ml-2 text-xs text-brown-800/50">coupon e consegna ricalcolati al salvataggio</span>
+          <span className="ml-2 text-xs text-brown-800/70">coupon e consegna ricalcolati al salvataggio</span>
         </p>
         <PendingButton tone="dark">Salva articoli e importi</PendingButton>
       </div>
-      <p className="text-xs text-brown-800/60">
+      <p className="text-xs text-brown-800/70">
         Prezzi e IVA sono presi dall&apos;anagrafica prodotti, salvo prezzo concordato sulla riga.
       </p>
     </ActionForm>

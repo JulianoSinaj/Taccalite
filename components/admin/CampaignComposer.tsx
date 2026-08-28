@@ -130,7 +130,7 @@ export function CampaignComposer({
               it unless the operator picks a segment, so re-saving an old draft
               doesn't quietly widen it to everyone. */}
           <input type="hidden" name="segment" value={segmentId ? "" : (campaign?.segment ?? "")} />
-          <p className="mt-1 text-xs text-brown-800/60">
+          <p className="mt-1 text-xs text-brown-800/70">
             {selectedSegment
               ? `${selectedSegment.description || selectedSegment.rule} · ${selectedSegment.size} iscritti in questo momento`
               : !segmentId && campaign?.segment
@@ -172,7 +172,7 @@ export function CampaignComposer({
             placeholder="Scrivi qui la tua comunicazione…"
             className={inputCls}
           />
-          <p className="mt-1 text-xs text-brown-800/60">
+          <p className="mt-1 text-xs text-brown-800/70">
             Riga vuota = nuovo paragrafo. Niente HTML: il testo viene formattato automaticamente.
           </p>
         </div>
@@ -189,7 +189,7 @@ export function CampaignComposer({
             onChange={(e) => setSchedule(e.target.value)}
             className={`${inputCls} max-w-xs`}
           />
-          <p className="mt-1 text-xs text-brown-800/60">
+          <p className="mt-1 text-xs text-brown-800/70">
             Ora italiana. La campagna parte da sola al primo passaggio delle automazioni dopo
             quell&apos;ora (di norma la mattina seguente): per un invio immediato lascia vuoto,
             salva e usa «Invia adesso».
@@ -206,6 +206,9 @@ export function CampaignComposer({
             title="Anteprima email"
             sandbox=""
             srcDoc={previewDoc}
+            // theme-exempt: this is the mail client's ground, not the
+            // gestionale's. Following the admin's dark theme here would preview
+            // the message on a surface no recipient will ever see it on.
             className="mt-3 h-[32rem] w-full rounded-lg border border-brown-900/10 bg-white"
           />
         </details>
@@ -241,12 +244,12 @@ export function CampaignComposer({
             </PendingButton>
           </ActionForm>
 
-          <span className="text-xs text-brown-800/60">Destinatari: {savedAudience}.</span>
+          <span className="text-xs text-brown-800/70">Destinatari: {savedAudience}.</span>
         </div>
       )}
 
       {!saved && (
-        <p className="text-xs text-brown-800/60">
+        <p className="text-xs text-brown-800/70">
           {ready
             ? "Salva la bozza per poterla provare, inviare o programmare."
             : "Compila oggetto e messaggio per continuare."}

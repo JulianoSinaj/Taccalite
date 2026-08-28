@@ -54,7 +54,7 @@ export function ClosureForm({
           defaultValue={closure && closure.toDate !== closure.fromDate ? closure.toDate : ""}
           className={inputCls}
         />
-        <p className="mt-1 text-xs text-brown-800/60">Lascia vuoto per un solo giorno.</p>
+        <p className="mt-1 text-xs text-brown-800/70">Lascia vuoto per un solo giorno.</p>
       </div>
 
       <div>
@@ -88,7 +88,7 @@ export function ClosureForm({
           placeholder="es. Ferie estive, Ferragosto, lavori"
           className={inputCls}
         />
-        <p className="mt-1 text-xs text-brown-800/60">Mostrato al cliente quando la data viene rifiutata.</p>
+        <p className="mt-1 text-xs text-brown-800/70">Mostrato al cliente quando la data viene rifiutata.</p>
       </div>
 
       <fieldset className="sm:col-span-2">
@@ -123,7 +123,7 @@ export function ClosureForm({
               className={inputCls}
             />
           </div>
-          <p className="pb-3 text-xs text-brown-800/60">
+          <p className="pb-3 text-xs text-brown-800/70">
             Lascia vuoto per tutto il giorno. Con un orario restano prenotabili le ore fuori dalla fascia.
           </p>
         </div>

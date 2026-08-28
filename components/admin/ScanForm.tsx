@@ -139,7 +139,7 @@ export function ScanForm({
           Numero tessera
         </label>
         <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-brown-800/40" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-brown-800/70" />
           <input
             ref={inputRef}
             id="card"
@@ -163,7 +163,7 @@ export function ScanForm({
 
         {/* The confirmation step: who is about to be credited. */}
         <div aria-live="polite" className="mt-2 min-h-10">
-          {lookup.state === "checking" && <p className="text-xs text-brown-800/60">Verifica tessera…</p>}
+          {lookup.state === "checking" && <p className="text-xs text-brown-800/70">Verifica tessera…</p>}
           {lookup.state === "error" && <p className="text-sm font-semibold text-danger">{lookup.message}</p>}
           {lookup.state === "found" && <HolderCard holder={lookup.holder} now={lookup.at} onChanged={refresh} />}
         </div>
@@ -221,7 +221,7 @@ export function ScanForm({
           Accredita punti
         </PendingButton>
         {!ready && (
-          <p className="text-xs text-brown-800/60">
+          <p className="text-xs text-brown-800/70">
             {enabled
               ? "Inserisci una tessera valida e un importo che generi almeno un punto."
               : "Accredito sospeso: il programma fedeltà è disattivato."}
@@ -246,7 +246,7 @@ function HolderCard({ holder, now, onChanged }: { holder: Holder; now: number; o
           <p className="text-xs text-brown-800/70">
             Saldo attuale {holder.points} punti · tessera {holder.cardNumber}
           </p>
-          <p className="text-xs text-brown-800/60">
+          <p className="text-xs text-brown-800/70">
             {last
               ? `Ultimo accredito +${last.delta}${lastAt != null ? ` · ${formatRelativeTime(lastAt, now)}` : ""} · ${last.reason}`
               : "Nessun accredito finora"}
@@ -268,13 +268,13 @@ function HolderCard({ holder, now, onChanged }: { holder: Holder; now: number; o
 
       {holder.pending.length > 0 && (
         <div className="mt-3 border-t border-gold/30 pt-3">
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Premi da consegnare</p>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">Premi da consegnare</p>
           <ul className="mt-2 space-y-2">
             {holder.pending.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm text-brown-950">
                   {r.rewardName}{" "}
-                  <span className="text-xs text-brown-800/60">
+                  <span className="text-xs text-brown-800/70">
                     · {r.pointsSpent} punti
                     {r.createdAt ? ` · riscattato ${formatRelativeTime(r.createdAt, now)}` : ""}
                   </span>
@@ -294,14 +294,14 @@ function HolderCard({ holder, now, onChanged }: { holder: Holder; now: number; o
 
       {holder.rewards.length > 0 && (
         <div className="mt-3 border-t border-gold/30 pt-3">
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
             Riscattabili con il saldo attuale
           </p>
           <ul className="mt-2 space-y-2">
             {holder.rewards.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm text-brown-950">
-                  {r.name} <span className="text-xs text-brown-800/60">· {r.points} punti</span>
+                  {r.name} <span className="text-xs text-brown-800/70">· {r.points} punti</span>
                 </span>
                 <ActionForm action={redeemAtCounter} onSuccess={onChanged}>
                   <input type="hidden" name="card" value={holder.cardNumber} />

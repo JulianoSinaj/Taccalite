@@ -830,7 +830,7 @@ export async function saveShop(_prev: ActionState, fd: FormData): Promise<Action
       }
     } else {
       await requireRole("admin");
-      if (!d.slug) throw new ActionError("Slug obbligatorio per una nuova sede");
+      if (!d.slug) throw new ActionError("Slug obbligatorio per una nuova sede.", "slug");
       const [created] = await db
         .insert(shops)
         .values({ ...values, slug: d.slug })

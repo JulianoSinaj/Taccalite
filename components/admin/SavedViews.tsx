@@ -39,16 +39,12 @@ export function SavedViews({
           <Link href={`${path}${v.query ? `?${v.query}` : ""}`} className="py-2 hover:underline">
             {v.name}
           </Link>
-          <ActionForm action={deleteView} className="inline-flex">
-            <input type="hidden" name="id" value={v.id} />
-            <button
-              type="submit"
-              aria-label={`Elimina la vista ${v.name}`}
-              className="rounded-full p-1 opacity-50 hover:bg-black/10 hover:opacity-100"
-            >
-              <X className="size-3" />
-            </button>
-          </ActionForm>
+          {/* A saved view is not recoverable once deleted, and this sits a few
+              pixels from the link that opens it — a 20px target beside a 44px
+              one, which on a phone is a mis-tap that silently destroys the
+              preset. `.tap` gives it the 44px it was missing without drawing the
+              pill any taller, and the confirmation gives it a way back. */}
+          <ConfirmingDelete id={v.id} name={v.name} />
         </span>
       ))}
 
@@ -75,7 +71,7 @@ export function SavedViews({
           <button
             type="button"
             onClick={() => setNaming(false)}
-            className="rounded-full px-2 py-1.5 text-xs text-brown-800/60 hover:text-brown-950"
+            className="rounded-full px-2 py-1.5 text-xs text-brown-800/70 hover:text-brown-950"
           >
             Annulla
           </button>
@@ -95,5 +91,23 @@ export function SavedViews({
         </button>
       )}
     </div>
+  );
+}
+
+/** The × on a saved view: a full-size target, and a question before it goes. */
+function ConfirmingDelete({ id, name }: { id: string; name: string }) {
+  return (
+    <ActionForm action={deleteView} className="inline-flex">
+      <input type="hidden" name="id" value={id} />
+      <PendingButton
+        tone="ghost"
+        confirm={`Eliminare la vista «${name}»? I filtri che salva non sono recuperabili.`}
+        confirmLabel="Elimina"
+        confirmTone="danger"
+      >
+        <X className="size-3" aria-hidden />
+        <span className="sr-only">Elimina la vista {name}</span>
+      </PendingButton>
+    </ActionForm>
   );
 }

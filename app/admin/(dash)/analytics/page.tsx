@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <Panel>
-      <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">{label}</p>
+      <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">{label}</p>
       <p className="font-display mt-1 text-3xl text-brown-950">{value.toLocaleString("it-IT")}</p>
     </Panel>
   );
@@ -72,7 +72,7 @@ export default async function AdminAnalytics({ searchParams }: SP) {
           except the headline numbers. */}
       <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Panel>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
             Visite · {range} giorni
           </p>
           <div className="mt-1 flex items-baseline gap-2">
@@ -83,25 +83,25 @@ export default async function AdminAnalytics({ searchParams }: SP) {
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs text-brown-800/50">
+          <p className="mt-1 text-xs text-brown-800/70">
             vs. {s.viewsPrev.toLocaleString("it-IT")} nel periodo precedente
           </p>
         </Panel>
         {/* Commerce context. Page views were counted and never once related to
             money, so the page couldn't answer "did any of this sell anything". */}
         <Panel>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
             Ordini · {range} giorni
           </p>
           <p className="font-display mt-1 text-3xl text-brown-950">{s.orders.toLocaleString("it-IT")}</p>
-          <p className="mt-1 text-xs text-brown-800/50">{s.ordersPerThousandViews} ogni 1.000 visite</p>
+          <p className="mt-1 text-xs text-brown-800/70">{s.ordersPerThousandViews} ogni 1.000 visite</p>
         </Panel>
         <Panel>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
             Incasso · {range} giorni
           </p>
           <p className="font-display mt-1 text-3xl text-brown-950">{euro(s.revenueCents)}</p>
-          <p className="mt-1 text-xs text-brown-800/50">al netto dei rimborsi</p>
+          <p className="mt-1 text-xs text-brown-800/70">al netto dei rimborsi</p>
         </Panel>
         <Stat label="Visite totali" value={s.total} />
       </div>
@@ -122,12 +122,12 @@ export default async function AdminAnalytics({ searchParams }: SP) {
                   className="w-full rounded-t bg-gold"
                   style={{ height: `${Math.round((d.n / maxDaily) * 100)}%`, minHeight: d.n > 0 ? "4px" : "0" }}
                 />
-                {showDayLabels && <span className="text-[10px] text-brown-800/50">{d.day.slice(8)}</span>}
+                {showDayLabels && <span className="text-[10px] text-brown-800/70">{d.day.slice(8)}</span>}
               </div>
             ))}
           </div>
         ) : (
-          <p className="grid h-40 place-items-center rounded-lg bg-cream/60 text-sm text-brown-800/60">
+          <p className="grid h-40 place-items-center rounded-lg bg-cream/60 text-sm text-brown-800/70">
             Nessuna visita registrata in questo periodo.
           </p>
         )}

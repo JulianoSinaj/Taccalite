@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import {
+  TableSkeleton,
   AdminHeader,
   Panel,
   StatusBadge,
@@ -19,8 +21,9 @@ import {
 import { DataTable } from "@/components/admin/DataTable";
 import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
 import { CampaignComposer, type SegmentOption } from "@/components/admin/CampaignComposer";
-import { getSubscribersPage, adminGetShops, SUBSCRIBER_SORTS } from "@/lib/admin/queries";
-import { subscriberFilters, sortFilters, filterQuery } from "@/lib/admin/filters";
+import { getSubscriberSummary, getSubscribersPage, adminGetShops, SUBSCRIBER_SORTS } from "@/lib/admin/queries";
+import { subscriberFilters, sortFilters, filterQuery, type SortSpec } from "@/lib/admin/filters";
+import { TotalSubtitle } from "@/components/admin/Streamed";
 import {
   removeSubscriber,
   addSubscriber,
@@ -86,7 +89,7 @@ const STATUS_CHIPS: { value: string; label: string }[] = [
 const btnSoft =
   "inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15";
 const disclosureCls =
-  "w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950";
+  "w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950";
 
 /**
  * The create/edit form for one segment. Same fields either way — a new segment
@@ -251,15 +254,10 @@ export default async function AdminNewsletter({ searchParams }: SP) {
   const sort = sortFilters(sp, SUBSCRIBER_SORTS, { colonna: "iscritto", verso: "desc" });
   // Carried on every sort/page link so the view survives navigation.
   const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso };
-  const [
-    { rows: subs, total, confirmed, pageCount, sources },
-    admin,
-    campaigns,
-    editing,
-    segmentRows,
-    shops,
-  ] = await Promise.all([
-    getSubscribersPage({ ...filters, page, sort }),
+  // Started, not awaited — see components/admin/Streamed.
+  const promise = getSubscribersPage({ ...filters, page, sort });
+  const [{ confirmed, sources }, admin, campaigns, editing, segmentRows, shops] = await Promise.all([
+    getSubscriberSummary(),
     isAdmin(),
     listCampaigns(showAllCampaigns ? ALL_CAMPAIGNS : RECENT_CAMPAIGNS + 1),
     sp.campagna ? getCampaign(sp.campagna) : Promise.resolve(null),
@@ -307,7 +305,14 @@ export default async function AdminNewsletter({ searchParams }: SP) {
     <div>
       <AdminHeader
         title="Newsletter"
-        subtitle={`${confirmed} iscritti confermati · ${total} nel filtro attuale`}
+        subtitle={
+          <TotalSubtitle
+            promise={promise}
+            one="nel filtro attuale"
+            many="nel filtro attuale"
+            prefix={`${confirmed} iscritti confermati · `}
+          />
+        }
         action={
           admin ? (
             <a href={`/api/admin/export/subscribers${filterQuery(filters)}`} download className={btnSoft}>
@@ -340,7 +345,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
                 templateHtml={templateHtml}
               />
               {editing && (
-                <p className="mt-4 border-t border-brown-900/10 pt-3 text-xs text-brown-800/60">
+                <p className="mt-4 border-t border-brown-900/10 pt-3 text-xs text-brown-800/70">
                   Stai modificando «{editing.subject}».{" "}
                   <Link href={BASE} className="font-semibold text-gold-deep underline">
                     Componi invece una nuova comunicazione
@@ -368,7 +373,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
                         {c.subject}
                         <CampaignStatus campaign={c} />
                       </p>
-                      <p className="mt-0.5 text-xs text-brown-800/60">
+                      <p className="mt-0.5 text-xs text-brown-800/70">
                         {audienceOf(c)}
                         {c.status === "sent" && ` · ${c.recipientCount} destinatari · ${fmtDateTime(c.sentAt)}`}
                         {c.status === "scheduled" && ` · programmata per ${fmtDateTime(c.scheduledFor)}`}
@@ -433,7 +438,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
                 );
               })}
               {hasMoreCampaigns && (
-                <p className="text-xs text-brown-800/60">
+                <p className="text-xs text-brown-800/70">
                   Mostrate le ultime {RECENT_CAMPAIGNS}.{" "}
                   <Link href={`${BASE}?campagne=tutte`} className="font-semibold text-gold-deep underline">
                     Mostra tutte le comunicazioni
@@ -441,7 +446,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
                 </p>
               )}
               {showAllCampaigns && (
-                <p className="text-xs text-brown-800/60">
+                <p className="text-xs text-brown-800/70">
                   <Link href={BASE} className="font-semibold text-gold-deep underline">
                     Mostra solo le ultime {RECENT_CAMPAIGNS}
                   </Link>
@@ -459,7 +464,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
             <summary className="w-fit cursor-pointer">
               <h2 id="segments-title" className="font-display inline text-xl text-brown-950">
                 Segmenti{" "}
-                <span className="text-sm font-normal text-brown-800/60">({segments.length})</span>
+                <span className="text-sm font-normal text-brown-800/70">({segments.length})</span>
               </h2>
             </summary>
             <div className="mt-3 space-y-3">
@@ -473,7 +478,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
                           {segmentSize.get(s.id) ?? 0} iscritti
                         </span>
                       </p>
-                      <p className="mt-0.5 text-xs text-brown-800/60">
+                      <p className="mt-0.5 text-xs text-brown-800/70">
                         {s.description || describeRule(s.rule)}
                       </p>
                     </div>
@@ -495,7 +500,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
               <Panel>
                 <h3 className="font-display mb-3 text-lg text-brown-950">Nuovo segmento</h3>
                 <SegmentForm sources={sources} shops={shops} />
-                <p className="mt-3 text-xs text-brown-800/60">
+                <p className="mt-3 text-xs text-brown-800/70">
                   Un segmento salva la <strong>regola</strong>, non l&apos;elenco: viene ricalcolato a ogni
                   invio, quindi «clienti fedeli» significa la stessa cosa a marzo e a gennaio. Vale solo
                   sugli iscritti confermati alla newsletter.
@@ -561,7 +566,7 @@ export default async function AdminNewsletter({ searchParams }: SP) {
                 </label>
                 <PendingButton tone="dark">Aggiungi</PendingButton>
               </ActionForm>
-              <p className="mt-3 text-xs text-brown-800/60">
+              <p className="mt-3 text-xs text-brown-800/70">
                 Senza la spunta parte la <strong>conferma via email</strong>, esattamente come
                 dall&apos;iscrizione sul sito: l&apos;indirizzo resta «in attesa» finché il cliente non
                 clicca. Spunta la casella solo se hai un consenso scritto — la scelta finisce nel
@@ -600,105 +605,139 @@ export default async function AdminNewsletter({ searchParams }: SP) {
           />
         </div>
 
-        <DataTable
-          rows={subs}
-          rowKey={(s) => s.id}
-          basePath={BASE}
-          params={linkParams}
-          sort={sort}
-          empty={
-            q || stato !== "all" || origine !== "all"
-              ? "Nessun iscritto corrisponde ai filtri."
-              : "Nessun iscritto ancora."
-          }
-          columns={[
-            {
-              key: "email",
-              header: "Email",
-              sortable: true,
-              sticky: true,
-              cell: (s) => <span className="font-medium text-brown-950">{s.email}</span>,
-            },
-            {
-              key: "stato",
-              header: "Stato",
-              sortable: true,
-              cell: (s) => (
-                <div>
-                  <StatusBadge
-                    status={
-                      s.status === "confirmed" ? "confirmed" : s.status === "unsubscribed" ? "cancelled" : "pending"
-                    }
-                  />
-                  {s.status === "unsubscribed" && s.unsubscribedAt && (
-                    <p className="mt-1 text-[11px] text-brown-800/60">dal {fmtDate(s.unsubscribedAt)}</p>
-                  )}
-                </div>
-              ),
-            },
-            {
-              key: "origine",
-              header: "Origine",
-              sortable: true,
-              hideOnMobile: true,
-              cell: (s) => <span className="text-brown-800/70">{s.source || "—"}</span>,
-            },
-            {
-              key: "iscritto",
-              header: "Iscritto",
-              sortable: true,
-              hideOnMobile: true,
-              cell: (s) => <span className="text-brown-800/70">{fmtDate(s.createdAt)}</span>,
-            },
-            {
-              key: "confermato",
-              header: "Confermato",
-              sortable: true,
-              hideOnMobile: true,
-              cell: (s) => (
-                <span className="text-brown-800/70">{s.confirmedAt ? fmtDate(s.confirmedAt) : "—"}</span>
-              ),
-            },
-            {
-              key: "azioni",
-              header: <span className="sr-only">Azioni</span>,
-              align: "right",
-              // Same gate as "Aggiungi" above: managing the list is an admin act.
-              cell: (s) =>
-                admin && s.status !== "unsubscribed" ? (
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {s.status === "pending" && (
-                      <>
-                        <ActionForm action={resendSubscriberConfirmation} className="inline-flex">
-                          <input type="hidden" name="id" value={s.id} />
-                          <PendingButton tone="dark">Reinvia conferma</PendingButton>
-                        </ActionForm>
-                        <ActionForm action={confirmSubscriber} className="inline-flex">
-                          <input type="hidden" name="id" value={s.id} />
-                          <PendingButton
-                            tone="gold"
-                            confirm={`Confermare ${s.email} a mano? Fallo solo se hai il consenso scritto: la scelta resta nel registro attività.`}
-                          >
-                            Conferma
-                          </PendingButton>
-                        </ActionForm>
-                      </>
-                    )}
-                    <DeleteForm
-                      action={removeSubscriber}
-                      id={s.id}
-                      confirm={`Rimuovere ${s.email} dalla newsletter?`}
-                    >
-                      Rimuovi
-                    </DeleteForm>
-                  </div>
-                ) : null,
-            },
-          ]}
-        />
-
-        <Pagination basePath={BASE} page={page} pageCount={pageCount} params={linkParams} />
+        {/* Only the subscribers wait on the query; the composer, the campaign
+            history and the filters above all render first. */}
+        <Suspense key={filterQuery({ ...linkParams, page: String(page) })} fallback={<TableSkeleton />}>
+          <SubscriberTable
+            promise={promise}
+            page={page}
+            linkParams={linkParams}
+            sort={sort}
+            filtered={!!q || stato !== "all" || origine !== "all"}
+            admin={admin}
+          />
+        </Suspense>
       </section>
     </div>
+  );
+}
+
+
+async function SubscriberTable({
+  promise,
+  page,
+  linkParams,
+  sort,
+  filtered,
+  admin,
+}: {
+  promise: ReturnType<typeof getSubscribersPage>;
+  page: number;
+  linkParams: Record<string, string | undefined>;
+  sort: SortSpec;
+  filtered: boolean;
+  admin: boolean;
+}) {
+  const { rows: subs, pageCount } = await promise;
+  return (
+    <>
+          <DataTable
+            rows={subs}
+            rowKey={(s) => s.id}
+            basePath={BASE}
+            params={linkParams}
+            sort={sort}
+            empty={
+              filtered ? "Nessun iscritto corrisponde ai filtri." : "Nessun iscritto ancora."
+            }
+            columns={[
+              {
+                key: "email",
+                header: "Email",
+                sortable: true,
+                sticky: true,
+                cell: (s) => <span className="font-medium text-brown-950">{s.email}</span>,
+              },
+              {
+                key: "stato",
+                header: "Stato",
+                sortable: true,
+                cell: (s) => (
+                  <div>
+                    <StatusBadge
+                      status={
+                        s.status === "confirmed" ? "confirmed" : s.status === "unsubscribed" ? "cancelled" : "pending"
+                      }
+                    />
+                    {s.status === "unsubscribed" && s.unsubscribedAt && (
+                      <p className="mt-1 text-[11px] text-brown-800/70">dal {fmtDate(s.unsubscribedAt)}</p>
+                    )}
+                  </div>
+                ),
+              },
+              {
+                key: "origine",
+                header: "Origine",
+                sortable: true,
+                hideOnMobile: true,
+                cell: (s) => <span className="text-brown-800/70">{s.source || "—"}</span>,
+              },
+              {
+                key: "iscritto",
+                header: "Iscritto",
+                sortable: true,
+                hideOnMobile: true,
+                cell: (s) => <span className="text-brown-800/70">{fmtDate(s.createdAt)}</span>,
+              },
+              {
+                key: "confermato",
+                header: "Confermato",
+                sortable: true,
+                hideOnMobile: true,
+                cell: (s) => (
+                  <span className="text-brown-800/70">{s.confirmedAt ? fmtDate(s.confirmedAt) : "—"}</span>
+                ),
+              },
+              {
+                key: "azioni",
+                header: <span className="sr-only">Azioni</span>,
+                align: "right",
+                // Same gate as "Aggiungi" above: managing the list is an admin act.
+                cell: (s) =>
+                  admin && s.status !== "unsubscribed" ? (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {s.status === "pending" && (
+                        <>
+                          <ActionForm action={resendSubscriberConfirmation} className="inline-flex">
+                            <input type="hidden" name="id" value={s.id} />
+                            <PendingButton tone="dark">Reinvia conferma</PendingButton>
+                          </ActionForm>
+                          <ActionForm action={confirmSubscriber} className="inline-flex">
+                            <input type="hidden" name="id" value={s.id} />
+                            <PendingButton
+                              tone="gold"
+                              confirm={`Confermare ${s.email} a mano? Fallo solo se hai il consenso scritto: la scelta resta nel registro attività.`}
+                            >
+                              Conferma
+                            </PendingButton>
+                          </ActionForm>
+                        </>
+                      )}
+                      <DeleteForm
+                        action={removeSubscriber}
+                        id={s.id}
+                        confirm={`Rimuovere ${s.email} dalla newsletter?`}
+                      >
+                        Rimuovi
+                      </DeleteForm>
+                    </div>
+                  ) : null,
+              },
+            ]}
+          />
+
+          <Pagination basePath={BASE} page={page} pageCount={pageCount} params={linkParams} />
+      <Pagination basePath={BASE} page={page} pageCount={pageCount} params={linkParams} />
+    </>
   );
 }

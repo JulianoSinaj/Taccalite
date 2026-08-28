@@ -1,8 +1,18 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { AdminHeader, Panel, Pagination, fmtDateTime, inputCls, labelCls } from "@/components/admin/ui";
+import {
+  AdminHeader,
+  Panel,
+  Pagination,
+  TableSkeleton,
+  fmtDateTime,
+  inputCls,
+  labelCls,
+} from "@/components/admin/ui";
 import { FilterToolbar, ActiveFilters, labelFrom } from "@/components/admin/FilterBar";
-import { getAuditPage } from "@/lib/admin/queries";
+import { getAuditPage, getAuditFacets } from "@/lib/admin/queries";
+import { TotalSubtitle } from "@/components/admin/Streamed";
 import { auditFilters, filterQuery } from "@/lib/admin/filters";
 import { isAdmin } from "@/lib/auth/session";
 
@@ -77,7 +87,7 @@ function MetaTable({ meta }: { meta: Record<string, unknown> }) {
     <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 rounded-lg bg-cream/60 px-3 py-2 text-xs sm:grid-cols-2">
       {entries.map(([k, v]) => (
         <div key={k} className="flex justify-between gap-3">
-          <dt className="font-mono text-brown-800/60">{k}</dt>
+          <dt className="font-mono text-brown-800/70">{k}</dt>
           <dd className="truncate text-right text-brown-900" title={String(v)}>
             {v === null || v === undefined
               ? "—"
@@ -108,10 +118,9 @@ export default async function AuditPage({ searchParams }: SP) {
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
   const filters = auditFilters(sp);
-  const { rows, page: current, pageCount, total, actors, entities } = await getAuditPage({
-    ...filters,
-    page,
-  });
+  // Started, not awaited — see components/admin/Streamed.
+  const promise = getAuditPage({ ...filters, page });
+  const { actors, entities } = await getAuditFacets();
   const filtered = Object.values(filters).some((v) => v && v !== "all");
   const ENTITY_CHIPS = [
     { value: "all", label: "Tutto" },
@@ -127,9 +136,16 @@ export default async function AuditPage({ searchParams }: SP) {
       <AdminHeader
         title="Registro attività"
         subtitle={
-          filters.record
-            ? `${total} operazioni su un singolo record`
-            : `${total} operazioni registrate${filtered ? " nel filtro attuale" : ""}`
+          <TotalSubtitle
+            promise={promise}
+            one="operazione"
+            many="operazioni"
+            suffix={
+              filters.record
+                ? " su un singolo record"
+                : ` registrate${filtered ? " nel filtro attuale" : ""}`
+            }
+          />
         }
         action={
           <a
@@ -195,51 +211,72 @@ export default async function AuditPage({ searchParams }: SP) {
         }}
       />
 
-      {rows.length === 0 ? (
-        <Panel>
-          <p className="text-brown-800/70">
-            {filtered ? "Nessuna attività corrisponde ai filtri." : "Nessuna attività registrata."}
-          </p>
-        </Panel>
-      ) : (
-        <div className="space-y-2">
-          {rows.map((r) => (
-            <Panel key={r.id}>
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-brown-950">{r.summary}</p>
-                  <p className="mt-0.5 text-xs text-brown-800/60">
-                    <span className="font-mono">{r.action}</span>
-                    {r.actorName ? ` · ${r.actorName}` : ""}
-                    {r.entityId && (
-                      <>
-                        {" · "}
-                        {(() => {
-                          const href = ENTITY_HREF[r.entity]?.(r.entityId!) ?? null;
-                          return href ? (
-                            <Link
-                              href={href}
-                              className="font-mono font-semibold text-gold-deep underline decoration-gold-dark/50 underline-offset-2 hover:text-brown-950"
-                            >
-                              {r.entityId}
-                            </Link>
-                          ) : (
-                            <span className="font-mono">{r.entityId}</span>
-                          );
-                        })()}
-                      </>
-                    )}
-                  </p>
-                </div>
-                <span className="shrink-0 text-xs text-brown-800/50">{fmtDateTime(r.createdAt)}</span>
-              </div>
-              {r.meta && <MetaTable meta={r.meta} />}
-            </Panel>
-          ))}
-        </div>
-      )}
-
-      <Pagination basePath={BASE} page={current} pageCount={pageCount} params={filters} />
+      {/* Only the entries wait on the query; the facets above do not. */}
+      <Suspense key={filterQuery({ ...filters, page: String(page) })} fallback={<TableSkeleton rows={8} />}>
+        <AuditList promise={promise} filters={filters} filtered={filtered} />
+      </Suspense>
     </div>
+  );
+}
+
+
+async function AuditList({
+  promise,
+  filters,
+  filtered,
+}: {
+  promise: ReturnType<typeof getAuditPage>;
+  filters: Record<string, string | undefined>;
+  filtered: boolean;
+}) {
+  const { rows, page: current, pageCount } = await promise;
+  return (
+    <>
+          {rows.length === 0 ? (
+            <Panel>
+              <p className="text-brown-800/70">
+                {filtered ? "Nessuna attività corrisponde ai filtri." : "Nessuna attività registrata."}
+              </p>
+            </Panel>
+          ) : (
+            <div className="space-y-2">
+              {rows.map((r) => (
+                <Panel key={r.id}>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-brown-950">{r.summary}</p>
+                      <p className="mt-0.5 text-xs text-brown-800/70">
+                        <span className="font-mono">{r.action}</span>
+                        {r.actorName ? ` · ${r.actorName}` : ""}
+                        {r.entityId && (
+                          <>
+                            {" · "}
+                            {(() => {
+                              const href = ENTITY_HREF[r.entity]?.(r.entityId!) ?? null;
+                              return href ? (
+                                <Link
+                                  href={href}
+                                  className="font-mono font-semibold text-gold-deep underline decoration-gold-dark/50 underline-offset-2 hover:text-brown-950"
+                                >
+                                  {r.entityId}
+                                </Link>
+                              ) : (
+                                <span className="font-mono">{r.entityId}</span>
+                              );
+                            })()}
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs text-brown-800/70">{fmtDateTime(r.createdAt)}</span>
+                  </div>
+                  {r.meta && <MetaTable meta={r.meta} />}
+                </Panel>
+              ))}
+            </div>
+          )}
+
+          <Pagination basePath={BASE} page={current} pageCount={pageCount} params={filters} />
+    </>
   );
 }

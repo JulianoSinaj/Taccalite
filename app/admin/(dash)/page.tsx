@@ -14,7 +14,7 @@ import {
   ArrowRight,
   CalendarX,
 } from "lucide-react";
-import { AdminHeader, Panel, StatusBadge, euro, reservationTypeLabel } from "@/components/admin/ui";
+import { AdminHeader, Panel, OrderStatusBadge, StatusBadge, euro, reservationTypeLabel } from "@/components/admin/ui";
 import {
   getDashboardStats,
   getDashboardInsights,
@@ -254,37 +254,37 @@ export default async function AdminDashboard() {
       {/* KPI strip — 30-day performance with period-over-period deltas */}
       <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Panel>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Incasso 30 giorni</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Incasso 30 giorni</p>
           <div className="mt-2 flex flex-wrap items-baseline gap-2">
             <p className="font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{euro(insights.revenue30dCents)}</p>
             <DeltaBadge d={revDelta} />
           </div>
-          <p className="mt-1 text-xs text-brown-800/50">vs. 30 giorni precedenti</p>
+          <p className="mt-1 text-xs text-brown-800/70">vs. 30 giorni precedenti</p>
         </Panel>
         <Panel>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Scontrino medio</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Scontrino medio</p>
           <p className="mt-2 font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{euro(insights.aovCents)}</p>
-          <p className="mt-1 text-xs text-brown-800/50">{insights.orders30d} ordini pagati (30 gg)</p>
+          <p className="mt-1 text-xs text-brown-800/70">{insights.orders30d} ordini pagati (30 gg)</p>
         </Panel>
         <Panel>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Ordini 30 giorni</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Ordini 30 giorni</p>
           <p className="mt-2 font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{insights.orders30d}</p>
-          <p className="mt-1 text-xs text-brown-800/50">pagati</p>
+          <p className="mt-1 text-xs text-brown-800/70">pagati</p>
         </Panel>
         <Panel>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Nuovi clienti</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Nuovi clienti</p>
           <div className="mt-2 flex flex-wrap items-baseline gap-2">
             <p className="font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{insights.newCustomers30d}</p>
             <DeltaBadge d={custDelta} />
           </div>
-          <p className="mt-1 text-xs text-brown-800/50">registrati (30 gg)</p>
+          <p className="mt-1 text-xs text-brown-800/70">registrati (30 gg)</p>
         </Panel>
       </div>
 
       {/* Revenue trend + top products */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel className="lg:col-span-2">
-          <h3 className="font-display mb-4 text-lg text-brown-950">Andamento incassi · 30 giorni</h3>
+          <h2 className="font-display mb-4 text-lg text-brown-950">Andamento incassi · 30 giorni</h2>
           {hasRevenue ? (
             <>
               {/* No `items-end` on the row: that sizes each column to its own
@@ -312,7 +312,7 @@ export default async function AdminDashboard() {
                   </div>
                 ))}
               </div>
-              <div className="mt-2 flex justify-between text-[11px] text-brown-800/50">
+              <div className="mt-2 flex justify-between text-[11px] text-brown-800/70">
                 <span>{series[0]?.day.slice(5)}</span>
                 <span>{series[series.length - 1]?.day.slice(5)}</span>
               </div>
@@ -320,16 +320,16 @@ export default async function AdminDashboard() {
           ) : (
             // Zero everywhere used to render an invisible row of bars, which
             // reads as a broken panel rather than as "no sales yet".
-            <p className="grid h-40 place-items-center rounded-lg bg-cream/60 text-sm text-brown-800/60">
+            <p className="grid h-40 place-items-center rounded-lg bg-cream/60 text-sm text-brown-800/70">
               Nessun incasso registrato negli ultimi 30 giorni.
             </p>
           )}
         </Panel>
 
         <Panel>
-          <h3 className="font-display mb-4 text-lg text-brown-950">Prodotti più venduti · 30 gg</h3>
+          <h2 className="font-display mb-4 text-lg text-brown-950">Prodotti più venduti · 30 gg</h2>
           {insights.topProducts.length === 0 ? (
-            <p className="py-6 text-center text-sm text-brown-800/60">Nessuna vendita nel periodo.</p>
+            <p className="py-6 text-center text-sm text-brown-800/70">Nessuna vendita nel periodo.</p>
           ) : (
             <ul className="space-y-3">
               {insights.topProducts.map((p) => (
@@ -367,7 +367,7 @@ export default async function AdminDashboard() {
               : active
                 ? "border-gold/50 bg-surface hover:bg-gold/5 hover:shadow-md"
                 : "border-brown-900/10 bg-brown-900/[0.02] hover:bg-surface";
-            const numCls = danger ? "text-danger-soft-fg" : active ? "text-brown-950" : "text-brown-800/40";
+            const numCls = danger ? "text-danger-soft-fg" : active ? "text-brown-950" : "text-brown-800/70";
             const iconCls = danger ? "text-danger" : "text-gold-deep";
             return (
               <Link
@@ -393,16 +393,16 @@ export default async function AdminDashboard() {
       <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Panel>
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 font-display text-lg text-brown-950">
+            <h2 className="flex items-center gap-2 font-display text-lg text-brown-950">
               <CalendarClock className="size-5 text-gold-deep" />
               Prenotazioni di oggi
-            </h3>
+            </h2>
             <Link href="/admin/reservations" className="text-xs font-bold tracking-widest text-gold-deep uppercase hover:underline">
               Tutte
             </Link>
           </div>
           {todayReservations.length === 0 ? (
-            <p className="py-6 text-center text-sm text-brown-800/60">Nessuna prenotazione per oggi.</p>
+            <p className="py-6 text-center text-sm text-brown-800/70">Nessuna prenotazione per oggi.</p>
           ) : (
             <ul className="divide-y divide-brown-900/10">
               {todayReservations.map((r) => (
@@ -417,7 +417,7 @@ export default async function AdminDashboard() {
                     <span className="w-12 shrink-0 font-display text-sm font-bold text-brown-950">
                       {r.time ?? "—"}
                     </span>
-                    <span className="shrink-0 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+                    <span className="shrink-0 text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
                       {reservationTypeLabel(r.type)}
                     </span>
                     <span className="flex-1 truncate text-sm text-brown-950">{r.name}</span>
@@ -431,16 +431,16 @@ export default async function AdminDashboard() {
 
         <Panel>
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 font-display text-lg text-brown-950">
+            <h2 className="flex items-center gap-2 font-display text-lg text-brown-950">
               <ShoppingBag className="size-5 text-gold-deep" />
               Ordini recenti
-            </h3>
+            </h2>
             <Link href="/admin/orders" className="text-xs font-bold tracking-widest text-gold-deep uppercase hover:underline">
               Tutti
             </Link>
           </div>
           {recentOrders.length === 0 ? (
-            <p className="py-6 text-center text-sm text-brown-800/60">Nessun ordine recente.</p>
+            <p className="py-6 text-center text-sm text-brown-800/70">Nessun ordine recente.</p>
           ) : (
             <ul className="divide-y divide-brown-900/10">
               {recentOrders.map((o) => (
@@ -452,7 +452,7 @@ export default async function AdminDashboard() {
                     <span className="shrink-0 font-mono text-xs font-bold text-brown-800/70">#{o.orderNumber}</span>
                     <span className="flex-1 truncate text-sm text-brown-950">{o.name}</span>
                     <span className="shrink-0 text-sm font-semibold text-brown-950">{euro(o.totalCents)}</span>
-                    <StatusBadge status={o.status} />
+                    <OrderStatusBadge status={o.status} />
                   </Link>
                 </li>
               ))}
@@ -469,7 +469,7 @@ export default async function AdminDashboard() {
             <Link key={c.label} href={c.href}>
               <Panel className="transition-shadow hover:shadow-md">
                 <div className="flex items-center justify-between">
-                  <Icon className="size-5 text-brown-800/50" />
+                  <Icon className="size-5 text-brown-800/70" />
                   <span className="font-display text-xl font-bold tabular-nums text-brown-950 sm:text-2xl">{c.value}</span>
                 </div>
                 <p className="mt-2 text-xs font-medium text-brown-800/70">{c.label}</p>
@@ -484,13 +484,13 @@ export default async function AdminDashboard() {
         <Panel>
           <div className="flex items-center gap-3">
             <Mail className="size-5 text-gold-deep" />
-            <h3 className="font-display text-lg text-brown-950">Stato integrazioni</h3>
+            <h2 className="font-display text-lg text-brown-950">Stato integrazioni</h2>
           </div>
           <ul className="mt-4 space-y-2 text-sm">
             <IntegrationRow name="Invio email (SMTP)" status={MAIL_STATUS} />
             <IntegrationRow name="Pagamenti (Stripe)" status={PAYMENTS_STATUS} />
           </ul>
-          <p className="mt-4 text-xs text-brown-800/60">
+          <p className="mt-4 text-xs text-brown-800/70">
             Le email non inviate restano leggibili in{" "}
             <Link href="/admin/outbox" className="font-semibold text-gold-deep underline">
               Email
@@ -504,7 +504,7 @@ export default async function AdminDashboard() {
         </Panel>
 
         <Panel>
-          <h3 className="font-display text-lg text-brown-950">Azioni rapide</h3>
+          <h2 className="font-display text-lg text-brown-950">Azioni rapide</h2>
           <div className="mt-4 flex flex-wrap gap-3">
             <Link href="/admin/reservations/new" className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-4 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900">
               Nuova prenotazione

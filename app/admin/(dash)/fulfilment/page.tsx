@@ -49,10 +49,10 @@ const euroValue = (cents: number | null | undefined) =>
   cents == null ? "" : (cents / 100).toFixed(2);
 
 const summaryCls =
-  "w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950";
+  "w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950";
 
 function Hint({ children }: { children: React.ReactNode }) {
-  return <p className="mt-1 text-xs text-brown-800/60">{children}</p>;
+  return <p className="mt-1 text-xs text-brown-800/70">{children}</p>;
 }
 
 function Notice({ tone, children }: { tone: "warn" | "info"; children: React.ReactNode }) {
@@ -316,10 +316,10 @@ function ZoneList({ zones, shops, mode }: { zones: ZoneWithUsage[]; shops: ShopR
                 )}
               </h3>
               <ZoneSummary zone={z} shopName={z.shopSlug ? (shopName.get(z.shopSlug) ?? z.shopSlug) : null} />
-              {z.note && <p className="mt-1 text-sm text-brown-800/60">{z.note}</p>}
+              {z.note && <p className="mt-1 text-sm text-brown-800/70">{z.note}</p>}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-brown-800/50">
+              <span className="text-xs text-brown-800/70">
                 {z.orderCount} {z.orderCount === 1 ? "ordine" : "ordini"}
               </span>
               <ActionForm action={toggleDeliveryZoneActive} className="inline-flex">
@@ -482,11 +482,11 @@ function ShopSchedule({
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-brown-900/10 pb-3">
         <div className="flex flex-wrap items-baseline gap-3">
           <h2 className="font-display text-xl text-brown-950">{shop.name}</h2>
-          <Link href={hoursHref} className="text-xs text-brown-800/60 underline hover:text-brown-950">
+          <Link href={hoursHref} className="text-xs text-brown-800/70 underline hover:text-brown-950">
             Orari di apertura
           </Link>
         </div>
-        <span className="text-xs font-bold tracking-widest text-brown-800/60 uppercase">
+        <span className="text-xs font-bold tracking-widest text-brown-800/70 uppercase">
           {slots.length} {slots.length === 1 ? "fascia" : "fasce"}
           {slots.length > 0 && activeCount < slots.length ? ` · ${activeCount} attive` : ""}
         </span>
@@ -502,7 +502,7 @@ function ShopSchedule({
       )}
 
       {slots.length === 0 ? (
-        <p className="py-3 text-sm text-brown-800/60">Nessuna fascia: il ritiro resta senza orario.</p>
+        <p className="py-3 text-sm text-brown-800/70">Nessuna fascia: il ritiro resta senza orario.</p>
       ) : (
         <div className="space-y-3 pt-2">
           {WEEKDAYS.filter((d) => byDay.has(d)).map((d) => (
@@ -631,7 +631,7 @@ function ShopSchedule({
                 Genera
               </PendingButton>
             </div>
-            <p className="w-full text-xs text-brown-800/60">
+            <p className="w-full text-xs text-brown-800/70">
               <strong>Sostituisce</strong> tutte le fasce della sede con quelle ricavate dagli orari di
               apertura. Gli ordini già prenotati non si spostano: conservano l&apos;orario scelto.
             </p>

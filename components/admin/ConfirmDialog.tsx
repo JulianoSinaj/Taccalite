@@ -38,11 +38,20 @@ export function ConfirmDialog({
   // heading in the document, and a screen reader announced some other row's
   // question over this row's dialog.
   const titleId = useId();
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (open && !el.open) el.showModal();
+    if (open && !el.open) {
+      el.showModal();
+      // Moved here rather than left to `autoFocus`, which React only honours on
+      // mount — and this dialog mounts closed, alongside its row, long before it
+      // is ever shown. `showModal()` would otherwise focus the first focusable
+      // child, and its own default is not something to leave a destructive
+      // action to.
+      cancelRef.current?.focus();
+    }
     if (!open && el.open) el.close();
   }, [open]);
 
@@ -85,7 +94,15 @@ export function ConfirmDialog({
             thumb, and both are full width rather than two short pills wrapping
             unpredictably. */}
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          {/* Focus lands here, not on the confirming button (see the effect
+              above). "Elimina" used to be autofocused, so the Enter keystroke
+              that opened the dialog — or a second one from an operator working
+              the keyboard at speed — went straight through it and destroyed the
+              record. The dialog exists to interrupt; opening it pre-armed
+              defeats the point. Escape and the backdrop already mean "no", and
+              this makes the keyboard agree. */}
           <button
+            ref={cancelRef}
             type="button"
             onClick={onCancel}
             className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-brown-900/10 px-5 py-2.5 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15 sm:w-auto"
@@ -95,7 +112,6 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            autoFocus
             className={`inline-flex min-h-11 w-full items-center justify-center rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase sm:w-auto ${tones[tone]}`}
           >
             {confirmLabel}

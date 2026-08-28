@@ -33,7 +33,7 @@ export default async function NewReservation({ searchParams }: SP) {
       <Panel>
         <ReservationForm shops={shops} defaultDate={defaultDate} redirectTo="/admin/reservations" />
       </Panel>
-      <p className="mt-4 text-xs text-brown-800/60">
+      <p className="mt-4 text-xs text-brown-800/70">
         Le prenotazioni prese qui non avvisano il titolare (sei tu a inserirle) e superano i limiti
         di capacità della porchetta: se il giorno è pieno ricevi un avviso, ma la prenotazione viene
         comunque registrata.

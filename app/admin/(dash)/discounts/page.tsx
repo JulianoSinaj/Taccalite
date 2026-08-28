@@ -1,10 +1,21 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { AdminHeader, Panel, StatusBadge, euro, fmtDate, NewButton, Pagination } from "@/components/admin/ui";
+import {
+  AdminHeader,
+  Panel,
+  StatusBadge,
+  TableSkeleton,
+  euro,
+  fmtDate,
+  NewButton,
+  Pagination,
+} from "@/components/admin/ui";
 import { SegmentedFilter, FilterToolbar, ActiveFilters, labelFrom } from "@/components/admin/FilterBar";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
 import { getDiscountsPage, adminGetShops } from "@/lib/admin/queries";
-import { discountFilters } from "@/lib/admin/filters";
+import { discountFilters, filterQuery } from "@/lib/admin/filters";
+import { TotalSubtitle } from "@/components/admin/Streamed";
 import { deleteDiscount, toggleDiscountActive } from "@/lib/admin/discount-actions";
 import { discountState } from "@/lib/discounts";
 import { isAdmin } from "@/lib/auth/session";
@@ -81,7 +92,7 @@ function DiscountRow({ d, shopName }: { d: Row; shopName?: string }) {
           <p className="font-display text-lg tracking-wide text-brown-950">{d.code}</p>
           {state !== "active" && <StatusBadge status={state} />}
         </div>
-        <p className="text-xs text-brown-800/60">{facts.join(" · ")}</p>
+        <p className="text-xs text-brown-800/70">{facts.join(" · ")}</p>
         {restrictions.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {restrictions.map((r) => (
@@ -118,10 +129,9 @@ export default async function AdminDiscounts({ searchParams }: SP) {
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
   const filters = discountFilters(sp);
-  const [{ rows: codes, total, pageCount }, shops] = await Promise.all([
-    getDiscountsPage({ ...filters, page }),
-    adminGetShops(),
-  ]);
+  // Started, not awaited — the chrome must not wait on the rows.
+  const promise = getDiscountsPage({ ...filters, page });
+  const shops = await adminGetShops();
   const shopNames = new Map(shops.map((s) => [s.slug, s.name]));
   const filtered = Object.values(filters).some((v) => v && v !== "all");
 
@@ -129,7 +139,14 @@ export default async function AdminDiscounts({ searchParams }: SP) {
     <div>
       <AdminHeader
         title="Codici sconto"
-        subtitle={`${total} codici · percentuali, importi fissi o spedizione gratuita`}
+        subtitle={
+          <TotalSubtitle
+            promise={promise}
+            one="codice"
+            many="codici"
+            suffix=" · percentuali, importi fissi o spedizione gratuita"
+          />
+        }
         action={
           <div className="flex flex-wrap gap-2">
             {/* Which code cost how much, on which order — the whole ledger,
@@ -171,6 +188,30 @@ export default async function AdminDiscounts({ searchParams }: SP) {
         }}
       />
 
+      {/* Only the codes wait on the query. */}
+      <Suspense key={filterQuery({ ...filters, page: String(page) })} fallback={<TableSkeleton rows={5} />}>
+        <DiscountList promise={promise} shopNames={shopNames} page={page} filters={filters} filtered={filtered} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function DiscountList({
+  promise,
+  shopNames,
+  page,
+  filters,
+  filtered,
+}: {
+  promise: ReturnType<typeof getDiscountsPage>;
+  shopNames: Map<string, string>;
+  page: number;
+  filters: Record<string, string | undefined>;
+  filtered: boolean;
+}) {
+  const { rows: codes, pageCount } = await promise;
+  return (
+    <>
       {codes.length === 0 ? (
         <Panel>
           <p className="text-brown-800/70">
@@ -188,6 +229,6 @@ export default async function AdminDiscounts({ searchParams }: SP) {
       )}
 
       <Pagination basePath={BASE} page={page} pageCount={pageCount} params={filters} />
-    </div>
+    </>
   );
 }

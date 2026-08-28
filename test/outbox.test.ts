@@ -3,7 +3,7 @@ import { eq, like } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { emailOutbox, newsletterCampaigns } from "@/lib/db/schema";
 import { outboxFilters, outboxWhere, filterQuery } from "@/lib/admin/filters";
-import { getOutboxPage, getOutboxForExport } from "@/lib/admin/queries";
+import { getOutboxPage, getOutboxSummary, getOutboxForExport } from "@/lib/admin/queries";
 import { drainOutbox, orderEmailDelivery, OUTBOX_MAX_ATTEMPTS } from "@/lib/mail/mailer";
 
 /** Every fixture address ends in this, so other suites' mail never leaks in. */
@@ -59,18 +59,22 @@ describe("outboxFilters", () => {
 });
 
 describe("getOutboxPage", () => {
+  // The chip counts and the whole-outbox failure figures live in
+  // `getOutboxSummary`, separately from the rows, so the page can render its
+  // chrome before the list arrives.
   it("counts per status under the other filters, and the whole-outbox failures separately", async () => {
     const page = await getOutboxPage({ stato: "all", q: DOMAIN });
     expect(mine(page.rows)).toHaveLength(6);
-    expect(page.counts).toEqual({ all: 6, queued: 1, sent: 2, failed: 3 });
+    const summary = await getOutboxSummary({ stato: "all", q: DOMAIN });
+    expect(summary.counts).toEqual({ all: 6, queued: 1, sent: 2, failed: 3 });
 
     // Chip counts ignore the status facet — "Fallite (3)" stays 3 while viewing sent.
     const sent = await getOutboxPage({ stato: "sent", q: DOMAIN });
     expect(mine(sent.rows).map((r) => r.status)).toEqual(["sent", "sent"]);
-    expect(sent.counts.failed).toBe(3);
+    expect((await getOutboxSummary({ stato: "sent", q: DOMAIN })).counts.failed).toBe(3);
 
-    expect(page.failed).toBeGreaterThanOrEqual(3);
-    expect(page.exhausted).toBeGreaterThanOrEqual(1);
+    expect(summary.failed).toBeGreaterThanOrEqual(3);
+    expect(summary.exhausted).toBeGreaterThanOrEqual(1);
   });
 
   it("searches recipient and subject case-insensitively", async () => {

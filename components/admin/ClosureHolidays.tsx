@@ -41,7 +41,7 @@ export function ClosureHolidays({
       <details>
         <summary className="flex cursor-pointer flex-wrap items-baseline justify-between gap-2">
           <span className="font-display text-lg text-brown-950">Festività nazionali {year}</span>
-          <span className="text-xs text-brown-800/60">
+          <span className="text-xs text-brown-800/70">
             {open.length === 0
               ? "Tutte già coperte o passate"
               : `${open.length} ${open.length === 1 ? "giorno" : "giorni"} non ancora in calendario`}
@@ -54,7 +54,7 @@ export function ClosureHolidays({
               key={y}
               href={yearHref(y)}
               className={`font-bold tracking-widest uppercase ${
-                y === year ? "text-brown-950 underline" : "text-brown-800/60 hover:text-brown-950"
+                y === year ? "text-brown-950 underline" : "text-brown-800/70 hover:text-brown-950"
               }`}
             >
               {y}
@@ -75,7 +75,7 @@ export function ClosureHolidays({
                     htmlFor={id}
                     className={`flex min-h-11 items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
                       past || done
-                        ? "border-brown-900/10 text-brown-800/50"
+                        ? "border-brown-900/10 text-brown-800/70"
                         : "border-brown-900/20 text-brown-950"
                     }`}
                   >

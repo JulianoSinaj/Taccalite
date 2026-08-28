@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 const inputClasses =
-  "w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3.5 text-sm text-cream transition-colors placeholder:text-cream/40 focus:border-gold focus:outline-none";
+  "w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3.5 text-sm text-cream transition-colors placeholder:text-cream/60 focus:border-gold focus:outline-none";
 
 export default function AdminLoginForm({ wrongRole }: { wrongRole: boolean }) {
   const router = useRouter();

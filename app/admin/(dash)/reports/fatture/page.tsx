@@ -142,12 +142,12 @@ export default async function InvoiceRegister({ searchParams }: SP) {
           <div className="scroll-x">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-brown-900/10 text-left text-[12px] tracking-widest text-brown-800/60 uppercase">
-                  <th className="pb-2 font-bold">Documento</th>
-                  <th className="pb-2 font-bold">Cliente</th>
-                  <th className="pb-2 font-bold">Incassata</th>
-                  <th className="pb-2 text-right font-bold">Totale</th>
-                  <th className="pb-2 font-bold">Stato</th>
+                <tr className="border-b border-brown-900/10 text-left text-[12px] tracking-widest text-brown-800/70 uppercase">
+                  <th scope="col" className="pb-2 font-bold">Documento</th>
+                  <th scope="col" className="pb-2 font-bold">Cliente</th>
+                  <th scope="col" className="pb-2 font-bold">Incassata</th>
+                  <th scope="col" className="pb-2 text-right font-bold">Totale</th>
+                  <th scope="col" className="pb-2 font-bold">Stato</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brown-900/10">
@@ -161,7 +161,7 @@ export default async function InvoiceRegister({ searchParams }: SP) {
                         {r.orderNumber}
                       </Link>
                       {r.shopSlug && (
-                        <span className="ml-2 text-xs text-brown-800/50">
+                        <span className="ml-2 text-xs text-brown-800/70">
                           {shopName.get(r.shopSlug) ?? r.shopSlug}
                         </span>
                       )}
@@ -169,7 +169,7 @@ export default async function InvoiceRegister({ searchParams }: SP) {
                     <td className="py-2 text-brown-950">
                       {r.name}
                       {!r.hasFiscalIdentity && (
-                        <span className="ml-2 text-xs text-brown-800/50">
+                        <span className="ml-2 text-xs text-brown-800/70">
                           senza codice fiscale
                         </span>
                       )}
@@ -215,7 +215,7 @@ export default async function InvoiceRegister({ searchParams }: SP) {
         </Panel>
       )}
 
-      <p className="mt-4 max-w-3xl text-xs text-brown-800/60">
+      <p className="mt-4 max-w-3xl text-xs text-brown-800/70">
         Totale fatturato nel periodo: <strong>{euro(issuedCents)}</strong>. Il registro è ricostruito
         dal{" "}
         <Link href="/admin/audit?entity=order" className="font-semibold text-gold-deep underline">

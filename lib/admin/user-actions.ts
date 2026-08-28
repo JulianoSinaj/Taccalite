@@ -158,7 +158,8 @@ export async function updateUserProfile(_prev: ActionState, fd: FormData): Promi
         .from(users)
         .where(eq(users.email, d.email))
         .limit(1);
-      if (clash && clash.id !== d.id) throw new ActionError("Email già in uso da un altro account.");
+      if (clash && clash.id !== d.id)
+        throw new ActionError("Email già in uso da un altro account.", "email");
     }
 
     // Username is the login handle and is unique; a form without the field
@@ -171,7 +172,7 @@ export async function updateUserProfile(_prev: ActionState, fd: FormData): Promi
         .from(users)
         .where(eq(users.username, username))
         .limit(1);
-      if (clash && clash.id !== d.id) throw new ActionError("Username già in uso.");
+      if (clash && clash.id !== d.id) throw new ActionError("Username già in uso.", "username");
     }
 
     await db
@@ -231,7 +232,7 @@ export async function createUser(_prev: ActionState, fd: FormData): Promise<Acti
       .from(users)
       .where(eq(users.username, d.username))
       .limit(1);
-    if (existing) throw new ActionError("Username già in uso.");
+    if (existing) throw new ActionError("Username già in uso.", "username");
 
     const passwordHash = await hashPasswordAsync(d.password);
     const [created] = await db
@@ -291,7 +292,7 @@ export async function createCustomerAccount(_prev: ActionState, fd: FormData): P
         .where(eq(users.email, d.email))
         .limit(1);
       if (clash) {
-        throw new ActionError("Esiste già un account con questa email.");
+        throw new ActionError("Esiste già un account con questa email.", "email");
       }
     } else if (d.phone) {
       // A phone-only card has nothing but the number to identify it, so the

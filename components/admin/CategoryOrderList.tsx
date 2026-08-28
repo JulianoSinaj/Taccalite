@@ -268,7 +268,7 @@ function DragGroup({
         </div>
       ))}
       {isPending && saving && (
-        <p className="-mt-1 text-xs text-brown-800/50" aria-live="polite">
+        <p className="-mt-1 text-xs text-brown-800/70" aria-live="polite">
           Salvataggio ordine…
         </p>
       )}
@@ -290,7 +290,7 @@ function DragHandle({ id, disabled }: { id: string; disabled?: boolean }) {
       disabled={disabled}
       aria-label="Trascina per riordinare"
       title={disabled ? "Cancella la ricerca per riordinare" : undefined}
-      className="grid size-11 shrink-0 touch-none place-items-center rounded-lg text-brown-800/40 hover:bg-brown-900/5 hover:text-brown-950 active:cursor-grabbing disabled:cursor-default disabled:text-brown-800/20 disabled:hover:bg-transparent"
+      className="grid size-11 shrink-0 touch-none place-items-center rounded-lg text-brown-800/70 hover:bg-brown-900/5 hover:text-brown-950 active:cursor-grabbing disabled:cursor-default disabled:text-brown-800/40 disabled:hover:bg-transparent"
       style={{ cursor: disabled ? "default" : "grab" }}
     >
       <GripVertical className="size-4" aria-hidden="true" />
@@ -332,10 +332,10 @@ function CategoryRow({
         <DragHandle id={c.id} disabled={dragDisabled} />
         <div>
           <p className="font-display text-lg text-brown-950">
-            {c.parentId && <span className="text-brown-800/40">↳ </span>}
+            {c.parentId && <span className="text-brown-800/70">↳ </span>}
             {c.name}
           </p>
-          <p className="text-xs text-brown-800/60">
+          <p className="text-xs text-brown-800/70">
             <code>/{c.slug}</code>
             {" · "}
             {c.usage > 0 ? (

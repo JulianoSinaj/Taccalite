@@ -61,7 +61,7 @@ export function PasswordField({
         onClick={() => setRevealed((r) => !r)}
         aria-label={revealed ? "Nascondi la password" : "Mostra la password"}
         title={revealed ? "Nascondi" : "Mostra"}
-        className="rounded-lg p-2.5 text-brown-800/60 hover:bg-brown-900/5 hover:text-brown-950"
+        className="rounded-lg p-2.5 text-brown-800/70 hover:bg-brown-900/5 hover:text-brown-950"
       >
         {revealed ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
       </button>
@@ -74,7 +74,7 @@ export function PasswordField({
         }}
         aria-label="Genera una password sicura"
         title="Genera"
-        className="rounded-lg p-2.5 text-brown-800/60 hover:bg-brown-900/5 hover:text-brown-950"
+        className="rounded-lg p-2.5 text-brown-800/70 hover:bg-brown-900/5 hover:text-brown-950"
       >
         <RefreshCw className="size-4" />
       </button>

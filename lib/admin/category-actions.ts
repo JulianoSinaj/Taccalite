@@ -80,13 +80,20 @@ export async function saveCategory(_prev: ActionState, fd: FormData): Promise<Ac
     // Slugs are unique per kind, not globally: the shop files products under
     // "Formaggi" and posts under "Formaggi" too, and those are different lists.
     const base = d.slug || slugify(d.name);
-    if (!base) throw new ActionError("Il nome non produce uno slug valido: aggiungi lettere o numeri.");
+    if (!base)
+      throw new ActionError(
+        "Il nome non produce uno slug valido: aggiungi lettere o numeri.",
+        "slug",
+      );
     const clash = await db
       .select({ id: categories.id })
       .from(categories)
       .where(and(eq(categories.kind, d.kind), eq(categories.slug, base)));
     if (clash.some((c) => c.id !== d.id)) {
-      throw new ActionError(`Esiste già una categoria con lo slug «${base}» in questo elenco.`);
+      throw new ActionError(
+        `Esiste già una categoria con lo slug «${base}» in questo elenco.`,
+        "slug",
+      );
     }
 
     // Hierarchy is a product-catalogue affordance; news categories are flat.
@@ -101,10 +108,16 @@ export async function saveCategory(_prev: ActionState, fd: FormData): Promise<Ac
       // already be a parent — either would make a third level the list can't
       // draw (and, in the worst case, a cycle).
       if (parent.parentId) {
-        throw new ActionError(`«${parent.name}» è già una sottocategoria: scegli una categoria di primo livello.`);
+        throw new ActionError(
+          `«${parent.name}» è già una sottocategoria: scegli una categoria di primo livello.`,
+          "parentId",
+        );
       }
       if (d.id && (await childCount(d.id)) > 0) {
-        throw new ActionError("Questa categoria raggruppa già altre categorie e deve restare al primo livello.");
+        throw new ActionError(
+          "Questa categoria raggruppa già altre categorie e deve restare al primo livello.",
+          "parentId",
+        );
       }
     }
 

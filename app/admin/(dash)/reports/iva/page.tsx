@@ -30,11 +30,11 @@ function VatTable({
     <div className="scroll-x">
       <table className="w-full text-sm">
       <thead>
-        <tr className="border-b border-brown-900/10 text-left text-[12px] tracking-widest text-brown-800/60 uppercase">
-          <th className="pb-2 font-bold">Aliquota</th>
-          <th className="pb-2 text-right font-bold">Imponibile</th>
-          <th className="pb-2 text-right font-bold">Imposta</th>
-          <th className="pb-2 text-right font-bold">Totale ivato</th>
+        <tr className="border-b border-brown-900/10 text-left text-[12px] tracking-widest text-brown-800/70 uppercase">
+          <th scope="col" className="pb-2 font-bold">Aliquota</th>
+          <th scope="col" className="pb-2 text-right font-bold">Imponibile</th>
+          <th scope="col" className="pb-2 text-right font-bold">Imposta</th>
+          <th scope="col" className="pb-2 text-right font-bold">Totale ivato</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-brown-900/10">
@@ -145,7 +145,7 @@ export default async function VatReport({ searchParams }: SP) {
               <p className="font-display text-2xl font-bold text-brown-950">{euro(netTax)}</p>
             </div>
             <VatTable buckets={report.buckets} />
-            <p className="mt-3 text-xs text-brown-800/60">
+            <p className="mt-3 text-xs text-brown-800/70">
               Vendite incassate nel periodo, al netto delle note di credito emesse nel periodo.
             </p>
           </Panel>
@@ -167,7 +167,7 @@ export default async function VatReport({ searchParams }: SP) {
                 Vedi gli ordini →
               </Link>
             </div>
-            <p className="mb-3 text-xs text-brown-800/60">
+            <p className="mb-3 text-xs text-brown-800/70">
               {report.salesCount} ordini incassati tra il {period.fromISO} e il {period.toISO}, al lordo
               di eventuali rimborsi successivi.
             </p>
@@ -181,7 +181,7 @@ export default async function VatReport({ searchParams }: SP) {
               <div className="space-y-6">
                 {report.byShop.map((s) => (
                   <div key={s.shopSlug ?? "spedizioni"}>
-                    <p className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+                    <p className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
                       {s.shopSlug ? (shopName.get(s.shopSlug) ?? s.shopSlug) : "Spedizioni / senza sede"}
                       {" · "}
                       {euro(totalImposta(s.buckets))} di imposta
@@ -207,7 +207,7 @@ export default async function VatReport({ searchParams }: SP) {
               <h2 className="font-display mb-1 text-lg text-brown-950">
                 Acconti sulle prenotazioni
               </h2>
-              <p className="mb-3 text-xs text-brown-800/60">
+              <p className="mb-3 text-xs text-brown-800/70">
                 Fuori dai totali IVA qui sopra. Da valutare col commercialista: la caparra
                 confirmatoria resta fuori campo IVA finché non è imputata al prezzo, mentre quella
                 trattenuta dopo un{" "}
@@ -221,36 +221,36 @@ export default async function VatReport({ searchParams }: SP) {
               </p>
               <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="rounded-lg bg-cream/60 px-4 py-3">
-                  <dt className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+                  <dt className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
                     Incassati nel periodo
                   </dt>
                   <dd className="font-display mt-1 text-xl font-bold tabular-nums text-brown-950">
                     {euro(deposits.collected.cents)}
-                    <span className="ml-2 text-xs font-normal text-brown-800/60">
+                    <span className="ml-2 text-xs font-normal text-brown-800/70">
                       su {deposits.collected.count}{" "}
                       {deposits.collected.count === 1 ? "prenotazione" : "prenotazioni"}
                     </span>
                   </dd>
                 </div>
                 <div className="rounded-lg bg-cream/60 px-4 py-3">
-                  <dt className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+                  <dt className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
                     Trattenuti (non presentati)
                   </dt>
                   <dd className="font-display mt-1 text-xl font-bold tabular-nums text-brown-950">
                     {euro(deposits.forfeited.cents)}
-                    <span className="ml-2 text-xs font-normal text-brown-800/60">
+                    <span className="ml-2 text-xs font-normal text-brown-800/70">
                       su {deposits.forfeited.count}{" "}
                       {deposits.forfeited.count === 1 ? "prenotazione" : "prenotazioni"}
                     </span>
                   </dd>
                 </div>
                 <div className="rounded-lg bg-cream/60 px-4 py-3">
-                  <dt className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+                  <dt className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
                     Rimborsati (annullate)
                   </dt>
                   <dd className="font-display mt-1 text-xl font-bold tabular-nums text-brown-950">
                     {euro(deposits.refunded.cents)}
-                    <span className="ml-2 text-xs font-normal text-brown-800/60">
+                    <span className="ml-2 text-xs font-normal text-brown-800/70">
                       su {deposits.refunded.count}{" "}
                       {deposits.refunded.count === 1 ? "prenotazione" : "prenotazioni"}
                     </span>
@@ -263,7 +263,7 @@ export default async function VatReport({ searchParams }: SP) {
           {report.reversals.length > 0 && (
             <Panel className="border-danger/30">
               <h2 className="font-display mb-1 text-lg text-brown-950">Note di credito (rimborsi)</h2>
-              <p className="mb-3 text-xs text-brown-800/60">
+              <p className="mb-3 text-xs text-brown-800/70">
                 {report.reversalCount} ordini rimborsati in questo periodo. Il rimborso viene registrato
                 qui, nel periodo in cui il denaro è stato restituito: la vendita resta nel periodo in cui
                 è stata incassata, che potrebbe essere già stato dichiarato.
@@ -274,7 +274,7 @@ export default async function VatReport({ searchParams }: SP) {
         </div>
       )}
 
-      <p className="mt-4 text-xs text-brown-800/60">
+      <p className="mt-4 text-xs text-brown-800/70">
         I prezzi sono comprensivi di IVA. La spedizione è calcolata all&apos;aliquota del{" "}
         {vatRateLabel(report.shippingVatBps)} (modificabile in Impostazioni ·{" "}
         <code>store.shippingVatRate</code>). Documento di sintesi per il commercialista — non

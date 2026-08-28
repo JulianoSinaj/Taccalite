@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import {
   AdminHeader,
   Panel,
   StatusBadge,
+  TableSkeleton,
   inputCls,
   labelCls,
   fmtDate,
@@ -26,6 +28,7 @@ import {
   countExpiredReservations,
 } from "@/lib/admin/queries";
 import { reservationFilters, filterQuery } from "@/lib/admin/filters";
+import { TotalSubtitle } from "@/components/admin/Streamed";
 import { BulkBar, BulkCheckbox } from "@/components/admin/BulkBar";
 import { SavedViews } from "@/components/admin/SavedViews";
 import {
@@ -74,9 +77,9 @@ const BTN_SECONDARY =
 function depositLine(r: ReservationRow): { text: string; cls: string } | null {
   if (r.depositCents <= 0) return null;
   const amt = euro(r.depositCents);
-  if (r.depositRefundedAt) return { text: `Acconto ${amt} rimborsato`, cls: "text-brown-800/60" };
+  if (r.depositRefundedAt) return { text: `Acconto ${amt} rimborsato`, cls: "text-brown-800/70" };
   if (r.depositForfeitedAt) return { text: `Acconto ${amt} trattenuto`, cls: "font-medium text-warn" };
-  if (!r.depositPaidAt) return { text: `Acconto ${amt} da incassare`, cls: "text-brown-800/60" };
+  if (!r.depositPaidAt) return { text: `Acconto ${amt} da incassare`, cls: "text-brown-800/70" };
   if (r.status === "cancelled") {
     return { text: `Acconto ${amt} incassato — da definire (rimborso o trattenuta)`, cls: "font-medium text-danger" };
   }
@@ -107,9 +110,10 @@ export default async function AdminReservations({ searchParams }: SP) {
   const viewer = await getCurrentUser();
   const today = dateInRome();
   const closures = await getClosures(today);
-  const [{ rows, total, pageCount }, shops, admin, views, deposits, undecided, expired] =
+  // Started, not awaited — see components/admin/Streamed.
+  const promise = getReservationsPage({ ...filters, page });
+  const [shops, admin, views, deposits, undecided, expired] =
     await Promise.all([
-      getReservationsPage({ ...filters, page }),
       adminGetShops(),
       isAdmin(),
       viewer ? getSavedViews(viewer.id, BASE) : Promise.resolve([]),
@@ -128,22 +132,26 @@ export default async function AdminReservations({ searchParams }: SP) {
   const current = { stato, negozio: filters.negozio ?? "all", tipo, q, da, a };
   const SHOP_CHIPS = shopChips(shops, scope);
 
-  const subtitle = [
-    `${total} ${total === 1 ? "prenotazione" : "prenotazioni"}`,
+  // The count streams in; the deposits line does not depend on the row query.
+  const depositLine =
     deposits.cents > 0
-      ? `${euro(deposits.cents)} di acconti incassati su ${deposits.count} ${
+      ? ` · ${euro(deposits.cents)} di acconti incassati su ${deposits.count} ${
           deposits.count === 1 ? "prenotazione aperta" : "prenotazioni aperte"
         }`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+      : "";
 
   return (
     <div>
       <AdminHeader
         title="Prenotazioni"
-        subtitle={subtitle}
+        subtitle={
+          <TotalSubtitle
+            promise={promise}
+            one="prenotazione"
+            many="prenotazioni"
+            suffix={depositLine}
+          />
+        }
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Link
@@ -249,219 +257,254 @@ export default async function AdminReservations({ searchParams }: SP) {
 
       <SavedViews path={BASE} views={views} currentQuery={filterQuery(filters).replace(/^\?/, "")} />
 
-      {rows.length === 0 ? (
-        <Panel>
-          <p className="text-brown-800/70">Nessuna prenotazione in questa vista.</p>
-        </Panel>
-      ) : (
-        <>
-          <BulkBar
-            formId={BULK_FORM}
-            action={bulkUpdateReservationStatus}
-            label="prenotazioni"
-            options={[
-              { value: "confirmed", label: "Conferma" },
-              { value: "completed", label: "Segna completate" },
-              { value: "cancelled", label: "Annulla" },
-              { value: "no_show", label: "Segna non presentati" },
-              { value: "pending", label: "Rimetti in attesa" },
-            ]}
-            confirmTemplate="Applicare l'azione a {n} prenotazioni? I clienti con email riceveranno l'avviso."
-          />
-
-          {/* One row = the facts and the one or two clicks the state calls for.
-              Everything else — reschedule, deposit, table, notes, emails — is on
-              the booking's own page, which every row links to. The row used to
-              carry a copy of all of it, which made the list unreadable on a
-              phone and gave the same action two homes. */}
-          <div className="space-y-4">
-            {rows.map((r) => {
-              const open = r.status === "pending" || r.status === "confirmed";
-              const isPast = r.date < today;
-              const deposit = depositLine(r);
-              // A live booking on a day the shop has since closed: the one row
-              // in the list that needs a phone call, and it looked like any other.
-              const closed =
-                open && !isPast ? closureFor(closures, r.shopSlug, r.date, "reservations", r.time || undefined) : null;
-              return (
-                <Panel key={r.id}>
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="flex min-w-0 gap-3">
-                      <BulkCheckbox
-                        formId={BULK_FORM}
-                        id={r.id}
-                        label={`Seleziona prenotazione ${r.reference}`}
-                      />
-                      <div className="min-w-0 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-brown-800/60">{r.reference}</span>
-                          <span className="rounded-full bg-gold/15 px-2.5 py-1 text-[11px] font-bold tracking-widest text-gold-deep uppercase">
-                            {reservationTypeLabel(r.type)}
-                          </span>
-                          <StatusBadge status={r.status} />
-                          {open && isPast && (
-                            <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-warn-soft-fg uppercase">
-                              Scaduta
-                            </span>
-                          )}
-                          {closed && (
-                            <span
-                              className="rounded-full bg-danger-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-danger-soft-fg uppercase"
-                              title={closed.reason || undefined}
-                            >
-                              Giorno chiuso{closureTimeLabel(closed) ? ` ${closureTimeLabel(closed)}` : ""}
-                            </span>
-                          )}
-                          {r.waitlisted && r.status !== "cancelled" && (
-                            <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-warn uppercase">
-                              Lista d&apos;attesa
-                            </span>
-                          )}
-                          {r.remindedAt && (
-                            <span className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-info-soft-fg uppercase">
-                              Promemoria inviato
-                            </span>
-                          )}
-                          {r.readyAt && (
-                            <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-ok uppercase">
-                              Pronta ✓
-                            </span>
-                          )}
-                        </div>
-
-                        <Link
-                          href={`/admin/reservations/${r.id}`}
-                          className="font-display inline-block text-xl text-brown-950 hover:underline"
-                        >
-                          {r.name}
-                        </Link>
-
-                        <div className="grid grid-cols-1 gap-x-8 gap-y-1 text-sm text-brown-800/80 sm:grid-cols-2">
-                          <p>
-                            <span aria-hidden="true">📅</span> <span className="sr-only">Data: </span>
-                            {fmtDate(r.date)}
-                            {r.time ? ` · ${r.time}` : ""}
-                          </p>
-                          <p>
-                            <span aria-hidden="true">🏬</span> <span className="sr-only">Negozio: </span>
-                            {shopName.get(r.shopSlug) ?? r.shopSlug}
-                          </p>
-                          <p>
-                            <span aria-hidden="true">📞</span> <span className="sr-only">Telefono: </span>
-                            {r.phone}
-                          </p>
-                          {r.email && (
-                            <p className="truncate">
-                              <span aria-hidden="true">✉️</span> <span className="sr-only">Email: </span>
-                              {r.email}
-                            </p>
-                          )}
-                          {r.guests != null && (
-                            <p>
-                              <span aria-hidden="true">👥</span> <span className="sr-only">Ospiti: </span>
-                              {r.guests} ospiti
-                              {r.tableNumber ? ` · tav. ${r.tableNumber}` : ""}
-                            </p>
-                          )}
-                          {r.quantityKg != null && (
-                            <p>
-                              <span aria-hidden="true">⚖️</span> <span className="sr-only">Quantità: </span>
-                              {r.quantityKg} kg
-                            </p>
-                          )}
-                        </div>
-
-                        {r.notes && (
-                          <p className="max-w-2xl text-sm text-brown-800/70">
-                            <span aria-hidden="true">📝</span> <span className="sr-only">Note: </span>
-                            {r.notes}
-                          </p>
-                        )}
-                        {r.adminNotes && (
-                          <p className="max-w-2xl rounded-lg bg-gold/10 px-3 py-1.5 text-sm text-brown-900">
-                            <span className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
-                              Nota interna
-                            </span>{" "}
-                            {r.adminNotes}
-                          </p>
-                        )}
-                        {deposit && <p className={`text-xs ${deposit.cls}`}>{deposit.text}</p>}
-                      </div>
-                    </div>
-
-                    {/* The clicks this state calls for, and the way to the rest. */}
-                    <div className="flex w-full shrink-0 flex-col gap-2 lg:w-56">
-                      {r.waitlisted && r.type === "porchetta" && r.status !== "cancelled" && (
-                        <ActionForm action={promoteFromWaitlist}>
-                          <input type="hidden" name="id" value={r.id} />
-                          <PendingButton tone="gold">Conferma dalla lista</PendingButton>
-                        </ActionForm>
-                      )}
-
-                      {open && (
-                        <div className="flex gap-2">
-                          {r.status === "pending" ? (
-                            <ActionForm action={updateReservationStatus} className="flex-1">
-                              <input type="hidden" name="id" value={r.id} />
-                              <input type="hidden" name="status" value="confirmed" />
-                              <PendingButton tone="gold">Conferma</PendingButton>
-                            </ActionForm>
-                          ) : (
-                            <ActionForm action={updateReservationStatus} className="flex-1">
-                              <input type="hidden" name="id" value={r.id} />
-                              <input type="hidden" name="status" value="completed" />
-                              <PendingButton tone="dark">Completata</PendingButton>
-                            </ActionForm>
-                          )}
-                          <ActionForm action={updateReservationStatus} className="flex-1">
-                            <input type="hidden" name="id" value={r.id} />
-                            <input type="hidden" name="status" value="cancelled" />
-                            <PendingButton
-                              tone="danger"
-                              confirm={
-                                r.email
-                                  ? "Annullare questa prenotazione? Il cliente riceverà un'email."
-                                  : "Annullare questa prenotazione?"
-                              }
-                            >
-                              Annulla
-                            </PendingButton>
-                          </ActionForm>
-                        </div>
-                      )}
-
-                      {/* Past its day and never closed: the one outcome the
-                          quick buttons above cannot express. */}
-                      {open && isPast && (
-                        <ActionForm action={updateReservationStatus}>
-                          <input type="hidden" name="id" value={r.id} />
-                          <input type="hidden" name="status" value="no_show" />
-                          <PendingButton
-                            tone="danger"
-                            confirm={
-                              r.depositPaidAt && r.depositCents > 0
-                                ? "Segnare come non presentato? L'acconto incassato verrà trattenuto."
-                                : "Segnare come non presentato?"
-                            }
-                          >
-                            Non presentato
-                          </PendingButton>
-                        </ActionForm>
-                      )}
-
-                      <Link href={`/admin/reservations/${r.id}`} className={BTN_SECONDARY}>
-                        Apri scheda →
-                      </Link>
-                    </div>
-                  </div>
-                </Panel>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      <Pagination basePath={BASE} page={page} pageCount={pageCount} params={current} />
+      {/* Only the bookings wait on the query; the filters above stay put. */}
+      <Suspense key={filterQuery({ ...current, page: String(page) })} fallback={<TableSkeleton rows={6} />}>
+        <ReservationList
+          promise={promise}
+          shopName={shopName}
+          closures={closures}
+          today={today}
+          page={page}
+          current={current}
+        />
+      </Suspense>
     </div>
+  );
+}
+
+
+async function ReservationList({
+  promise,
+  shopName,
+  closures,
+  today,
+  page,
+  current,
+}: {
+  promise: ReturnType<typeof getReservationsPage>;
+  shopName: Map<string, string>;
+  closures: Awaited<ReturnType<typeof getClosures>>;
+  today: string;
+  page: number;
+  current: Record<string, string | undefined>;
+}) {
+  const { rows, pageCount } = await promise;
+  return (
+    <>
+          {rows.length === 0 ? (
+            <Panel>
+              <p className="text-brown-800/70">Nessuna prenotazione in questa vista.</p>
+            </Panel>
+          ) : (
+            <>
+              <BulkBar
+                formId={BULK_FORM}
+                action={bulkUpdateReservationStatus}
+                label="prenotazioni"
+                options={[
+                  { value: "confirmed", label: "Conferma" },
+                  { value: "completed", label: "Segna completate" },
+                  { value: "cancelled", label: "Annulla" },
+                  { value: "no_show", label: "Segna non presentati" },
+                  { value: "pending", label: "Rimetti in attesa" },
+                ]}
+                confirmTemplate="Applicare l'azione a {n} prenotazioni? I clienti con email riceveranno l'avviso."
+              />
+
+              {/* One row = the facts and the one or two clicks the state calls for.
+                  Everything else — reschedule, deposit, table, notes, emails — is on
+                  the booking's own page, which every row links to. The row used to
+                  carry a copy of all of it, which made the list unreadable on a
+                  phone and gave the same action two homes. */}
+              <div className="space-y-4">
+                {rows.map((r) => {
+                  const open = r.status === "pending" || r.status === "confirmed";
+                  const isPast = r.date < today;
+                  const deposit = depositLine(r);
+                  // A live booking on a day the shop has since closed: the one row
+                  // in the list that needs a phone call, and it looked like any other.
+                  const closed =
+                    open && !isPast ? closureFor(closures, r.shopSlug, r.date, "reservations", r.time || undefined) : null;
+                  return (
+                    <Panel key={r.id}>
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="flex min-w-0 gap-3">
+                          <BulkCheckbox
+                            formId={BULK_FORM}
+                            id={r.id}
+                            label={`Seleziona prenotazione ${r.reference}`}
+                          />
+                          <div className="min-w-0 space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-brown-800/70">{r.reference}</span>
+                              <span className="rounded-full bg-gold/15 px-2.5 py-1 text-[11px] font-bold tracking-widest text-gold-deep uppercase">
+                                {reservationTypeLabel(r.type)}
+                              </span>
+                              <StatusBadge status={r.status} />
+                              {open && isPast && (
+                                <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-warn-soft-fg uppercase">
+                                  Scaduta
+                                </span>
+                              )}
+                              {closed && (
+                                <span
+                                  className="rounded-full bg-danger-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-danger-soft-fg uppercase"
+                                  title={closed.reason || undefined}
+                                >
+                                  Giorno chiuso{closureTimeLabel(closed) ? ` ${closureTimeLabel(closed)}` : ""}
+                                </span>
+                              )}
+                              {r.waitlisted && r.status !== "cancelled" && (
+                                <span className="rounded-full bg-warn-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-warn uppercase">
+                                  Lista d&apos;attesa
+                                </span>
+                              )}
+                              {r.remindedAt && (
+                                <span className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-info-soft-fg uppercase">
+                                  Promemoria inviato
+                                </span>
+                              )}
+                              {r.readyAt && (
+                                <span className="rounded-full bg-ok-soft px-2.5 py-1 text-[11px] font-bold tracking-widest text-ok uppercase">
+                                  Pronta ✓
+                                </span>
+                              )}
+                            </div>
+
+                            <Link
+                              href={`/admin/reservations/${r.id}`}
+                              className="font-display inline-block text-xl text-brown-950 hover:underline"
+                            >
+                              {r.name}
+                            </Link>
+
+                            <div className="grid grid-cols-1 gap-x-8 gap-y-1 text-sm text-brown-800/80 sm:grid-cols-2">
+                              <p>
+                                <span aria-hidden="true">📅</span> <span className="sr-only">Data: </span>
+                                {fmtDate(r.date)}
+                                {r.time ? ` · ${r.time}` : ""}
+                              </p>
+                              <p>
+                                <span aria-hidden="true">🏬</span> <span className="sr-only">Negozio: </span>
+                                {shopName.get(r.shopSlug) ?? r.shopSlug}
+                              </p>
+                              <p>
+                                <span aria-hidden="true">📞</span> <span className="sr-only">Telefono: </span>
+                                {r.phone}
+                              </p>
+                              {r.email && (
+                                <p className="truncate">
+                                  <span aria-hidden="true">✉️</span> <span className="sr-only">Email: </span>
+                                  {r.email}
+                                </p>
+                              )}
+                              {r.guests != null && (
+                                <p>
+                                  <span aria-hidden="true">👥</span> <span className="sr-only">Ospiti: </span>
+                                  {r.guests} ospiti
+                                  {r.tableNumber ? ` · tav. ${r.tableNumber}` : ""}
+                                </p>
+                              )}
+                              {r.quantityKg != null && (
+                                <p>
+                                  <span aria-hidden="true">⚖️</span> <span className="sr-only">Quantità: </span>
+                                  {r.quantityKg} kg
+                                </p>
+                              )}
+                            </div>
+
+                            {r.notes && (
+                              <p className="max-w-2xl text-sm text-brown-800/70">
+                                <span aria-hidden="true">📝</span> <span className="sr-only">Note: </span>
+                                {r.notes}
+                              </p>
+                            )}
+                            {r.adminNotes && (
+                              <p className="max-w-2xl rounded-lg bg-gold/10 px-3 py-1.5 text-sm text-brown-900">
+                                <span className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
+                                  Nota interna
+                                </span>{" "}
+                                {r.adminNotes}
+                              </p>
+                            )}
+                            {deposit && <p className={`text-xs ${deposit.cls}`}>{deposit.text}</p>}
+                          </div>
+                        </div>
+
+                        {/* The clicks this state calls for, and the way to the rest. */}
+                        <div className="flex w-full shrink-0 flex-col gap-2 lg:w-56">
+                          {r.waitlisted && r.type === "porchetta" && r.status !== "cancelled" && (
+                            <ActionForm action={promoteFromWaitlist}>
+                              <input type="hidden" name="id" value={r.id} />
+                              <PendingButton tone="gold">Conferma dalla lista</PendingButton>
+                            </ActionForm>
+                          )}
+
+                          {open && (
+                            <div className="flex gap-2">
+                              {r.status === "pending" ? (
+                                <ActionForm action={updateReservationStatus} className="flex-1">
+                                  <input type="hidden" name="id" value={r.id} />
+                                  <input type="hidden" name="status" value="confirmed" />
+                                  <PendingButton tone="gold">Conferma</PendingButton>
+                                </ActionForm>
+                              ) : (
+                                <ActionForm action={updateReservationStatus} className="flex-1">
+                                  <input type="hidden" name="id" value={r.id} />
+                                  <input type="hidden" name="status" value="completed" />
+                                  <PendingButton tone="dark">Completata</PendingButton>
+                                </ActionForm>
+                              )}
+                              <ActionForm action={updateReservationStatus} className="flex-1">
+                                <input type="hidden" name="id" value={r.id} />
+                                <input type="hidden" name="status" value="cancelled" />
+                                <PendingButton
+                                  tone="danger"
+                                  confirm={
+                                    r.email
+                                      ? "Annullare questa prenotazione? Il cliente riceverà un'email."
+                                      : "Annullare questa prenotazione?"
+                                  }
+                                >
+                                  Annulla
+                                </PendingButton>
+                              </ActionForm>
+                            </div>
+                          )}
+
+                          {/* Past its day and never closed: the one outcome the
+                              quick buttons above cannot express. */}
+                          {open && isPast && (
+                            <ActionForm action={updateReservationStatus}>
+                              <input type="hidden" name="id" value={r.id} />
+                              <input type="hidden" name="status" value="no_show" />
+                              <PendingButton
+                                tone="danger"
+                                confirm={
+                                  r.depositPaidAt && r.depositCents > 0
+                                    ? "Segnare come non presentato? L'acconto incassato verrà trattenuto."
+                                    : "Segnare come non presentato?"
+                                }
+                              >
+                                Non presentato
+                              </PendingButton>
+                            </ActionForm>
+                          )}
+
+                          <Link href={`/admin/reservations/${r.id}`} className={BTN_SECONDARY}>
+                            Apri scheda →
+                          </Link>
+                        </div>
+                      </div>
+                    </Panel>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          <Pagination basePath={BASE} page={page} pageCount={pageCount} params={current} />
+      <Pagination basePath={BASE} page={page} pageCount={pageCount} params={current} />
+    </>
   );
 }

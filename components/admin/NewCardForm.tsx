@@ -91,7 +91,7 @@ export function NewCardForm({ onUseCard }: { onUseCard: (card: string) => void }
           </label>
           <input id="cust-phone" name="phone" type="tel" maxLength={40} autoComplete="off" className={inputCls} />
         </div>
-        <p className="-mt-2 text-xs text-brown-800/60 sm:col-span-2">Serve almeno uno dei due recapiti.</p>
+        <p className="-mt-2 text-xs text-brown-800/70 sm:col-span-2">Serve almeno uno dei due recapiti.</p>
         <label className="flex items-start gap-3 text-sm text-brown-800 sm:col-span-2">
           <input
             type="checkbox"

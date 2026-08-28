@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { ChevronDown } from "lucide-react";
 import {
   AdminHeader,
   Panel,
   StatusBadge,
+  TableSkeleton,
   Pagination,
   fmtDateTime,
   inputCls,
@@ -11,7 +13,8 @@ import {
 } from "@/components/admin/ui";
 import { SegmentedFilter, FilterToolbar, ActiveFilters, labelFrom } from "@/components/admin/FilterBar";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
-import { getOutboxPage } from "@/lib/admin/queries";
+import { getOutboxPage, getOutboxSummary, getCampaignSubject } from "@/lib/admin/queries";
+import { TotalSubtitle } from "@/components/admin/Streamed";
 import { outboxFilters, filterQuery, type OutboxFilters } from "@/lib/admin/filters";
 import { retryOutboxEmail, retryAllFailed, deleteOutboxEmail } from "@/lib/admin/outbox-actions";
 import { OUTBOX_MAX_ATTEMPTS, OUTBOX_RETENTION_DAYS } from "@/lib/mail/mailer";
@@ -59,16 +62,22 @@ export default async function AdminOutbox({ searchParams }: SP) {
   // to staff would hand anyone at the counter a way into the owner's account.
   // Staff keep the list itself — recipient, subject, status and error are what
   // the retry workflow needs.
-  const [{ rows, total, failed, exhausted, counts, campaigns, pageCount }, admin] = await Promise.all([
-    getOutboxPage({ ...filters, page }),
+  // Started, not awaited: the banner, the retry buttons and the status chips are
+  // whole-outbox figures and must not wait on a page of messages.
+  const promise = getOutboxPage({ ...filters, page });
+  const [{ failed, exhausted, counts }, admin, filteredCampaign] = await Promise.all([
+    getOutboxSummary(filters),
     isAdmin(),
+    filters.campaign ? getCampaignSubject(filters.campaign) : Promise.resolve(null),
   ]);
 
   return (
     <div>
       <AdminHeader
         title="Email"
-        subtitle={`${total} email registrate dalla piattaforma`}
+        subtitle={
+          <TotalSubtitle promise={promise} one="email" many="email" suffix=" registrate dalla piattaforma" />
+        }
         action={
           <div className="flex flex-wrap gap-2">
             {failed > 0 && (
@@ -90,7 +99,11 @@ export default async function AdminOutbox({ searchParams }: SP) {
             <Link href="/admin/settings#smtp" className={exportBtnCls} title="Stato SMTP e invio di un'email di prova">
               Email di prova
             </Link>
-            {admin && total > 0 && (
+            {/* Gated on the whole-outbox count rather than the filtered one: the
+                export applies the current filters, and a filter that matches
+                nothing is exactly when an operator wants to widen it, not to
+                lose the button. */}
+            {admin && counts.all > 0 && (
               <a
                 href={`/api/admin/export/email${filterQuery(filters)}`}
                 download
@@ -141,12 +154,36 @@ export default async function AdminOutbox({ searchParams }: SP) {
           stato: { title: "Stato", format: labelFrom(STATUS_FILTERS) },
           q: { title: "Ricerca", format: (v) => `“${v}”` },
           id: { title: "Email", format: (v) => v.slice(0, 8) },
-          campaign: { title: "Campagna", format: (v) => campaigns[v] ?? v.slice(0, 8) },
+          campaign: { title: "Campagna", format: (v) => filteredCampaign ?? v.slice(0, 8) },
           da: { title: "Dal" },
           a: { title: "Al" },
         }}
       />
 
+      {/* Only the messages wait on the query. */}
+      <Suspense key={filterQuery({ ...filters, page: String(page) })} fallback={<TableSkeleton rows={6} />}>
+        <OutboxList promise={promise} filters={filters} filtered={filtered} admin={admin} page={page} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function OutboxList({
+  promise,
+  filters,
+  filtered,
+  admin,
+  page,
+}: {
+  promise: ReturnType<typeof getOutboxPage>;
+  filters: OutboxFilters;
+  filtered: boolean;
+  admin: boolean;
+  page: number;
+}) {
+  const { rows, campaigns, pageCount } = await promise;
+  return (
+    <>
       {rows.length === 0 ? (
         <EmptyState filters={filters} filtered={filtered} />
       ) : (
@@ -164,7 +201,7 @@ export default async function AdminOutbox({ searchParams }: SP) {
       )}
 
       <Pagination basePath={BASE} page={page} pageCount={pageCount} params={filters} />
-    </div>
+    </>
   );
 }
 
@@ -275,22 +312,22 @@ function OutboxRow({
         <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 [&::-webkit-details-marker]:hidden">
           <ChevronDown
             aria-hidden
-            className="size-4 shrink-0 text-brown-800/50 transition-transform group-open:rotate-180"
+            className="size-4 shrink-0 text-brown-800/70 transition-transform group-open:rotate-180"
           />
           <StatusBadge status={e.status} />
           <span className="font-semibold text-brown-950">{e.subject}</span>
-          <span className="text-xs text-brown-800/60">→ {e.toAddress}</span>
+          <span className="text-xs text-brown-800/70">→ {e.toAddress}</span>
           {e.campaignId && (
             <span className="rounded-full bg-brown-900/8 px-2 py-0.5 text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
               Newsletter
             </span>
           )}
           {e.attempts > 1 && (
-            <span className="text-[11px] font-bold tracking-widest text-brown-800/50 uppercase">
+            <span className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
               {e.attempts} tentativi
             </span>
           )}
-          <span className="ml-auto text-xs text-brown-800/50">{fmtDateTime(e.createdAt)}</span>
+          <span className="ml-auto text-xs text-brown-800/70">{fmtDateTime(e.createdAt)}</span>
         </summary>
 
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-4">
@@ -369,7 +406,7 @@ function OutboxRow({
 function Meta({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-[11px] font-bold tracking-widest text-brown-800/50 uppercase">{label}</dt>
+      <dt className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">{label}</dt>
       <dd className="mt-0.5 text-brown-900">{children}</dd>
     </div>
   );
@@ -393,7 +430,7 @@ function Body({ email: e, admin }: { email: EmailOutboxRow; admin: boolean }) {
   const html = e.html.trim();
   const text = e.text.trim();
   if (!html && !text) {
-    return <p className="mt-3 text-xs text-brown-800/60">(nessun contenuto)</p>;
+    return <p className="mt-3 text-xs text-brown-800/70">(nessun contenuto)</p>;
   }
   if (!html) {
     return (
@@ -411,7 +448,7 @@ function Body({ email: e, admin }: { email: EmailOutboxRow; admin: boolean }) {
         className="h-80 w-full rounded-lg border border-brown-900/10 bg-surface"
       />
       <details>
-        <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+        <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950">
           Versione testo
         </summary>
         <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-cream/60 p-4 text-xs whitespace-pre-wrap text-brown-900">

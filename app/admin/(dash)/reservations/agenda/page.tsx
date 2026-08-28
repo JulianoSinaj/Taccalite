@@ -192,7 +192,7 @@ export default async function ReservationAgenda({ searchParams }: SP) {
               <section key={g.date} className="break-inside-avoid">
                 <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-brown-900/10 pb-2">
                   <h2 className="font-display text-xl text-brown-950 capitalize">{formatDay(g.date)}</h2>
-                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold tracking-widest text-brown-800/60 uppercase">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold tracking-widest text-brown-800/70 uppercase">
                     <span>{g.items.length} prenotazioni</span>
                     {overbooked.map((s) => (
                       <span
@@ -242,7 +242,7 @@ export default async function ReservationAgenda({ searchParams }: SP) {
                         {r.quantityKg != null && (
                           <span className="text-sm font-semibold text-brown-950">· {r.quantityKg} kg</span>
                         )}
-                        <span className="text-sm text-brown-800/60">· {shopName.get(r.shopSlug) ?? r.shopSlug}</span>
+                        <span className="text-sm text-brown-800/70">· {shopName.get(r.shopSlug) ?? r.shopSlug}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         {r.type === "porchetta" &&
@@ -259,7 +259,7 @@ export default async function ReservationAgenda({ searchParams }: SP) {
                             // No address to send the notice to, so the button
                             // could only ever throw. Say why instead.
                             <span
-                              className="rounded-full bg-brown-900/10 px-3 py-1 text-xs font-medium text-brown-800/60 print:hidden"
+                              className="rounded-full bg-brown-900/10 px-3 py-1 text-xs font-medium text-brown-800/70 print:hidden"
                               title="L'avviso di ritiro si invia via email"
                             >
                               Nessuna email

@@ -124,7 +124,7 @@ export function DataTable<T>({
        */}
       <table className="w-full border-separate border-spacing-0 text-sm">
         <thead>
-          <tr className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+          <tr className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
             {columns.map((c) => (
               <th
                 key={c.key}

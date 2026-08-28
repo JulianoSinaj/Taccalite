@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   AdminHeader,
   Panel,
+  OrderStatusBadge,
   StatusBadge,
   euro,
   fmtDate,
@@ -200,7 +201,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                       ? `${i.weightKg.toLocaleString("it-IT", { maximumFractionDigits: 3 })} kg`
                       : `${i.quantity}×`}{" "}
                     {i.name}
-                    <span className="ml-1.5 text-xs text-brown-800/50">
+                    <span className="ml-1.5 text-xs text-brown-800/70">
                       {euro(i.unitPriceCents)}
                       {i.weightKg != null ? "/kg" : ""}
                     </span>
@@ -256,17 +257,17 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             </div>
             {vat.length > 0 && (
               <div className="mt-4 border-t border-brown-900/10 pt-3">
-                <p className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+                <p className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
                   Riepilogo IVA (prezzi ivati)
                   {order.refundedCents > 0 ? " · al netto del rimborso" : ""}
                 </p>
                 <div className="scroll-x">
                   <table className="w-full text-xs text-brown-800/80">
                   <thead>
-                    <tr className="text-left text-brown-800/50">
-                      <th className="pb-1 font-semibold">Aliquota</th>
-                      <th className="pb-1 text-right font-semibold">Imponibile</th>
-                      <th className="pb-1 text-right font-semibold">Imposta</th>
+                    <tr className="text-left text-brown-800/70">
+                      <th scope="col" className="pb-1 font-semibold">Aliquota</th>
+                      <th scope="col" className="pb-1 text-right font-semibold">Imponibile</th>
+                      <th scope="col" className="pb-1 text-right font-semibold">Imposta</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -287,7 +288,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
           {editable && (
             <Panel>
               <h3 className="font-display mb-1 text-lg text-brown-950">Modifica articoli e importi</h3>
-              <p className="mb-4 text-xs text-brown-800/60">
+              <p className="mb-4 text-xs text-brown-800/70">
                 Disponibile finché l&apos;ordine non è pagato.
               </p>
               <OrderItemsForm order={order} items={items} products={products} />
@@ -298,21 +299,21 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             <h3 className="font-display mb-3 text-lg text-brown-950">Cliente</h3>
             <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-brown-800/60">Nome</dt>
+                <dt className="text-brown-800/70">Nome</dt>
                 <dd className="text-brown-950">{order.name}</dd>
               </div>
               <div>
-                <dt className="text-brown-800/60">Email</dt>
+                <dt className="text-brown-800/70">Email</dt>
                 <dd className="text-brown-950">{order.email}</dd>
               </div>
               {order.phone && (
                 <div>
-                  <dt className="text-brown-800/60">Telefono</dt>
+                  <dt className="text-brown-800/70">Telefono</dt>
                   <dd className="text-brown-950">{order.phone}</dd>
                 </div>
               )}
               <div>
-                <dt className="text-brown-800/60">Evasione</dt>
+                <dt className="text-brown-800/70">Evasione</dt>
                 <dd className="text-brown-950">
                   {FULFILMENT_LABEL[order.fulfilment]}
                   {shopName ? ` · ${shopName}` : ""}
@@ -320,19 +321,19 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               </div>
               {order.pickupSlotAt && (
                 <div>
-                  <dt className="text-brown-800/60">Fascia di ritiro</dt>
+                  <dt className="text-brown-800/70">Fascia di ritiro</dt>
                   <dd className="text-brown-950">{formatSlotLabel(order.pickupSlotAt)}</dd>
                 </div>
               )}
               {zone && (
                 <div>
-                  <dt className="text-brown-800/60">Zona</dt>
+                  <dt className="text-brown-800/70">Zona</dt>
                   <dd className="text-brown-950">{zone.name}</dd>
                 </div>
               )}
               {order.readyAt && order.fulfilment !== "shipping" && (
                 <div>
-                  <dt className="text-brown-800/60">
+                  <dt className="text-brown-800/70">
                     {order.fulfilment === "delivery" ? "In consegna dal" : "Pronto dal"}
                   </dt>
                   <dd className="text-brown-950">{fmtDateTime(order.readyAt)}</dd>
@@ -380,7 +381,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 after payment — and this is the field an operator reaches for
                 *after* the sale, which is precisely when it used to lock. */}
             <details className="mt-3 rounded-lg bg-gold/10 px-3 py-2" open={!!order.internalNotes}>
-              <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+              <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950">
                 Nota interna
               </summary>
               <ActionForm action={setOrderInternalNotes} className="mt-2 space-y-2">
@@ -393,7 +394,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   placeholder="Es. il cliente ha chiamato, ritira venerdì"
                   className={inputCls}
                 />
-                <p className="text-xs text-brown-800/60">
+                <p className="text-xs text-brown-800/70">
                   Non viene mai mostrata al cliente né stampata sul documento di consegna.
                 </p>
                 <PendingButton tone="dark">Salva nota</PendingButton>
@@ -402,7 +403,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
 
             {editable ? (
               <details className="mt-4 border-t border-brown-900/10 pt-3">
-                <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950">
                   Modifica dati e consegna
                 </summary>
                 <div className="mt-4">
@@ -410,7 +411,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 </div>
               </details>
             ) : (
-              <p className="mt-4 border-t border-brown-900/10 pt-3 text-xs text-brown-800/60">
+              <p className="mt-4 border-t border-brown-900/10 pt-3 text-xs text-brown-800/70">
                 Ordine {order.status === "cancelled" ? "annullato" : "già pagato"}: articoli e dati non
                 sono modificabili.{" "}
                 {order.status !== "cancelled" &&
@@ -424,7 +425,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
           <Panel>
             <h3 className="font-display mb-3 text-lg text-brown-950">Stato</h3>
             <div className="mb-4 flex flex-wrap gap-2">
-              <StatusBadge status={order.status} />
+              <OrderStatusBadge status={order.status} />
               <StatusBadge status={order.paymentStatus} />
             </div>
             {statusOptions.length > 0 ? (
@@ -443,10 +444,10 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   </select>
                 </div>
                 <PendingButton tone="dark">Aggiorna stato</PendingButton>
-                <p className="text-xs text-brown-800/60">{statusHint}</p>
+                <p className="text-xs text-brown-800/70">{statusHint}</p>
               </ActionForm>
             ) : (
-              <p className="text-xs text-brown-800/60">Ordine rimborsato: lo stato è definitivo.</p>
+              <p className="text-xs text-brown-800/70">Ordine rimborsato: lo stato è definitivo.</p>
             )}
 
             {canReady && (
@@ -455,7 +456,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 <PendingButton tone="gold">
                   {order.fulfilment === "delivery" ? "In consegna: avvisa il cliente" : "Pronto: avvisa il cliente"}
                 </PendingButton>
-                <p className="text-xs text-brown-800/60">
+                <p className="text-xs text-brown-800/70">
                   {order.readyAt
                     ? `Avvisato il ${fmtDateTime(order.readyAt)}. Premendo di nuovo l'email viene reinviata.`
                     : order.fulfilment === "delivery"
@@ -500,7 +501,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   <input type="hidden" name="id" value={order.id} />
                   <PendingButton tone="dark">Reinvia email al cliente</PendingButton>
                 </ActionForm>
-                <p className="mt-2 text-xs text-brown-800/60">
+                <p className="mt-2 text-xs text-brown-800/70">
                   Rimanda l&apos;ultima comunicazione utile ({resendKind}) a {order.email}.
                 </p>
               </div>
@@ -558,7 +559,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                     </a>
                   </p>
                 )}
-                <p className="text-xs text-brown-800/60">
+                <p className="text-xs text-brown-800/70">
                   {order.status === "fulfilled"
                     ? "Salvando il tracking l'email di spedizione viene reinviata al cliente."
                     : "Il tracking è necessario per segnare la spedizione come evasa: è quello che il cliente riceve nell'email."}
@@ -587,7 +588,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                     {fromReservation?.reference}.
                   </p>
                 )}
-                <p className="mt-1 mb-3 text-xs text-brown-800/60">
+                <p className="mt-1 mb-3 text-xs text-brown-800/70">
                   {PAYMENT_METHOD_LABEL[order.paymentMethod]}
                   {order.paymentMethod === "card"
                     ? " — il pagamento online non è stato completato."
@@ -609,7 +610,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                   </div>
                   <PendingButton tone="dark">Registra incasso</PendingButton>
                 </ActionForm>
-                <p className="mt-2 text-xs text-brown-800/60">
+                <p className="mt-2 text-xs text-brown-800/70">
                   Registra il pagamento, accredita i punti fedeltà e conta l&apos;eventuale codice
                   sconto.{" "}
                   {order.stockAppliedAt
@@ -621,22 +622,22 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
 
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between gap-3">
-                <dt className="text-brown-800/60">Metodo</dt>
+                <dt className="text-brown-800/70">Metodo</dt>
                 <dd className="text-brown-950">{PAYMENT_METHOD_LABEL[order.paymentMethod]}</dd>
               </div>
               {order.paidWith && (
                 <div className="flex justify-between gap-3">
-                  <dt className="text-brown-800/60">Incassato con</dt>
+                  <dt className="text-brown-800/70">Incassato con</dt>
                   <dd className="text-brown-950">{PAYMENT_INSTRUMENT_LABEL[order.paidWith]}</dd>
                 </div>
               )}
               <div className="flex justify-between gap-3">
-                <dt className="text-brown-800/60">Provider</dt>
+                <dt className="text-brown-800/70">Provider</dt>
                 <dd className="text-brown-950">{order.paymentProvider ?? "—"}</dd>
               </div>
               {order.stripeSessionId && (
                 <div className="flex justify-between gap-3">
-                  <dt className="text-brown-800/60">Sessione Stripe</dt>
+                  <dt className="text-brown-800/70">Sessione Stripe</dt>
                   <dd className="max-w-[60%] truncate font-mono text-xs text-brown-950" title={order.stripeSessionId}>
                     {order.stripeSessionId}
                   </dd>
@@ -663,7 +664,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                     </a>
                   )}
                 </div>
-                <p className="mt-2 text-xs text-brown-800/60">
+                <p className="mt-2 text-xs text-brown-800/70">
                   Formato FatturaPA FPR12, da trasmettere tramite un intermediario accreditato.
                   {order.refundedCents > 0 &&
                     " La nota di credito (TD04) storna i " +
@@ -672,7 +673,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                 </p>
 
                 <details className="mt-4" open={!order.customerTaxCode && !order.customerVatNumber}>
-                  <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+                  <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950">
                     Dati di fatturazione
                   </summary>
                   <div className="mt-3">
@@ -698,7 +699,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
                     placeholder={`${(refundableCents / 100).toFixed(2)} (tutto)`}
                     className={`${inputCls} max-w-[12rem]`}
                   />
-                  <p className="text-xs text-brown-800/60">
+                  <p className="text-xs text-brown-800/70">
                     {order.refundedCents > 0
                       ? `Già rimborsato ${euro(order.refundedCents)} · residuo ${euro(refundableCents)}.`
                       : "Lascia vuoto per rimborsare l'intero importo."}{" "}

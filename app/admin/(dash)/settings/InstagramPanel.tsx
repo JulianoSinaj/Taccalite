@@ -28,7 +28,7 @@ export async function InstagramPanel() {
     <Panel>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="font-display text-lg text-brown-950">Instagram (feed in homepage)</h3>
+          <h2 className="font-display text-lg text-brown-950">Instagram (feed in homepage)</h2>
           <p className="mt-2 text-sm text-brown-800/70">
             Stato:{" "}
             <span className={status.configured ? "font-semibold text-ok" : "font-semibold text-warn"}>
@@ -77,10 +77,11 @@ export async function InstagramPanel() {
 
       <ActionForm action={connectInstagram} className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <label className={labelCls}>
+          <label className={labelCls} htmlFor="instagram-token">
             {status.source === "settings" ? "Sostituisci token di accesso" : "Token di accesso (long-lived)"}
           </label>
           <input
+            id="instagram-token"
             name="token"
             type="password"
             autoComplete="off"
@@ -92,7 +93,7 @@ export async function InstagramPanel() {
         </div>
         <PendingButton tone="dark">Collega</PendingButton>
       </ActionForm>
-      <p className="mt-2 text-xs text-brown-800/60">
+      <p className="mt-2 text-xs text-brown-800/70">
         Genera un token <em>long-lived</em> (60 giorni) per l&apos;account professionale della bottega da{" "}
         <a
           href="https://developers.facebook.com/apps/"

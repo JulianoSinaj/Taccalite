@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import {
   AdminHeader,
   Panel,
+  OrderStatusBadge,
   StatusBadge,
   BackLink,
   HistoryLink,
@@ -163,7 +164,7 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
 
             <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-brown-800/60">Cliente</dt>
+                <dt className="text-brown-800/70">Cliente</dt>
                 <dd className="text-brown-950">
                   {r.name}
                   {r.userId && (
@@ -180,36 +181,36 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
                 </dd>
               </div>
               <div>
-                <dt className="text-brown-800/60">Telefono</dt>
+                <dt className="text-brown-800/70">Telefono</dt>
                 <dd className="text-brown-950">{r.phone}</dd>
               </div>
               <div>
-                <dt className="text-brown-800/60">Email</dt>
+                <dt className="text-brown-800/70">Email</dt>
                 <dd className="text-brown-950">{r.email ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-brown-800/60">Sede</dt>
+                <dt className="text-brown-800/70">Sede</dt>
                 <dd className="text-brown-950">{shop?.name ?? r.shopSlug}</dd>
               </div>
               {r.guests != null && (
                 <div>
-                  <dt className="text-brown-800/60">Ospiti</dt>
+                  <dt className="text-brown-800/70">Ospiti</dt>
                   <dd className="text-brown-950">{r.guests}</dd>
                 </div>
               )}
               {r.quantityKg != null && (
                 <div>
-                  <dt className="text-brown-800/60">Quantità</dt>
+                  <dt className="text-brown-800/70">Quantità</dt>
                   <dd className="text-brown-950">{r.quantityKg} kg</dd>
                 </div>
               )}
               <div>
-                <dt className="text-brown-800/60">Ricevuta il</dt>
+                <dt className="text-brown-800/70">Ricevuta il</dt>
                 <dd className="text-brown-950">{fmtDateTime(r.createdAt)}</dd>
               </div>
               {r.tableNumber && (
                 <div>
-                  <dt className="text-brown-800/60">Tavolo</dt>
+                  <dt className="text-brown-800/70">Tavolo</dt>
                   <dd className="text-brown-950">{r.tableNumber}</dd>
                 </div>
               )}
@@ -217,7 +218,7 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
 
             {r.notes && (
               <p className="mt-4 border-t border-brown-900/10 pt-3 text-sm text-brown-800/80">
-                <span className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+                <span className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
                   Note del cliente
                 </span>
                 <br />
@@ -226,7 +227,7 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
             )}
             {r.adminNotes && (
               <p className="mt-3 rounded-lg bg-gold/10 px-3 py-2 text-sm text-brown-900">
-                <span className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+                <span className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
                   Nota interna
                 </span>
                 <br />
@@ -243,11 +244,11 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
           {/* The rest of the day, so a reschedule isn't made blind. */}
           <Panel>
             <h3 className="font-display mb-1 text-lg text-brown-950">Resto della giornata</h3>
-            <p className="mb-3 text-xs text-brown-800/60">
+            <p className="mb-3 text-xs text-brown-800/70">
               {fmtDate(r.date)} · {shop?.name ?? r.shopSlug}
             </p>
             {sameDay.length === 0 ? (
-              <p className="text-sm text-brown-800/60">Nessun&apos;altra prenotazione questo giorno.</p>
+              <p className="text-sm text-brown-800/70">Nessun&apos;altra prenotazione questo giorno.</p>
             ) : (
               <ul className="divide-y divide-brown-900/10">
                 {sameDay.map((o) => (
@@ -259,14 +260,14 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
                       <span className="w-12 shrink-0 font-display font-bold text-brown-950">
                         {o.time ?? "—"}
                       </span>
-                      <span className="shrink-0 text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+                      <span className="shrink-0 text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
                         {reservationTypeLabel(o.type)}
                       </span>
                       <span className="flex-1 truncate text-brown-950">{o.name}</span>
-                      <span className="shrink-0 text-xs text-brown-800/60">
+                      <span className="shrink-0 text-xs text-brown-800/70">
                         {o.quantityKg != null ? `${o.quantityKg} kg` : o.guests != null ? `${o.guests} p.` : ""}
                       </span>
-                      <StatusBadge status={o.status} />
+                      <OrderStatusBadge status={o.status} />
                     </Link>
                   </li>
                 ))}
@@ -322,7 +323,7 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
                   <input type="hidden" name="id" value={r.id} />
                   <PendingButton tone="dark">Reinvia email al cliente</PendingButton>
                 </ActionForm>
-                <p className="mt-2 text-xs text-brown-800/60">
+                <p className="mt-2 text-xs text-brown-800/70">
                   Rimanda l&apos;ultima comunicazione utile (
                   {r.waitlisted && r.type === "porchetta" && r.status !== "cancelled"
                     ? "avviso di lista d'attesa"
@@ -345,7 +346,7 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
             <dl className="space-y-3 text-sm">
               {r.type === "porchetta" && (
                 <div>
-                  <dt className="text-brown-800/60">Porchetta</dt>
+                  <dt className="text-brown-800/70">Porchetta</dt>
                   <dd className="font-display text-lg text-brown-950">
                     {kgBooked + ownKg}
                     {capacity > 0 ? ` / ${capacity}` : ""} kg
@@ -357,7 +358,7 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
               )}
               {r.time && (
                 <div>
-                  <dt className="text-brown-800/60">Coperti alle {r.time}</dt>
+                  <dt className="text-brown-800/70">Coperti alle {r.time}</dt>
                   <dd className="font-display text-lg text-brown-950">
                     {seatsBooked + ownGuests}
                     {seatsCap != null ? ` / ${seatsCap}` : ""}
@@ -424,10 +425,10 @@ export default async function ReservationDetail({ params }: { params: Promise<{ 
               <p
                 className={`mt-2 text-xs ${
                   r.depositRefundedAt
-                    ? "text-brown-800/60"
+                    ? "text-brown-800/70"
                     : r.depositForfeitedAt || depositUndecided
                       ? "font-medium text-warn"
-                      : "text-brown-800/60"
+                      : "text-brown-800/70"
                 }`}
               >
                 {r.depositRefundedAt

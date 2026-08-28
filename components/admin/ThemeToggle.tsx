@@ -34,7 +34,7 @@ export function ThemeToggle({ current }: { current: Theme }) {
             className={`flex min-h-11 flex-1 items-center justify-center rounded-lg px-2 py-1.5 transition-colors ${
               active
                 ? "bg-brown-950 text-cream"
-                : "text-brown-800/60 hover:bg-brown-900/5 hover:text-brown-950"
+                : "text-brown-800/70 hover:bg-brown-900/5 hover:text-brown-950"
             }`}
           >
             <Icon className="mx-auto size-4" />

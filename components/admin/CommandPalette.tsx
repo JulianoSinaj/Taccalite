@@ -65,6 +65,22 @@ const HIT_GROUP: Record<Hit["kind"], string> = {
 };
 
 /**
+ * How anything else on the page asks for the palette.
+ *
+ * ⌘K used to be the *only* way in, which meant the search over every order,
+ * customer, product and discount code was unreachable on the tablet at the
+ * counter — a phone has no ⌘K — and invisible on desktop to anyone who had not
+ * been told about it. `AdminNav` now draws a trigger in both layouts and calls
+ * this; an event rather than lifted state, because the nav and the palette are
+ * siblings under the layout and neither owns the other.
+ */
+const OPEN_EVENT = "admin:open-search";
+
+export function openCommandPalette() {
+  window.dispatchEvent(new Event(OPEN_EVENT));
+}
+
+/**
  * The palette shell: nothing but the open flag and the shortcut that flips it.
  *
  * The body is a separate component mounted only while open, so its query,
@@ -86,8 +102,13 @@ export default function CommandPalette({ isAdmin }: { isAdmin: boolean }) {
         setOpen(false);
       }
     }
+    const onOpen = () => setOpen(true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(OPEN_EVENT, onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(OPEN_EVENT, onOpen);
+    };
   }, []);
 
   if (!open) return null;
@@ -223,11 +244,11 @@ function Palette({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }
             }
           }}
           placeholder="Cerca un ordine, un cliente, un prodotto o una sezione…"
-          className="w-full border-b border-brown-900/10 px-5 py-4 text-sm text-brown-950 placeholder:text-brown-800/40 focus:outline-none"
+          className="w-full border-b border-brown-900/10 px-5 py-4 text-sm text-brown-950 placeholder:text-brown-800/70 focus:outline-none"
         />
         <ul className="max-h-[min(20rem,50dvh)] overflow-y-auto py-2">
           {results.length === 0 ? (
-            <li className="px-5 py-6 text-center text-sm text-brown-800/50">
+            <li className="px-5 py-6 text-center text-sm text-brown-800/70">
               {searching ? "Ricerca…" : "Nessun risultato."}
             </li>
           ) : (
@@ -246,10 +267,10 @@ function Palette({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }
                     {/* The subtitle is what makes two customers with the same
                         surname distinguishable without opening either. */}
                     {c.detail && (
-                      <span className="block truncate text-xs text-brown-800/50">{c.detail}</span>
+                      <span className="block truncate text-xs text-brown-800/70">{c.detail}</span>
                     )}
                   </span>
-                  <span className="shrink-0 text-[11px] font-bold tracking-widest text-brown-800/40 uppercase">
+                  <span className="shrink-0 text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
                     {c.group}
                   </span>
                 </button>
@@ -257,7 +278,7 @@ function Palette({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }
             ))
           )}
         </ul>
-        <div className="border-t border-brown-900/10 px-5 py-2 text-[12px] text-brown-800/50">
+        <div className="border-t border-brown-900/10 px-5 py-2 text-[12px] text-brown-800/70">
           ↑↓ per navigare · ↵ per aprire · Esc per chiudere
         </div>
       </div>

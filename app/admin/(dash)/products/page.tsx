@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import {
   AdminHeader,
   Panel,
   StatusBadge,
+  TableSkeleton,
   euro,
   inputCls,
   labelCls,
@@ -21,6 +23,7 @@ import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { BulkBar, BulkCheckbox } from "@/components/admin/BulkBar";
 import {
   getProductsPage,
+  getProductCategoryFacet,
   adminGetShops,
   countExpiringSoon,
   countProductStockStates,
@@ -29,7 +32,8 @@ import {
 } from "@/lib/admin/queries";
 import { SavedViews } from "@/components/admin/SavedViews";
 import { getCurrentUser, isAdmin } from "@/lib/auth/session";
-import { productFilters, sortFilters, filterQuery } from "@/lib/admin/filters";
+import { productFilters, sortFilters, filterQuery, type SortSpec } from "@/lib/admin/filters";
+import { TotalSubtitle } from "@/components/admin/Streamed";
 import { expiryWindow } from "@/lib/time";
 import { getSetting } from "@/lib/db/queries";
 import { isLowStock, reorderPointFor } from "@/lib/inventory";
@@ -105,15 +109,12 @@ export default async function AdminProducts({ searchParams }: SP) {
   // Bulk CSV import and export are full-admin operations server-side (a price
   // list rewrites the catalogue; an export is a bulk dump). Staff used to see
   // both controls and only find out on submit.
-  const [
-    { rows: products, total, pageCount, categories },
-    shops,
-    expiringSoon,
-    stockCounts,
-    views,
-    admin,
-  ] = await Promise.all([
-    getProductsPage({ ...filters, page, sort, lowStockThreshold }),
+  //
+  // Started, not awaited: everything below renders without waiting on the rows,
+  // so changing a facet no longer blanks the toolbar. See components/admin/Streamed.
+  const promise = getProductsPage({ ...filters, page, sort, lowStockThreshold });
+  const [categories, shops, expiringSoon, stockCounts, views, admin] = await Promise.all([
+    getProductCategoryFacet(),
     adminGetShops(),
     countExpiringSoon(expiryHorizon, scope),
     countProductStockStates(filters, lowStockThreshold),
@@ -166,7 +167,7 @@ export default async function AdminProducts({ searchParams }: SP) {
             <Link href={`/admin/products/${p.id}`} className="font-semibold text-brown-950 hover:underline">
               {p.name}
             </Link>
-            {p.sku && <p className="mt-0.5 font-mono text-[11px] text-brown-800/50">{p.sku}</p>}
+            {p.sku && <p className="mt-0.5 font-mono text-[11px] text-brown-800/70">{p.sku}</p>}
             <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
               {p.archivedAt ? (
                 <StatusBadge status="archived" />
@@ -184,6 +185,13 @@ export default async function AdminProducts({ searchParams }: SP) {
                 </span>
               )}
             </div>
+            {/* The two columns below don't survive a narrow screen, so they
+                reappear here rather than disappearing. The sede especially:
+                with two shops in the catalogue, "which one is this?" is
+                unanswerable on a phone otherwise. */}
+            <p className="mt-0.5 text-xs text-brown-800/70 sm:hidden">
+              {[p.category || null, shopName.get(p.shopSlug) ?? p.shopSlug].filter(Boolean).join(" · ")}
+            </p>
           </div>
         </div>
       ),
@@ -210,7 +218,7 @@ export default async function AdminProducts({ searchParams }: SP) {
       cell: (p) => (
         <span className="tabular-nums text-brown-950">
           {euro(p.priceCents)}
-          {p.unit ? <span className="text-xs text-brown-800/50"> /{p.unit}</span> : null}
+          {p.unit ? <span className="text-xs text-brown-800/70"> /{p.unit}</span> : null}
         </span>
       ),
     },
@@ -223,7 +231,7 @@ export default async function AdminProducts({ searchParams }: SP) {
       // the reorder point is a number that needs a glance; the rest is a number.
       cell: (p) =>
         p.stock == null ? (
-          <span className="text-xs text-brown-800/40">illimitata</span>
+          <span className="text-xs text-brown-800/70">illimitata</span>
         ) : p.stock <= 0 ? (
           <span className="rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-bold tracking-widest text-danger-soft-fg uppercase">
             Esaurito
@@ -279,7 +287,14 @@ export default async function AdminProducts({ searchParams }: SP) {
     <div>
       <AdminHeader
         title="Prodotti"
-        subtitle={`${total} prodotti${filtered ? " nel filtro attuale" : ""}`}
+        subtitle={
+          <TotalSubtitle
+            promise={promise}
+            one="prodotto"
+            many="prodotti"
+            suffix={filtered ? " nel filtro attuale" : ""}
+          />
+        }
         action={
           <div className="flex flex-wrap gap-2">
             <Link
@@ -359,7 +374,7 @@ export default async function AdminProducts({ searchParams }: SP) {
           admins only, matching the action's own guard. */}
       {admin && (
         <details className="mb-4">
-          <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+          <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950">
             Importa listino da CSV
           </summary>
           <Panel className="mt-3">
@@ -395,7 +410,7 @@ export default async function AdminProducts({ searchParams }: SP) {
               </label>
               <PendingButton tone="dark">Importa</PendingButton>
             </ActionForm>
-            <p className="mt-3 text-xs text-brown-800/60">
+            <p className="mt-3 text-xs text-brown-800/70">
               Le colonne sono le stesse dell&apos;esportazione e i prodotti si riconoscono dallo{" "}
               <code>slug</code>. Una cella vuota lascia il valore invariato, quindi un foglio con solo{" "}
               <code>slug,prezzoEuros</code> è un aggiornamento prezzi. Se il file contiene errori non
@@ -415,6 +430,39 @@ export default async function AdminProducts({ searchParams }: SP) {
         confirmTemplate="Applicare l'azione a {n} prodotti? Quelli per cui non è consentita vengono saltati."
       />
 
+      {/* Only the catalogue waits on the query. */}
+      <Suspense key={filterQuery({ ...linkParams, page: String(page) })} fallback={<TableSkeleton />}>
+        <ProductsTable
+          promise={promise}
+          columns={columns}
+          page={page}
+          linkParams={linkParams}
+          sort={sort}
+          filtered={filtered}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ProductsTable({
+  promise,
+  columns,
+  page,
+  linkParams,
+  sort,
+  filtered,
+}: {
+  promise: ReturnType<typeof getProductsPage>;
+  columns: Column<ProductRow>[];
+  page: number;
+  linkParams: Record<string, string | undefined>;
+  sort: SortSpec;
+  filtered: boolean;
+}) {
+  const { rows: products, pageCount } = await promise;
+  return (
+    <>
       <DataTable
         rows={products}
         columns={columns}
@@ -430,6 +478,6 @@ export default async function AdminProducts({ searchParams }: SP) {
       />
 
       <Pagination basePath={BASE} page={page} pageCount={pageCount} params={linkParams} />
-    </div>
+    </>
   );
 }

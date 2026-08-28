@@ -340,7 +340,12 @@ export function ManualOrderForm({
   }
 
   return (
-    <ActionForm action={createManualOrder} redirectTo="/admin/orders" className="space-y-6">
+    <ActionForm
+      action={createManualOrder}
+      redirectTo="/admin/orders"
+      className="space-y-6"
+      guardUnsaved="Le modifiche a questo ordine non sono state salvate. Se esci adesso vanno perse."
+    >
       {booking && (
         <>
           <input type="hidden" name="reservationId" value={booking.id} />
@@ -399,14 +404,14 @@ export function ManualOrderForm({
 
       {/* ── Products ── */}
       <Panel>
-        <h3 className="font-display mb-4 text-lg text-brown-950">Prodotti</h3>
+        <h2 className="font-display mb-4 text-lg text-brown-950">Prodotti</h2>
 
         <div className="relative">
           <label className={labelCls} htmlFor="prod-search">
             Cerca un prodotto
           </label>
           <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-brown-800/40" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-brown-800/70" />
             <input
               id="prod-search"
               value={search}
@@ -431,7 +436,7 @@ export function ManualOrderForm({
                     className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm hover:bg-gold/10"
                   >
                     <span className="text-brown-950">{p.name}</span>
-                    <span className="shrink-0 text-xs text-brown-800/60">
+                    <span className="shrink-0 text-xs text-brown-800/70">
                       {euro(p.priceCents)}
                       {p.stock != null ? ` · ${p.stock} pz` : ""}
                     </span>
@@ -443,7 +448,7 @@ export function ManualOrderForm({
         </div>
 
         {lines.length === 0 ? (
-          <p className="mt-4 rounded-lg bg-cream/60 px-4 py-6 text-center text-sm text-brown-800/60">
+          <p className="mt-4 rounded-lg bg-cream/60 px-4 py-6 text-center text-sm text-brown-800/70">
             Nessun articolo. Cerca un prodotto qui sopra per aggiungerlo.
           </p>
         ) : (
@@ -464,7 +469,7 @@ export function ManualOrderForm({
                         </span>
                       )}
                     </p>
-                    <p className="text-xs text-brown-800/60">
+                    <p className="text-xs text-brown-800/70">
                       {euro(l.product.priceCents)}
                       {l.product.unit ? ` / ${l.product.unit}` : l.byWeight ? " / kg" : ""} · IVA{" "}
                       {vatRateLabel(l.product.vatRateBps)}
@@ -501,7 +506,7 @@ export function ManualOrderForm({
                       aria-label={l.byWeight ? `Peso in kg di ${l.product.name}` : `Quantità ${l.product.name}`}
                       className={`${inputCls} w-20 text-center`}
                     />
-                    <span className="w-6 text-xs text-brown-800/50">{l.byWeight ? "kg" : "pz"}</span>
+                    <span className="w-6 text-xs text-brown-800/70">{l.byWeight ? "kg" : "pz"}</span>
                     <button
                       type="button"
                       onClick={() => bump(l.product.slug, 1)}
@@ -534,7 +539,7 @@ export function ManualOrderForm({
                     type="button"
                     onClick={() => setAmount(l.product.slug, 0)}
                     aria-label={`Rimuovi ${l.product.name}`}
-                    className="rounded-full p-1.5 text-brown-800/40 hover:bg-danger-soft hover:text-danger"
+                    className="rounded-full p-1.5 text-brown-800/70 hover:bg-danger-soft hover:text-danger"
                   >
                     <X className="size-4" />
                   </button>
@@ -547,16 +552,16 @@ export function ManualOrderForm({
 
       {/* ── Customer ── */}
       <Panel>
-        <h3 className="font-display mb-4 text-lg text-brown-950">Cliente</h3>
+        <h2 className="font-display mb-4 text-lg text-brown-950">Cliente</h2>
 
         {picked ? (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gold/10 px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-brown-950">
                 {picked.name || picked.username}{" "}
-                <span className="text-xs font-normal text-brown-800/60">@{picked.username}</span>
+                <span className="text-xs font-normal text-brown-800/70">@{picked.username}</span>
               </p>
-              <p className="text-xs text-brown-800/60">
+              <p className="text-xs text-brown-800/70">
                 {picked.points ?? 0} punti
                 {picked.cardNumber ? ` · tessera ${picked.cardNumber}` : ""}
               </p>
@@ -575,7 +580,7 @@ export function ManualOrderForm({
               Cerca un cliente registrato (facoltativo)
             </label>
             <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-brown-800/40" />
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-brown-800/70" />
               <input
                 id="cust-search"
                 value={customerQuery}
@@ -595,7 +600,7 @@ export function ManualOrderForm({
                       className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm hover:bg-gold/10"
                     >
                       <span className="text-brown-950">{c.name || c.username}</span>
-                      <span className="shrink-0 text-xs text-brown-800/60">
+                      <span className="shrink-0 text-xs text-brown-800/70">
                         {c.email ?? c.phone ?? `@${c.username}`}
                       </span>
                     </button>
@@ -603,7 +608,7 @@ export function ManualOrderForm({
                 ))}
               </ul>
             )}
-            <p className="mt-1 text-xs text-brown-800/60">
+            <p className="mt-1 text-xs text-brown-800/70">
               Collegando un cliente, la vendita entra nel suo storico e accredita i punti fedeltà.
             </p>
           </div>
@@ -648,7 +653,7 @@ export function ManualOrderForm({
 
       {/* ── Fulfilment + payment ── */}
       <Panel>
-        <h3 className="font-display mb-4 text-lg text-brown-950">Evasione e pagamento</h3>
+        <h2 className="font-display mb-4 text-lg text-brown-950">Evasione e pagamento</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={labelCls} htmlFor={fid("fulfilment")}>Tipo</label>
@@ -754,7 +759,7 @@ export function ManualOrderForm({
               className={`${inputCls} uppercase`}
             />
             {coupon.state === "checking" && (
-              <p className="mt-1 text-xs text-brown-800/60">Verifica in corso…</p>
+              <p className="mt-1 text-xs text-brown-800/70">Verifica in corso…</p>
             )}
             {coupon.state === "ok" && (
               <p className="mt-1 text-xs font-semibold text-ok">
@@ -784,7 +789,7 @@ export function ManualOrderForm({
               placeholder="0,00"
               className={inputCls}
             />
-            <p className="mt-1 text-xs text-brown-800/60">Si somma all&apos;eventuale codice sconto.</p>
+            <p className="mt-1 text-xs text-brown-800/70">Si somma all&apos;eventuale codice sconto.</p>
           </div>
 
           {fulfilment !== "pickup" && (
@@ -803,7 +808,7 @@ export function ManualOrderForm({
                 placeholder={(computedShipping / 100).toFixed(2)}
                 className={inputCls}
               />
-              <p className="mt-1 text-xs text-brown-800/60">
+              <p className="mt-1 text-xs text-brown-800/70">
                 Vuoto: applica la tariffa della zona ({euro(computedShipping)}
                 {quote.zone ? ` · ${quote.zone.name}` : " · nessuna zona per questo CAP"}).
               </p>
@@ -861,7 +866,7 @@ export function ManualOrderForm({
 
       {/* ── Totals ── */}
       <Panel className="border-gold/40 bg-gold/5">
-        <h3 className="font-display mb-3 text-lg text-brown-950">Riepilogo</h3>
+        <h2 className="font-display mb-3 text-lg text-brown-950">Riepilogo</h2>
         <dl className="space-y-1 text-sm">
           <div className="flex justify-between text-brown-800/70">
             <dt>Subtotale ({lines.length} righe)</dt>
@@ -894,10 +899,10 @@ export function ManualOrderForm({
         {vat.length > 0 && (
           <table className="mt-3 w-full border-t border-brown-900/10 pt-2 text-xs text-brown-800/70">
             <thead>
-              <tr className="text-left text-brown-800/50">
-                <th className="pt-2 pb-1 font-semibold">Aliquota</th>
-                <th className="pt-2 pb-1 text-right font-semibold">Imponibile</th>
-                <th className="pt-2 pb-1 text-right font-semibold">Imposta</th>
+              <tr className="text-left text-brown-800/70">
+                <th scope="col" className="pt-2 pb-1 font-semibold">Aliquota</th>
+                <th scope="col" className="pt-2 pb-1 text-right font-semibold">Imponibile</th>
+                <th scope="col" className="pt-2 pb-1 text-right font-semibold">Imposta</th>
               </tr>
             </thead>
             <tbody>
@@ -911,7 +916,7 @@ export function ManualOrderForm({
             </tbody>
           </table>
         )}
-        <p className="mt-3 text-xs text-brown-800/60">
+        <p className="mt-3 text-xs text-brown-800/70">
           Anteprima: prezzi, IVA, sconto e spedizione vengono ricalcolati dal server al salvataggio.
         </p>
       </Panel>

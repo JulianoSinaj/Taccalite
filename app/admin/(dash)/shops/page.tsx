@@ -16,7 +16,7 @@ function ServiceTag({ on, label }: { on: boolean; label: string }) {
   return (
     <span
       className={`rounded-full px-2.5 py-1 text-[11px] font-bold tracking-widest uppercase ${
-        on ? "bg-ok-soft text-ok-soft-fg" : "bg-brown-900/10 text-brown-800/50"
+        on ? "bg-ok-soft text-ok-soft-fg" : "bg-brown-900/10 text-brown-800/70"
       }`}
     >
       {label}
@@ -106,12 +106,12 @@ export default async function AdminShops() {
                   <div className="min-w-0 flex-1">
                     <p className="font-display text-lg text-brown-950">
                       {s.name}{" "}
-                      <span className="text-xs font-normal text-brown-800/50">
+                      <span className="text-xs font-normal text-brown-800/70">
                         /{s.slug} · ordine {s.sortOrder}
                       </span>
                     </p>
                     {s.specialty && <p className="text-xs text-brown-800/70">{s.specialty}</p>}
-                    <p className="mt-1 text-xs text-brown-800/60">
+                    <p className="mt-1 text-xs text-brown-800/70">
                       {[s.address, s.phone, s.email].filter(Boolean).join(" · ") || "Nessun contatto inserito"}
                     </p>
 
@@ -132,7 +132,7 @@ export default async function AdminShops() {
                           ? "Oggi: chiuso"
                           : `Oggi: ${rangesLabel(todayRanges)}`}
                       {state?.nextChange && (
-                        <span className="text-brown-800/60">
+                        <span className="text-brown-800/70">
                           {" "}
                           · {state.open ? "chiude" : "apre"} alle {state.nextChange}
                         </span>
@@ -154,7 +154,7 @@ export default async function AdminShops() {
                       <ServiceTag on={s.storeEnabled} label="Store" />
                       <ServiceTag on={s.porchettaEnabled} label="Porchetta" />
                     </div>
-                    <p className="mt-2 text-xs text-brown-800/60">
+                    <p className="mt-2 text-xs text-brown-800/70">
                       Porchetta:{" "}
                       {s.porchettaCapacityKg != null ? `${s.porchettaCapacityKg} kg/giorno` : "capacità generale"} ·
                       Coperti per fascia: {s.seatsCapacity != null ? s.seatsCapacity : "nessun limite"}

@@ -30,7 +30,7 @@ function Title({ closure }: { closure: ShopClosureRow }) {
       {closure.fromDate === closure.toDate
         ? fmtDay(closure.fromDate, { weekday: true })
         : `${fmtDay(closure.fromDate, { weekday: true })} — ${fmtDay(closure.toDate, { weekday: true })}`}
-      {days > 1 && <span className="ml-2 text-xs font-normal text-brown-800/50">{days} giorni</span>}
+      {days > 1 && <span className="ml-2 text-xs font-normal text-brown-800/70">{days} giorni</span>}
     </p>
   );
 }
@@ -146,7 +146,7 @@ export function ClosureCard({
             <Title closure={closure} />
             <StatusPill closure={closure} today={today} />
           </div>
-          <p className="mt-0.5 text-xs text-brown-800/60">
+          <p className="mt-0.5 text-xs text-brown-800/70">
             {closure.shopSlug ? (shopName.get(closure.shopSlug) ?? closure.shopSlug) : "Tutte le sedi"}
             {closure.reason ? ` · ${closure.reason}` : ""}
           </p>
@@ -180,7 +180,7 @@ export function ClosureCard({
 
       {!past && (
         <details className="mt-4 border-t border-brown-900/10 pt-3">
-          <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+          <summary className="w-fit cursor-pointer text-[11px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950">
             Modifica
           </summary>
           <div className="mt-4">

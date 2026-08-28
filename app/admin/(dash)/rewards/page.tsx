@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { AdminHeader, Panel, StatusBadge, NewButton, Pagination } from "@/components/admin/ui";
+import { Suspense } from "react";
+import { AdminHeader, Panel, StatusBadge, TableSkeleton, NewButton, Pagination } from "@/components/admin/ui";
 import { SegmentedFilter, FilterToolbar, ActiveFilters, labelFrom } from "@/components/admin/FilterBar";
 import { ActionForm, DeleteForm, PendingButton } from "@/components/admin/ActionForm";
-import { getRewardsPage } from "@/lib/admin/queries";
-import { rewardFilters } from "@/lib/admin/filters";
+import { getRewardsPage, getRewardsAttention } from "@/lib/admin/queries";
+import { TotalSubtitle } from "@/components/admin/Streamed";
+import { rewardFilters, filterQuery } from "@/lib/admin/filters";
 import { deleteReward, toggleRewardActive } from "@/lib/admin/actions";
 
 export const dynamic = "force-dynamic";
@@ -59,13 +61,9 @@ export default async function AdminRewards({ searchParams }: SP) {
   // Resolved once and passed down so the query, the chips and every row agree
   // on "now" — and so no `new Date()` runs in the render body.
   const now = new Date();
-  const {
-    rows: rewards,
-    total,
-    pageCount,
-    outOfStock,
-    expired,
-  } = await getRewardsPage({ ...filters, page, now });
+  // Started, not awaited — see components/admin/Streamed.
+  const promise = getRewardsPage({ ...filters, page, now });
+  const { outOfStock, expired } = await getRewardsAttention(now);
   const filtered = Object.values(filters).some((v) => v && v !== "all");
   const needsAttention = outOfStock + expired;
 
@@ -73,9 +71,14 @@ export default async function AdminRewards({ searchParams }: SP) {
     <div>
       <AdminHeader
         title="Premi"
-        subtitle={`${total} premi nel catalogo fedeltà${
-          needsAttention > 0 ? ` · ${needsAttention} da sistemare` : ""
-        }`}
+        subtitle={
+          <TotalSubtitle
+            promise={promise}
+            one="premio"
+            many="premi"
+            suffix={` nel catalogo fedeltà${needsAttention > 0 ? ` · ${needsAttention} da sistemare` : ""}`}
+          />
+        }
         action={<NewButton href="/admin/rewards/new">+ Nuovo premio</NewButton>}
       />
 
@@ -126,94 +129,120 @@ export default async function AdminRewards({ searchParams }: SP) {
         }}
       />
 
-      {rewards.length === 0 ? (
-        <Panel>
-          <p className="text-brown-800/70">
-            {filtered
-              ? "Nessun premio corrisponde ai filtri."
-              : "Nessun premio ancora. Creane uno con «Nuovo premio»."}
-          </p>
-        </Panel>
-      ) : (
-        <div className="space-y-3">
-          {rewards.map((r) => (
-            <Panel key={r.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-center gap-3">
-                {r.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail, any host
-                  <img
-                    src={r.image}
-                    alt=""
-                    className="size-12 shrink-0 rounded-lg object-cover ring-1 ring-brown-900/10"
-                  />
-                ) : (
-                  <span
-                    aria-hidden
-                    title="Senza immagine"
-                    className="size-12 shrink-0 rounded-lg bg-brown-900/5 ring-1 ring-brown-900/10"
-                  />
-                )}
-                <div className="min-w-0">
-                  <p className="font-display flex flex-wrap items-center gap-1.5 text-lg text-brown-950">
-                    <Link href={`/admin/rewards/${r.id}`} className="hover:underline">
-                      {r.name}
-                    </Link>
-                    {/* Stock, window and per-customer cap are all enforced at
-                        redemption and none of them were visible here, so a
-                        reward with nothing left looked exactly like one with
-                        fifty. */}
-                    {r.stock != null && (
-                      <Tag tone={r.stock <= 0 ? "bad" : r.stock <= 3 ? "warn" : "mute"}>
-                        {r.stock <= 0 ? "Esaurito" : `${r.stock} rimasti`}
-                      </Tag>
-                    )}
-                    {r.active && windowState(r, now) === "expired" && <Tag tone="bad">Periodo finito</Tag>}
-                    {r.active && windowState(r, now) === "not_yet" && <Tag tone="warn">Non ancora attivo</Tag>}
-                  </p>
-                  <p className="text-xs text-brown-800/60">
-                    {r.points} punti
-                    {r.maxPerCustomer != null
-                      ? ` · max ${r.maxPerCustomer} a cliente`
-                      : ""}
-                    {windowLabel(r) ? ` · ${windowLabel(r)}` : ""}
-                    {" · "}
-                    {Number(r.pendingRedemptions) > 0 ? (
-                      <Link
-                        href={`/admin/loyalty?rq=${encodeURIComponent(r.name)}&rstato=pending`}
-                        className="font-bold text-warn-soft-fg hover:underline"
-                      >
-                        {r.pendingRedemptions} da consegnare
-                      </Link>
-                    ) : (
-                      `${r.totalRedemptions} riscatti`
-                    )}
-                  </p>
-                  {r.description && (
-                    <p className="line-clamp-1 text-xs text-brown-800/50">{r.description}</p>
-                  )}
-                </div>
-                {!r.active && <StatusBadge status="cancelled" />}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <ActionForm action={toggleRewardActive} className="inline-flex">
-                  <input type="hidden" name="id" value={r.id} />
-                  <input type="hidden" name="active" value={r.active ? "false" : "true"} />
-                  <PendingButton tone="dark">{r.active ? "Disattiva" : "Attiva"}</PendingButton>
-                </ActionForm>
-                <Link
-                  href={`/admin/rewards/${r.id}`}
-                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-                >
-                  Modifica
-                </Link>
-                <DeleteForm action={deleteReward} id={r.id} confirm={`Eliminare "${r.name}"?`} />
-              </div>
-            </Panel>
-          ))}
-        </div>
-      )}
-
-      <Pagination basePath={BASE} page={page} pageCount={pageCount} params={filters} />
+      {/* Only the catalogue waits on the query; the banner above is a
+          whole-catalogue figure and renders first. */}
+      <Suspense key={filterQuery({ ...filters, page: String(page) })} fallback={<TableSkeleton rows={5} />}>
+        <RewardList promise={promise} now={now} page={page} filters={filters} filtered={filtered} />
+      </Suspense>
     </div>
+  );
+}
+
+
+async function RewardList({
+  promise,
+  now,
+  page,
+  filters,
+  filtered,
+}: {
+  promise: ReturnType<typeof getRewardsPage>;
+  now: Date;
+  page: number;
+  filters: Record<string, string | undefined>;
+  filtered: boolean;
+}) {
+  const { rows: rewards, pageCount } = await promise;
+  return (
+    <>
+          {rewards.length === 0 ? (
+            <Panel>
+              <p className="text-brown-800/70">
+                {filtered
+                  ? "Nessun premio corrisponde ai filtri."
+                  : "Nessun premio ancora. Creane uno con «Nuovo premio»."}
+              </p>
+            </Panel>
+          ) : (
+            <div className="space-y-3">
+              {rewards.map((r) => (
+                <Panel key={r.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {r.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail, any host
+                      <img
+                        src={r.image}
+                        alt=""
+                        className="size-12 shrink-0 rounded-lg object-cover ring-1 ring-brown-900/10"
+                      />
+                    ) : (
+                      <span
+                        aria-hidden
+                        title="Senza immagine"
+                        className="size-12 shrink-0 rounded-lg bg-brown-900/5 ring-1 ring-brown-900/10"
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-display flex flex-wrap items-center gap-1.5 text-lg text-brown-950">
+                        <Link href={`/admin/rewards/${r.id}`} className="hover:underline">
+                          {r.name}
+                        </Link>
+                        {/* Stock, window and per-customer cap are all enforced at
+                            redemption and none of them were visible here, so a
+                            reward with nothing left looked exactly like one with
+                            fifty. */}
+                        {r.stock != null && (
+                          <Tag tone={r.stock <= 0 ? "bad" : r.stock <= 3 ? "warn" : "mute"}>
+                            {r.stock <= 0 ? "Esaurito" : `${r.stock} rimasti`}
+                          </Tag>
+                        )}
+                        {r.active && windowState(r, now) === "expired" && <Tag tone="bad">Periodo finito</Tag>}
+                        {r.active && windowState(r, now) === "not_yet" && <Tag tone="warn">Non ancora attivo</Tag>}
+                      </p>
+                      <p className="text-xs text-brown-800/70">
+                        {r.points} punti
+                        {r.maxPerCustomer != null
+                          ? ` · max ${r.maxPerCustomer} a cliente`
+                          : ""}
+                        {windowLabel(r) ? ` · ${windowLabel(r)}` : ""}
+                        {" · "}
+                        {Number(r.pendingRedemptions) > 0 ? (
+                          <Link
+                            href={`/admin/loyalty?rq=${encodeURIComponent(r.name)}&rstato=pending`}
+                            className="font-bold text-warn-soft-fg hover:underline"
+                          >
+                            {r.pendingRedemptions} da consegnare
+                          </Link>
+                        ) : (
+                          `${r.totalRedemptions} riscatti`
+                        )}
+                      </p>
+                      {r.description && (
+                        <p className="line-clamp-1 text-xs text-brown-800/70">{r.description}</p>
+                      )}
+                    </div>
+                    {!r.active && <StatusBadge status="inactive" />}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <ActionForm action={toggleRewardActive} className="inline-flex">
+                      <input type="hidden" name="id" value={r.id} />
+                      <input type="hidden" name="active" value={r.active ? "false" : "true"} />
+                      <PendingButton tone="dark">{r.active ? "Disattiva" : "Attiva"}</PendingButton>
+                    </ActionForm>
+                    <Link
+                      href={`/admin/rewards/${r.id}`}
+                      className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                    >
+                      Modifica
+                    </Link>
+                    <DeleteForm action={deleteReward} id={r.id} confirm={`Eliminare "${r.name}"?`} />
+                  </div>
+                </Panel>
+              ))}
+            </div>
+          )}
+
+          <Pagination basePath={BASE} page={page} pageCount={pageCount} params={filters} />
+    </>
   );
 }

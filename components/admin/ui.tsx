@@ -27,7 +27,7 @@ export function HistoryLink({ id, className = "" }: { id: string; className?: st
   return (
     <Link
       href={`/admin/audit?record=${encodeURIComponent(id)}`}
-      className={`inline-flex items-center gap-1.5 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950 print:hidden ${className}`}
+      className={`inline-flex items-center gap-1.5 text-[12px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950 print:hidden ${className}`}
     >
       <ScrollText className="size-3.5" />
       Cronologia
@@ -47,7 +47,50 @@ export function NewButton({ href, children }: { href: string; children: ReactNod
   );
 }
 
-export function AdminHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
+/**
+ * The stand-in for a list while its rows are being fetched.
+ *
+ * Every list page used to be one server component, so changing a single filter
+ * dropped the whole route into `loading.tsx` — header, toolbar, active-filter
+ * chips and saved views all replaced by three grey blocks, including the control
+ * the operator had just used. The rows now sit behind their own Suspense
+ * boundary and this is what shows there: the panel keeps its shape, and the
+ * chrome above it never moves.
+ */
+export function TableSkeleton({ rows = 8 }: { rows?: number }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="overflow-hidden rounded-2xl border border-brown-900/10 bg-surface shadow-sm"
+    >
+      <div className="border-b border-brown-900/10 px-5 py-3.5">
+        <div className="h-3 w-32 animate-pulse rounded bg-brown-950/10" />
+      </div>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-4 border-b border-brown-900/5 px-5 py-4 last:border-0">
+          <div className="h-3 w-24 animate-pulse rounded bg-brown-950/10" />
+          <div className="h-3 flex-1 animate-pulse rounded bg-brown-950/5" />
+          <div className="h-3 w-16 animate-pulse rounded bg-brown-950/10" />
+        </div>
+      ))}
+      <span className="sr-only">Caricamento dei risultati…</span>
+    </div>
+  );
+}
+
+export function AdminHeader({
+  title,
+  subtitle,
+  action,
+}: {
+  title: string;
+  /** A node, not a string: the row count in most list subtitles comes from the
+   *  same query as the rows, so it streams in behind its own boundary rather
+   *  than holding the header back. */
+  subtitle?: ReactNode;
+  action?: ReactNode;
+}) {
   return (
     <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
@@ -99,7 +142,13 @@ const badgeStyles: Record<string, string> = {
   exhausted: "bg-brown-900/10 text-brown-800",
 };
 
-/** Italian labels for the raw enum values stored in the DB. */
+/** Italian labels for the raw enum values stored in the DB.
+ *
+ * Written for the *booking*, which is what first needed them: «prenotazione» is
+ * feminine, so `confirmed`/`cancelled` read "Confermata"/"Annullata". Entities
+ * whose noun is masculine share the enum but not the agreement — see
+ * `orderStatusLabel` below and `redemptionStatusLabel` in RedemptionStatusForm.
+ */
 const statusLabels: Record<string, string> = {
   pending: "In attesa",
   confirmed: "Confermata",
@@ -124,6 +173,26 @@ const statusLabels: Record<string, string> = {
 
 export function statusLabel(status: string): string {
   return statusLabels[status] ?? status;
+}
+
+/**
+ * The same states, agreeing with «ordine».
+ *
+ * Only `cancelled` actually differs today — the shared map's "Annullata" was
+ * showing on seven order surfaces — but the whole enum is spelled out so the
+ * next value added to `orders.status` has to be considered here rather than
+ * silently inheriting a booking's gender.
+ */
+const orderStatusLabels: Record<string, string> = {
+  pending: "In attesa",
+  paid: "Pagato",
+  fulfilled: "Evaso",
+  cancelled: "Annullato",
+  refunded: "Rimborsato",
+};
+
+export function orderStatusLabel(status: string): string {
+  return orderStatusLabels[status] ?? statusLabel(status);
 }
 
 /** The three reservation kinds, in the order they're offered to an operator. */
@@ -170,6 +239,13 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
   );
 }
 
+/** `StatusBadge` for an order's own status — the one surface that must not use
+ *  the booking wording. Payment status (`unpaid`/`paid`/`refunded`) reads the
+ *  same either way, so it stays on the plain badge. */
+export function OrderStatusBadge({ status }: { status: string }) {
+  return <StatusBadge status={status} label={orderStatusLabel(status)} />;
+}
+
 /** Every text input, select and textarea in the gestionale.
  *
  * `min-h-11` is the 44px touch floor — `py-2.5` alone left a 40px control, and
@@ -197,41 +273,41 @@ export function SubmitButton({ children, tone = "gold" }: { children: ReactNode;
   );
 }
 
-/** GET search box that submits to the current page (preserves other params via hidden inputs). */
-export function SearchBox({
-  basePath,
-  q,
-  placeholder,
-  hidden = {},
-}: {
-  basePath: string;
-  q?: string;
-  placeholder?: string;
-  hidden?: Record<string, string>;
-}) {
-  return (
-    <form action={basePath} method="get" className="mb-4 flex gap-2">
-      {Object.entries(hidden).map(([k, v]) => (
-        <input key={k} type="hidden" name={k} value={v} />
-      ))}
-      <input
-        name="q"
-        defaultValue={q}
-        placeholder={placeholder ?? "Cerca…"}
-        className={`${inputCls} max-w-xs`}
-      />
-      <button
-        type="submit"
-        className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
-      >
-        Cerca
-      </button>
-    </form>
-  );
+/**
+ * The page numbers to draw for a paginator: first, last, a window around the
+ * current page, and `null` where a run was elided.
+ *
+ * Kept out of the component and exported so `test/pagination.test.ts` can pin
+ * the shape — the windowing is the only part with edge cases (near either end
+ * the window slides rather than shrinking, so the control never changes width).
+ */
+export function pageWindow(page: number, pageCount: number, span = 2): (number | null)[] {
+  if (pageCount <= 7) return Array.from({ length: pageCount }, (_, i) => i + 1);
+  // Slide the window rather than letting it shrink, so the same *count* of page
+  // numbers is offered wherever you are. Clamping it instead drew a control two
+  // numbers narrower at either end, and the buttons moved under the pointer as
+  // you paged through. (One ellipsis slot still comes and goes at the ends;
+  // that is a two-character gap, not a button.)
+  const start = Math.min(Math.max(2, page - span), pageCount - 2 * span - 1);
+  const end = Math.max(Math.min(pageCount - 1, page + span), 2 * span + 2);
+  const out: (number | null)[] = [1];
+  if (start > 2) out.push(null);
+  for (let p = start; p <= end; p++) out.push(p);
+  if (end < pageCount - 1) out.push(null);
+  out.push(pageCount);
+  return out;
 }
 
-/** Prev/next pagination that preserves the current query string.
- *  `pageParam` lets a page host two independent paginators (e.g. "page" + "rpage"). */
+/**
+ * Paginator for the admin lists, preserving the current query string.
+ *
+ * Numbered, not just prev/next: at 25 rows a page the activity log runs to 31
+ * pages and the orders list to 24, so "go to the oldest" was thirty clicks and
+ * "go back to where I was" was unanswerable. First and last are always drawn,
+ * with a window around the current page and an ellipsis over what is skipped.
+ *
+ * `pageParam` lets a page host two independent paginators (e.g. "page" + "rpage").
+ */
 export function Pagination({
   basePath,
   page,
@@ -252,27 +328,66 @@ export function Pagination({
     sp.set(pageParam, String(p));
     return `${basePath}?${sp.toString()}`;
   };
-  const btn = "inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase";
+  const btn =
+    "inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-xs font-bold tracking-widest uppercase";
+  const num =
+    "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-3 text-xs font-bold tabular-nums";
+  // A disabled control is exempt from the 4.5:1 floor, but at /30 these arrows
+  // were invisible rather than merely quiet. /60 reads as unavailable next to
+  // the /70 the rest of the page now uses, and can still be seen.
+  const arrowOff = "pointer-events-none bg-brown-900/5 text-brown-800/60";
+  const arrowOn = "bg-brown-900/10 text-brown-950 hover:bg-brown-900/15";
+
   return (
-    <div className="mt-6 flex items-center justify-between">
+    <nav
+      aria-label="Paginazione"
+      className="mt-6 flex flex-wrap items-center justify-between gap-3 print:hidden"
+    >
       <a
         href={page > 1 ? href(page - 1) : undefined}
         aria-disabled={page <= 1}
-        className={`${btn} ${page > 1 ? "bg-brown-900/10 text-brown-950 hover:bg-brown-900/15" : "pointer-events-none bg-brown-900/5 text-brown-800/30"}`}
+        className={`${btn} ${page > 1 ? arrowOn : arrowOff}`}
       >
         ← Precedenti
       </a>
-      <span className="text-xs font-semibold text-brown-800/60">
-        Pagina {page} di {pageCount}
-      </span>
+
+      {/* Scrolls rather than wraps: on a phone a 31-page control would
+          otherwise push the rest of the page down by three rows of pills. */}
+      <div className="no-scrollbar order-last w-full overflow-x-auto sm:order-none sm:w-auto">
+        <ol className="flex items-center justify-center gap-1">
+          {pageWindow(page, pageCount).map((p, i) =>
+            p === null ? (
+              <li key={`gap${i}`} aria-hidden className="px-1 text-xs text-brown-800/70">
+                …
+              </li>
+            ) : (
+              <li key={p}>
+                <a
+                  href={href(p)}
+                  aria-current={p === page ? "page" : undefined}
+                  aria-label={`Pagina ${p} di ${pageCount}`}
+                  className={`${num} ${
+                    p === page
+                      ? "bg-brown-950 text-cream"
+                      : "text-brown-800/70 hover:bg-brown-900/10 hover:text-brown-950"
+                  }`}
+                >
+                  {p}
+                </a>
+              </li>
+            ),
+          )}
+        </ol>
+      </div>
+
       <a
         href={page < pageCount ? href(page + 1) : undefined}
         aria-disabled={page >= pageCount}
-        className={`${btn} ${page < pageCount ? "bg-brown-900/10 text-brown-950 hover:bg-brown-900/15" : "pointer-events-none bg-brown-900/5 text-brown-800/30"}`}
+        className={`${btn} ${page < pageCount ? arrowOn : arrowOff}`}
       >
         Successivi →
       </a>
-    </div>
+    </nav>
   );
 }
 

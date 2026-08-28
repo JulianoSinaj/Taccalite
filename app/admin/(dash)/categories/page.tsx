@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AdminHeader, Panel, NewButton, SearchBox, inputCls, labelCls } from "@/components/admin/ui";
+import { AdminHeader, Panel, NewButton, inputCls, labelCls } from "@/components/admin/ui";
+import { FilterToolbar } from "@/components/admin/FilterBar";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import CategoryOrderList from "@/components/admin/CategoryOrderList";
 import { adminGetCategoriesWithUsage, countUnfiled, type CategoryWithUsage } from "@/lib/admin/queries";
@@ -133,13 +134,19 @@ export default async function AdminCategories({ searchParams }: SP) {
         ))}
       </div>
 
-      {/* `kind` rides along as a hidden field: searching from the News tab must
-          not silently drop the operator back into the product vocabulary. */}
-      <SearchBox
+      {/* The same toolbar every other list uses — this page was the last one
+          still on a bare, unlabelled search box, so it had no field label, no
+          apply-on-change and none of the shared chrome around it.
+
+          `kind` rides along as a carried hidden field: searching from the News
+          tab must not silently drop the operator back into the product
+          vocabulary. */}
+      <FilterToolbar
         basePath={BASE}
-        q={q}
-        placeholder="Cerca per nome o slug…"
-        hidden={kind === "product" ? {} : { kind }}
+        params={{ kind, ...(q ? { q } : {}) }}
+        carry={["kind"]}
+        formId="categories-filters"
+        searchPlaceholder="Nome o slug…"
       />
       {q && (
         <p className="-mt-2 mb-4 text-xs">

@@ -247,19 +247,23 @@ export function ActiveFilters({
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
-      <span className="font-bold tracking-widest text-brown-800/60 uppercase">Filtri attivi</span>
+      <span className="font-bold tracking-widest text-brown-800/70 uppercase">Filtri attivi</span>
       {active.map(([k, v]) => {
         const { title, format } = labels[k];
         return (
           <Link
             key={k}
             href={filterHref(basePath, params, { [k]: undefined })}
-            className="group inline-flex items-center gap-1.5 rounded-full bg-brown-900/8 py-1.5 pr-2 pl-3 text-brown-900 hover:bg-brown-900/15"
+            // `.tap` for the same reason "Azzera tutto" beside it has one: these
+            // are ~26px tall, and they sit shoulder to shoulder in a row where
+            // the wrong one removes the wrong facet. The pseudo-element widens
+            // the target without drawing the pill any bigger.
+            className="tap group inline-flex items-center gap-1.5 rounded-full bg-brown-900/8 py-1.5 pr-2 pl-3 text-brown-900 hover:bg-brown-900/15"
             aria-label={`Rimuovi filtro ${title}: ${format ? format(v) : v}`}
           >
-            <span className="text-brown-800/60">{title}:</span>
+            <span className="text-brown-800/70">{title}:</span>
             <span className="font-semibold">{format ? format(v) : v}</span>
-            <span aria-hidden className="text-base leading-none text-brown-800/50 group-hover:text-brown-950">
+            <span aria-hidden className="text-base leading-none text-brown-800/70 group-hover:text-brown-950">
               ×
             </span>
           </Link>

@@ -69,7 +69,7 @@ export default async function AdminContenuti() {
                 className="inline-flex min-h-9 items-center gap-2 rounded-full border border-brown-900/15 px-3 text-xs font-bold tracking-widest text-brown-900 uppercase hover:bg-brown-900/5"
               >
                 {group}
-                <span className={n ? "text-gold-dark" : "text-brown-800/40"}>
+                <span className={n ? "text-gold-dark" : "text-brown-800/70"}>
                   {n}/{defs.length}
                 </span>
               </a>

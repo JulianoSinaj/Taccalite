@@ -4,7 +4,7 @@ import {
   AdminHeader,
   Panel,
   BackLink,
-  StatusBadge,
+  OrderStatusBadge,
   Pagination,
   euro,
   fmtDateTime,
@@ -71,12 +71,12 @@ export default async function EditDiscount({ params, searchParams }: Props) {
         <Panel className="scroll-x p-0">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
-                <th className="px-5 py-3">Data</th>
-                <th className="px-5 py-3">Ordine</th>
-                <th className="px-5 py-3">Cliente</th>
-                <th className="px-5 py-3 text-right">Sconto</th>
-                <th className="px-5 py-3 text-right">Totale ordine</th>
+              <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
+                <th scope="col" className="px-5 py-3">Data</th>
+                <th scope="col" className="px-5 py-3">Ordine</th>
+                <th scope="col" className="px-5 py-3">Cliente</th>
+                <th scope="col" className="px-5 py-3 text-right">Sconto</th>
+                <th scope="col" className="px-5 py-3 text-right">Totale ordine</th>
               </tr>
             </thead>
             <tbody>
@@ -94,11 +94,11 @@ export default async function EditDiscount({ params, searchParams }: Props) {
                         {u.orderNumber ?? "—"}
                       </Link>
                     ) : (
-                      <span className="text-brown-800/50">—</span>
+                      <span className="text-brown-800/70">—</span>
                     )}
                     {u.orderStatus && (
                       <span className="ml-2">
-                        <StatusBadge status={u.orderStatus} />
+                        <OrderStatusBadge status={u.orderStatus} />
                       </span>
                     )}
                   </td>

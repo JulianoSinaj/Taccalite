@@ -47,7 +47,7 @@ export default async function EditCategory({ params }: { params: Promise<{ id: s
       <Panel>
         <CategoryForm category={category} parents={parents} hasChildren={hasChildren} />
       </Panel>
-      <p className="mt-4 text-xs text-brown-800/60">
+      <p className="mt-4 text-xs text-brown-800/70">
         Rinominando la categoria il nuovo nome viene applicato a tutti gli elementi che la usano.
       </p>
     </div>

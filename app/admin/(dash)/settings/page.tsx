@@ -316,12 +316,22 @@ const KNOWN: {
   },
 ];
 
+/**
+ * The control for one setting.
+ *
+ * `id` comes from the caller so the row's visible `<label>` can point at it.
+ * These controls used to carry an `aria-label` repeating the label text beside
+ * them, which named the control twice and left the visible label bound to
+ * nothing — a heading you could click without anything happening.
+ */
 function SettingField({
   def,
   value,
+  id,
 }: {
   def: (typeof KNOWN)[number];
   value: unknown;
+  id: string;
 }) {
   if (def.control === "boolean") {
     const checked = value === true;
@@ -332,6 +342,7 @@ function SettingField({
       <label className="inline-flex items-center gap-3">
         <input type="hidden" name="value" value="false" />
         <input
+          id={id}
           type="checkbox"
           name="value"
           value="true"
@@ -348,9 +359,9 @@ function SettingField({
       <>
         <input type="hidden" name="valueType" value="text" />
         <input
+          id={id}
           type="text"
           name="value"
-          aria-label={def.label}
           defaultValue={current}
           className={`${inputCls} max-w-md`}
         />
@@ -365,8 +376,8 @@ function SettingField({
       <>
         <input type="hidden" name="valueType" value="text" />
         <textarea
+          id={id}
           name="value"
-          aria-label={def.label}
           rows={6}
           defaultValue={current}
           spellCheck={false}
@@ -380,8 +391,8 @@ function SettingField({
     const current = typeof value === "number" ? value : Number(def.default);
     return (
       <select
+        id={id}
         name="value"
-        aria-label={def.label}
         defaultValue={String(current)}
         className={`${inputCls} max-w-xs`}
       >
@@ -397,8 +408,8 @@ function SettingField({
     const current = typeof value === "string" ? value : String(def.default);
     return (
       <select
+        id={id}
         name="value"
-        aria-label={def.label}
         defaultValue={current}
         className={`${inputCls} max-w-xs`}
       >
@@ -414,9 +425,9 @@ function SettingField({
   const current = typeof value === "number" ? value : Number(def.default);
   return (
     <input
+      id={id}
       type="number"
       name="value"
-      aria-label={def.label}
       required
       min={def.min}
       step={def.step ?? 1}
@@ -499,7 +510,7 @@ async function MailerStatus() {
 function MailerStatusPending() {
   return (
     <p className="mt-2 text-sm text-brown-800/70">
-      Stato: <span className="font-semibold text-brown-800/50">verifica in corso…</span>
+      Stato: <span className="font-semibold text-brown-800/70">verifica in corso…</span>
     </p>
   );
 }
@@ -530,13 +541,13 @@ export default async function AdminSettings() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel>
-          <h3 id="smtp" className="scroll-mt-24 font-display text-lg text-brown-950">
+          <h2 id="smtp" className="scroll-mt-24 font-display text-lg text-brown-950">
             Email (SMTP)
-          </h3>
+          </h2>
           <Suspense fallback={<MailerStatusPending />}>
             <MailerStatus />
           </Suspense>
-          <p className="mt-2 text-xs text-brown-800/60">
+          <p className="mt-2 text-xs text-brown-800/70">
             Le credenziali SMTP si impostano nelle variabili d&apos;ambiente (<code>.env</code>):
             <code> SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, MAIL_FROM</code>.
             Dopo averle cambiate riavvia l&apos;applicazione: vengono lette all&apos;avvio.
@@ -560,7 +571,7 @@ export default async function AdminSettings() {
         </Panel>
 
         <Panel>
-          <h3 className="font-display text-lg text-brown-950">Pagamenti (Stripe)</h3>
+          <h2 className="font-display text-lg text-brown-950">Pagamenti (Stripe)</h2>
           <p className="mt-2 text-sm text-brown-800/70">
             Stato:{" "}
             <span
@@ -582,7 +593,7 @@ export default async function AdminSettings() {
           {/* The distinction that matters: with no keys in production the card
               option disappears rather than quietly marking orders paid. Saying
               so here is the difference between a warning and a silent hole. */}
-          <p className="mt-2 text-xs text-brown-800/60">
+          <p className="mt-2 text-xs text-brown-800/70">
             {stripeConfigured
               ? "Il checkout con carta è attivo. Registra il webhook su Stripe (Sviluppatori → Webhook) puntandolo a "
               : simulatedPayments
@@ -590,14 +601,14 @@ export default async function AdminSettings() {
                 : "Senza chiavi il pagamento con carta non viene offerto al checkout: restano il pagamento in bottega e il contrassegno. Imposta STRIPE_SECRET_KEY e STRIPE_WEBHOOK_SECRET, poi registra il webhook su "}
             <code>{absoluteUrl("/api/checkout/webhook")}</code>.
           </p>
-          <p className="mt-2 text-xs text-brown-800/60">
+          <p className="mt-2 text-xs text-brown-800/70">
             Eventi da sottoscrivere: <code>checkout.session.completed</code>,{" "}
             <code>checkout.session.async_payment_succeeded</code>,{" "}
             <code>checkout.session.async_payment_failed</code>,{" "}
             <code>checkout.session.expired</code>, <code>charge.refunded</code>,{" "}
             <code>charge.dispute.created</code>.
           </p>
-          <p className="mt-2 text-xs text-brown-800/60">
+          <p className="mt-2 text-xs text-brown-800/70">
             Webhook: <strong>{env.stripe.webhookSecret ? "segreto impostato" : "segreto mancante"}</strong>
             {!env.stripe.webhookSecret &&
               " — senza STRIPE_WEBHOOK_SECRET gli aggiornamenti da Stripe (pagamenti differiti, rimborsi dalla dashboard, contestazioni) non arrivano."}
@@ -606,7 +617,7 @@ export default async function AdminSettings() {
       </div>
 
       <h2 className="font-display mt-10 mb-1 text-xl text-brown-950">Automazioni</h2>
-      <p className="mb-3 text-xs text-brown-800/60">
+      <p className="mb-3 text-xs text-brown-800/70">
         Girano da sole se lo scheduler chiama <code>/api/cron?job=all</code>. Qui vedi quando
         ognuna ha lavorato l&apos;ultima volta e puoi lanciarla subito.
       </p>
@@ -624,8 +635,8 @@ export default async function AdminSettings() {
                     </span>
                   )}
                 </p>
-                <p className="mt-0.5 text-xs text-brown-800/60">{job.description}</p>
-                <p className="mt-1 text-xs text-brown-800/50">
+                <p className="mt-0.5 text-xs text-brown-800/70">{job.description}</p>
+                <p className="mt-1 text-xs text-brown-800/70">
                   {last
                     ? `Ultima esecuzione: ${fmtDateTime(last.at)}${last.ok ? "" : ` — ${last.error}`}`
                     : "Mai eseguita."}
@@ -660,10 +671,12 @@ export default async function AdminSettings() {
               >
                 <input type="hidden" name="key" value={def.key} />
                 <div className="flex-1">
-                  <label className={labelCls}>{def.label}</label>
-                  <div className="mb-2 font-mono text-[11px] tracking-wide text-brown-800/40">{def.key}</div>
-                  <SettingField def={def} value={value} />
-                  <p className="mt-2 text-xs text-brown-800/60">{def.help}</p>
+                  <label className={labelCls} htmlFor={`setting-${def.key}`}>
+                    {def.label}
+                  </label>
+                  <div className="mb-2 font-mono text-[11px] tracking-wide text-brown-800/70">{def.key}</div>
+                  <SettingField def={def} value={value} id={`setting-${def.key}`} />
+                  <p className="mt-2 text-xs text-brown-800/70">{def.help}</p>
                 </div>
                 <div className="sm:pt-6">
                   <PendingButton tone="dark">Salva</PendingButton>
@@ -677,7 +690,7 @@ export default async function AdminSettings() {
       {extras.length > 0 && (
         <>
           <h2 className="font-display mt-10 mb-1 text-xl text-brown-950">Altri parametri</h2>
-          <p className="mb-3 text-xs text-brown-800/60">
+          <p className="mb-3 text-xs text-brown-800/70">
             Impostazioni avanzate: modifica il valore in formato JSON (es. <code>true</code>,{" "}
             <code>42</code>, <code>&quot;testo&quot;</code>).
           </p>

@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { inArray } from "drizzle-orm";
 import {
   AdminHeader,
+  TableSkeleton,
+  OrderStatusBadge,
   StatusBadge,
   euro,
   fmtDate,
@@ -18,7 +21,8 @@ import {
 } from "@/components/admin/FilterBar";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { getOrdersPage, adminGetShops, getSavedViews, ORDER_SORTS } from "@/lib/admin/queries";
-import { orderFilters, sortFilters, filterQuery } from "@/lib/admin/filters";
+import { orderFilters, sortFilters, filterQuery, type SortSpec } from "@/lib/admin/filters";
+import { TotalSubtitle } from "@/components/admin/Streamed";
 import { DataTable } from "@/components/admin/DataTable";
 import { BulkBar, BulkCheckbox } from "@/components/admin/BulkBar";
 import { SavedViews } from "@/components/admin/SavedViews";
@@ -99,39 +103,15 @@ export default async function AdminOrders({ searchParams }: SP) {
   const filters = orderFilters({ ...sp, negozio: lockShop(sp.negozio, scope) });
   const sort = sortFilters(sp, ORDER_SORTS, { colonna: "data", verso: "desc" });
   const viewer = await getCurrentUser();
-  const [{ rows: orders, total, pageCount }, shops, admin, views] = await Promise.all([
-    getOrdersPage({ ...filters, page, sort }),
+  // Started here, awaited in `OrdersTable` below. The chrome — filters, saved
+  // views, the export links — must not wait on the rows, or every filter change
+  // takes the whole page down to `loading.tsx`. See components/admin/Streamed.
+  const ordersPromise = getOrdersPage({ ...filters, page, sort });
+  const [shops, admin, views] = await Promise.all([
     adminGetShops(),
     isAdmin(),
     viewer ? getSavedViews(viewer.id, BASE) : Promise.resolve([]),
   ]);
-  const shopName = new Map(shops.map((s) => [s.slug, s.name]));
-  // Carried on every sort/page link so the view survives navigation.
-  const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso };
-
-  // Per-order item preview: fetch line items for the current page in one query,
-  // then group into a total-quantity count + the first product names.
-  const ids = orders.map((o) => o.id);
-  const items = ids.length
-    ? await db
-        .select({ orderId: orderItems.orderId, name: orderItems.name, quantity: orderItems.quantity })
-        .from(orderItems)
-        .where(inArray(orderItems.orderId, ids))
-    : [];
-  const preview = new Map<string, { count: number; names: string[] }>();
-  for (const it of items) {
-    const p = preview.get(it.orderId) ?? { count: 0, names: [] };
-    p.count += it.quantity;
-    p.names.push(it.name);
-    preview.set(it.orderId, p);
-  }
-  const previewText = (orderId: string): string | null => {
-    const p = preview.get(orderId);
-    if (!p || p.count === 0) return null;
-    const shown = p.names.slice(0, 2).join(", ");
-    const more = p.names.length > 2 ? "…" : "";
-    return `${p.count} art. · ${shown}${more}`;
-  };
 
   // The active filter bag the shared chrome reads from. It reads the **locked**
   // shop, not the one in the query string: built from the raw params, a scoped
@@ -150,12 +130,18 @@ export default async function AdminOrders({ searchParams }: SP) {
   };
   // …and no chips for locations this operator can never open.
   const SHOP_CHIPS = shopChips(shops, scope);
+  const shopName = new Map(shops.map((s) => [s.slug, s.name]));
+  // Carried on every sort/page link so the view survives navigation.
+  const linkParams = { ...filters, colonna: sort.colonna, verso: sort.verso };
+  // Which empty state the table shows. Computed here, where the facets live.
+  const filtered =
+    !!q || stato !== "all" || tipo !== "all" || metodo !== "all" || current.negozio !== "all";
 
   return (
     <div>
       <AdminHeader
         title="Ordini"
-        subtitle={`${total} ordini`}
+        subtitle={<TotalSubtitle promise={ordersPromise} one="ordine" many="ordini" />}
         action={
           <div className="flex flex-wrap gap-2">
             <Link
@@ -261,135 +247,218 @@ export default async function AdminOrders({ searchParams }: SP) {
         confirmTemplate="Applicare l'azione a {n} ordini? I clienti riceveranno le email previste. Gli ordini per cui non è consentita vengono saltati."
       />
 
-      {/* A sortable table, now that the detail page carries the heavy actions.
-          Card-per-row couldn't be sorted or scanned at volume, which is what a
-          list of orders is for. */}
-      <DataTable
-        rows={orders}
-        rowKey={(o) => o.id}
-        basePath={BASE}
-        params={linkParams}
-        sort={sort}
-        empty={
-          q || stato !== "all" || tipo !== "all" || metodo !== "all" || current.negozio !== "all"
-            ? "Nessun ordine corrisponde ai filtri."
-            : "Nessun ordine ancora. Gli ordini dallo shop online compaiono qui."
-        }
-        columns={[
-          {
-            // The select box lives inside the identity cell rather than in a
-            // column of its own: one column fewer on a narrow screen, and the
-            // pinned column then carries both the tick and what it ticks. The
-            // checkbox joins the bulk form through `form="…"`, so where it sits
-            // in the DOM makes no difference to the submission.
-            key: "numero",
-            header: "Ordine",
-            sortable: true,
-            sticky: true,
-            cell: (o) => (
-              <div className="flex items-start gap-3">
-                <BulkCheckbox formId={BULK_FORM} id={o.id} label={`Seleziona ordine ${o.orderNumber}`} />
-                <div>
-                  <Link
-                    href={`/admin/orders/${o.id}`}
-                    className="font-mono text-xs font-bold whitespace-nowrap text-brown-950 hover:underline"
-                  >
-                    {o.orderNumber}
-                  </Link>
-                  <p className="mt-0.5 text-xs whitespace-nowrap text-brown-800/50">{fmtDate(o.createdAt)}</p>
-                </div>
-              </div>
-            ),
-          },
-          {
-            key: "cliente",
-            header: "Cliente",
-            sortable: true,
-            cell: (o) => {
-              const prev = previewText(o.id);
-              return (
-                <div>
-                  <p className="font-semibold text-brown-950">{o.name}</p>
-                  <p className="text-xs text-brown-800/60">{o.email}</p>
-                  {prev && <p className="text-xs text-brown-800/50">{prev}</p>}
-                </div>
-              );
-            },
-          },
-          {
-            key: "consegna",
-            header: "Consegna",
-            hideOnMobile: true,
-            cell: (o) => (
-              <span className="text-brown-800/70">
-                {FULFILMENT_SHORT[o.fulfilment]}
-                {o.shopSlug ? ` · ${shopName.get(o.shopSlug) ?? o.shopSlug}` : ""}
-                {o.pickupSlotAt ? ` · ${fmtDateTime(o.pickupSlotAt)}` : ""}
-              </span>
-            ),
-          },
-          {
-            key: "stato",
-            header: "Stato",
-            sortable: true,
-            cell: (o) => (
-              <div className="flex flex-wrap gap-1">
-                <StatusBadge status={o.status} />
-                <StatusBadge status={o.paymentStatus} />
-                {/* "Da pagare" alone doesn't distinguish an abandoned card
-                    checkout from a live order the customer will pay for on
-                    collection — opposite meanings, opposite actions. */}
-                {o.paymentStatus === "unpaid" && settlesOnHandover(o.paymentMethod) && (
-                  <span className="border border-gold-dark/50 bg-gold/20 px-2 py-0.5 text-[10px] font-bold tracking-wider text-brown-950 uppercase">
-                    {PAYMENT_METHOD_SHORT[o.paymentMethod]}
-                  </span>
-                )}
-              </div>
-            ),
-          },
-          {
-            key: "totale",
-            header: "Totale",
-            sortable: true,
-            align: "right",
-            cell: (o) => (
-              <div className="tabular-nums">
-                <span className="font-semibold text-brown-950">{euro(o.totalCents)}</span>
-                {o.refundedCents > 0 && (
-                  <p className="text-xs text-danger">−{euro(o.refundedCents)}</p>
-                )}
-              </div>
-            ),
-          },
-          {
-            key: "azioni",
-            header: <span className="sr-only">Azioni</span>,
-            align: "right",
-            cell: (o) => (
-              <div className="flex items-center justify-end gap-1.5">
-                {/* The overwhelmingly common next step for a paid pickup order
-                    is "handed over" — one tap, not two selects. */}
-                {o.status === "paid" && o.fulfilment !== "shipping" && (
-                  <ActionForm action={updateOrderStatus} className="inline-flex">
-                    <input type="hidden" name="id" value={o.id} />
-                    <input type="hidden" name="status" value="fulfilled" />
-                    <input type="hidden" name="paymentStatus" value={o.paymentStatus} />
-                    <PendingButton tone="gold">✓ Consegnato</PendingButton>
-                  </ActionForm>
-                )}
-                <Link
-                  href={`/admin/orders/${o.id}`}
-                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-3 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-                >
-                  Dettaglio
-                </Link>
-              </div>
-            ),
-          },
-        ]}
-      />
-
-      <Pagination basePath={BASE} page={page} pageCount={pageCount} params={linkParams} />
+      {/* The rows, and only the rows, wait on the query. The chrome above has
+          already rendered by the time this fallback appears, so a filter change
+          no longer takes the toolbar down with it. `key` on the active view is
+          what makes the boundary fall back *again* on the next change instead of
+          holding the previous page's rows on screen. */}
+      <Suspense key={filterQuery({ ...linkParams, page: String(page) })} fallback={<TableSkeleton />}>
+        <OrdersTable
+          promise={ordersPromise}
+          shopName={shopName}
+          page={page}
+          linkParams={linkParams}
+          sort={sort}
+          filtered={filtered}
+        />
+      </Suspense>
     </div>
+  );
+}
+
+
+/**
+ * The orders themselves.
+ *
+ * Split out so it can sit behind Suspense — it owns the two queries that make
+ * this page slow (the page of orders, and the line items previewed in each row)
+ * and nothing else on the screen depends on them.
+ */
+async function OrdersTable({
+  promise,
+  shopName,
+  page,
+  linkParams,
+  sort,
+  filtered,
+}: {
+  promise: ReturnType<typeof getOrdersPage>;
+  shopName: Map<string, string>;
+  page: number;
+  linkParams: Record<string, string | undefined>;
+  sort: SortSpec;
+  /** Whether any facet is on, which decides which empty state to show. */
+  filtered: boolean;
+}) {
+  const { rows: orders, pageCount } = await promise;
+
+  // Per-order item preview: fetch line items for the current page in one query,
+  // then group into a total-quantity count + the first product names.
+  const ids = orders.map((o) => o.id);
+  const items = ids.length
+    ? await db
+        .select({ orderId: orderItems.orderId, name: orderItems.name, quantity: orderItems.quantity })
+        .from(orderItems)
+        .where(inArray(orderItems.orderId, ids))
+    : [];
+  const preview = new Map<string, { count: number; names: string[] }>();
+  for (const it of items) {
+    const p = preview.get(it.orderId) ?? { count: 0, names: [] };
+    p.count += it.quantity;
+    p.names.push(it.name);
+    preview.set(it.orderId, p);
+  }
+  const previewText = (orderId: string): string | null => {
+    const p = preview.get(orderId);
+    if (!p || p.count === 0) return null;
+    const shown = p.names.slice(0, 2).join(", ");
+    const more = p.names.length > 2 ? "…" : "";
+    return `${p.count} art. · ${shown}${more}`;
+  };
+
+  /** "Ritiro · Centro · 12 set 2026, 10:30" — the delivery column's whole text,
+   *  named once because it renders in two places (its own column on a wide
+   *  screen, inside the customer cell on a narrow one). */
+  const deliveryText = (o: (typeof orders)[number]): string =>
+    [
+      FULFILMENT_SHORT[o.fulfilment],
+      o.shopSlug ? (shopName.get(o.shopSlug) ?? o.shopSlug) : null,
+      o.pickupSlotAt ? fmtDateTime(o.pickupSlotAt) : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+  return (
+    <>
+          {/* A sortable table, now that the detail page carries the heavy actions.
+              Card-per-row couldn't be sorted or scanned at volume, which is what a
+              list of orders is for. */}
+          <DataTable
+            rows={orders}
+            rowKey={(o) => o.id}
+            basePath={BASE}
+            params={linkParams}
+            sort={sort}
+            empty={
+              filtered
+                ? "Nessun ordine corrisponde ai filtri."
+                : "Nessun ordine ancora. Gli ordini dallo shop online compaiono qui."
+            }
+            columns={[
+              {
+                // The select box lives inside the identity cell rather than in a
+                // column of its own: one column fewer on a narrow screen, and the
+                // pinned column then carries both the tick and what it ticks. The
+                // checkbox joins the bulk form through `form="…"`, so where it sits
+                // in the DOM makes no difference to the submission.
+                key: "numero",
+                header: "Ordine",
+                sortable: true,
+                sticky: true,
+                cell: (o) => (
+                  <div className="flex items-start gap-3">
+                    <BulkCheckbox formId={BULK_FORM} id={o.id} label={`Seleziona ordine ${o.orderNumber}`} />
+                    <div>
+                      <Link
+                        href={`/admin/orders/${o.id}`}
+                        className="font-mono text-xs font-bold whitespace-nowrap text-brown-950 hover:underline"
+                      >
+                        {o.orderNumber}
+                      </Link>
+                      <p className="mt-0.5 text-xs whitespace-nowrap text-brown-800/70">{fmtDate(o.createdAt)}</p>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                key: "cliente",
+                header: "Cliente",
+                sortable: true,
+                cell: (o) => {
+                  const prev = previewText(o.id);
+                  return (
+                    <div>
+                      <p className="font-semibold text-brown-950">{o.name}</p>
+                      <p className="text-xs text-brown-800/70">{o.email}</p>
+                      {prev && <p className="text-xs text-brown-800/70">{prev}</p>}
+                      {/* The delivery column below is dropped on a narrow screen —
+                          it does not survive as a column — so it reappears here as a
+                          line instead of vanishing. It carries the collection slot,
+                          which is the one thing the counter needs to know about an
+                          order it is looking at on a phone. */}
+                      <p className="text-xs text-brown-800/70 sm:hidden">{deliveryText(o)}</p>
+                    </div>
+                  );
+                },
+              },
+              {
+                key: "consegna",
+                header: "Consegna",
+                hideOnMobile: true,
+                cell: (o) => <span className="text-brown-800/70">{deliveryText(o)}</span>,
+              },
+              {
+                key: "stato",
+                header: "Stato",
+                sortable: true,
+                cell: (o) => (
+                  <div className="flex flex-wrap gap-1">
+                    <OrderStatusBadge status={o.status} />
+                    <StatusBadge status={o.paymentStatus} />
+                    {/* "Da pagare" alone doesn't distinguish an abandoned card
+                        checkout from a live order the customer will pay for on
+                        collection — opposite meanings, opposite actions. */}
+                    {o.paymentStatus === "unpaid" && settlesOnHandover(o.paymentMethod) && (
+                      <span className="border border-gold-dark/50 bg-gold/20 px-2 py-0.5 text-[10px] font-bold tracking-wider text-brown-950 uppercase">
+                        {PAYMENT_METHOD_SHORT[o.paymentMethod]}
+                      </span>
+                    )}
+                  </div>
+                ),
+              },
+              {
+                key: "totale",
+                header: "Totale",
+                sortable: true,
+                align: "right",
+                cell: (o) => (
+                  <div className="tabular-nums">
+                    <span className="font-semibold text-brown-950">{euro(o.totalCents)}</span>
+                    {o.refundedCents > 0 && (
+                      <p className="text-xs text-danger">−{euro(o.refundedCents)}</p>
+                    )}
+                  </div>
+                ),
+              },
+              {
+                key: "azioni",
+                header: <span className="sr-only">Azioni</span>,
+                align: "right",
+                cell: (o) => (
+                  <div className="flex items-center justify-end gap-1.5">
+                    {/* The overwhelmingly common next step for a paid pickup order
+                        is "handed over" — one tap, not two selects. */}
+                    {o.status === "paid" && o.fulfilment !== "shipping" && (
+                      <ActionForm action={updateOrderStatus} className="inline-flex">
+                        <input type="hidden" name="id" value={o.id} />
+                        <input type="hidden" name="status" value="fulfilled" />
+                        <input type="hidden" name="paymentStatus" value={o.paymentStatus} />
+                        <PendingButton tone="gold">✓ Consegnato</PendingButton>
+                      </ActionForm>
+                    )}
+                    <Link
+                      href={`/admin/orders/${o.id}`}
+                      className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-3 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                    >
+                      Dettaglio
+                    </Link>
+                  </div>
+                ),
+              },
+            ]}
+          />
+
+          <Pagination basePath={BASE} page={page} pageCount={pageCount} params={linkParams} />
+    </>
   );
 }

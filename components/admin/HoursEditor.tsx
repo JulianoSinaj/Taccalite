@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { inputCls, labelCls } from "./ui";
 import { weekdayName, structuredToRows, type DayHours } from "@/lib/hours";
@@ -44,9 +44,17 @@ function initialDays(shop?: ShopRow | null): DayState[] {
 }
 
 export function HoursEditor({ shop }: { shop?: ShopRow | null }) {
+  // Local rather than `useFieldIds` from ./forms: that module imports this one,
+  // and the round trip would be a cycle.
+  const uid = useId();
   const [days, setDays] = useState<DayState[]>(() => initialDays(shop));
+  // A *new* shop starts structured. The flag used to be derived from stored
+  // structured hours alone, so `/admin/shops/new` — which has none — opened on
+  // the legacy free-text box, under its own help text telling the operator to
+  // turn structured hours on. Only a shop that already has prose and has never
+  // been migrated still lands in the old mode.
   const [useStructured, setUseStructured] = useState(
-    () => !!shop?.hoursStructured && shop.hoursStructured.length > 0,
+    () => !shop || (!!shop.hoursStructured && shop.hoursStructured.length > 0),
   );
 
   const update = (day: number, fn: (d: DayState) => DayState) =>
@@ -82,7 +90,12 @@ export function HoursEditor({ shop }: { shop?: ShopRow | null }) {
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-        <label className={`${labelCls} mb-0`}>Orari di apertura</label>
+        {/* Bound to whichever control is showing: the free-text box below has
+            an id, the structured grid names its own time fields, so there the
+            label is a group heading rather than a field label. */}
+        <label className={`${labelCls} mb-0`} htmlFor={useStructured ? undefined : `${uid}-hours`}>
+          Orari di apertura
+        </label>
         <label className="flex items-center gap-2 text-xs font-medium text-brown-900">
           <input
             type="checkbox"
@@ -139,7 +152,7 @@ export function HoursEditor({ shop }: { shop?: ShopRow | null }) {
                           }
                           className={`${inputCls} w-28 py-1.5`}
                         />
-                        <span className="text-brown-800/50">–</span>
+                        <span className="text-brown-800/70">–</span>
                         <input
                           type="time"
                           value={r.close}
@@ -159,7 +172,7 @@ export function HoursEditor({ shop }: { shop?: ShopRow | null }) {
                             onClick={() =>
                               update(d.day, (x) => ({ ...x, ranges: x.ranges.filter((_, j) => j !== i) }))
                             }
-                            className="rounded-full p-1 text-brown-800/40 hover:bg-danger-soft hover:text-danger"
+                            className="rounded-full p-1 text-brown-800/70 hover:bg-danger-soft hover:text-danger"
                           >
                             <X className="size-3.5" />
                           </button>
@@ -193,7 +206,7 @@ export function HoursEditor({ shop }: { shop?: ShopRow | null }) {
             <span className="font-bold tracking-widest uppercase">Sul sito</span>
             <ul className="mt-1 space-y-0.5">
               {preview.length === 0 ? (
-                <li className="text-brown-800/50">Nessun orario impostato.</li>
+                <li className="text-brown-800/70">Nessun orario impostato.</li>
               ) : (
                 preview.map((r) => (
                   <li key={r.label}>
@@ -210,12 +223,13 @@ export function HoursEditor({ shop }: { shop?: ShopRow | null }) {
               structured field is what tells the server to fall back to it. */}
           <input type="hidden" name="hoursStructured" value="" />
           <textarea
+            id={`${uid}-hours`}
             name="hours"
             rows={3}
             defaultValue={shop?.hours.map((h) => `${h.label} | ${h.value}`).join("\n")}
             className={inputCls}
           />
-          <p className="mt-1 text-xs text-brown-800/60">
+          <p className="mt-1 text-xs text-brown-800/70">
             Una riga per fascia: <code>Etichetta | Valore</code>. Gli orari liberi vengono interpretati
             alla meglio e, se non sono comprensibili, il badge «aperto adesso» sparisce senza avvisi:
             attiva gli orari strutturati per evitarlo.

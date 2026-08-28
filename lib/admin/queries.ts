@@ -739,7 +739,7 @@ export async function getProductsPage(
         products.sortOrder,
       )
     : asc(products.sortOrder);
-  const [rows, [{ total }], categories] = await Promise.all([
+  const [rows, [{ total }]] = await Promise.all([
     db
       .select()
       .from(products)
@@ -747,22 +747,30 @@ export async function getProductsPage(
       .orderBy(orderBy, products.name)
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
-    db.select({ total: sql<number>`count(*)` }).from(products).where(where),
-    // Chips for the live catalogue: a category that survives only on archived
-    // rows is a filter that matches nothing.
-    db
-      .selectDistinct({ category: products.category })
-      .from(products)
-      .where(isNull(products.archivedAt))
-      .orderBy(products.category),
+    db.select({ total: sql`count(*)`.mapWith(Number) }).from(products).where(where),
   ]);
   return {
     rows,
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-    categories: categories.map((c) => c.category).filter(Boolean),
   };
+}
+
+/**
+ * Chips for the live catalogue: a category that survives only on archived rows
+ * is a filter that matches nothing.
+ *
+ * Its own query rather than a third leg of `getProductsPage`, because it feeds
+ * the toolbar, which now renders ahead of the rows (see components/admin/Streamed).
+ */
+export async function getProductCategoryFacet(): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ category: products.category })
+    .from(products)
+    .where(isNull(products.archivedAt))
+    .orderBy(products.category);
+  return rows.map((c) => c.category).filter(Boolean);
 }
 
 /**
@@ -785,12 +793,27 @@ export async function countProductStockStates(
 }
 
 /** Paginated news list, with the distinct categories for the filter chips. */
+/**
+ * The distinct categories the diary actually uses, for the filter dropdown.
+ *
+ * Separate from `getBlogPage` because it feeds the page's *chrome*, which now
+ * renders before the rows do (see components/admin/Streamed) — bundling it with
+ * the row query would have held the toolbar behind the list it filters.
+ */
+export async function getBlogCategoryFacet(): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ category: blogPosts.category })
+    .from(blogPosts)
+    .orderBy(blogPosts.category);
+  return rows.map((c) => c.category).filter(Boolean);
+}
+
 export async function getBlogPage(opts: BlogFilters & { page?: number }) {
   const page = Math.max(1, opts.page ?? 1);
   // Today in the business timezone, so "online" vs "programmato" here matches
   // the gate the public listing applies.
   const where = blogWhere(opts, dateInRome());
-  const [rows, [{ total }], categories] = await Promise.all([
+  const [rows, [{ total }]] = await Promise.all([
     db
       .select()
       .from(blogPosts)
@@ -799,14 +822,12 @@ export async function getBlogPage(opts: BlogFilters & { page?: number }) {
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
     db.select({ total: sql<number>`count(*)` }).from(blogPosts).where(where),
-    db.selectDistinct({ category: blogPosts.category }).from(blogPosts).orderBy(blogPosts.category),
   ]);
   return {
     rows,
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-    categories: categories.map((c) => c.category).filter(Boolean),
   };
 }
 
@@ -831,21 +852,32 @@ export async function getRewardsPage(opts: RewardFilters & { page?: number; now?
       .offset((page - 1) * PAGE_SIZE),
     db.select({ total: sql<number>`count(*)` }).from(rewards).where(where),
   ]);
-  // Counted across the whole catalogue, not the current page: these are the
-  // numbers the filter chips carry, and a chip that says "0" while the next
-  // page holds three sold-out rewards is worse than no chip.
+  return {
+    rows,
+    total,
+    page,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+  };
+}
+
+/**
+ * Rewards that are switched on but cannot be claimed — sold out, or past their
+ * end date.
+ *
+ * Counted across the whole catalogue, not the current page: these are the
+ * numbers the banner and the filter chips carry, and a chip that says "0" while
+ * the next page holds three sold-out rewards is worse than no chip. Its own
+ * query because it belongs to chrome that renders ahead of the rows (see
+ * components/admin/Streamed).
+ */
+export async function getRewardsAttention(now = new Date()) {
   const [attention] = await db
     .select({
       outOfStock: sql<number>`sum(case when ${rewards.active} and ${rewards.stock} is not null and ${rewards.stock} <= 0 then 1 else 0 end)`,
       expired: sql<number>`sum(case when ${rewards.active} and ${rewards.availableUntil} is not null and ${rewards.availableUntil} < ${now.getTime()} then 1 else 0 end)`,
     })
     .from(rewards);
-
   return {
-    rows,
-    total,
-    page,
-    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
     outOfStock: Number(attention?.outOfStock ?? 0),
     expired: Number(attention?.expired ?? 0),
   };
@@ -1134,7 +1166,7 @@ export async function getSubscribersPage(opts: SubscriberFilters & { page?: numb
         newsletterSubscribers.createdAt,
       )
     : desc(newsletterSubscribers.createdAt);
-  const [rows, [{ total }], [{ confirmed }], sources] = await Promise.all([
+  const [rows, [{ total }]] = await Promise.all([
     db
       .select()
       .from(newsletterSubscribers)
@@ -1143,39 +1175,44 @@ export async function getSubscribersPage(opts: SubscriberFilters & { page?: numb
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
     db.select({ total: sql<number>`count(*)` }).from(newsletterSubscribers).where(where),
+  ]);
+  return {
+    rows,
+    total,
+    page,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+  };
+}
+
+/**
+ * The list-wide figures above the subscriber table: how many are confirmed, and
+ * the origins the filter offers. Neither depends on the current page, and both
+ * belong to chrome that renders ahead of the rows (see components/admin/Streamed).
+ */
+export async function getSubscriberSummary() {
+  const [[{ confirmed }], sources] = await Promise.all([
     db
       .select({ confirmed: sql<number>`count(*)` })
       .from(newsletterSubscribers)
       .where(eq(newsletterSubscribers.status, "confirmed")),
     db.selectDistinct({ source: newsletterSubscribers.source }).from(newsletterSubscribers),
   ]);
-  return {
-    rows,
-    total,
-    confirmed,
-    page,
-    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-    sources: sources.map((s) => s.source).filter((s): s is string => !!s),
-  };
+  return { confirmed, sources: sources.map((s) => s.source).filter((s): s is string => !!s) };
 }
 
 export const getOutbox = () => db.select().from(emailOutbox).orderBy(desc(emailOutbox.createdAt)).limit(200);
 
 /** Paginated + status-filterable email outbox. */
-export async function getOutboxPage(opts: OutboxFilters & { page?: number }) {
-  const page = Math.max(1, opts.page ?? 1);
-  const where = outboxWhere(opts);
-  const [rows, [{ total }], [{ failed, exhausted }], byStatus] = await Promise.all([
-    db
-      .select()
-      .from(emailOutbox)
-      .where(where)
-      .orderBy(desc(emailOutbox.createdAt), emailOutbox.id)
-      .limit(PAGE_SIZE)
-      .offset((page - 1) * PAGE_SIZE),
-    db.select({ total: sql<number>`count(*)` }).from(emailOutbox).where(where),
-    // Whole-outbox figures for the banner and the bulk retry buttons, which act
-    // on every failed message regardless of what is filtered on screen.
+/**
+ * The whole-outbox figures the page's chrome is built from: the banner, the
+ * bulk-retry buttons and the per-status chips.
+ *
+ * Split out of `getOutboxPage` because these feed the header and the segmented
+ * control, which now render ahead of the rows (see components/admin/Streamed) —
+ * leaving them in the row query held the retry buttons behind the list.
+ */
+export async function getOutboxSummary(opts: OutboxFilters) {
+  const [[{ failed, exhausted }], byStatus] = await Promise.all([
     // `exhausted` is the subset past the retry cap — the ones an ordinary
     // "riprova tutte" deliberately skips, and therefore the only ones that need
     // the counter reset. Counted so the page can say how many rather than
@@ -1201,6 +1238,33 @@ export async function getOutboxPage(opts: OutboxFilters & { page?: number }) {
     counts[r.status] = Number(r.n);
     counts.all += Number(r.n);
   }
+  return { failed, exhausted: Number(exhausted ?? 0), counts };
+}
+
+/** One campaign's subject, for the active-filter chip on the outbox — chrome,
+ *  so it must resolve without waiting on the page of messages. */
+export async function getCampaignSubject(id: string): Promise<string | null> {
+  const [row] = await db
+    .select({ subject: newsletterCampaigns.subject })
+    .from(newsletterCampaigns)
+    .where(eq(newsletterCampaigns.id, id))
+    .limit(1);
+  return row?.subject ?? null;
+}
+
+export async function getOutboxPage(opts: OutboxFilters & { page?: number }) {
+  const page = Math.max(1, opts.page ?? 1);
+  const where = outboxWhere(opts);
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select()
+      .from(emailOutbox)
+      .where(where)
+      .orderBy(desc(emailOutbox.createdAt), emailOutbox.id)
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    db.select({ total: sql<number>`count(*)` }).from(emailOutbox).where(where),
+  ]);
 
   // Campaign subjects for the rows on this page, plus the active campaign
   // filter, which needs a label even when nothing matches it.
@@ -1218,9 +1282,6 @@ export async function getOutboxPage(opts: OutboxFilters & { page?: number }) {
   return {
     rows,
     total,
-    failed,
-    exhausted: Number(exhausted ?? 0),
-    counts,
     campaigns,
     page,
     pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
@@ -1584,18 +1645,14 @@ function dedupeActors(
  * Paginated audit-log feed, newest first, plus the distinct actors and entities
  * present in the whole log so the filters can offer them.
  */
-export async function getAuditPage(opts: AuditFilters & { page?: number } = {}) {
-  const page = Math.max(1, opts.page ?? 1);
-  const where = auditWhere(opts);
-  const [rows, [{ total }], actors, entities] = await Promise.all([
-    db
-      .select()
-      .from(auditLog)
-      .where(where)
-      .orderBy(desc(auditLog.createdAt))
-      .limit(PAGE_SIZE)
-      .offset((page - 1) * PAGE_SIZE),
-    db.select({ total: sql<number>`count(*)` }).from(auditLog).where(where),
+/**
+ * The filter dropdowns above the activity log: who has ever acted, and on what.
+ *
+ * Its own query rather than a leg of `getAuditPage`, because it feeds the
+ * toolbar — which renders ahead of the entries now (see components/admin/Streamed).
+ */
+export async function getAuditFacets() {
+  const [actors, entities] = await Promise.all([
     // Every (actor, name) pair with the last time that name was used. Reduced to
     // one row per actor below — `selectDistinct` on the pair returned them all,
     // so anyone ever renamed (the demo admin is logged under two names) appeared
@@ -1611,12 +1668,29 @@ export async function getAuditPage(opts: AuditFilters & { page?: number } = {}) 
     db.selectDistinct({ entity: auditLog.entity }).from(auditLog).orderBy(auditLog.entity),
   ]);
   return {
+    actors: dedupeActors(actors),
+    entities: entities.map((e) => e.entity).filter(Boolean),
+  };
+}
+
+export async function getAuditPage(opts: AuditFilters & { page?: number } = {}) {
+  const page = Math.max(1, opts.page ?? 1);
+  const where = auditWhere(opts);
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select()
+      .from(auditLog)
+      .where(where)
+      .orderBy(desc(auditLog.createdAt))
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    db.select({ total: sql<number>`count(*)` }).from(auditLog).where(where),
+  ]);
+  return {
     rows,
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-    actors: dedupeActors(actors),
-    entities: entities.map((e) => e.entity).filter(Boolean),
   };
 }
 

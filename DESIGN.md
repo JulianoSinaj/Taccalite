@@ -169,6 +169,47 @@ reason.
 - Alternating bands: cream → brown-900/950 dark band → cream → `cream-dark/60`
 - Grids: cards `grid gap-6 sm:grid-cols-2` (products `lg:grid-cols-4`, blog `lg:grid-cols-3`); hero/split `lg:grid-cols-2 gap-10`
 
+## Gestionale — secondary text has one step, and it is `/70`
+
+`text-brown-800/70` is the *only* muted step in the back office. Not a
+preference: on `--surface` (white in light mode) the ramp lands at
+
+| | light | dark |
+| --- | --- | --- |
+| `/60` | **3.90** ✗ | 4.64 ✓ |
+| `/70` | 5.26 ✓ | 5.83 ✓ |
+| `/80` | 7.22 ✓ | 7.22 ✓ |
+
+…and roughly three hundred of these sit on 10–14px type, where the large-text
+exemption does not apply. `/60` and below fail AA in light mode — which is the
+default — while dark mode was always fine, so the failure was invisible to
+anyone testing at night. There is **no passing step below `/70`**: 4.5:1 is the
+floor and `/70` is 5.26, so a fourth, fainter tier cannot exist. Hierarchy below
+body text comes from size, weight and uppercase tracking, not from more opacity.
+
+`/80` is the emphasis step; solid `text-brown-950` is primary. A disabled
+control may go quieter (`/60` on the paginator's spent arrows) — WCAG exempts
+those, and at `/30` they were invisible rather than merely quiet.
+
+## Gestionale — list pages are a shell plus a streamed body
+
+Every admin list follows one shape (`components/admin/Streamed.tsx`): start the
+row query **without awaiting it**, await only the cheap chrome data (shops,
+saved views, facet values, whole-list counts), and hand the pending promise to
+the table and to `TotalSubtitle` in the header. Both sit behind `<Suspense>`
+keyed on the active query, with `TableSkeleton` as the fallback.
+
+The rule this enforces: a filter, sort or page change must never take the
+toolbar down with it. As one component, the page had nothing to show during the
+navigation but the route's `loading.tsx`, so clicking a dropdown replaced the
+header, the filters, the active-filter chips and the saved views with three grey
+rectangles — including the control that had just been used.
+
+Where a facet or a banner was computed inside the row query, it has been split
+into its own query (`getAuditFacets`, `getOutboxSummary`, `getSubscriberSummary`,
+`getProductCategoryFacet`, `getBlogCategoryFacet`, `getRewardsAttention`) so the
+chrome does not wait on the list it describes.
+
 ## Components & patterns
 - **Radius**: cards `rounded-2xl` (24px); intro-sequence frames `rounded-[28px]`; buttons/pills `rounded-full`; inputs `rounded-lg`
 - **Buttons**: primary = `bg-brown-900 text-cream hover:bg-brown-800` pill; accent = `bg-gold text-brown-950 hover:bg-cream` pill; outline = `border-brown-800 text-brown-900 hover:bg-brown-900 hover:text-cream` pill (on dark: `border-cream/30 text-cream`); most CTAs carry `data-magnetic`

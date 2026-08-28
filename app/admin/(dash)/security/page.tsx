@@ -45,7 +45,7 @@ export default async function SecurityPage() {
           </p>
 
           <div className="mt-6 border-t border-brown-900/10 pt-5">
-            <h3 className="font-display text-lg text-brown-950">Codici di recupero</h3>
+            <h2 className="font-display text-lg text-brown-950">Codici di recupero</h2>
             <p className="mt-1 mb-3 text-sm text-brown-800/70">
               Servono per entrare se perdi il telefono. Ogni codice vale un solo accesso.
             </p>
@@ -81,7 +81,7 @@ export default async function SecurityPage() {
         </Panel>
       ) : (
         <Panel className="max-w-xl">
-          <h3 className="font-display text-lg text-brown-950">Attiva la verifica in due passaggi</h3>
+          <h2 className="font-display text-lg text-brown-950">Attiva la verifica in due passaggi</h2>
           <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-brown-800/80">
             <li>Apri un&apos;app di autenticazione (Google Authenticator, Authy, 1Password…).</li>
             <li>Scansiona il QR qui sotto (oppure inserisci il codice manuale).</li>
@@ -146,7 +146,7 @@ export default async function SecurityPage() {
             <li key={i} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0">
               <div>
                 <p className="text-sm font-semibold text-brown-950">{s.device}</p>
-                <p className="text-xs text-brown-800/60">
+                <p className="text-xs text-brown-800/70">
                   Ultimo accesso {fmtDateTime(s.lastSeenAt)}
                   {s.ip ? ` · ${s.ip}` : ""} · scade il {fmtDateTime(s.expiresAt)}
                 </p>
@@ -172,7 +172,7 @@ export default async function SecurityPage() {
             </ActionForm>
           </div>
         )}
-        <p className="mt-3 text-xs text-brown-800/60">
+        <p className="mt-3 text-xs text-brown-800/70">
           Le sessioni scadono da sole dopo 30 giorni, o dopo 7 giorni di inattività.
         </p>
       </Panel>

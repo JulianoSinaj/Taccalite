@@ -43,6 +43,7 @@ export function ReservationForm({
     <ActionForm
       action={editing ? updateReservationDetails : createAdminReservation}
       redirectTo={redirectTo}
+      guardUnsaved="Le modifiche a questa prenotazione non sono state salvate. Se esci adesso vanno perse."
       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       {editing && <input type="hidden" name="id" value={reservation.id} />}
@@ -186,7 +187,7 @@ export function ReservationForm({
           <input type="checkbox" name="notifyCustomer" className="h-4 w-4 rounded accent-brown-950" />
           Invia {editing ? "il riepilogo aggiornato" : "la conferma"} al cliente via email
         </label>
-        <p className="mt-1 text-xs text-brown-800/60">
+        <p className="mt-1 text-xs text-brown-800/70">
           Richiede un indirizzo email. Per una prenotazione presa al telefono di solito non serve.
         </p>
       </div>

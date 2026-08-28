@@ -4,6 +4,7 @@ import {
   AdminHeader,
   HistoryLink,
   Panel,
+  OrderStatusBadge,
   StatusBadge,
   inputCls,
   labelCls,
@@ -70,7 +71,7 @@ export default async function CustomerDetail({ params, searchParams }: Params) {
   return (
     <div>
       <div className="mb-4">
-        <Link href="/admin/loyalty" className="text-xs font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+        <Link href="/admin/loyalty" className="text-xs font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950">
           ← Torna a Fedeltà
         </Link>
       </div>
@@ -94,7 +95,7 @@ export default async function CustomerDetail({ params, searchParams }: Params) {
             @{user.username}
             {user.email ? ` · ${user.email}` : ""}
           </p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-brown-800/60">
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-brown-800/70">
             Iscritto il {fmtDate(user.createdAt)}
             {!user.active && (
               <span className="rounded-full bg-danger-solid/15 px-2 py-0.5 text-[11px] font-bold text-danger uppercase">
@@ -121,11 +122,11 @@ export default async function CustomerDetail({ params, searchParams }: Params) {
         <div className="flex items-center gap-8">
           <div className="text-right">
             <p className="font-display text-3xl font-bold text-brown-950">{loyalty?.points ?? 0}</p>
-            <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Punti</p>
+            <p className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">Punti</p>
           </div>
           <div className="text-right">
             <p className="font-display text-lg text-brown-950">{loyalty?.cardNumber ? `#${loyalty.cardNumber}` : "—"}</p>
-            <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Tessera</p>
+            <p className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">Tessera</p>
           </div>
         </div>
       </Panel>
@@ -135,20 +136,20 @@ export default async function CustomerDetail({ params, searchParams }: Params) {
           up by eye. Refunds are netted out. */}
       <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Panel>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Speso finora</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Speso finora</p>
           <p className="font-display mt-1 text-2xl font-bold text-brown-950">{euro(stats.spentCents)}</p>
-          <p className="mt-0.5 text-xs text-brown-800/50">al netto dei rimborsi</p>
+          <p className="mt-0.5 text-xs text-brown-800/70">al netto dei rimborsi</p>
         </Panel>
         <Panel>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Ordini</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Ordini</p>
           <p className="font-display mt-1 text-2xl font-bold text-brown-950">{stats.orders}</p>
         </Panel>
         <Panel>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Scontrino medio</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Scontrino medio</p>
           <p className="font-display mt-1 text-2xl font-bold text-brown-950">{euro(stats.aovCents)}</p>
         </Panel>
         <Panel>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Ultimo ordine</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Ultimo ordine</p>
           <p className="font-display mt-1 text-xl text-brown-950">
             {stats.lastOrderAt ? fmtDate(stats.lastOrderAt) : "—"}
           </p>
@@ -186,7 +187,7 @@ export default async function CustomerDetail({ params, searchParams }: Params) {
               </label>
               <PendingButton tone="dark">Salva</PendingButton>
             </ActionForm>
-            <p className="mt-3 text-xs text-brown-800/60">
+            <p className="mt-3 text-xs text-brown-800/70">
               Username e ruolo si modificano da <strong>Utenti</strong>. Cambiando l&apos;email,
               l&apos;indirizzo torna &laquo;da verificare&raquo;.
             </p>
@@ -230,7 +231,7 @@ export default async function CustomerDetail({ params, searchParams }: Params) {
               </div>
               <PendingButton tone="dark">Applica</PendingButton>
             </ActionForm>
-            <p className="mt-3 text-xs text-brown-800/60">
+            <p className="mt-3 text-xs text-brown-800/70">
               Usa un valore positivo per accreditare (es. <strong>+50</strong> per un bonus), negativo per
               scalare (es. <strong>−20</strong> per una correzione). Il motivo è obbligatorio: resta
               nello storico del cliente e nel registro attività.
@@ -246,7 +247,7 @@ export default async function CustomerDetail({ params, searchParams }: Params) {
           <Panel className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-brown-950">Diritti dell&apos;interessato</p>
-              <p className="mt-1 text-xs text-brown-800/60">
+              <p className="mt-1 text-xs text-brown-800/70">
                 Esporta tutti i dati del cliente (art. 15) o anonimizza l&apos;account e le
                 prenotazioni (art. 17). Gli ordini restano per obblighi fiscali.
               </p>
@@ -283,11 +284,11 @@ export default async function CustomerDetail({ params, searchParams }: Params) {
         <Panel className="scroll-x p-0">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
-                <th className="px-5 py-3">Data</th>
-                <th className="px-5 py-3">Motivo</th>
-                <th className="px-5 py-3 text-right">Variazione</th>
-                <th className="px-5 py-3 text-right">Saldo</th>
+              <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
+                <th scope="col" className="px-5 py-3">Data</th>
+                <th scope="col" className="px-5 py-3">Motivo</th>
+                <th scope="col" className="px-5 py-3 text-right">Variazione</th>
+                <th scope="col" className="px-5 py-3 text-right">Saldo</th>
               </tr>
             </thead>
             <tbody>
@@ -331,12 +332,12 @@ export default async function CustomerDetail({ params, searchParams }: Params) {
           {orders.map((o) => (
             <Panel key={o.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <StatusBadge status={o.status} />
+                <OrderStatusBadge status={o.status} />
                 <div>
                   <Link href={`/admin/orders/${o.id}`} className="font-semibold text-brown-950 hover:underline">
                     {o.orderNumber}
                   </Link>
-                  <p className="text-xs text-brown-800/60">{fmtDate(o.createdAt)}</p>
+                  <p className="text-xs text-brown-800/70">{fmtDate(o.createdAt)}</p>
                 </div>
               </div>
               <p className="font-display text-lg text-brown-950">{euro(o.totalCents)}</p>
@@ -363,9 +364,9 @@ export default async function CustomerDetail({ params, searchParams }: Params) {
                     className="font-semibold text-brown-950 hover:underline"
                   >
                     {reservationTypeLabel(r.type)}{" "}
-                    <span className="text-xs font-normal text-brown-800/50">#{r.reference}</span>
+                    <span className="text-xs font-normal text-brown-800/70">#{r.reference}</span>
                   </Link>
-                  <p className="text-xs text-brown-800/60">{reservationDetail(r)}</p>
+                  <p className="text-xs text-brown-800/70">{reservationDetail(r)}</p>
                 </div>
               </div>
             </Panel>
@@ -387,7 +388,7 @@ export default async function CustomerDetail({ params, searchParams }: Params) {
                 <StatusBadge status={r.status} label={redemptionStatusLabel(r.status)} />
                 <div>
                   <p className="font-semibold text-brown-950">{r.rewardName}</p>
-                  <p className="text-xs text-brown-800/60">
+                  <p className="text-xs text-brown-800/70">
                     {r.pointsSpent} punti · {fmtDate(r.createdAt)}
                   </p>
                 </div>

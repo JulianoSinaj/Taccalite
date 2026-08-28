@@ -59,7 +59,7 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
 
       {order.internalNotes && (
         <p className="mb-4 rounded-2xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-brown-900 print:hidden">
-          <span className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">
+          <span className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">
             Nota interna (non stampata)
           </span>
           <br />
@@ -82,7 +82,7 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
             {vatNumber && <p className="text-xs text-brown-800/70">P.IVA {vatNumber}</p>}
           </div>
           <div className="text-right">
-            <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+            <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
               Documento di consegna
             </p>
             <p className="font-display text-xl font-bold text-brown-950">{order.orderNumber}</p>
@@ -92,7 +92,7 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
 
         <section className="grid grid-cols-1 gap-6 border-b border-brown-900/15 py-5 sm:grid-cols-2">
           <div>
-            <p className="mb-1 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+            <p className="mb-1 text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
               Cliente
             </p>
             <p className="font-semibold text-brown-950">{order.name}</p>
@@ -100,7 +100,7 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
             {order.email && <p className="text-sm text-brown-800/80">{order.email}</p>}
           </div>
           <div>
-            <p className="mb-1 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+            <p className="mb-1 text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
               {order.fulfilment === "pickup" ? "Ritiro presso" : FULFILMENT_LABEL[order.fulfilment] + " a"}
             </p>
             {order.fulfilment !== "pickup" ? (
@@ -111,7 +111,7 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
                   {addr.zip} {addr.city}
                 </p>
               ) : (
-                <p className="text-sm text-brown-800/60">Indirizzo non indicato</p>
+                <p className="text-sm text-brown-800/70">Indirizzo non indicato</p>
               )
             ) : (
               <p className="text-sm text-brown-950">
@@ -130,13 +130,13 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
         <section className="py-5">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-brown-900/15 text-left text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
-                <th className="pb-2">Articolo</th>
-                <th className="pb-2 text-center">Qtà</th>
-                <th className="pb-2 text-right">Prezzo</th>
-                <th className="pb-2 text-right">Totale</th>
+              <tr className="border-b border-brown-900/15 text-left text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
+                <th scope="col" className="pb-2">Articolo</th>
+                <th scope="col" className="pb-2 text-center">Qtà</th>
+                <th scope="col" className="pb-2 text-right">Prezzo</th>
+                <th scope="col" className="pb-2 text-right">Totale</th>
                 {/* A tick box for the person picking the order. */}
-                <th className="pb-2 text-center print:table-cell">✓</th>
+                <th scope="col" className="pb-2 text-center print:table-cell">✓</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-brown-900/10">
@@ -187,7 +187,7 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
             <span className="tabular-nums">{euro(order.totalCents)}</span>
           </div>
           {vat.length > 0 && (
-            <p className="pt-1 text-[12px] text-brown-800/60">
+            <p className="pt-1 text-[12px] text-brown-800/70">
               Prezzi ivati · IVA{" "}
               {vat.map((b) => `${vatRateLabel(b.rateBps)} ${euro(b.impostaCents)}`).join(" · ")} (tot.{" "}
               {euro(totalImposta(vat))})
@@ -197,14 +197,14 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
 
         {order.notes && (
           <section className="mt-4 border-t border-brown-900/15 pt-4">
-            <p className="mb-1 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+            <p className="mb-1 text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
               Note del cliente
             </p>
             <p className="text-sm text-brown-800/80">{order.notes}</p>
           </section>
         )}
 
-        <footer className="mt-8 flex items-end justify-between gap-8 border-t border-brown-900/15 pt-5 text-xs text-brown-800/60">
+        <footer className="mt-8 flex items-end justify-between gap-8 border-t border-brown-900/15 pt-5 text-xs text-brown-800/70">
           <span>
             Documento non fiscale · non sostituisce lo scontrino o la fattura elettronica.
           </span>

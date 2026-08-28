@@ -35,7 +35,7 @@ export function redemptionStatusLabel(status: string): string {
  */
 export function RedemptionStatusForm({ redemption: r }: { redemption: Redemption }) {
   if (r.status === "cancelled") {
-    return <p className="text-xs text-brown-800/60">Annullato · punti restituiti al cliente</p>;
+    return <p className="text-xs text-brown-800/70">Annullato · punti restituiti al cliente</p>;
   }
   return (
     <div className="flex flex-col items-start gap-1 sm:items-end">
@@ -52,7 +52,7 @@ export function RedemptionStatusForm({ redemption: r }: { redemption: Redemption
         <PendingButton tone="dark">Aggiorna</PendingButton>
       </ActionForm>
       {r.status === "fulfilled" && r.fulfilledAt && (
-        <p className="text-[11px] text-brown-800/60">Consegnato il {fmtDateTime(r.fulfilledAt)}</p>
+        <p className="text-[11px] text-brown-800/70">Consegnato il {fmtDateTime(r.fulfilledAt)}</p>
       )}
     </div>
   );

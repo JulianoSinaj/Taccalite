@@ -117,19 +117,19 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
           <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Marginalità</h2>
           <Panel className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
-              <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Prezzo ivato</p>
+              <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Prezzo ivato</p>
               <p className="font-display mt-1 text-xl text-brown-950">{euro(product.priceCents)}</p>
             </div>
             <div>
-              <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Netto (imponibile)</p>
+              <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Netto (imponibile)</p>
               <p className="font-display mt-1 text-xl text-brown-950">{euro(productMargin.netCents)}</p>
             </div>
             <div>
-              <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Costo</p>
+              <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Costo</p>
               <p className="font-display mt-1 text-xl text-brown-950">{euro(product.costCents)}</p>
             </div>
             <div>
-              <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Margine</p>
+              <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Margine</p>
               <p
                 className={`font-display mt-1 text-xl font-bold ${
                   productMargin.marginCents >= 0 ? "text-ok" : "text-danger"
@@ -139,7 +139,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
               </p>
             </div>
           </Panel>
-          <p className="mt-2 text-xs text-brown-800/60">
+          <p className="mt-2 text-xs text-brown-800/70">
             Il margine confronta il costo con l&apos;imponibile (prezzo al netto dell&apos;IVA), non con
             il prezzo esposto.
           </p>
@@ -150,26 +150,26 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
       <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Venduto · ultimi 30 giorni</h2>
       <Panel className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Quantità</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Quantità</p>
           <p className="font-display mt-1 text-xl text-brown-950">
             {sales30.weightKg > 0
               ? `${sales30.weightKg.toLocaleString("it-IT", { maximumFractionDigits: 3 })} kg`
               : sales30.units}
             {sales30.weightKg > 0 && sales30.units > 0 && (
-              <span className="text-sm font-normal text-brown-800/60"> + {sales30.units} pz</span>
+              <span className="text-sm font-normal text-brown-800/70"> + {sales30.units} pz</span>
             )}
           </p>
         </div>
         <div>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Incasso</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Incasso</p>
           <p className="font-display mt-1 text-xl text-brown-950">{euro(sales30.cents)}</p>
         </div>
         <div>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">Ordini</p>
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">Ordini</p>
           <p className="font-display mt-1 text-xl text-brown-950">{sales30.orders}</p>
         </div>
         <div>
-          <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+          <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
             Copertura
           </p>
           <p className="font-display mt-1 text-xl text-brown-950">
@@ -217,7 +217,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                 {waitlist.map((w) => (
                   <li key={w.id} className="flex flex-wrap justify-between gap-2">
                     <span>{w.email}</span>
-                    <span className="text-xs text-brown-800/50">dal {fmtDate(w.createdAt)}</span>
+                    <span className="text-xs text-brown-800/70">dal {fmtDate(w.createdAt)}</span>
                   </li>
                 ))}
               </ul>
@@ -231,7 +231,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                     Avvisa che è tornato disponibile
                   </PendingButton>
                 </ActionForm>
-                <p className="mt-2 text-xs text-brown-800/60">
+                <p className="mt-2 text-xs text-brown-800/70">
                   L&apos;avviso parte da solo quando la giacenza risale da zero. Usa questo
                   pulsante se il prodotto è tornato disponibile senza passare per lo zero.
                 </p>
@@ -240,7 +240,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
           )}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div>
-              <h3 className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+              <h3 className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
                 Rettifica
               </h3>
               <ActionForm action={adjustStock} className="flex flex-wrap items-end gap-3">
@@ -272,7 +272,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                 </div>
                 <PendingButton tone="dark">Applica</PendingButton>
               </ActionForm>
-              <p className="mt-2 text-xs text-brown-800/60">
+              <p className="mt-2 text-xs text-brown-800/70">
                 Positivo per caricare (arrivo merce), negativo per scaricare (scarto, rottura).
               </p>
             </div>
@@ -281,7 +281,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                 subtract by hand — against a number that can move while they
                 count — was an invitation to get it wrong. */}
             <div className="border-t border-brown-900/10 pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
-              <h3 className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+              <h3 className="mb-2 text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
                 Conteggio inventario
               </h3>
               <ActionForm action={adjustStock} className="flex flex-wrap items-end gap-3">
@@ -314,7 +314,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                 </div>
                 <PendingButton tone="dark">Allinea</PendingButton>
               </ActionForm>
-              <p className="mt-2 text-xs text-brown-800/60">
+              <p className="mt-2 text-xs text-brown-800/70">
                 Inserisci quanti pezzi ci sono davvero: la differenza viene registrata a ledger.
               </p>
             </div>
@@ -323,7 +323,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
           {movements.length > 0 && (
             <div className="mt-8">
               <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+                <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
                   Ultimi {movements.length} movimenti
                 </p>
                 {/* The ledger here is capped; this product's full one is a
@@ -342,11 +342,11 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
             <div className="scroll-x">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
-                    <th className="py-2">Data</th>
-                    <th className="py-2">Motivo</th>
-                    <th className="py-2 text-right">Variazione</th>
-                    <th className="py-2 text-right">Giacenza</th>
+                  <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
+                    <th scope="col" className="py-2">Data</th>
+                    <th scope="col" className="py-2">Motivo</th>
+                    <th scope="col" className="py-2 text-right">Variazione</th>
+                    <th scope="col" className="py-2 text-right">Giacenza</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brown-900/5">
@@ -386,13 +386,13 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
           <p className="text-sm font-semibold text-brown-950">
             {product.archivedAt ? "Prodotto archiviato" : "Archivia"}
           </p>
-          <p className="mt-1 text-xs text-brown-800/60">
+          <p className="mt-1 text-xs text-brown-800/70">
             {product.archivedAt
               ? `Archiviato il ${fmtDate(product.archivedAt)}: non compare nel catalogo né sul sito, ma storico, movimenti e righe d'ordine restano consultabili. Ripristinandolo torna attivo nel catalogo; vendita online ed evidenza restano da riattivare dalla scheda.`
               : "Sparisce dal catalogo, dai selettori e dal sito. Storico, movimenti e righe d'ordine restano: è la scelta giusta per qualsiasi cosa sia mai stata venduta."}
           </p>
           {!deletable && (
-            <p className="mt-2 text-xs text-brown-800/60">
+            <p className="mt-2 text-xs text-brown-800/70">
               Questo prodotto ha uno storico ({history.sold}{" "}
               {history.sold === 1 ? "riga d'ordine" : "righe d'ordine"}, {history.movements}{" "}
               {history.movements === 1 ? "movimento" : "movimenti"} di magazzino) e non può essere

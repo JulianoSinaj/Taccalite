@@ -126,8 +126,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           )}
           <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">
             {/* Derived from the path, so every route gets one - detail pages
-                used to carry an ad-hoc back link, or nothing at all. */}
-            <Breadcrumbs />
+                used to carry an ad-hoc back link, or nothing at all. `isAdmin`
+                only decides whether a parent crumb is a link: staff on the day
+                sheet were offered "Zone e fasce", which redirects them away. */}
+            <Breadcrumbs isAdmin={user.role === "admin"} />
             {children}
           </div>
         </div>

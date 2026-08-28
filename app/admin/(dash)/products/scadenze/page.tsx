@@ -141,7 +141,7 @@ export default async function ExpiringBatches({ searchParams }: SP) {
               <section key={g.title} className="break-inside-avoid">
                 <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-brown-900/10 pb-2">
                   <h2 className="font-display text-xl text-brown-950">{g.title}</h2>
-                  <span className="text-xs font-bold tracking-widest text-brown-800/60 uppercase">
+                  <span className="text-xs font-bold tracking-widest text-brown-800/70 uppercase">
                     {g.list.length} lotti · valore a costo {euro(valueOf(g.list))}
                   </span>
                 </div>
@@ -170,10 +170,10 @@ export default async function ExpiringBatches({ searchParams }: SP) {
                         <span className="text-sm text-brown-800/70">
                           lotto {b.lotCode || "—"} · {b.remaining} pz
                         </span>
-                        <span className="text-sm text-brown-800/60">
+                        <span className="text-sm text-brown-800/70">
                           · {shopName.get(shopSlug) ?? shopSlug}
                         </span>
-                        {b.supplier && <span className="text-sm text-brown-800/60">· {b.supplier}</span>}
+                        {b.supplier && <span className="text-sm text-brown-800/70">· {b.supplier}</span>}
                         <span className="sr-only">{productSlug}</span>
                       </div>
                       <ActionForm action={writeOffBatch} className="print:hidden">

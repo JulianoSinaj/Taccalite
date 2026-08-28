@@ -43,10 +43,28 @@ const LABELS: Record<string, string> = {
   analytics: "Statistiche",
   reports: "Report",
   iva: "Riepilogo IVA",
+  // The other two report pages had no entry, so they fell through to the raw
+  // segment and the crumb read "cassa" / "fatture" in lower case.
+  cassa: "Chiusura di cassa",
+  fatture: "Registro fatture",
+  // …and this one is nine letters of plain lower-case, which is exactly what a
+  // nanoid looks like to `looksLikeId` below: without an entry the whole page
+  // announced itself as "Dettaglio".
+  chiusure: "Chiusure",
   users: "Utenti",
   audit: "Registro attività",
   settings: "Impostazioni",
 };
+
+/**
+ * Sections whose index page an operator may not be allowed to open.
+ *
+ * `/admin/fulfilment` is admin-only and redirects staff away, but the day sheet
+ * under it (`/admin/fulfilment/oggi`) is not — so for a staff account the parent
+ * crumb was a link straight back out of the page they had just opened. Rendered
+ * as plain text for them instead, the same as a grouping folder.
+ */
+const ADMIN_ONLY = new Set(["fulfilment", "categories", "discounts", "contenuti", "chiusure", "users", "audit", "settings"]);
 
 /**
  * Segments that name a section but have no page of their own.
@@ -59,10 +77,20 @@ const LABELS: Record<string, string> = {
  */
 const NOT_BROWSABLE = new Set(["reports"]);
 
-/** A nanoid-ish path segment is a record id, not a section. */
-const looksLikeId = (seg: string) => !(seg in LABELS) && /^[A-Za-z0-9_-]{8,}$/.test(seg);
+/**
+ * A nanoid-ish path segment is a record id, not a section.
+ *
+ * The length test alone was not enough: "chiusure" is nine lower-case letters,
+ * so the closures page introduced itself as "Dettaglio". Requiring a digit or a
+ * capital as well is what actually separates the two populations — ids come from
+ * `nanoid`, whose 21 characters are drawn from `A-Za-z0-9_-` (the odds of one
+ * containing neither a digit nor a capital are about one in a hundred million),
+ * while a route segment in this app is always a lower-case Italian word.
+ */
+const looksLikeId = (seg: string) =>
+  !(seg in LABELS) && seg.length >= 8 && /^[A-Za-z0-9_-]+$/.test(seg) && /[0-9A-Z]/.test(seg);
 
-export function Breadcrumbs() {
+export function Breadcrumbs({ isAdmin = true }: { isAdmin?: boolean }) {
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean);
   // "/admin" alone is the root — a single crumb saying "Dashboard" is noise.
@@ -71,14 +99,18 @@ export function Breadcrumbs() {
   const crumbs = segments.map((seg, i) => ({
     href: `/${segments.slice(0, i + 1).join("/")}`,
     label: looksLikeId(seg) ? "Dettaglio" : (LABELS[seg] ?? seg),
-    // An id segment isn't a browsable index; neither is a grouping folder, nor
-    // the last crumb.
-    link: !looksLikeId(seg) && !NOT_BROWSABLE.has(seg) && i < segments.length - 1,
+    // An id segment isn't a browsable index; neither is a grouping folder, a
+    // section this operator would only be redirected out of, nor the last crumb.
+    link:
+      !looksLikeId(seg) &&
+      !NOT_BROWSABLE.has(seg) &&
+      (isAdmin || !ADMIN_ONLY.has(seg)) &&
+      i < segments.length - 1,
   }));
 
   return (
     <nav aria-label="Percorso" className="mb-4 print:hidden">
-      <ol className="flex flex-wrap items-center gap-1 text-xs text-brown-800/60">
+      <ol className="flex flex-wrap items-center gap-1 text-xs text-brown-800/70">
         {crumbs.map((c, i) => (
           <li key={c.href} className="flex items-center gap-1">
             {i > 0 && <ChevronRight className="size-3 shrink-0 opacity-50" aria-hidden />}

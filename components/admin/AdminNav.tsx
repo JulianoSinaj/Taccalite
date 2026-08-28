@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useScrollLock } from "@/lib/use-scroll-lock";
+import { openCommandPalette } from "./CommandPalette";
 import {
   BarChart3,
   CalendarCheck,
@@ -22,6 +23,7 @@ import {
   TicketPercent,
   ScanLine,
   ScrollText,
+  Search,
   Settings,
   ShieldCheck,
   ShieldHalf,
@@ -173,7 +175,7 @@ export default function AdminNav({
       {groups.map((group, gi) => (
         <div key={group.title ?? `g${gi}`}>
           {group.title && (
-            <p className="px-4 pb-1.5 text-[11px] font-bold tracking-[0.2em] text-brown-800/45 uppercase">
+            <p className="px-4 pb-1.5 text-[11px] font-bold tracking-[0.2em] text-brown-800/70 uppercase">
               {group.title}
             </p>
           )}
@@ -206,7 +208,7 @@ export default function AdminNav({
   const footer = (
     <div className="border-t border-brown-900/10 p-4">
       {themeToggle && <div className="mb-3">{themeToggle}</div>}
-      <p className="mb-2 px-2 text-xs text-brown-800/60">{userName}</p>
+      <p className="mb-2 px-2 text-xs text-brown-800/70">{userName}</p>
       <button
         type="button"
         onClick={logout}
@@ -242,15 +244,29 @@ export default function AdminNav({
       <div className="sticky top-0 z-30 border-b border-brown-900/10 bg-surface px-safe lg:hidden print:hidden">
         <div className="flex h-16 items-center justify-between px-5">
           {brand}
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            aria-label="Apri il menu"
-            aria-expanded={open}
-            className="tap rounded-xl p-2 text-brown-800 hover:bg-brown-900/5"
-          >
-            <Menu className="size-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* The search had no trigger at all here: ⌘K was the only way to
+                open it, and this is the layout on the device that has no ⌘K.
+                Beside the menu rather than inside the drawer, because looking a
+                customer up is the thing done most and from the busiest place. */}
+            <button
+              type="button"
+              onClick={openCommandPalette}
+              aria-label="Cerca ordini, clienti, prodotti"
+              className="tap rounded-xl p-2 text-brown-800 hover:bg-brown-900/5"
+            >
+              <Search className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              aria-label="Apri il menu"
+              aria-expanded={open}
+              className="tap rounded-xl p-2 text-brown-800 hover:bg-brown-900/5"
+            >
+              <Menu className="size-5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -293,6 +309,23 @@ export default function AdminNav({
           rather than `vh` for the same reason the shell uses it. */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-brown-900/10 bg-surface lg:sticky lg:top-0 lg:flex lg:h-dvh print:hidden">
         <div className="border-b border-brown-900/10 px-6 py-5">{brand}</div>
+        {/* Drawn as a field rather than an icon: it has to say what it searches
+            and teach the shortcut, neither of which a magnifying glass does. It
+            is a button, though — clicking it opens the palette, whose own input
+            takes the typing. */}
+        <div className="px-3 pt-3">
+          <button
+            type="button"
+            onClick={openCommandPalette}
+            className="flex w-full min-h-11 items-center gap-2 rounded-xl border border-brown-900/10 bg-cream/40 px-3 text-left text-sm text-brown-800/70 hover:border-brown-900/20 hover:text-brown-950"
+          >
+            <Search className="size-4 shrink-0" aria-hidden />
+            <span className="flex-1 truncate">Cerca…</span>
+            <kbd className="rounded border border-brown-900/15 px-1.5 py-0.5 font-sans text-[11px] font-bold text-brown-800/70">
+              ⌘K
+            </kbd>
+          </button>
+        </div>
         {nav}
         {footer}
       </aside>

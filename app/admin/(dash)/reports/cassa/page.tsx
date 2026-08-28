@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AdminHeader, Panel, euro } from "@/components/admin/ui";
+import { AdminHeader, Panel, euro, inputCls, labelCls } from "@/components/admin/ui";
 import { PrintButton } from "@/components/admin/PrintButton";
 import { getCashUp, adminGetShops } from "@/lib/admin/queries";
 import { shopScope, lockShop } from "@/lib/admin/scope";
@@ -105,6 +105,26 @@ export default async function CashUp({ searchParams }: SP) {
         }
       />
 
+      {/* The arrows above walk a day at a time, which is right for "yesterday"
+          and useless for "last Saturday" — reconciling a till from a fortnight
+          ago was a dozen clicks. The agenda has had this picker since the start;
+          the two day-scoped screens that hadn't now agree with it. */}
+      <form action={BASE} method="get" className="mb-6 flex flex-wrap items-end gap-3 print:hidden">
+        {shopFilter !== "all" && <input type="hidden" name="negozio" value={shopFilter} />}
+        <div>
+          <label className={labelCls} htmlFor="cassa-day">
+            Giorno
+          </label>
+          <input id="cassa-day" type="date" name="giorno" defaultValue={day} className={inputCls} />
+        </div>
+        <button
+          type="submit"
+          className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-5 py-2.5 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+        >
+          Vai
+        </button>
+      </form>
+
       {shops.length > 1 && (
         <div className="mb-6 flex flex-wrap gap-2 print:hidden">
           <Link
@@ -142,13 +162,13 @@ export default async function CashUp({ searchParams }: SP) {
           {/* The line anybody actually counts, first and on its own. */}
           {counted && (
             <Panel className="border-gold/40 bg-gold/5">
-              <p className="text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
+              <p className="text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
                 Contanti attesi in cassa
               </p>
               <p className="font-display mt-1 text-3xl font-bold tabular-nums text-brown-950">
                 {euro(counted.takenCents - counted.refundedCents)}
               </p>
-              <p className="mt-1 text-xs text-brown-800/60">
+              <p className="mt-1 text-xs text-brown-800/70">
                 {counted.orders} {counted.orders === 1 ? "incasso" : "incassi"} in contanti
                 {counted.refundedCents > 0 &&
                   `, al netto di ${euro(counted.refundedCents)} restituiti`}
@@ -161,12 +181,12 @@ export default async function CashUp({ searchParams }: SP) {
             <div className="scroll-x">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-brown-900/10 text-left text-[12px] tracking-widest text-brown-800/60 uppercase">
-                    <th className="pb-2 font-bold">Strumento</th>
-                    <th className="pb-2 text-right font-bold">Ordini</th>
-                    <th className="pb-2 text-right font-bold">Incassato</th>
-                    <th className="pb-2 text-right font-bold">Restituito</th>
-                    <th className="pb-2 text-right font-bold">Netto</th>
+                  <tr className="border-b border-brown-900/10 text-left text-[12px] tracking-widest text-brown-800/70 uppercase">
+                    <th scope="col" className="pb-2 font-bold">Strumento</th>
+                    <th scope="col" className="pb-2 text-right font-bold">Ordini</th>
+                    <th scope="col" className="pb-2 text-right font-bold">Incassato</th>
+                    <th scope="col" className="pb-2 text-right font-bold">Restituito</th>
+                    <th scope="col" className="pb-2 text-right font-bold">Netto</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brown-900/10">
@@ -175,7 +195,7 @@ export default async function CashUp({ searchParams }: SP) {
                       <td className="py-2 font-semibold text-brown-950">
                         {instrumentLabel(r.instrument)}
                         {r.instrument === null && (
-                          <span className="ml-2 text-xs font-normal text-brown-800/60">
+                          <span className="ml-2 text-xs font-normal text-brown-800/70">
                             (incassi precedenti al tracciamento dello strumento)
                           </span>
                         )}
@@ -208,7 +228,7 @@ export default async function CashUp({ searchParams }: SP) {
                 </tfoot>
               </table>
             </div>
-            <p className="mt-3 text-xs text-brown-800/60">
+            <p className="mt-3 text-xs text-brown-800/70">
               Gli incassi sono contati sulla data in cui il denaro è arrivato, i rimborsi su quella
               in cui è stato restituito — le stesse regole del{" "}
               <Link href="/admin/reports/iva" className="font-semibold text-gold-deep underline">
@@ -218,7 +238,7 @@ export default async function CashUp({ searchParams }: SP) {
             </p>
           </Panel>
 
-          <p className="text-xs text-brown-800/60 print:hidden">
+          <p className="text-xs text-brown-800/70 print:hidden">
             <Link
               href={`/admin/orders?stato=incassati&data=incasso&da=${day}&a=${day}${
                 shopFilter !== "all" ? `&negozio=${shopFilter}` : ""

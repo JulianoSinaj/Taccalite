@@ -18,7 +18,7 @@ export default async function EditReward({ params }: { params: Promise<{ id: str
       className="rounded-xl bg-brown-900/5 px-4 py-3 hover:bg-brown-900/10"
     >
       <p className="font-display text-2xl text-brown-950">{n}</p>
-      <p className="text-xs font-bold tracking-widest text-brown-800/60 uppercase">{label}</p>
+      <p className="text-xs font-bold tracking-widest text-brown-800/70 uppercase">{label}</p>
     </Link>
   );
 

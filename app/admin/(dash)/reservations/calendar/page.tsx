@@ -200,7 +200,7 @@ export default async function ReservationCalendar({ searchParams }: SP) {
               {items.length === 0 ? (
                 <Link
                   href={`/admin/reservations/new?data=${dayISO}`}
-                  className="rounded-lg py-2 text-center text-xs text-brown-800/40 hover:bg-brown-900/5 hover:text-brown-800/70 print:hidden"
+                  className="rounded-lg py-2 text-center text-xs text-brown-800/70 hover:bg-brown-900/5 hover:text-brown-800/70 print:hidden"
                 >
                   + Nuova
                 </Link>

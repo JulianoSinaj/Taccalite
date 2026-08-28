@@ -2,7 +2,7 @@ import Link from "next/link";
 import {
   AdminHeader,
   Panel,
-  StatusBadge,
+  OrderStatusBadge,
   euro,
   inputCls,
   labelCls,
@@ -164,7 +164,7 @@ function OrderLine({
             >
               {order.name}
             </Link>
-            <span className="text-xs text-brown-800/60">
+            <span className="text-xs text-brown-800/70">
               {order.orderNumber}
             </span>
             {order.phone && (
@@ -178,7 +178,7 @@ function OrderLine({
               </a>
             )}
             {shopName && (
-              <span className="text-sm text-brown-800/60">· {shopName}</span>
+              <span className="text-sm text-brown-800/70">· {shopName}</span>
             )}
             {detail &&
               (detailHref ? (
@@ -225,7 +225,7 @@ function OrderLine({
             </span>
           )}
           {/* "In attesa" on a contrassegno says nothing "Da incassare" hasn't. */}
-          {order.status !== "pending" && <StatusBadge status={order.status} />}
+          {order.status !== "pending" && <OrderStatusBadge status={order.status} />}
         </div>
       </div>
 
@@ -311,7 +311,7 @@ function Section({
     <section className="break-inside-avoid">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-brown-900/10 pb-2">
         <h2 className="font-display text-xl text-brown-950">{title}</h2>
-        <span className="text-xs font-bold tracking-widest text-brown-800/60 uppercase">
+        <span className="text-xs font-bold tracking-widest text-brown-800/70 uppercase">
           {count} {count === 1 ? "ordine" : "ordini"}
           {count > 0 && ` · ${euro(total)}`}
           {due > 0 && (
@@ -320,7 +320,7 @@ function Section({
         </span>
       </div>
       {count === 0 ? (
-        <p className="px-1 py-2 text-sm text-brown-800/60">{empty}</p>
+        <p className="px-1 py-2 text-sm text-brown-800/70">{empty}</p>
       ) : (
         <div className="space-y-2">{children}</div>
       )}
@@ -330,7 +330,7 @@ function Section({
 
 function GroupHeading({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mt-4 mb-1.5 text-xs font-bold tracking-widest text-brown-800/60 uppercase">
+    <p className="mt-4 mb-1.5 text-xs font-bold tracking-widest text-brown-800/70 uppercase">
       {children}
     </p>
   );
@@ -687,7 +687,7 @@ export default async function FulfilmentToday({ searchParams }: SP) {
         </Section>
       </div>
 
-      <p className="mt-8 text-xs text-brown-800/50 print:hidden">
+      <p className="mt-8 text-xs text-brown-800/70 print:hidden">
         «Pronto» e «In consegna» avvisano il cliente via email senza chiudere
         l&apos;ordine. «Consegnato» — o «Incassa e consegna», per chi paga alla
         consegna — lo chiude senza inviare nulla: la merce è già nelle sue mani.

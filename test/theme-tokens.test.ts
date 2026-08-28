@@ -137,6 +137,31 @@ describe("the admin paints with tokens, not literals", () => {
     ([p]) => !p.includes("AdminLoginForm"),
   );
 
+  /**
+   * A single line may opt out with `theme-exempt`, either on the line itself or
+   * anywhere in the comment block directly above it — so the reason can run to
+   * more than one line, which it should.
+   *
+   * There is one honest case for a literal in the back office: a surface that
+   * is not the back office. The newsletter composer previews the email in an
+   * `<iframe>`, and that iframe's ground is the mail client's white, not the
+   * gestionale's — inverting it in dark mode would show the operator a preview
+   * of something no recipient will ever see. Exempting the whole file would
+   * take the check off the composer's own chrome too, which is themed like
+   * everything else, so the opt-out lives on the line and carries its reason.
+   */
+  const EXEMPT = /theme-exempt/;
+  const COMMENT = /^\s*(\/\/|\/\*|\*)/;
+
+  /** True when `i` carries the marker, or the comment block above it does. */
+  const exempted = (lines: string[], i: number): boolean => {
+    if (EXEMPT.test(lines[i])) return true;
+    for (let j = i - 1; j >= 0 && COMMENT.test(lines[j]); j--) {
+      if (EXEMPT.test(lines[j])) return true;
+    }
+    return false;
+  };
+
   it("finds the admin sources", () => {
     expect(themed.length).toBeGreaterThan(20);
   });
@@ -145,7 +170,15 @@ describe("the admin paints with tokens, not literals", () => {
     ["bg-white", /\bbg-white\b/],
     ["a literal status tint", /(?<![\w-])(bg|text|border)-(emerald|amber|rose|sky|orange)-\d{2,3}(?![\w-])/],
   ])("uses no %s", (_label, pattern) => {
-    const offenders = themed.filter(([, src]) => pattern.test(src)).map(([p]) => p);
+    // Per line rather than per file, so a failure names the line to go and look
+    // at instead of only the file it is somewhere inside.
+    const offenders = themed.flatMap(([p, src]) => {
+      const lines = src.split("\n");
+      return lines
+        .map((line, i) => [line, i] as const)
+        .filter(([line, i]) => pattern.test(line) && !exempted(lines, i))
+        .map(([, i]) => `${p}:${i + 1}`);
+    });
     expect(offenders).toEqual([]);
   });
 });

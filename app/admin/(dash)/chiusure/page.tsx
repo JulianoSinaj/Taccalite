@@ -165,7 +165,7 @@ export default async function AdminClosures({ searchParams }: SP) {
         </>
       )}
 
-      <p className="mt-6 text-xs text-brown-800/60">
+      <p className="mt-6 text-xs text-brown-800/70">
         Gli orari settimanali si impostano in{" "}
         <Link href="/admin/shops" className="font-semibold text-gold-deep underline">
           Negozi

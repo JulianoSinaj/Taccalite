@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import {
   AdminHeader,
+  TableSkeleton,
   Panel,
   inputCls,
   labelCls,
@@ -14,7 +16,9 @@ import { SegmentedFilter, FilterToolbar, ActiveFilters, labelFrom } from "@/comp
 import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
 import { PasswordField } from "@/components/admin/PasswordField";
 import { getUsersPage, adminGetShops } from "@/lib/admin/queries";
-import { userFilters } from "@/lib/admin/filters";
+import { userFilters, filterQuery } from "@/lib/admin/filters";
+import { TotalSubtitle } from "@/components/admin/Streamed";
+import type { ShopRow } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth/session";
 import {
   unlockUser,
@@ -88,22 +92,24 @@ export default async function AdminUsers({ searchParams }: SP) {
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
   const filters = userFilters(sp);
-  const [{ rows: users, total, pageCount }, shops] = await Promise.all([
-    getUsersPage({ ...filters, page }),
-    adminGetShops(),
-  ]);
+  // Started, not awaited: the chrome below must render without waiting on it.
+  const promise = getUsersPage({ ...filters, page });
+  const shops = await adminGetShops();
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
-  // One reading of "now" for the whole page, so two rows can't disagree about
-  // whether a lock has expired mid-render.
-  const now = new Date();
-  const locked = (u: { lockedUntil: Date | null }) => isLocked(u, now);
   const filtered = Object.values(filters).some((v) => v && v !== "all");
 
   return (
     <div>
       <AdminHeader
         title="Utenti"
-        subtitle={`${total} account${filtered ? " nel filtro attuale" : ""} · ruoli, password e accessi`}
+        subtitle={
+          <TotalSubtitle
+            promise={promise}
+            one="account"
+            many="account"
+            suffix={`${filtered ? " nel filtro attuale" : ""} · ruoli, password e accessi`}
+          />
+        }
         action={<NewButton href="/admin/users/new">+ Nuovo utente</NewButton>}
       />
 
@@ -132,332 +138,379 @@ export default async function AdminUsers({ searchParams }: SP) {
         }}
       />
 
-      {users.length === 0 ? (
-        <Panel>
-          <p className="text-brown-800/70">
-            {filtered ? "Nessun account corrisponde ai filtri." : "Nessun utente."}
-          </p>
-        </Panel>
-      ) : (
-        <div className="space-y-3">
-          {users.map((u) => (
-            <Panel key={u.id}>
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="font-display flex flex-wrap items-center gap-1.5 text-lg text-brown-950">
-                    {u.name || u.username}
-                    {u.id === me.id && <Tag tone="warn">Sei tu</Tag>}
-                    <Tag tone="mute">{roleLabel(u.role)}</Tag>
-                    <Tag tone={u.active ? "ok" : "bad"}>{u.active ? "Attivo" : "Disattivato"}</Tag>
-                    {/* Verification and 2FA state were invisible here, so a
-                        locked-out or unverified account looked like any other. */}
-                    {u.email &&
-                      (u.emailVerifiedAt ? (
-                        <Tag tone="ok">Email verificata</Tag>
-                      ) : (
-                        <Tag tone="warn">Email da verificare</Tag>
-                      ))}
-                    {u.totpEnabled && <Tag tone="ok">2FA</Tag>}
-                    {/* The access state the page is named after. Written on
-                        every sign-in and every failure, and shown nowhere — so a
-                        locked-out account looked exactly like a forgotten
-                        password, and neither had an answer here. */}
-                    {locked(u) && <Tag tone="bad">Bloccato</Tag>}
-                    {/* An unassigned staff account sees both locations, which is
-                        the old behaviour and worth saying out loud rather than
-                        leaving as an absence. */}
-                    {u.role === "staff" && (
-                      <Tag tone={u.shopSlug ? "mute" : "warn"}>
-                        {u.shopSlug ? (shopName.get(u.shopSlug) ?? u.shopSlug) : "Tutte le sedi"}
-                      </Tag>
-                    )}
-                  </p>
-                  <p className="text-xs text-brown-800/60">
-                    @{u.username}
-                    {u.email ? ` · ${u.email}` : ""} · registrato {fmtDate(u.createdAt)}
-                    {u.lastLoginAt
-                      ? ` · ultimo accesso ${fmtDate(u.lastLoginAt)}`
-                      : " · mai entrato"}
-                  </p>
-                  {locked(u) && (
-                    <p className="mt-1 text-xs font-semibold text-danger-soft-fg">
-                      Bloccato dopo {u.failedLoginCount} tentativi falliti, fino alle{" "}
-                      {u.lockedUntil?.toLocaleTimeString("it-IT", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                      . Si sblocca da solo, oppure subito qui sotto.
-                    </p>
-                  )}
-                  {/* The customer page is about orders, points and privacy
-                      rights — none of which a staff or admin account has. */}
-                  {u.role === "customer" && (
-                    <Link
-                      href={`/admin/loyalty/${u.id}`}
-                      className="mt-1 inline-block text-[12px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
-                    >
-                      Scheda cliente →
-                    </Link>
-                  )}
-                </div>
-                {u.id === me.id ? (
-                  <p className="text-xs text-brown-800/60">
-                    Ruolo, password e 2FA del tuo account si gestiscono da{" "}
-                    <Link href="/admin/security" className="font-bold text-gold-dark hover:underline">
-                      Sicurezza
-                    </Link>
-                    .
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                    <ActionForm action={setUserRole} className="flex items-center gap-2">
-                      <input type="hidden" name="id" value={u.id} />
-                      <label className="sr-only" htmlFor={`role-${u.id}`}>
-                        Ruolo di {u.username}
-                      </label>
-                      <select id={`role-${u.id}`} name="role" defaultValue={u.role} className={`${inputCls} w-40`}>
-                        <option value="customer">Cliente</option>
-                        <option value="staff">Staff</option>
-                        <option value="admin">Amministratore</option>
-                      </select>
-                      {/* Submitted with the role, because the two are one
-                          privilege. Only a staff account has a location to
-                          pick; for anyone else the field would be ignored. */}
-                      {u.role === "staff" && (
-                        <>
-                          <label className="sr-only" htmlFor={`shop-${u.id}`}>
-                            Sede di {u.username}
+      {/* Only the accounts wait on the query — the filters above stay put. */}
+      <Suspense key={filterQuery({ ...filters, page: String(page) })} fallback={<TableSkeleton rows={6} />}>
+        <UsersList
+          promise={promise}
+          shops={shops}
+          shopName={shopName}
+          page={page}
+          filters={filters}
+          filtered={filtered}
+          meId={me.id}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+
+/**
+ * The accounts themselves, behind their own Suspense boundary.
+ *
+ * "now" is read here rather than in the shell so every row on this page agrees
+ * about whether a lock has expired — the shell and the rows would otherwise be
+ * two different instants once the rows started streaming separately.
+ */
+async function UsersList({
+  promise,
+  shops,
+  shopName,
+  page,
+  filters,
+  filtered,
+  meId,
+}: {
+  promise: ReturnType<typeof getUsersPage>;
+  shops: ShopRow[];
+  shopName: Map<string, string>;
+  page: number;
+  filters: Record<string, string | undefined>;
+  filtered: boolean;
+  meId: string;
+}) {
+  const { rows: users, pageCount } = await promise;
+  const now = new Date();
+  const locked = (u: { lockedUntil: Date | null }) => isLocked(u, now);
+  const me = { id: meId };
+  return (
+    <>
+          {users.length === 0 ? (
+            <Panel>
+              <p className="text-brown-800/70">
+                {filtered ? "Nessun account corrisponde ai filtri." : "Nessun utente."}
+              </p>
+            </Panel>
+          ) : (
+            <div className="space-y-3">
+              {users.map((u) => (
+                <Panel key={u.id}>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="font-display flex flex-wrap items-center gap-1.5 text-lg text-brown-950">
+                        {u.name || u.username}
+                        {u.id === me.id && <Tag tone="warn">Sei tu</Tag>}
+                        <Tag tone="mute">{roleLabel(u.role)}</Tag>
+                        <Tag tone={u.active ? "ok" : "bad"}>{u.active ? "Attivo" : "Disattivato"}</Tag>
+                        {/* Verification and 2FA state were invisible here, so a
+                            locked-out or unverified account looked like any other. */}
+                        {u.email &&
+                          (u.emailVerifiedAt ? (
+                            <Tag tone="ok">Email verificata</Tag>
+                          ) : (
+                            <Tag tone="warn">Email da verificare</Tag>
+                          ))}
+                        {u.totpEnabled && <Tag tone="ok">2FA</Tag>}
+                        {/* The access state the page is named after. Written on
+                            every sign-in and every failure, and shown nowhere — so a
+                            locked-out account looked exactly like a forgotten
+                            password, and neither had an answer here. */}
+                        {locked(u) && <Tag tone="bad">Bloccato</Tag>}
+                        {/* An unassigned staff account sees both locations, which is
+                            the old behaviour and worth saying out loud rather than
+                            leaving as an absence. */}
+                        {u.role === "staff" && (
+                          <Tag tone={u.shopSlug ? "mute" : "warn"}>
+                            {u.shopSlug ? (shopName.get(u.shopSlug) ?? u.shopSlug) : "Tutte le sedi"}
+                          </Tag>
+                        )}
+                      </p>
+                      <p className="text-xs text-brown-800/70">
+                        @{u.username}
+                        {u.email ? ` · ${u.email}` : ""} · registrato {fmtDate(u.createdAt)}
+                        {u.lastLoginAt
+                          ? ` · ultimo accesso ${fmtDate(u.lastLoginAt)}`
+                          : " · mai entrato"}
+                      </p>
+                      {locked(u) && (
+                        <p className="mt-1 text-xs font-semibold text-danger-soft-fg">
+                          Bloccato dopo {u.failedLoginCount} tentativi falliti, fino alle{" "}
+                          {u.lockedUntil?.toLocaleTimeString("it-IT", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          . Si sblocca da solo, oppure subito qui sotto.
+                        </p>
+                      )}
+                      {/* The customer page is about orders, points and privacy
+                          rights — none of which a staff or admin account has. */}
+                      {u.role === "customer" && (
+                        <Link
+                          href={`/admin/loyalty/${u.id}`}
+                          className="mt-1 inline-block text-[12px] font-bold tracking-widest text-gold-dark uppercase hover:underline"
+                        >
+                          Scheda cliente →
+                        </Link>
+                      )}
+                    </div>
+                    {u.id === me.id ? (
+                      <p className="text-xs text-brown-800/70">
+                        Ruolo, password e 2FA del tuo account si gestiscono da{" "}
+                        <Link href="/admin/security" className="font-bold text-gold-dark hover:underline">
+                          Sicurezza
+                        </Link>
+                        .
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                        <ActionForm action={setUserRole} className="flex items-center gap-2">
+                          <input type="hidden" name="id" value={u.id} />
+                          <label className="sr-only" htmlFor={`role-${u.id}`}>
+                            Ruolo di {u.username}
                           </label>
-                          <select
-                            id={`shop-${u.id}`}
-                            name="shopSlug"
-                            defaultValue={u.shopSlug ?? ""}
-                            className={`${inputCls} w-40`}
-                          >
-                            <option value="">Tutte le sedi</option>
-                            {shops.map((sh) => (
-                              <option key={sh.slug} value={sh.slug}>
-                                {sh.name}
-                              </option>
-                            ))}
+                          <select id={`role-${u.id}`} name="role" defaultValue={u.role} className={`${inputCls} w-40`}>
+                            <option value="customer">Cliente</option>
+                            <option value="staff">Staff</option>
+                            <option value="admin">Amministratore</option>
                           </select>
+                          {/* Submitted with the role, because the two are one
+                              privilege. Only a staff account has a location to
+                              pick; for anyone else the field would be ignored. */}
+                          {u.role === "staff" && (
+                            <>
+                              <label className="sr-only" htmlFor={`shop-${u.id}`}>
+                                Sede di {u.username}
+                              </label>
+                              <select
+                                id={`shop-${u.id}`}
+                                name="shopSlug"
+                                defaultValue={u.shopSlug ?? ""}
+                                className={`${inputCls} w-40`}
+                              >
+                                <option value="">Tutte le sedi</option>
+                                {shops.map((sh) => (
+                                  <option key={sh.slug} value={sh.slug}>
+                                    {sh.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </>
+                          )}
+                          <PendingButton
+                            tone="dark"
+                            confirm={`Cambiare ruolo o sede di @${u.username}? Le sessioni attive verranno chiuse.`}
+                          >
+                            {u.role === "staff" ? "Ruolo e sede" : "Ruolo"}
+                          </PendingButton>
+                        </ActionForm>
+                        <ActionForm action={resetUserPassword} className="flex items-center gap-2">
+                          <input type="hidden" name="id" value={u.id} />
+                          <PasswordField id={`pw-${u.id}`} label={`Nuova password per ${u.username}`} />
+                          <PendingButton
+                            tone="dark"
+                            confirm={`Reimpostare la password di @${u.username}? Le sessioni attive verranno chiuse.`}
+                          >
+                            Reset
+                          </PendingButton>
+                        </ActionForm>
+                        <ActionForm action={setUserActive} className="flex items-center gap-2">
+                          <input type="hidden" name="id" value={u.id} />
+                          <input type="hidden" name="active" value={u.active ? "false" : "true"} />
+                          {u.active ? (
+                            <PendingButton
+                              tone="danger"
+                              confirm={`Disattivare @${u.username}? L'account non potrà più accedere e le sessioni attive verranno chiuse.`}
+                            >
+                              Disattiva
+                            </PendingButton>
+                          ) : (
+                            <PendingButton tone="dark">Riattiva</PendingButton>
+                          )}
+                        </ActionForm>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Recovery actions: the ones an operator reaches for when someone
+                      can't get in. Collapsed so the row stays scannable. */}
+                  <details className="mt-3 border-t border-brown-900/10 pt-3">
+                    <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950">
+                      Anagrafica e accesso
+                    </summary>
+
+                    <ActionForm action={updateUserProfile} className="mt-3 flex flex-wrap items-end gap-3">
+                      <input type="hidden" name="id" value={u.id} />
+                      <div className="min-w-40">
+                        <label className={labelCls} htmlFor={`username-${u.id}`}>
+                          Username
+                        </label>
+                        <input
+                          id={`username-${u.id}`}
+                          name="username"
+                          required
+                          minLength={3}
+                          maxLength={40}
+                          pattern="[a-z0-9._-]+"
+                          title="Solo lettere minuscole, numeri, . _ -"
+                          defaultValue={u.username}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div className="min-w-48 flex-1">
+                        <label className={labelCls} htmlFor={`name-${u.id}`}>
+                          Nome
+                        </label>
+                        <input
+                          id={`name-${u.id}`}
+                          name="name"
+                          required
+                          maxLength={200}
+                          defaultValue={u.name ?? ""}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div className="min-w-48 flex-1">
+                        <label className={labelCls} htmlFor={`email-${u.id}`}>
+                          Email
+                        </label>
+                        <input
+                          id={`email-${u.id}`}
+                          name="email"
+                          type="email"
+                          maxLength={200}
+                          defaultValue={u.email ?? ""}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div className="min-w-40">
+                        <label className={labelCls} htmlFor={`phone-${u.id}`}>
+                          Telefono
+                        </label>
+                        <input
+                          id={`phone-${u.id}`}
+                          name="phone"
+                          maxLength={40}
+                          defaultValue={u.phone ?? ""}
+                          className={inputCls}
+                        />
+                      </div>
+                      <label
+                        htmlFor={`marketing-${u.id}`}
+                        className="flex min-h-11 items-center gap-2 text-sm text-brown-950"
+                      >
+                        <input
+                          id={`marketing-${u.id}`}
+                          type="checkbox"
+                          name="marketingConsent"
+                          defaultChecked={u.marketingConsent}
+                          className="h-4 w-4 accent-gold-dark"
+                        />
+                        Consenso marketing
+                      </label>
+                      <PendingButton tone="dark">Salva anagrafica</PendingButton>
+                    </ActionForm>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-brown-900/10 pt-3">
+                      {u.email && (
+                        <ActionForm action={setEmailVerified} className="inline-flex">
+                          <input type="hidden" name="id" value={u.id} />
+                          <input type="hidden" name="verified" value={u.emailVerifiedAt ? "false" : "true"} />
+                          <PendingButton tone="dark">
+                            {u.emailVerifiedAt ? "Segna email da verificare" : "Segna email verificata"}
+                          </PendingButton>
+                        </ActionForm>
+                      )}
+                      {u.email && !u.emailVerifiedAt && u.active && (
+                        <ActionForm action={resendUserVerification} className="inline-flex">
+                          <input type="hidden" name="id" value={u.id} />
+                          <PendingButton tone="dark">Reinvia email di verifica</PendingButton>
+                        </ActionForm>
+                      )}
+                      {/* The owner picks their own password: nobody has to read
+                          one out over the phone. Needs an address to send it to. */}
+                      {u.email && u.active && u.id !== me.id && (
+                        <ActionForm action={sendUserPasswordReset} className="inline-flex">
+                          <input type="hidden" name="id" value={u.id} />
+                          <PendingButton
+                            tone="dark"
+                            confirm={`Inviare a ${u.email} un link per reimpostare la password?`}
+                          >
+                            Invia link reset password
+                          </PendingButton>
+                        </ActionForm>
+                      )}
+                      {locked(u) && (
+                        <>
+                          <ActionForm action={unlockUser} className="inline-flex">
+                            <input type="hidden" name="id" value={u.id} />
+                            <PendingButton tone="dark">Sblocca ora</PendingButton>
+                          </ActionForm>
+                          {/* A lockout usually means somebody was guessing. If the
+                              guessing worked, ending the sessions is the response
+                              that matters. */}
+                          <ActionForm action={unlockUser} className="inline-flex">
+                            <input type="hidden" name="id" value={u.id} />
+                            <input type="hidden" name="signOut" value="true" />
+                            <PendingButton
+                              tone="danger"
+                              confirm={`Sbloccare @${u.username} e chiudere tutte le sue sessioni? Dovrà accedere di nuovo su ogni dispositivo.`}
+                            >
+                              Sblocca e disconnetti
+                            </PendingButton>
+                          </ActionForm>
                         </>
                       )}
-                      <PendingButton
-                        tone="dark"
-                        confirm={`Cambiare ruolo o sede di @${u.username}? Le sessioni attive verranno chiuse.`}
-                      >
-                        {u.role === "staff" ? "Ruolo e sede" : "Ruolo"}
-                      </PendingButton>
-                    </ActionForm>
-                    <ActionForm action={resetUserPassword} className="flex items-center gap-2">
-                      <input type="hidden" name="id" value={u.id} />
-                      <PasswordField id={`pw-${u.id}`} label={`Nuova password per ${u.username}`} />
-                      <PendingButton
-                        tone="dark"
-                        confirm={`Reimpostare la password di @${u.username}? Le sessioni attive verranno chiuse.`}
-                      >
-                        Reset
-                      </PendingButton>
-                    </ActionForm>
-                    <ActionForm action={setUserActive} className="flex items-center gap-2">
-                      <input type="hidden" name="id" value={u.id} />
-                      <input type="hidden" name="active" value={u.active ? "false" : "true"} />
-                      {u.active ? (
-                        <PendingButton
-                          tone="danger"
-                          confirm={`Disattivare @${u.username}? L'account non potrà più accedere e le sessioni attive verranno chiuse.`}
-                        >
-                          Disattiva
-                        </PendingButton>
-                      ) : (
-                        <PendingButton tone="dark">Riattiva</PendingButton>
+                      {u.totpEnabled && u.id !== me.id && (
+                        <ActionForm action={resetUserTotp} className="inline-flex">
+                          <input type="hidden" name="id" value={u.id} />
+                          <PendingButton
+                            tone="danger"
+                            confirm={`Azzerare la verifica in due passaggi di @${u.username}? Potrà accedere con la sola password finché non la riattiva. Le sessioni attive verranno chiuse.`}
+                          >
+                            Azzera 2FA
+                          </PendingButton>
+                        </ActionForm>
                       )}
-                    </ActionForm>
-                  </div>
-                )}
-              </div>
-
-              {/* Recovery actions: the ones an operator reaches for when someone
-                  can't get in. Collapsed so the row stays scannable. */}
-              <details className="mt-3 border-t border-brown-900/10 pt-3">
-                <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
-                  Anagrafica e accesso
-                </summary>
-
-                <ActionForm action={updateUserProfile} className="mt-3 flex flex-wrap items-end gap-3">
-                  <input type="hidden" name="id" value={u.id} />
-                  <div className="min-w-40">
-                    <label className={labelCls} htmlFor={`username-${u.id}`}>
-                      Username
-                    </label>
-                    <input
-                      id={`username-${u.id}`}
-                      name="username"
-                      required
-                      minLength={3}
-                      maxLength={40}
-                      pattern="[a-z0-9._-]+"
-                      title="Solo lettere minuscole, numeri, . _ -"
-                      defaultValue={u.username}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div className="min-w-48 flex-1">
-                    <label className={labelCls} htmlFor={`name-${u.id}`}>
-                      Nome
-                    </label>
-                    <input
-                      id={`name-${u.id}`}
-                      name="name"
-                      required
-                      maxLength={200}
-                      defaultValue={u.name ?? ""}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div className="min-w-48 flex-1">
-                    <label className={labelCls} htmlFor={`email-${u.id}`}>
-                      Email
-                    </label>
-                    <input
-                      id={`email-${u.id}`}
-                      name="email"
-                      type="email"
-                      maxLength={200}
-                      defaultValue={u.email ?? ""}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div className="min-w-40">
-                    <label className={labelCls} htmlFor={`phone-${u.id}`}>
-                      Telefono
-                    </label>
-                    <input
-                      id={`phone-${u.id}`}
-                      name="phone"
-                      maxLength={40}
-                      defaultValue={u.phone ?? ""}
-                      className={inputCls}
-                    />
-                  </div>
-                  <label
-                    htmlFor={`marketing-${u.id}`}
-                    className="flex min-h-11 items-center gap-2 text-sm text-brown-950"
-                  >
-                    <input
-                      id={`marketing-${u.id}`}
-                      type="checkbox"
-                      name="marketingConsent"
-                      defaultChecked={u.marketingConsent}
-                      className="h-4 w-4 accent-gold-dark"
-                    />
-                    Consenso marketing
-                  </label>
-                  <PendingButton tone="dark">Salva anagrafica</PendingButton>
-                </ActionForm>
-
-                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-brown-900/10 pt-3">
-                  {u.email && (
-                    <ActionForm action={setEmailVerified} className="inline-flex">
-                      <input type="hidden" name="id" value={u.id} />
-                      <input type="hidden" name="verified" value={u.emailVerifiedAt ? "false" : "true"} />
-                      <PendingButton tone="dark">
-                        {u.emailVerifiedAt ? "Segna email da verificare" : "Segna email verificata"}
-                      </PendingButton>
-                    </ActionForm>
-                  )}
-                  {u.email && !u.emailVerifiedAt && u.active && (
-                    <ActionForm action={resendUserVerification} className="inline-flex">
-                      <input type="hidden" name="id" value={u.id} />
-                      <PendingButton tone="dark">Reinvia email di verifica</PendingButton>
-                    </ActionForm>
-                  )}
-                  {/* The owner picks their own password: nobody has to read
-                      one out over the phone. Needs an address to send it to. */}
-                  {u.email && u.active && u.id !== me.id && (
-                    <ActionForm action={sendUserPasswordReset} className="inline-flex">
-                      <input type="hidden" name="id" value={u.id} />
-                      <PendingButton
-                        tone="dark"
-                        confirm={`Inviare a ${u.email} un link per reimpostare la password?`}
-                      >
-                        Invia link reset password
-                      </PendingButton>
-                    </ActionForm>
-                  )}
-                  {locked(u) && (
-                    <>
-                      <ActionForm action={unlockUser} className="inline-flex">
-                        <input type="hidden" name="id" value={u.id} />
-                        <PendingButton tone="dark">Sblocca ora</PendingButton>
-                      </ActionForm>
-                      {/* A lockout usually means somebody was guessing. If the
-                          guessing worked, ending the sessions is the response
-                          that matters. */}
-                      <ActionForm action={unlockUser} className="inline-flex">
-                        <input type="hidden" name="id" value={u.id} />
-                        <input type="hidden" name="signOut" value="true" />
-                        <PendingButton
-                          tone="danger"
-                          confirm={`Sbloccare @${u.username} e chiudere tutte le sue sessioni? Dovrà accedere di nuovo su ogni dispositivo.`}
-                        >
-                          Sblocca e disconnetti
-                        </PendingButton>
-                      </ActionForm>
-                    </>
-                  )}
-                  {u.totpEnabled && u.id !== me.id && (
-                    <ActionForm action={resetUserTotp} className="inline-flex">
-                      <input type="hidden" name="id" value={u.id} />
-                      <PendingButton
-                        tone="danger"
-                        confirm={`Azzerare la verifica in due passaggi di @${u.username}? Potrà accedere con la sola password finché non la riattiva. Le sessioni attive verranno chiuse.`}
-                      >
-                        Azzera 2FA
-                      </PendingButton>
-                    </ActionForm>
-                  )}
-                </div>
-                <p className="mt-2 text-xs text-brown-800/60">
-                  Usa «Azzera 2FA» quando qualcuno ha perso sia il telefono sia i codici di recupero.
-                  Cambiando l&apos;email, l&apos;indirizzo torna &laquo;da verificare&raquo;.
-                </p>
-
-                {/* Privacy rights (art. 15 / 17). Same tools as the customer
-                    page, reachable from here too; an admin must be demoted
-                    before it can be erased. */}
-                {u.role !== "admin" && (
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-brown-900/10 pt-3">
-                    <p className="text-xs text-brown-800/60">
-                      <span className="font-bold tracking-widest text-brown-800/60 uppercase">Privacy (GDPR)</span>
-                      {" · "}esporta i dati o anonimizza l&apos;account. Gli ordini restano per obblighi fiscali.
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={`/api/admin/gdpr/${u.id}`}
-                        download
-                        className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
-                      >
-                        Esporta dati
-                      </a>
-                      <DeleteForm
-                        action={anonymizeCustomer}
-                        id={u.id}
-                        confirm={`Anonimizzare definitivamente i dati di ${u.name || u.username}? L'operazione non è reversibile. Gli ordini restano per obblighi fiscali.`}
-                      >
-                        Anonimizza
-                      </DeleteForm>
                     </div>
-                  </div>
-                )}
-              </details>
-            </Panel>
-          ))}
-        </div>
-      )}
+                    <p className="mt-2 text-xs text-brown-800/70">
+                      Usa «Azzera 2FA» quando qualcuno ha perso sia il telefono sia i codici di recupero.
+                      Cambiando l&apos;email, l&apos;indirizzo torna &laquo;da verificare&raquo;.
+                    </p>
 
-      <Pagination basePath={BASE} page={page} pageCount={pageCount} params={filters} />
-    </div>
+                    {/* Privacy rights (art. 15 / 17). Same tools as the customer
+                        page, reachable from here too; an admin must be demoted
+                        before it can be erased. */}
+                    {u.role !== "admin" && (
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-brown-900/10 pt-3">
+                        <p className="text-xs text-brown-800/70">
+                          <span className="font-bold tracking-widest text-brown-800/70 uppercase">Privacy (GDPR)</span>
+                          {" · "}esporta i dati o anonimizza l&apos;account. Gli ordini restano per obblighi fiscali.
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`/api/admin/gdpr/${u.id}`}
+                            download
+                            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                          >
+                            Esporta dati
+                          </a>
+                          <DeleteForm
+                            action={anonymizeCustomer}
+                            id={u.id}
+                            confirm={`Anonimizzare definitivamente i dati di ${u.name || u.username}? L'operazione non è reversibile. Gli ordini restano per obblighi fiscali.`}
+                          >
+                            Anonimizza
+                          </DeleteForm>
+                        </div>
+                      </div>
+                    )}
+                  </details>
+                </Panel>
+              ))}
+            </div>
+          )}
+
+          <Pagination basePath={BASE} page={page} pageCount={pageCount} params={filters} />
+    </>
   );
 }

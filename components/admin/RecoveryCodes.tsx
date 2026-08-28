@@ -42,7 +42,8 @@ function SubmitButton({
       >
         {pending ? "…" : children}
       </button>
-      {confirm && (
+      {/* Mounted on demand, as in ActionForm — see the note there. */}
+      {confirm && asking && (
         <ConfirmDialog
           open={asking}
           title="Confermi?"

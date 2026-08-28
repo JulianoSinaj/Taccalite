@@ -79,7 +79,7 @@ export async function saveDiscount(_prev: ActionState, fd: FormData): Promise<Ac
     } catch (err) {
       // Same answer whether the clash comes from a create or a rename — the
       // update used to surface the raw constraint error.
-      if (isDuplicateCode(err)) throw new ActionError(`Esiste già un codice ${d.code}.`);
+      if (isDuplicateCode(err)) throw new ActionError(`Esiste già un codice ${d.code}.`, "code");
       throw err;
     }
 

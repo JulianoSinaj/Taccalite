@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import {
   AdminHeader,
   Panel,
   StatusBadge,
+  TableSkeleton,
   inputCls,
   labelCls,
   fmtDate,
@@ -20,6 +22,7 @@ import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { RedemptionStatusForm, redemptionStatusLabel } from "@/components/admin/RedemptionStatusForm";
 import { getCustomersPage, getRedemptionsPage, getLoyaltyOutstanding } from "@/lib/admin/queries";
 import { customerFilters, filterQuery } from "@/lib/admin/filters";
+import { TotalSubtitle } from "@/components/admin/Streamed";
 import { adjustPoints } from "@/lib/admin/actions";
 import { isAdmin } from "@/lib/auth/session";
 
@@ -80,8 +83,10 @@ export default async function AdminLoyalty({ searchParams }: SP) {
 
   // Points adjustment and bulk PII export are admin-only (see the matching
   // server-side guards); hide the controls from staff so they don't 403.
-  const [{ rows: customers, total, pageCount }, redemptions, outstanding, admin] = await Promise.all([
-    getCustomersPage({ ...filters, page }),
+  // Started, not awaited — see components/admin/Streamed. The redemption queue
+  // below is a second, independent list, so it gets its own boundary too.
+  const customersPromise = getCustomersPage({ ...filters, page });
+  const [redemptions, outstanding, admin] = await Promise.all([
     getRedemptionsPage({ page: rpage, stato: rstato, q: rq }),
     getLoyaltyOutstanding(),
     isAdmin(),
@@ -90,19 +95,27 @@ export default async function AdminLoyalty({ searchParams }: SP) {
   const customerParams = { ...filters, rstato, rq, rpage: rpageStr };
   const redemptionParams = { ...filters, page: pageStr, rstato, rq };
 
-  const subtitle = [
-    `${total} ${filters.ruolo === "customer" ? "clienti" : "account"}`,
+  // Everything after the count is independent of the customer query.
+  const subtitleTail = [
     `${outstanding.toLocaleString("it-IT")} punti in circolazione`,
     redemptions.pending > 0 ? `${redemptions.pending} premi da consegnare` : null,
   ]
     .filter(Boolean)
     .join(" · ");
+  const noun = filters.ruolo === "customer" ? "clienti" : "account";
 
   return (
     <div>
       <AdminHeader
         title="Fedeltà"
-        subtitle={subtitle}
+        subtitle={
+          <TotalSubtitle
+            promise={customersPromise}
+            one={noun === "clienti" ? "cliente" : "account"}
+            many={noun}
+            suffix={` · ${subtitleTail}`}
+          />
+        }
         action={
           admin ? (
             <div className="flex flex-wrap gap-2">
@@ -165,19 +178,10 @@ export default async function AdminLoyalty({ searchParams }: SP) {
           }}
         />
 
-        {customers.length === 0 ? (
-          <Panel>
-            <p className="text-brown-800/70">Nessun account corrisponde a questa vista.</p>
-          </Panel>
-        ) : (
-          <div className="space-y-3">
-            {customers.map((c) => (
-              <CustomerRow key={c.id} customer={c} admin={admin} />
-            ))}
-          </div>
-        )}
-
-        <Pagination basePath={BASE} page={page} pageCount={pageCount} params={customerParams} />
+        {/* Only the customers wait on their query. */}
+        <Suspense key={filterQuery({ ...customerParams, page: String(page) })} fallback={<TableSkeleton rows={5} />}>
+          <CustomerList promise={customersPromise} admin={admin} page={page} params={customerParams} />
+        </Suspense>
       </section>
 
       {/* ── Redemption queue ────────────────────────────────────────────── */}
@@ -278,7 +282,7 @@ function CustomerRow({ customer: c, admin }: { customer: Customer; admin: boolea
             </span>
           )}
         </p>
-        <p className="text-xs text-brown-800/60">
+        <p className="text-xs text-brown-800/70">
           @{c.username}
           {c.email ? ` · ${c.email}` : ""}
           {c.phone ? ` · ${c.phone}` : ""}
@@ -294,11 +298,11 @@ function CustomerRow({ customer: c, admin }: { customer: Customer; admin: boolea
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
         <div className="text-right sm:min-w-16">
           <p className="font-display text-2xl font-bold text-brown-950">{c.points ?? 0}</p>
-          <p className="text-[11px] font-bold tracking-widest text-brown-800/60 uppercase">Punti</p>
+          <p className="text-[11px] font-bold tracking-widest text-brown-800/70 uppercase">Punti</p>
         </div>
         {admin && c.active && <AdjustPointsForm userId={c.id} username={c.username} />}
         {admin && !c.active && (
-          <p className="max-w-40 text-xs text-brown-800/60">
+          <p className="max-w-40 text-xs text-brown-800/70">
             Account disattivato: le rettifiche si fanno dalla scheda.
           </p>
         )}
@@ -356,7 +360,7 @@ function RedemptionQueueRow({ row }: { row: RedemptionRow }) {
         <StatusBadge status={r.status} label={redemptionStatusLabel(r.status)} />
         <div>
           <p className="font-semibold text-brown-950">{r.rewardName}</p>
-          <p className="text-xs text-brown-800/60">
+          <p className="text-xs text-brown-800/70">
             {/* Which customer is the first thing you need to hand a reward
                 over; the list only ever showed the reward. */}
             <Link href={`/admin/loyalty/${r.userId}`} className="font-semibold hover:underline">
@@ -368,5 +372,36 @@ function RedemptionQueueRow({ row }: { row: RedemptionRow }) {
       </div>
       <RedemptionStatusForm redemption={r} />
     </Panel>
+  );
+}
+
+async function CustomerList({
+  promise,
+  admin,
+  page,
+  params,
+}: {
+  promise: ReturnType<typeof getCustomersPage>;
+  admin: boolean;
+  page: number;
+  params: Record<string, string | undefined>;
+}) {
+  const { rows: customers, pageCount } = await promise;
+  return (
+    <>
+      {customers.length === 0 ? (
+        <Panel>
+          <p className="text-brown-800/70">Nessun account corrisponde a questa vista.</p>
+        </Panel>
+      ) : (
+        <div className="space-y-3">
+          {customers.map((c) => (
+            <CustomerRow key={c.id} customer={c} admin={admin} />
+          ))}
+        </div>
+      )}
+
+      <Pagination basePath={BASE} page={page} pageCount={pageCount} params={params} />
+    </>
   );
 }

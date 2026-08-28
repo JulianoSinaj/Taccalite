@@ -24,7 +24,7 @@ export function BatchPanel({
 
   /** How a lot's date reads relative to today. */
   const dateState = (expiry: string | null) => {
-    if (!expiry) return { tone: "text-brown-800/50", label: "senza scadenza" };
+    if (!expiry) return { tone: "text-brown-800/70", label: "senza scadenza" };
     if (expiry < today) return { tone: "font-bold text-danger-soft-fg", label: `scaduto il ${fmtDate(expiry)}` };
     // Within a week is the window a shop can still act on.
     const soon = new Date(`${today}T00:00:00`);
@@ -38,7 +38,7 @@ export function BatchPanel({
   return (
     <Panel>
       <h3 className="font-display mb-1 text-lg text-brown-950">Lotti e scadenze</h3>
-      <p className="mb-4 text-xs text-brown-800/60">
+      <p className="mb-4 text-xs text-brown-800/70">
         Registra i lotti in arrivo con il loro codice e la scadenza. Le vendite consumano prima i lotti
         che scadono per primi (FEFO), così la tracciabilità resta allineata alla giacenza.
       </p>
@@ -91,7 +91,7 @@ export function BatchPanel({
         </div>
         <PendingButton tone="dark">Registra lotto</PendingButton>
       </ActionForm>
-      <p className="mt-2 text-xs text-brown-800/60">
+      <p className="mt-2 text-xs text-brown-800/70">
         Registrare un lotto carica anche la giacenza del prodotto.
       </p>
 
@@ -99,13 +99,13 @@ export function BatchPanel({
         <div className="scroll-x mt-6">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/60 uppercase">
-                <th className="py-2">Lotto</th>
-                <th className="py-2">Scadenza</th>
-                <th className="py-2 text-right">Residuo</th>
-                <th className="py-2">Fornitore</th>
-                <th className="py-2 text-right">Costo</th>
-                <th className="py-2 text-right">
+              <tr className="border-b border-brown-900/10 text-left text-[12px] font-bold tracking-widest text-brown-800/70 uppercase">
+                <th scope="col" className="py-2">Lotto</th>
+                <th scope="col" className="py-2">Scadenza</th>
+                <th scope="col" className="py-2 text-right">Residuo</th>
+                <th scope="col" className="py-2">Fornitore</th>
+                <th scope="col" className="py-2 text-right">Costo</th>
+                <th scope="col" className="py-2 text-right">
                   <span className="sr-only">Azioni</span>
                 </th>
               </tr>
@@ -132,7 +132,7 @@ export function BatchPanel({
                           defaultValue={b.remaining}
                           className={`${inputCls} w-20 py-1.5 text-right`}
                         />
-                        <span className="text-xs text-brown-800/50">/ {b.quantity}</span>
+                        <span className="text-xs text-brown-800/70">/ {b.quantity}</span>
                         <PendingButton tone="dark">OK</PendingButton>
                       </ActionForm>
                     </td>
@@ -165,17 +165,17 @@ export function BatchPanel({
       )}
 
       {open.length === 0 && (
-        <p className="mt-6 rounded-lg bg-cream/60 px-4 py-4 text-center text-sm text-brown-800/60">
+        <p className="mt-6 rounded-lg bg-cream/60 px-4 py-4 text-center text-sm text-brown-800/70">
           Nessun lotto aperto per questo prodotto.
         </p>
       )}
 
       {spent.length > 0 && (
         <details className="mt-4">
-          <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/60 uppercase hover:text-brown-950">
+          <summary className="w-fit cursor-pointer text-[12px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950">
             Lotti esauriti ({spent.length})
           </summary>
-          <ul className="mt-2 space-y-1 text-xs text-brown-800/60">
+          <ul className="mt-2 space-y-1 text-xs text-brown-800/70">
             {spent.map((b) => (
               <li key={b.id}>
                 {b.lotCode || "senza codice"} · {b.quantity} unità

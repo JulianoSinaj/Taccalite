@@ -30,7 +30,7 @@ export type EditorMeta = { updatedAt: string | null; updatedBy: string | null };
 
 const ROWS: Record<EditorDef["type"], number> = { text: 1, lines: 4, records: 6, rich: 18 };
 
-const hint = "text-xs text-brown-800/60";
+const hint = "text-xs text-brown-800/70";
 const smallBtn =
   "inline-flex min-h-11 items-center rounded-full border border-brown-900/15 px-4 text-xs font-bold tracking-widest text-brown-900 uppercase transition-colors hover:bg-brown-900/5";
 
@@ -108,9 +108,9 @@ export function ContentEditor({
           {dirty ? (
             <span className="text-gold-dark">Non salvato</span>
           ) : edited ? (
-            <span className="text-brown-800/60">Modificato</span>
+            <span className="text-brown-800/70">Modificato</span>
           ) : (
-            <span className="text-brown-800/40">Testo originale</span>
+            <span className="text-brown-800/70">Testo originale</span>
           )}
           {draft && <span className="text-danger">Bozza da verificare</span>}
           <Link href={def.page} target="_blank" rel="noopener noreferrer" className="text-gold-dark hover:underline">

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { inputCls, labelCls } from "./ui";
-import { ActionForm, PendingButton } from "./ActionForm";
+import { ActionForm, FieldError, PendingButton } from "./ActionForm";
 import { HoursEditor } from "./HoursEditor";
 import { saveProduct, saveBlogPost, saveShop, saveReward } from "@/lib/admin/actions";
 import { saveDiscount } from "@/lib/admin/discount-actions";
@@ -102,7 +102,7 @@ function ImageField({ current }: { current?: string | null }) {
             Rimuovi immagine
           </button>
         ) : null}
-        <p className="text-xs text-brown-800/60">
+        <p className="text-xs text-brown-800/70">
           Carica JPG/PNG/WebP/AVIF (max 5 MB) oppure incolla un URL. Il file caricato ha la precedenza.
         </p>
       </div>
@@ -137,211 +137,234 @@ export function ProductForm({
     <ActionForm
       action={saveProduct}
       redirectTo="/admin/products"
+      guardUnsaved="Le modifiche a questo prodotto non sono state salvate. Se esci adesso vanno perse."
       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       {product && <input type="hidden" name="id" value={product.id} />}
-      <div>
-        <label className={labelCls} htmlFor={fid("name")}>Nome</label>
-        <input id={fid("name")} name="name" required defaultValue={product?.name} className={inputCls} />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("slug")}>Slug</label>
-        <input
-          id={fid("slug")}
-          name="slug"
-          defaultValue={product?.slug}
-          placeholder="auto dal nome se vuoto"
-          className={inputCls}
-        />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("shopSlug")}>Negozio</label>
-        <select id={fid("shopSlug")} name="shopSlug" defaultValue={product?.shopSlug} className={inputCls}>
-          {shops.map((s) => (
-            <option key={s.slug} value={s.slug}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("categoryId")}>Categoria</label>
-        <select
-          id={fid("categoryId")}
-          name="categoryId"
-          defaultValue={product?.categoryId ?? ""}
-          onChange={(e) => onCategoryChange(e.target.value)}
-          className={inputCls}
-        >
-          <option value="">— Nessuna categoria —</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.parentId ? "  ↳ " : ""}
-              {c.name}
-              {c.active ? "" : " (nascosta)"}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-brown-800/60">
-          Gestisci l&apos;elenco in{" "}
-          <Link href="/admin/categories" className="font-semibold text-gold-deep underline">
-            Categorie
-          </Link>
-          .
-        </p>
-      </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls} htmlFor={fid("description")}>Descrizione</label>
-        <textarea id={fid("description")} name="description" rows={3} defaultValue={product?.description} className={inputCls} />
-      </div>
-      <ImageField current={product?.image} />
-      <div>
-        <label className={labelCls} htmlFor={fid("imageLabel")}>Etichetta immagine</label>
-        <input id={fid("imageLabel")} name="imageLabel" defaultValue={product?.imageLabel} className={inputCls} />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
-        <input id={fid("sortOrder")} name="sortOrder" type="number" defaultValue={product?.sortOrder ?? 0} className={inputCls} />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("priceEuros")}>Prezzo (€)</label>
-        <input
-          id={fid("priceEuros")}
-          name="priceEuros"
-          type="number"
-          step="0.01"
-          defaultValue={product?.priceCents != null ? (product.priceCents / 100).toFixed(2) : ""}
-          className={inputCls}
-        />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("unit")}>Unità (kg, pezzo…)</label>
-        <input
-          id={fid("unit")}
-          name="unit"
-          defaultValue={product?.unit ?? ""}
-          placeholder="auto: kg se venduto a peso"
-          className={inputCls}
-        />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("vatRate")}>Aliquota IVA</label>
-        <select
-          id={fid("vatRate")}
-          name="vatRate"
-          value={String(vatBps / 100)}
-          onChange={(e) => setVatBps(Math.round(Number(e.target.value) * 100))}
-          className={inputCls}
-        >
-          {VAT_RATES_BPS.map((bps) => (
-            <option key={bps} value={String(bps / 100)}>
-              {vatRateLabel(bps)}
-            </option>
-          ))}
-        </select>
-        {!product && categories.some((c) => c.defaultVatRateBps != null) && (
-          <p className="mt-1 text-xs text-brown-800/60">
-            Proposta dall&apos;aliquota dichiarata sulla categoria; puoi cambiarla.
-          </p>
-        )}
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("stock")}>Giacenza (vuoto = illimitata)</label>
-        <input id={fid("stock")} name="stock" type="number" min={0} defaultValue={product?.stock ?? ""} className={inputCls} />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("reorderPoint")}>Soglia di riordino</label>
-        <input
-          id={fid("reorderPoint")}
-          name="reorderPoint"
-          type="number"
-          min={0}
-          defaultValue={product?.reorderPoint ?? ""}
-          placeholder="vuoto = soglia generale"
-          className={inputCls}
-        />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("costEuros")}>Costo d&apos;acquisto (€, senza IVA)</label>
-        <input
-          id={fid("costEuros")}
-          name="costEuros"
-          type="number"
-          step="0.01"
-          min={0}
-          defaultValue={product?.costCents != null ? (product.costCents / 100).toFixed(2) : ""}
-          placeholder="per il calcolo del margine"
-          className={inputCls}
-        />
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <label className={labelCls} htmlFor={fid("sku")}>Codice / SKU</label>
-          <input id={fid("sku")} name="sku" defaultValue={product?.sku ?? ""} className={inputCls} />
-        </div>
-        <div>
-          <label className={labelCls} htmlFor={fid("supplier")}>Fornitore</label>
-          <input id={fid("supplier")} name="supplier" defaultValue={product?.supplier ?? ""} className={inputCls} />
-        </div>
-      </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls} htmlFor={fid("origin")}>Provenienza / tracciabilità</label>
-        <input
-          id={fid("origin")}
-          name="origin"
-          defaultValue={product?.origin ?? ""}
-          placeholder="es. Suino nazionale — Marche"
-          className={inputCls}
-        />
-      </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls} htmlFor={fid("allergens")}>Allergeni (separati da virgola)</label>
-        <input
-          id={fid("allergens")}
-          name="allergens"
-          defaultValue={product?.allergens?.join(", ") ?? ""}
-          placeholder="es. glutine, latte, frutta a guscio"
-          className={inputCls}
-        />
-      </div>
-      <div className="sm:col-span-2">
-        <label className={labelCls} htmlFor={fid("ingredients")}>Ingredienti</label>
-        <textarea id={fid("ingredients")} name="ingredients" rows={2} defaultValue={product?.ingredients ?? ""} className={inputCls} />
-      </div>
 
-      {/* SEO, as on the news diary: the description is a shelf label, not
-          always the sentence a search result should show. */}
-      <div>
-        <label className={labelCls} htmlFor={fid("seoTitle")}>Titolo SEO (opzionale)</label>
-        <input
-          id={fid("seoTitle")}
-          name="seoTitle"
-          maxLength={70}
-          defaultValue={product?.seoTitle ?? ""}
-          placeholder={product?.name ?? "Usa il nome del prodotto"}
-          className={inputCls}
-        />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor={fid("seoDescription")}>Descrizione SEO (opzionale)</label>
-        <textarea
-          id={fid("seoDescription")}
-          name="seoDescription"
-          rows={2}
-          maxLength={200}
-          defaultValue={product?.seoDescription ?? ""}
-          placeholder="Se vuota viene usata la descrizione."
-          className={inputCls}
-        />
-      </div>
-      <div className="flex flex-wrap items-center gap-6 pt-6 sm:col-span-2">
-        <Toggle name="purchasable" label="Acquistabile online" defaultChecked={product?.purchasable} />
-        <Toggle name="soldByWeight" label="Venduto a peso" defaultChecked={product?.soldByWeight} />
-        {/* Off by default: "in evidenza" is the homepage strip, and every new
-            product used to land there until somebody noticed. */}
-        <Toggle name="featured" label="In evidenza" defaultChecked={product?.featured ?? false} />
-        <Toggle name="active" label="Attivo" defaultChecked={product?.active ?? true} />
-      </div>
+      <FormSection title="Anagrafica" hint="Come il prodotto si chiama, dove sta e in che reparto.">
+        <div>
+          <label className={labelCls} htmlFor={fid("name")}>Nome</label>
+          <input id={fid("name")} name="name" required defaultValue={product?.name} className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("slug")}>Slug</label>
+          <input
+            id={fid("slug")}
+            name="slug"
+            defaultValue={product?.slug}
+            placeholder="auto dal nome se vuoto"
+            className={inputCls}
+          />
+          <FieldError name="slug" />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("shopSlug")}>Negozio</label>
+          <select id={fid("shopSlug")} name="shopSlug" defaultValue={product?.shopSlug} className={inputCls}>
+            {shops.map((s) => (
+              <option key={s.slug} value={s.slug}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("categoryId")}>Categoria</label>
+          <select
+            id={fid("categoryId")}
+            name="categoryId"
+            defaultValue={product?.categoryId ?? ""}
+            onChange={(e) => onCategoryChange(e.target.value)}
+            className={inputCls}
+          >
+            <option value="">— Nessuna categoria —</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.parentId ? "  ↳ " : ""}
+                {c.name}
+                {c.active ? "" : " (nascosta)"}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-brown-800/70">
+            Gestisci l&apos;elenco in{" "}
+            <Link href="/admin/categories" className="font-semibold text-gold-deep underline">
+              Categorie
+            </Link>
+            .
+          </p>
+        </div>
+        <div className="sm:col-span-2">
+          <label className={labelCls} htmlFor={fid("description")}>Descrizione</label>
+          <textarea id={fid("description")} name="description" rows={3} defaultValue={product?.description} className={inputCls} />
+        </div>
+      </FormSection>
+
+      <FormSection title="Immagine e ordine" hint="La foto della scheda prodotto, e la posizione nel listino.">
+        <ImageField current={product?.image} />
+        <div>
+          <label className={labelCls} htmlFor={fid("imageLabel")}>Etichetta immagine</label>
+          <input id={fid("imageLabel")} name="imageLabel" defaultValue={product?.imageLabel} className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
+          <input id={fid("sortOrder")} name="sortOrder" type="number" defaultValue={product?.sortOrder ?? 0} className={inputCls} />
+        </div>
+      </FormSection>
+
+      <FormSection title="Prezzo e IVA" hint="Quanto costa al cliente, con che aliquota, e quanto costa alla bottega.">
+        <div>
+          <label className={labelCls} htmlFor={fid("priceEuros")}>Prezzo (€)</label>
+          <input
+            id={fid("priceEuros")}
+            name="priceEuros"
+            type="number"
+            step="0.01"
+            defaultValue={product?.priceCents != null ? (product.priceCents / 100).toFixed(2) : ""}
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("unit")}>Unità (kg, pezzo…)</label>
+          <input
+            id={fid("unit")}
+            name="unit"
+            defaultValue={product?.unit ?? ""}
+            placeholder="auto: kg se venduto a peso"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("vatRate")}>Aliquota IVA</label>
+          <select
+            id={fid("vatRate")}
+            name="vatRate"
+            value={String(vatBps / 100)}
+            onChange={(e) => setVatBps(Math.round(Number(e.target.value) * 100))}
+            className={inputCls}
+          >
+            {VAT_RATES_BPS.map((bps) => (
+              <option key={bps} value={String(bps / 100)}>
+                {vatRateLabel(bps)}
+              </option>
+            ))}
+          </select>
+          {!product && categories.some((c) => c.defaultVatRateBps != null) && (
+            <p className="mt-1 text-xs text-brown-800/70">
+              Proposta dall&apos;aliquota dichiarata sulla categoria; puoi cambiarla.
+            </p>
+          )}
+        </div>
+      </FormSection>
+
+      <FormSection title="Magazzino" hint="Giacenza, soglia di riordino e i riferimenti del fornitore.">
+        <div>
+          <label className={labelCls} htmlFor={fid("stock")}>Giacenza (vuoto = illimitata)</label>
+          <input id={fid("stock")} name="stock" type="number" min={0} defaultValue={product?.stock ?? ""} className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("reorderPoint")}>Soglia di riordino</label>
+          <input
+            id={fid("reorderPoint")}
+            name="reorderPoint"
+            type="number"
+            min={0}
+            defaultValue={product?.reorderPoint ?? ""}
+            placeholder="vuoto = soglia generale"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("costEuros")}>Costo d&apos;acquisto (€, senza IVA)</label>
+          <input
+            id={fid("costEuros")}
+            name="costEuros"
+            type="number"
+            step="0.01"
+            min={0}
+            defaultValue={product?.costCents != null ? (product.costCents / 100).toFixed(2) : ""}
+            placeholder="per il calcolo del margine"
+            className={inputCls}
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className={labelCls} htmlFor={fid("sku")}>Codice / SKU</label>
+            <input id={fid("sku")} name="sku" defaultValue={product?.sku ?? ""} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls} htmlFor={fid("supplier")}>Fornitore</label>
+            <input id={fid("supplier")} name="supplier" defaultValue={product?.supplier ?? ""} className={inputCls} />
+          </div>
+        </div>
+      </FormSection>
+
+      <FormSection title="Etichetta e tracciabilità" hint="Quello che deve comparire in vetrina e nella scheda del sito.">
+        <div className="sm:col-span-2">
+          <label className={labelCls} htmlFor={fid("origin")}>Provenienza / tracciabilità</label>
+          <input
+            id={fid("origin")}
+            name="origin"
+            defaultValue={product?.origin ?? ""}
+            placeholder="es. Suino nazionale — Marche"
+            className={inputCls}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className={labelCls} htmlFor={fid("allergens")}>Allergeni (separati da virgola)</label>
+          <input
+            id={fid("allergens")}
+            name="allergens"
+            defaultValue={product?.allergens?.join(", ") ?? ""}
+            placeholder="es. glutine, latte, frutta a guscio"
+            className={inputCls}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className={labelCls} htmlFor={fid("ingredients")}>Ingredienti</label>
+          <textarea id={fid("ingredients")} name="ingredients" rows={2} defaultValue={product?.ingredients ?? ""} className={inputCls} />
+        </div>
+      </FormSection>
+
+      <FormSection title="SEO" hint="Come il prodotto compare nei risultati di ricerca. Entrambi opzionali.">
+        {/* SEO, as on the news diary: the description is a shelf label, not
+            always the sentence a search result should show. */}
+        <div>
+          <label className={labelCls} htmlFor={fid("seoTitle")}>Titolo SEO (opzionale)</label>
+          <input
+            id={fid("seoTitle")}
+            name="seoTitle"
+            maxLength={70}
+            defaultValue={product?.seoTitle ?? ""}
+            placeholder={product?.name ?? "Usa il nome del prodotto"}
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls} htmlFor={fid("seoDescription")}>Descrizione SEO (opzionale)</label>
+          <textarea
+            id={fid("seoDescription")}
+            name="seoDescription"
+            rows={2}
+            maxLength={200}
+            defaultValue={product?.seoDescription ?? ""}
+            placeholder="Se vuota viene usata la descrizione."
+            className={inputCls}
+          />
+        </div>
+      </FormSection>
+
+      <FormSection title="Visibilità" hint="Dove il prodotto compare, e se è ordinabile online.">
+        <div className="flex flex-wrap items-center gap-6 pt-6 sm:col-span-2">
+          <Toggle name="purchasable" label="Acquistabile online" defaultChecked={product?.purchasable} />
+          <Toggle name="soldByWeight" label="Venduto a peso" defaultChecked={product?.soldByWeight} />
+          {/* Off by default: "in evidenza" is the homepage strip, and every new
+              product used to land there until somebody noticed. */}
+          <Toggle name="featured" label="In evidenza" defaultChecked={product?.featured ?? false} />
+          <Toggle name="active" label="Attivo" defaultChecked={product?.active ?? true} />
+        </div>
+      </FormSection>
+
       <div className="sm:col-span-2">
         <PendingButton>{product ? "Salva modifiche" : "Crea prodotto"}</PendingButton>
       </div>
@@ -364,6 +387,7 @@ export function BlogForm({
     <ActionForm
       action={saveBlogPost}
       redirectTo="/admin/blog"
+      guardUnsaved="Le modifiche a questo articolo non sono state salvate. Se esci adesso vanno perse."
       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       {post && <input type="hidden" name="id" value={post.id} />}
@@ -374,6 +398,7 @@ export function BlogForm({
       <div>
         <label className={labelCls} htmlFor={fid("slug")}>Slug</label>
         <input id={fid("slug")} name="slug" defaultValue={post?.slug} placeholder="auto se vuoto" className={inputCls} />
+        <FieldError name="slug" />
       </div>
       <div>
         <label className={labelCls} htmlFor={fid("date")}>Data</label>
@@ -390,7 +415,7 @@ export function BlogForm({
             </option>
           ))}
         </select>
-        <p className="mt-1 text-xs text-brown-800/60">
+        <p className="mt-1 text-xs text-brown-800/70">
           Gestisci l&apos;elenco in{" "}
           <Link href="/admin/categories?kind=post" className="font-semibold text-gold-deep underline">
             Categorie
@@ -457,7 +482,7 @@ export function BlogForm({
       <div className="flex items-center pt-6">
         <Toggle name="published" label="Pubblicato" defaultChecked={post?.published ?? true} />
       </div>
-      <div className="flex items-center pt-6 text-xs text-brown-800/60">
+      <div className="flex items-center pt-6 text-xs text-brown-800/70">
         Con una data futura l&apos;articolo resta nascosto fino a quel giorno.
       </div>
       <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
@@ -486,10 +511,10 @@ function FormSection({ title, hint, children }: { title: string; hint?: string; 
       className="grid grid-cols-1 gap-4 border-t border-brown-900/10 pt-5 first:border-t-0 first:pt-0 sm:col-span-2 sm:grid-cols-2"
     >
       <div className="sm:col-span-2">
-        <h3 id={id} className="font-display text-base text-brown-950">
+        <h2 id={id} className="font-display text-base text-brown-950">
           {title}
-        </h3>
-        {hint && <p className="mt-0.5 text-xs text-brown-800/60">{hint}</p>}
+        </h2>
+        {hint && <p className="mt-0.5 text-xs text-brown-800/70">{hint}</p>}
       </div>
       {children}
     </section>
@@ -502,6 +527,7 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
     <ActionForm
       action={saveShop}
       redirectTo="/admin/shops"
+      guardUnsaved="Le modifiche a questa sede non sono state salvate. Se esci adesso vanno perse."
       className="grid grid-cols-1 gap-5 sm:grid-cols-2"
     >
       {shop && <input type="hidden" name="id" value={shop.id} />}
@@ -524,7 +550,8 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
             aria-describedby={fid("slug-hint")}
             className={inputCls}
           />
-          <p id={fid("slug-hint")} className="mt-1 text-xs text-brown-800/60">
+          <FieldError name="slug" />
+          <p id={fid("slug-hint")} className="mt-1 text-xs text-brown-800/70">
             {shop
               ? `Pagina pubblica: /sedi/${shop.slug}. Non modificabile dopo la creazione.`
               : "Solo lettere minuscole, numeri e trattini. Diventa l'indirizzo /sedi/<slug>."}
@@ -537,7 +564,7 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
         <div>
           <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
           <input id={fid("sortOrder")} name="sortOrder" type="number" step={1} defaultValue={shop?.sortOrder ?? 0} className={inputCls} />
-          <p className="mt-1 text-xs text-brown-800/60">Posizione negli elenchi: il numero più basso viene prima.</p>
+          <p className="mt-1 text-xs text-brown-800/70">Posizione negli elenchi: il numero più basso viene prima.</p>
         </div>
       </FormSection>
 
@@ -562,7 +589,7 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
         </div>
         <div className="sm:col-span-2">
           <Toggle name="hoursConfirmed" label="Orari confermati" defaultChecked={shop?.hoursConfirmed ?? true} />
-          <p className="mt-1 text-xs text-brown-800/60">
+          <p className="mt-1 text-xs text-brown-800/70">
             Se non confermati, il sito mostra gli orari con l&apos;avviso «da confermare» e nasconde il badge «aperto adesso».
           </p>
         </div>
@@ -589,7 +616,7 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
             placeholder="usa il valore generale"
             className={inputCls}
           />
-          <p className="mt-1 text-xs text-brown-800/60">
+          <p className="mt-1 text-xs text-brown-800/70">
             Vuoto: usa la capacità impostata in Impostazioni per tutte le sedi.
           </p>
         </div>
@@ -606,7 +633,7 @@ export function ShopForm({ shop }: { shop?: ShopRow | null }) {
             placeholder="nessun limite"
             className={inputCls}
           />
-          <p className="mt-1 text-xs text-brown-800/60">
+          <p className="mt-1 text-xs text-brown-800/70">
             Il sito rifiuta le prenotazioni oltre questo numero di ospiti nella stessa fascia; nel gestionale vengono solo segnalate.
           </p>
         </div>
@@ -667,6 +694,7 @@ export function DiscountForm({
     <ActionForm
       action={saveDiscount}
       redirectTo="/admin/discounts"
+      guardUnsaved="Le modifiche a questo codice non sono state salvate. Se esci adesso vanno perse."
       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       {discount && <input type="hidden" name="id" value={discount.id} />}
@@ -682,8 +710,9 @@ export function DiscountForm({
           placeholder="es. BENVENUTO10"
           className={`${inputCls} uppercase ${locked ? "opacity-70" : ""}`}
         />
+        <FieldError name="code" />
         {locked && (
-          <p id={fid("code-hint")} className="mt-1 text-xs text-brown-800/60">
+          <p id={fid("code-hint")} className="mt-1 text-xs text-brown-800/70">
             Usato {discount!.timesUsed} volte: il nome non si può più cambiare. Per un nome nuovo crea un
             altro codice e disattiva questo.
           </p>
@@ -800,6 +829,7 @@ export function UserForm({ shops = [] }: { shops?: { slug: string; name: string 
     <ActionForm
       action={createUser}
       redirectTo="/admin/users"
+      guardUnsaved="Le modifiche a questo account non sono state salvate. Se esci adesso vanno perse."
       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       <div>
@@ -813,6 +843,7 @@ export function UserForm({ shops = [] }: { shops?: { slug: string; name: string 
           placeholder="es. mario.rossi"
           className={inputCls}
         />
+        <FieldError name="username" />
       </div>
       <div>
         <label className={labelCls} htmlFor={fid("name")}>Nome</label>
@@ -821,6 +852,7 @@ export function UserForm({ shops = [] }: { shops?: { slug: string; name: string 
       <div>
         <label className={labelCls} htmlFor={fid("email")}>Email (facoltativa)</label>
         <input id={fid("email")} name="email" type="email" maxLength={200} className={inputCls} />
+        <FieldError name="email" />
       </div>
       <div>
         <label className={labelCls} htmlFor={fid("role")}>Ruolo</label>
@@ -847,7 +879,7 @@ export function UserForm({ shops = [] }: { shops?: { slug: string; name: string 
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-brown-800/60">
+          <p className="mt-1 text-xs text-brown-800/70">
             Uno staff assegnato a una sede vede e modifica solo gli ordini, i prodotti e le
             prenotazioni di quella sede.
           </p>
@@ -878,6 +910,7 @@ export function RewardForm({ reward }: { reward?: RewardRow | null }) {
     <ActionForm
       action={saveReward}
       redirectTo="/admin/rewards"
+      guardUnsaved="Le modifiche a questo premio non sono state salvate. Se esci adesso vanno perse."
       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       {reward && <input type="hidden" name="id" value={reward.id} />}
@@ -896,7 +929,7 @@ export function RewardForm({ reward }: { reward?: RewardRow | null }) {
       <div className="sm:col-span-2">
         <label className={labelCls} htmlFor={fid("description")}>Descrizione</label>
         <textarea id={fid("description")} name="description" rows={2} maxLength={2000} defaultValue={reward?.description} className={inputCls} />
-        <p className="mt-1 text-xs text-brown-800/60">Mostrata al cliente nel catalogo fedeltà.</p>
+        <p className="mt-1 text-xs text-brown-800/70">Mostrata al cliente nel catalogo fedeltà.</p>
       </div>
 
       {/* Availability: how many exist, how often one customer may claim it, and
@@ -914,7 +947,7 @@ export function RewardForm({ reward }: { reward?: RewardRow | null }) {
           placeholder="illimitata"
           className={inputCls}
         />
-        <p className="mt-1 text-xs text-brown-800/60">
+        <p className="mt-1 text-xs text-brown-800/70">
           Scalata a ogni riscatto e ripristinata se il riscatto viene annullato.
         </p>
       </div>
@@ -931,7 +964,7 @@ export function RewardForm({ reward }: { reward?: RewardRow | null }) {
           placeholder="nessun limite"
           className={inputCls}
         />
-        <p className="mt-1 text-xs text-brown-800/60">Quante volte lo stesso cliente può riscattarlo.</p>
+        <p className="mt-1 text-xs text-brown-800/70">Quante volte lo stesso cliente può riscattarlo.</p>
       </div>
       <div>
         <label className={labelCls} htmlFor="reward-from">
@@ -962,7 +995,7 @@ export function RewardForm({ reward }: { reward?: RewardRow | null }) {
       <div>
         <label className={labelCls} htmlFor={fid("sortOrder")}>Ordine</label>
         <input id={fid("sortOrder")} name="sortOrder" type="number" step={1} defaultValue={reward?.sortOrder ?? 0} className={inputCls} />
-        <p className="mt-1 text-xs text-brown-800/60">Numero più basso = mostrato prima.</p>
+        <p className="mt-1 text-xs text-brown-800/70">Numero più basso = mostrato prima.</p>
       </div>
       <div className="flex items-center sm:col-span-2">
         <Toggle name="active" label="Attivo (visibile e riscattabile dai clienti)" defaultChecked={reward?.active ?? true} />
@@ -1012,6 +1045,7 @@ export function CategoryForm({
     <ActionForm
       action={saveCategory}
       redirectTo={`/admin/categories${isProduct ? "" : "?kind=post"}`}
+      guardUnsaved="Le modifiche a questa categoria non sono state salvate. Se esci adesso vanno perse."
       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       {category && <input type="hidden" name="id" value={category.id} />}
@@ -1030,7 +1064,8 @@ export function CategoryForm({
           placeholder="auto dal nome se vuoto"
           className={inputCls}
         />
-        <p className="mt-1 text-xs text-brown-800/60">
+        <FieldError name="slug" />
+        <p className="mt-1 text-xs text-brown-800/70">
           {isProduct
             ? "Usato nell'indirizzo pubblico: /negozio/categoria/<slug>."
             : "Identificativo interno; sul sito compare solo il nome."}
@@ -1044,8 +1079,8 @@ export function CategoryForm({
             <>
               {/* No field at all: the server would refuse it, and a disabled
                   <select> is never posted anyway. */}
-              <p className={`${inputCls} text-brown-800/60`}>— Nessuna (primo livello) —</p>
-              <p className="mt-1 text-xs text-brown-800/60">
+              <p className={`${inputCls} text-brown-800/70`}>— Nessuna (primo livello) —</p>
+              <p className="mt-1 text-xs text-brown-800/70">
                 Raggruppa già altre categorie, quindi resta al primo livello.
               </p>
             </>
@@ -1059,7 +1094,8 @@ export function CategoryForm({
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-xs text-brown-800/60">
+              <FieldError name="parentId" />
+              <p className="mt-1 text-xs text-brown-800/70">
                 Solo per ordinare il gestionale: sul sito le categorie sono tutte allo stesso livello.
               </p>
             </>
@@ -1075,7 +1111,7 @@ export function CategoryForm({
           defaultValue={category?.sortOrder ?? 0}
           className={inputCls}
         />
-        <p className="mt-1 text-xs text-brown-800/60">
+        <p className="mt-1 text-xs text-brown-800/70">
           Numero più basso = più in alto. Dall&apos;elenco puoi anche usare le frecce ↑ ↓.
         </p>
       </div>
@@ -1099,7 +1135,7 @@ export function CategoryForm({
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-brown-800/60">
+            <p className="mt-1 text-xs text-brown-800/70">
               Proposta ai nuovi prodotti di questa categoria. Non cambia i prodotti già salvati.
             </p>
           </div>
@@ -1114,7 +1150,7 @@ export function CategoryForm({
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-brown-800/60">
+            <p className="mt-1 text-xs text-brown-800/70">
               Il colore usato sul sito per questa categoria.
             </p>
           </div>
@@ -1128,7 +1164,7 @@ export function CategoryForm({
               defaultValue={category?.description}
               className={inputCls}
             />
-            <p className="mt-1 text-xs text-brown-800/60">
+            <p className="mt-1 text-xs text-brown-800/70">
               Mostrata in cima alla pagina della categoria sul sito.
             </p>
           </div>

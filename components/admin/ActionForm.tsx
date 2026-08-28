@@ -1,13 +1,67 @@
 "use client";
 
-import { useActionState, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useActionState,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { idleState, type ActionState } from "@/lib/admin/action-state";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { UnsavedGuard } from "./UnsavedGuard";
 import { useToast } from "./Toasts";
 
 type Action = (prev: ActionState, fd: FormData) => Promise<ActionState>;
+
+/**
+ * Which fields the last submission rejected, keyed by input `name`.
+ *
+ * Published by `ActionForm` and read by `FieldError` beside each input, so a
+ * validation failure is visible *at* the field rather than only as a toast that
+ * expires nine seconds later. Empty for every form that has not failed.
+ */
+const FieldErrorContext = createContext<Record<string, string>>({});
+
+/**
+ * The message for one field, plus the wiring an input needs to announce it.
+ *
+ * Render it under the control and spread `props` onto the control itself:
+ *
+ *     const slug = useFieldError("slug");
+ *     <input id={fid("slug")} name="slug" {...slug.props} … />
+ *     <FieldError name="slug" />
+ */
+export function useFieldError(name: string) {
+  const errors = useContext(FieldErrorContext);
+  const id = useId();
+  const message = errors[name];
+  return {
+    message,
+    props: message
+      ? ({ "aria-invalid": true, "aria-describedby": id } as const)
+      : ({} as Record<string, never>),
+    id,
+  };
+}
+
+/** The message itself. Renders nothing when the field is fine. */
+export function FieldError({ name }: { name: string }) {
+  const errors = useContext(FieldErrorContext);
+  const message = errors[name];
+  if (!message) return null;
+  return (
+    <p className="mt-1 flex items-start gap-1.5 text-xs font-semibold text-danger" data-field-error={name}>
+      <span aria-hidden>!</span>
+      {message}
+    </p>
+  );
+}
 
 /**
  * Submit button that reflects the enclosing form's pending state.
@@ -21,11 +75,22 @@ export function PendingButton({
   children,
   tone = "gold",
   confirm,
+  confirmLabel,
+  confirmTone,
   disabled = false,
 }: {
   children: ReactNode;
-  tone?: "gold" | "dark" | "danger";
+  /** `ghost` is the icon-sized one: no ground of its own, for a control that
+   *  sits inside something already coloured (the × on a saved view). It keeps
+   *  the 44px target through `.tap` rather than through padding, so it doesn't
+   *  stretch the pill it lives in. */
+  tone?: "gold" | "dark" | "danger" | "ghost";
   confirm?: string;
+  /** Wording and weight of the confirming button in the dialog. Needed when the
+   *  trigger's own label is an icon (there is nothing to echo) or when a quiet
+   *  trigger guards a destructive action. */
+  confirmLabel?: string;
+  confirmTone?: "danger" | "dark";
   /** Blocks submission before the form is ready (e.g. an unresolved lookup). */
   disabled?: boolean;
 }) {
@@ -36,7 +101,9 @@ export function PendingButton({
     gold: "bg-gold text-on-gold hover:bg-gold-dark",
     dark: "bg-brown-950 text-cream hover:bg-brown-900",
     danger: "bg-danger-solid text-danger-solid-fg hover:brightness-110",
+    ghost: "tap p-1 text-current opacity-60 hover:bg-black/10 hover:opacity-100",
   };
+  const size = tone === "ghost" ? "" : "min-h-11 px-5 py-2.5";
   return (
     <>
       <button
@@ -56,7 +123,7 @@ export function PendingButton({
               }
             : undefined
         }
-        className={`relative inline-flex min-h-11 items-center justify-center rounded-full px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-colors disabled:opacity-60 ${tones[tone]}`}
+        className={`relative inline-flex items-center justify-center rounded-full text-xs font-bold tracking-widest uppercase transition-colors disabled:opacity-60 ${size} ${tones[tone]}`}
       >
         <span className={pending ? "invisible" : undefined}>{children}</span>
         {pending && (
@@ -69,13 +136,19 @@ export function PendingButton({
           </span>
         )}
       </button>
-      {confirm && (
+      {/* Mounted only once it is actually asked for.
+          One of these per confirmable control meant the users list shipped 120
+          <dialog> elements — five a row, each with its own heading, message and
+          two buttons — for confirmations that are almost never opened, and the
+          page came to 766 KB of HTML for twenty-five rows. The dialog's effect
+          runs on mount, so `showModal()` still fires on the same tick. */}
+      {confirm && asking && (
         <ConfirmDialog
           open={asking}
           title="Confermi?"
           message={confirm}
-          confirmLabel={typeof children === "string" ? children : "Conferma"}
-          tone={tone === "danger" ? "danger" : "dark"}
+          confirmLabel={confirmLabel ?? (typeof children === "string" ? children : "Conferma")}
+          tone={confirmTone ?? (tone === "danger" ? "danger" : "dark")}
           onCancel={() => setAsking(false)}
           onConfirm={() => {
             // `asking` is still true on this click, so the handler above lets
@@ -103,6 +176,7 @@ export function ActionForm({
   id,
   redirectTo,
   onSuccess,
+  guardUnsaved,
   "aria-label": ariaLabel,
 }: {
   action: Action;
@@ -122,31 +196,96 @@ export function ActionForm({
    *  pages so saving returns the operator to that entity's list; omitted for the
    *  inline forms in list rows, which should leave the page where it is. */
   redirectTo?: string;
+  /**
+   * Ask before leaving with edits in the fields.
+   *
+   * The wording names what would be lost ("il prodotto"), because the dialog can
+   * appear over any page. Set it on the long create/edit forms; NOT on the
+   * one-button forms in list rows, where there is nothing to lose and the guard
+   * would fire on every ★ toggle.
+   */
+  guardUnsaved?: string;
 }) {
   const toast = useToast();
   const router = useRouter();
-  const [, formAction] = useActionState(async (prev: ActionState, fd: FormData) => {
+  // Whether anything has been typed since the last successful save. Tracked from
+  // the form's own bubbled events rather than per field: these forms are
+  // uncontrolled by design, and reading twenty defaultValues back would be a
+  // second source of truth for what the DOM already knows.
+  const [dirty, setDirty] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [state, formAction] = useActionState(async (prev: ActionState, fd: FormData) => {
     const result = await action(prev, fd);
     // Called from the action callback rather than an effect, so the toast is
     // published once per submission instead of on every re-render.
     toast(result);
     if (result.status === "success") {
+      // Saved: the guard must be down *before* the redirect below, or the form
+      // would block the navigation its own save just asked for.
+      setDirty(false);
       onSuccess?.(result);
       if (redirectTo) router.push(redirectTo);
     }
     return result;
   }, idleState);
 
+  const touch = guardUnsaved ? () => setDirty(true) : undefined;
+
+  // Take the operator to the first rejected field.
+  //
+  // Keyed on the whole state object rather than on the field name, so
+  // submitting twice with the same error focuses it again — the second attempt
+  // is exactly when "which field?" needs answering. Falls back to scrolling the
+  // message into view for a control the browser will not focus.
+  useEffect(() => {
+    const fieldErrors = state.fieldErrors;
+    if (!fieldErrors) return;
+    const form = formRef.current;
+    if (!form) return;
+    const first = Object.keys(fieldErrors)[0];
+    const found = form.elements.namedItem(first);
+    const control = found instanceof HTMLElement ? found : null;
+    if (control) {
+      control.focus({ preventScroll: true });
+      control.scrollIntoView({ block: "center", behavior: "smooth" });
+    } else {
+      form
+        .querySelector('[data-field-error="' + CSS.escape(first) + '"]')
+        ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    // `state`, not `state.fieldErrors`: submitting twice with the same error
+    // must focus the field again, and the second attempt is exactly when "which
+    // field?" needs answering. `useActionState` returns a fresh object per
+    // submission, so the identity change is the signal.
+  }, [state]);
+
   return (
-    <form id={id} action={formAction} className={className} aria-label={ariaLabel}>
-      {children}
+    <form
+      ref={formRef}
+      id={id}
+      action={formAction}
+      className={className}
+      aria-label={ariaLabel}
+      // Both: `onInput` catches typing, `onChange` catches selects, checkboxes
+      // and file pickers, which do not fire an input event in every browser.
+      onInput={touch}
+      onChange={touch}
+    >
+      <FieldErrorContext.Provider value={state.fieldErrors ?? EMPTY_ERRORS}>
+        {children}
+      </FieldErrorContext.Provider>
+      {guardUnsaved && <UnsavedGuard active={dirty} message={guardUnsaved} />}
     </form>
   );
 }
 
+/** A stable empty map, so a form with no errors doesn't hand its consumers a
+ *  fresh object on every render. */
+const EMPTY_ERRORS: Record<string, string> = {};
+
 /**
  * A minimal confirm-then-submit form for destructive actions. Renders a single
- * hidden `id` field plus a danger button guarded by a native confirm().
+ * hidden `id` field plus a danger button guarded by `ConfirmDialog`.
  */
 export function DeleteForm({
   action,
