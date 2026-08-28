@@ -459,7 +459,12 @@ export function htmlToText(html: string): string {
     .replace(/&#(\d+);/g, (_m, code) => String.fromCodePoint(Number(code)))
     .replace(/&#x([0-9a-f]+);/gi, (_m, code) => String.fromCodePoint(parseInt(code, 16)))
     .replace(/&amp;/gi, "&")
-    .replace(/[ \t]+\n/g, "\n")
+    // The source is indented markup, and that indentation is an artefact of how
+    // it was written, not something the reader asked for: without this the
+    // second and later lines of a composed body arrive stepped in by however
+    // many spaces the HTML happened to carry.
+    .replace(/^[ \t]+/gm, "")
+    .replace(/[ \t]+$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

@@ -31,6 +31,14 @@ describe("htmlToText", () => {
     expect(htmlToText("<p>a</p><div></div><div></div><p>b</p>")).toBe("a\n\nb");
   });
 
+  it("does not carry the source's indentation into the message", () => {
+    // Markup is written indented; the reader did not ask for that.
+    const indented = `<p>prima riga</p>
+       <p>seconda riga</p>
+       <ul><li>voce</li></ul>`;
+    expect(htmlToText(indented)).toBe("prima riga\n\nseconda riga\n\n• voce");
+  });
+
   it("decodes entities without decoding twice", () => {
     expect(htmlToText("<p>5 &lt; 6 &amp; 7</p>")).toBe("5 < 6 & 7");
     // The trap: `&amp;lt;` is a literal "&lt;", not a "<".
