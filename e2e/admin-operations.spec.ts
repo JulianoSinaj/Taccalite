@@ -47,13 +47,20 @@ test("2FA enrolment starts, and a wrong code is refused in Italian", async ({ pa
   await login(page);
   await page.goto("/admin/security");
 
-  // The E2E database is reused, so a previous run may have left this account
-  // mid-enrolment — in which case the page shows "Rigenera il QR" and the code
-  // field already, and there is no "Genera il QR" to click.
+  // Either state, waited for rather than sampled. The E2E database is reused
+  // locally, so a previous run may have left this account mid-enrolment — the
+  // page then shows "Rigenera QR" and the code field, with no "Genera il QR" to
+  // click. Asking `count()` which it is fails on a cold server: it answers 0
+  // before the page has rendered, skips the click, and then waits out the full
+  // timeout for a field that was never going to appear. It did exactly that on
+  // CI's first attempt.
   const start = page.getByRole("button", { name: /genera il qr/i });
-  if (await start.count()) await submitAndSettle(page, start.first());
-
   const code = page.locator('input[name="code"]');
+  await expect(start.or(code).first(), "the security page never rendered").toBeVisible({
+    timeout: 30_000,
+  });
+  if (await start.isVisible()) await submitAndSettle(page, start.first());
+
   await expect(code, "starting enrolment must present the code field").toBeVisible({ timeout: 20_000 });
 
   await code.fill("000000");
@@ -235,18 +242,25 @@ test("a customer's points can be corrected, with a reason", async ({ page }) => 
 });
 
 test("a failed email can be retried from the outbox", async ({ page }) => {
-  // The operator's only recovery lever once mail was misconfigured, and the E2E
-  // environment is permanently in that state — every order confirmation this
-  // suite generates lands here failed. Retrying will fail again; what is being
-  // asserted is that the control works, not that the relay does.
+  // The operator's only recovery lever once mail was misconfigured. SMTP is
+  // permanently unconfigured in E2E, so placing an order queues a confirmation
+  // that fails on the spot — which is how this test *makes* its own precondition
+  // instead of assuming one. It cannot assume: the reused local database is full
+  // of failed mail, a fresh CI database is empty, and whether any other spec has
+  // sent something yet is a race between parallel workers. That is precisely how
+  // this failed on CI while passing locally every time.
+  //
+  // Retrying will fail again; what is asserted is that the control works, not
+  // that the relay does.
+  await placePickupOrder(page, "Email Da Riprovare", `e2e-outbox-${RUN}@example.com`);
+
   await login(page);
   await page.goto("/admin/outbox?stato=failed");
 
   // «Riprova tutte le fallite» rather than a per-row button. The rows stream in
   // behind Suspense and the header does not, so a row control reports "element
-  // not found" while 214 failed emails sit in the table — and a `count()`-guarded
-  // skip resolves to 0 instantly and reports the whole test as covered. It is
-  // also the lever an operator actually pulls once SMTP is fixed.
+  // not found" while the failed mail sits in the table. It is also the lever an
+  // operator actually pulls once SMTP is fixed.
   const retry = page.getByRole("button", { name: /riprova tutte le fallite/i });
   await expect(retry.first(), "no failed email offers a retry").toBeVisible({ timeout: 20_000 });
 
