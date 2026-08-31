@@ -159,6 +159,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               key={t.id}
               role={t.status === "error" ? "alert" : "status"}
+              // The E2E specs wait on this to know an action has actually
+              // settled. `role="status"` alone is not usable for that: the list
+              // skeletons and `(dash)/loading.tsx` carry it too, and they are on
+              // screen during exactly the navigation a submit triggers — so a
+              // test polling for the role would "see" the outcome before the
+              // server action had run.
+              data-toast={t.status}
+              // The id too, because "a toast is on screen" is not the same as
+              // "this submission answered": the previous action's confirmation
+              // is still visible for several seconds. The specs wait for an id
+              // they have not seen before.
+              data-toast-id={t.id}
               // Inert card, live close button: the operator keeps clicking the
               // rows underneath while the confirmation is still fading.
               className={`pointer-events-none flex w-full max-w-sm items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg ${

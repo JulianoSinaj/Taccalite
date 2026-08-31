@@ -224,7 +224,25 @@ export function ActionForm({
       // would block the navigation its own save just asked for.
       setDirty(false);
       onSuccess?.(result);
-      if (redirectTo) router.push(redirectTo);
+      if (redirectTo) {
+        router.push(redirectTo);
+      } else {
+        // A form that stays put has to re-read its own record, or the operator
+        // is left looking at the value they just replaced.
+        //
+        // The action's `revalidatePath` clears the *server* cache; it does not
+        // re-render the page already on screen. So confirming a reservation
+        // saved `confirmed`, toasted "Prenotazione aggiornata." — and left the
+        // Stato dropdown reading "In attesa" until a manual reload, which is a
+        // screen contradicting itself about whether the change took. Proven
+        // with a browser: in-place value `pending`, value after reload
+        // `confirmed`. `e2e/admin-forms.spec.ts` asserts the confirmed status
+        // is on screen without reloading.
+        //
+        // A soft refresh: client state and scroll survive, only the server
+        // components re-render.
+        router.refresh();
+      }
     }
     return result;
   }, idleState);

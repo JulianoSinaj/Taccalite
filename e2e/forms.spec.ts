@@ -1,5 +1,13 @@
-import { test, expect, type Page } from "@playwright/test";
-import { E2E_ADMIN } from "../playwright.config";
+import { test, expect } from "@playwright/test";
+import {
+  RUN,
+  addToCart,
+  choosePickupSlotIfRequired,
+  expectNoRawSchemaError,
+  expectRowExists,
+  login,
+  placePickupOrder,
+} from "./_helpers";
 
 /**
  * Forms that are actually submitted.
@@ -25,55 +33,6 @@ import { E2E_ADMIN } from "../playwright.config";
  * afterwards. Keep it that way — a test that only fills a form proves nothing.
  */
 
-/** Unique per run: the E2E database persists across runs (`reuseExistingServer`). */
-const RUN = Date.now().toString(36);
-
-async function login(page: Page) {
-  await page.goto("/admin/login");
-  await page.fill('input[type="text"]', E2E_ADMIN.username);
-  await page.fill('input[type="password"]', E2E_ADMIN.password);
-  await page.click('button[type="submit"]');
-  await expect(page).toHaveURL(/\/admin(?!\/login)/, { timeout: 30_000 });
-}
-
-/** Put the first purchasable seeded product in the cart, through the UI. */
-async function addToCart(page: Page) {
-  await page.goto("/negozio/ciauscolo-igp");
-  await page.getByRole("button", { name: /aggiungi/i }).first().click();
-  // The cart lives in localStorage; wait for it to actually hold a line.
-  await expect
-    .poll(async () => page.evaluate(() => (window.localStorage.getItem("taccalite-cart") ?? "").length), {
-      timeout: 15_000,
-    })
-    .toBeGreaterThan(2);
-}
-
-/**
- * Assert a record exists by finding the **row link that opens it**, not by
- * searching the page text.
- *
- * `/admin/products?q=<name>` echoes the search term back into the filter chip
- * and the search box, so `toContainText(name)` passes on an empty result set.
- * That is not hypothetical: written that way, this file's product test went
- * green against the very bug it was added to catch.
- */
-async function expectRowExists(page: Page, listPath: string, name: string) {
-  await page.goto(`${listPath}?q=${encodeURIComponent(name)}`);
-  const row = page
-    .locator(`a[href^="${listPath}/"]`)
-    .filter({ hasText: name })
-    .filter({ hasNotText: /^nuovo/i });
-  await expect(row.first(), `no row linking to a saved "${name}"`).toBeVisible({ timeout: 20_000 });
-}
-
-/**
- * Zod's own messages are English. Any of them reaching a customer means a field
- * is mis-specified — that is exactly how the checkout failure presented.
- */
-async function expectNoRawSchemaError(page: Page) {
-  await expect(page.locator("body")).not.toContainText(/Invalid input|expected string|nonoptional|Required/i);
-}
-
 test("checkout submits and creates a pickup order", async ({ page }) => {
   // The regression: pickup does not render the address fields, so `address` and
   // `city` arrive as null and the order was refused.
@@ -83,6 +42,10 @@ test("checkout submits and creates a pickup order", async ({ page }) => {
   await page.fill('input[name="name"]', "Mario Rossi");
   await page.fill('input[name="email"]', `e2e-${RUN}@example.com`);
   await page.fill('input[name="phone"]', "3391234567");
+  // As soon as the shop has one active pickup window, choosing a time becomes
+  // mandatory and the submit button goes disabled — so this test's own outcome
+  // depends on configuration another spec creates.
+  await choosePickupSlotIfRequired(page);
 
   await page.getByRole("button", { name: /conferma ordine|paga/i }).first().click();
 
@@ -252,14 +215,7 @@ test("admin saves a new category and a new news article", async ({ page }) => {
 test("admin changes an order's status by hand", async ({ page }) => {
   // Depends on an order existing: create one first so the test does not rely on
   // seed data or on another spec having run.
-  await addToCart(page);
-  await page.goto("/checkout");
-  await page.fill('input[name="name"]', "Ordine Da Gestire");
-  await page.fill('input[name="email"]', `e2e-manage-${RUN}@example.com`);
-  await page.fill('input[name="phone"]', "3391234567");
-  await page.getByRole("button", { name: /conferma ordine|paga/i }).first().click();
-  await expect(page).toHaveURL(/\/checkout\/success\?order=ORD-/, { timeout: 30_000 });
-  const orderNumber = new URL(page.url()).searchParams.get("order")!;
+  const orderNumber = await placePickupOrder(page, "Ordine Da Gestire", `e2e-manage-${RUN}@example.com`);
 
   await login(page);
   await page.goto(`/admin/orders?q=${orderNumber}`);
