@@ -59,6 +59,18 @@ export default defineConfig({
       // variable, so these win over `.env`.
       ADMIN_USERNAME: E2E_ADMIN.username,
       ADMIN_PASSWORD: E2E_ADMIN.password,
+      // A relay that refuses instantly, so transactional mail is *attempted and
+      // failed* rather than left queued.
+      //
+      // This is the one place local and CI diverged and it cost a red build:
+      // with no SMTP_HOST at all the mailer never sends, so rows sit `queued`
+      // and `/admin/outbox?stato=failed` is empty — while the developer's `.env`
+      // points at a real relay with blank credentials, which rejects, so locally
+      // every row is `failed`. The outbox spec passed here and failed there.
+      // Port 1 gets an immediate ECONNREFUSED, so nothing waits on a timeout and
+      // nothing leaves the machine.
+      SMTP_HOST: "127.0.0.1",
+      SMTP_PORT: "1",
     },
   },
 });
