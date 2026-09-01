@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import RichText from "@/components/site/RichText";
+import { emphasise } from "@/components/site/Headline";
 import {
   SITE_CONTENT,
   parseLines,
@@ -115,5 +116,47 @@ describe("RichText", () => {
     expect(out).toContain('href="/cookie"');
     expect(out).toContain("mailto:");
     expect((out.match(/<li>/g) ?? []).length).toBe(8);
+  });
+});
+
+describe("editable headlines", () => {
+  it("renders the marked fragment in gold and leaves the rest alone", () => {
+    const out = renderToStaticMarkup(
+      createElement("h1", {}, emphasise("Parliamone **di persona.**")),
+    );
+    expect(out).toContain("Parliamone ");
+    expect(out).toContain('class="wonk text-gold-deep"');
+    expect(out).toContain("di persona.");
+    // The markers are a formatting instruction, never characters on the page.
+    expect(out).not.toContain("**");
+  });
+
+  it("passes text with no marker through untouched", () => {
+    // What makes adopting the convention on an existing heading a no-op.
+    const out = renderToStaticMarkup(createElement("h1", {}, emphasise("Scriveteci")));
+    expect(out).toBe("<h1>Scriveteci</h1>");
+  });
+
+  it("handles an emphasis that is the whole line, and one at the start", () => {
+    expect(renderToStaticMarkup(createElement("h1", {}, emphasise("**dal 1946.**")))).toContain(
+      "wonk",
+    );
+    const start = renderToStaticMarkup(createElement("h1", {}, emphasise("**Oggi** al banco")));
+    expect(start).toContain("wonk");
+    expect(start).toContain(" al banco");
+  });
+
+  it("keeps the hero headline and the contatti title editable and marked up", () => {
+    // These two are the storefront's first line of copy. If either loses its
+    // registry entry the page silently falls back to nothing at all, so the
+    // keys the pages read are asserted here rather than trusted.
+    for (const key of ["home.hero.titolo", "home.hero.testo", "contatti.titolo"]) {
+      expect(contentDef(key), key).toBeTruthy();
+    }
+    const hero = contentDef("home.hero.titolo")!;
+    expect(parseLines(hero.default)).toHaveLength(3);
+    // The gold fragment lives in the text now, not in the JSX.
+    expect(hero.default).toContain("**");
+    expect(contentDef("contatti.titolo")!.default).toContain("**");
   });
 });

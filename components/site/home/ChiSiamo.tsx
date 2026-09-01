@@ -67,7 +67,7 @@ export default function ChiSiamo() {
           </blockquote>
 
           <div className="mt-10">
-            <CTA href="/la-nostra-storia" tone="outline">
+            <CTA href="/la-nostra-storia" tone="gold">
               La nostra storia
             </CTA>
           </div>

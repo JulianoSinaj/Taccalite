@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, ChevronDown, Flame, Phone, ShoppingBag } from "lucide-react";
+import { ArrowRight, ChevronDown, Phone, ShoppingBag } from "lucide-react";
 import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
 import JsonLd from "@/components/JsonLd";
 import PageHero from "@/components/site/PageHero";
@@ -30,6 +30,15 @@ export const metadata: Metadata = {
   description:
     "La porchetta artigianale Taccalite: la ricetta di famiglia, cotta lentamente ogni sabato ad Ancona. Scegli quanta, in quale bottega e per quale sabato, e prenotala online.",
 };
+
+/**
+ * The horizontal dissolve on the hero photograph — see the note at its call
+ * site. Declared once because `mask-image` and its `-webkit-` twin have to stay
+ * identical, and a smoothstep written out twice is a smoothstep that will one
+ * day be edited once.
+ */
+const MASK =
+  "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.04) 6%, rgba(0,0,0,0.16) 11%, rgba(0,0,0,0.32) 16%, rgba(0,0,0,0.50) 22%, rgba(0,0,0,0.68) 27%, rgba(0,0,0,0.84) 33%, rgba(0,0,0,0.96) 38%, #000 44%)";
 
 /** The e-shop product this page prices from and sells through. */
 const PRODUCT_SLUG = "porchetta-artigianale";
@@ -86,6 +95,12 @@ export default async function PorchettaPage() {
   // With one roasting shop the strip reads as it always did; with more, each gets
   // its own figure rather than being averaged into a number true of neither.
   const capped = shopAvailability.filter((s) => s.capacityKg > 0);
+
+  // The strip at the top and the chips in the form are two reads of the same
+  // calendar, so the deadline shown beside the date has to be *that* batch's —
+  // matched on the ISO rather than assumed to be the first of the list.
+  const nextDay =
+    pickupDays.find((d) => d.pickupIso === availability.pickupIso) ?? pickupDays[0];
 
   const pickupDayName = weekdayNameIt(pickupDayKey, "sabato");
   const cutoffDayName = weekdayNameIt(cutoffDayKey, "venerdì");
@@ -204,10 +219,18 @@ export default async function PorchettaPage() {
       />
 
       {/* Hero.
-          Was a full-bleed stock photograph of somebody else's roast under a
-          near-black wash — the only remaining dark opening on the site, and the
-          one page where a stock image would be claiming to be the product. On
-          paper, with the seal, it says the same thing without borrowing. */}
+          Twice now this band has been a photograph: first full-bleed under a
+          near-black wash — the only dark opening left on the site — and then
+          not at all, a 360px square in the right-hand column. This is the third
+          shape and it is trying to keep what each of the other two was right
+          about. The picture is large and unframed, the way the first one was;
+          the page stays paper and the type stays black on cream, the way the
+          second one insisted. The photograph is the ground, not a slab over it.
+
+          The honesty problem the near-black version had is still here, though,
+          and it is now bigger: this is Wikimedia's porchetta, not ours. The
+          credit under it is what the licence asks; a Saturday morning and a
+          phone is what actually fixes it. */}
       <PageHero
         eyebrow="Specialità della casa"
         title={[
@@ -217,42 +240,92 @@ export default async function PorchettaPage() {
           </span>,
         ]}
         lede={`Cottura lenta, erbe delle Marche, e il ${pickupDayName} mattina fuori dal forno. Scegli quanta ne vuoi, in quale bottega e per quale ${pickupDayName}: al resto pensiamo noi.`}
-        aside={
-          <div className="relative mx-auto hidden max-w-sm lg:block">
-            <div className="relative aspect-square overflow-hidden">
-              {/* This was the only `fill` image on the site with no `sizes`, and
-                  it is the LCP element of the page. Without the prop Next assumes
-                  `100vw`, so a 360px box was being served the w=1920 variant:
-                  409KB to paint 24KB worth of pixels.
+        media={
+          // Not `aria-hidden`: the photograph is decorative and carries an
+          // empty `alt`, but keeping the panel in the accessibility tree costs
+          // nothing and leaves somewhere for a credit to live if the picture is
+          // ever swapped for one whose licence requires it. This one's does
+          // not — Pexels License, Cleo Vergara, free for commercial use with no
+          // attribution, which is also why `PhotoCredit` is not called here.
+          <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[50%] lg:block xl:w-[54%]">
+            {/* The picture, and no frame around it.
 
-                  The two halves of `sizes` are doing different jobs. Above `lg`
-                  the box is `max-w-sm` and nothing else — a constant, not a `vw`
-                  fraction — expressed in `rem` so it tracks the fluid root
-                  font-size that sizes the box (24rem × 15px = the 360px measured
-                  at every width from 1024 to 1920).
+                Two photographs have been wrong in this slot. First a 360px
+                square of `lonza-suino-brado.jpg` — a vacuum-packed loin under
+                the counter's magenta light — which was not porchetta at all, on
+                a page whose whole promise is crackling out of the oven. Then
+                Wikimedia's `porchetta-al-forno.jpg`, which was at least the
+                right dish but is flatly lit against a black cloth, and came
+                with a CC BY-SA credit that had to be printed over the corner.
 
-                  The `1px` fallback is what makes `loading="eager"` safe here.
-                  The parent is `hidden lg:block`, so on a phone this is a
-                  zero-width node the visitor never sees — but it is still in the
-                  DOM, and eager loading does not care that a box is collapsed.
-                  A bare `eager` therefore bought a desktop LCP by making every
-                  phone download an invisible 24KB. Telling the browser the slot
-                  is 1px wide means it satisfies that from the bottom of the
-                  srcset instead: 0.5KB, against 25KB on desktop and 89KB at 2×.
+                This one is lit, warm, and shows the spiral of the roll, which
+                is the part that makes someone want to eat it. It is also
+                CC0-equivalent, so the corner is clean.
 
-                  Measured after the change: the request now starts at 309ms,
-                  ahead of DOMContentLoaded, where lazy had it at 722ms — and all
-                  three of Next's warnings on this image are gone. */}
-              <Image
-                src="/images/lonza-suino-brado.jpg"
-                alt="Lonza di suino brado stagionata, in bottega da Taccalite"
-                fill
-                sizes="(min-width: 1024px) 24rem, 1px"
-                loading="eager"
-                fetchPriority="high"
-                className="object-cover"
-              />
-            </div>
+                `object-left` puts the two cut slices in the right-hand half of
+                the panel — which matters, because the left of this panel is
+                masked away (below) and anything composed there would be thrown
+                out.
+
+                The panel narrows at `lg`. `display-xl` sets at `8.5vw` up to a
+                `8rem` cap, so the headline's right edge tracks the viewport at
+                a fixed fraction until about 1400px and then stops — meaning the
+                gap between the last glyph and the panel is at its tightest
+                exactly at `lg`, where a flat 54% left three pixels of it. The
+                mask would have covered that, but three pixels is not a margin,
+                it is a coincidence waiting to be broken by a longer word. */}
+            <Image
+              src="/images/porchetta-affettata-tagliere.jpg"
+              alt=""
+              fill
+              sizes="(min-width: 1280px) 54vw, (min-width: 1024px) 50vw, 1px"
+              loading="eager"
+              fetchPriority="high"
+              className="object-cover object-left"
+              style={{
+                // The edge that was a line, and then was too white.
+                //
+                // A paper-coloured `div` laid over the photograph faded it out
+                // *to a flat colour* — and the page is not a flat colour, it is
+                // stock with `--paper-grain` multiplied over it. So the wash read
+                // as a panel of untextured cream on textured cream: the same
+                // seam, only softer. Masking removes the pixels instead of
+                // covering them, so what shows through is the real page.
+                //
+                // The shape of the ramp then matters more than its length, for
+                // two reasons that pull against each other.
+                //
+                // Smoothness: the first version went `0 → 0.55 → 1` at three
+                // stops, which is two straight runs at different slopes meeting
+                // at 26%. That join is a crease, and no amount of extra length
+                // hides it. This is a smoothstep — nine stops off `3t²-2t³` —
+                // so the slope is zero at both ends and there is no join to see.
+                //
+                // Whiteness: over cream, alpha is what makes a photograph pale.
+                // At a=0.5 this picture composites to roughly (196,177,164) —
+                // milk. So the fade should cross the middle of its range as
+                // quickly as it can and linger only at the ends, where it is
+                // imperceptible. A smoothstep does exactly that: steepest at
+                // 0.5, flat at 0 and 1. The pale band is now about an eighth of
+                // the panel rather than a fifth of it, and full strength arrives
+                // at 44% instead of 46% of a panel that is itself wider — which
+                // is the rest of the answer, since the cure for a washed edge is
+                // mostly more photograph behind it.
+                maskImage: MASK,
+                WebkitMaskImage: MASK,
+              }}
+            />
+
+            {/* The one wash that stays, and only at the top. The fixed header is
+                translucent paper with grain in it, and a photograph read through
+                that grain looks like a printing fault — so the picture starts
+                below the chrome rather than under it. Flat cream is the right
+                paint here precisely because the header is flat cream too.
+
+                The bottom is left hard on purpose: it is where this band hands
+                over to the sfornata strip, and a straight rule there is the same
+                join every other section of the site makes. */}
+            <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-paper via-paper/85 to-transparent" />
           </div>
         }
       >
@@ -268,64 +341,90 @@ export default async function PorchettaPage() {
         </div>
       </PageHero>
 
-      {/* Disponibilità — live availability strip. Real numbers from the day's
-          bookings, so it earns the gold border it sits behind. */}
+      {/* Disponibilità — the roasting docket.
+
+          This band was a card: a gold-hairline box on a warm fill, with a gold
+          pill on the right. Three things were wrong with it. It floated, on a
+          page whose whole idiom is ruled paper rather than cards. Its pill
+          repeated the hero's "Prenota per sabato" — the same words, the same
+          colour, the same anchor, two hundred pixels apart — so the eye met two
+          identical gold buttons and had to work out that they were one offer.
+          And it buried its own point: the kilos left in each bottega are the
+          only live numbers on the page, and they were set smaller than
+          everything around them, in a bulleted list, under a date.
+
+          So: no box, two hairlines. The date is the heading it always was, the
+          deadline sits under it where a deadline belongs, and the capacity is
+          promoted to the right-hand half and given a measure — a quantity is
+          easier to read as a length than as a sentence. The action steps down
+          to an outline, because the gold one is still on screen above it. */}
       <section className="px-5 pb-16 sm:px-8 lg:px-12">
-        <Reveal className="mx-auto flex max-w-[88rem] flex-col items-center justify-between gap-6 border border-gold/50 bg-paper-warm px-6 py-7 sm:flex-row sm:px-8 lg:px-12 sm:py-8">
-          <div className="text-center sm:text-left">
-            <p className="mb-3 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
-              Prossima sfornata
-            </p>
-            <p className="font-display text-2xl leading-tight font-semibold text-brown-950 sm:text-3xl">
-              {pickupLabel}
-              {hasCapacity && allFull && (
-                <span className="wonk text-gold-deep"> · Al completo — lista d&apos;attesa</span>
+        <Reveal className="mx-auto max-w-[88rem] border-y border-rule-strong py-8 sm:py-10">
+          <div className="grid gap-8 lg:grid-cols-12 lg:items-center lg:gap-12">
+            <div className="lg:col-span-5">
+              <p className="eyebrow font-semibold text-gold-deep uppercase">Prossima sfornata</p>
+              <p className="font-display mt-4 text-[1.75rem] leading-[1.05] font-semibold text-brown-950 sm:text-[2.125rem]">
+                {pickupLabel}
+                {hasCapacity && allFull && (
+                  <span className="wonk block text-gold-deep">Al completo — lista d&apos;attesa</span>
+                )}
+              </p>
+              {/* The deadline, which used to live only in the ledger four bands
+                  down. It is the fact that decides whether a visitor acts now or
+                  closes the tab, so it belongs against the date it applies to. */}
+              {nextDay?.bookable && (
+                <p className="mt-3 text-sm text-brown-700">
+                  Prenotazioni entro <span className="font-semibold text-brown-950">{nextDay.cutoffLabel}</span>
+                </p>
               )}
-              {hasCapacity && !allFull && capped.length === 1 && (
-                <span className="text-brown-700">
-                  {" "}
-                  ·{" "}
-                  <span className="font-bold text-gold-deep tabular-nums">
-                    {formatKg(capped[0].remainingKg)} kg
-                  </span>{" "}
-                  su {formatKg(capped[0].capacityKg)} disponibili
-                </span>
-              )}
-            </p>
-            {hasCapacity && !allFull && capped.length > 1 && (
-              <ul className="mt-3 space-y-1 text-sm text-brown-700">
-                {capped.map((s) => (
-                  <li key={s.slug}>
-                    <span className="font-semibold text-brown-950">{s.name}</span>
-                    {" · "}
-                    {s.isFull ? (
-                      <span className="text-gold-deep">al completo</span>
-                    ) : (
-                      <>
-                        <span className="font-bold text-gold-deep tabular-nums">
-                          {formatKg(s.remainingKg)} kg
-                        </span>{" "}
-                        su {formatKg(s.capacityKg)} disponibili
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
+            </div>
+
+            {capped.length > 0 && (
+              <div className="lg:col-span-4">
+                <ul className="space-y-4">
+                  {capped.map((s) => {
+                    // Remaining, not booked: the bar shrinks as the batch sells,
+                    // which is the direction a reader expects a "what is left"
+                    // gauge to move. Clamped, because a hand-edited capacity in
+                    // the gestionale can legitimately sit below what is already
+                    // on the books.
+                    const pct = Math.max(0, Math.min(100, (s.remainingKg / s.capacityKg) * 100));
+                    return (
+                      <li key={s.slug}>
+                        <div className="flex items-baseline justify-between gap-4">
+                          <span className="text-sm font-semibold text-brown-950">{s.name}</span>
+                          <span className="text-sm text-brown-700 tabular-nums">
+                            {s.isFull ? (
+                              <span className="text-gold-deep">al completo</span>
+                            ) : (
+                              <>
+                                <span className="font-bold text-gold-deep">
+                                  {formatKg(s.remainingKg)} kg
+                                </span>{" "}
+                                <span className="text-taupe">su {formatKg(s.capacityKg)}</span>
+                              </>
+                            )}
+                          </span>
+                        </div>
+                        {/* Decorative: the figures above already say it in words,
+                            and a progressbar role here would have a screen reader
+                            read every batch twice. */}
+                        <div aria-hidden className="mt-2 h-[3px] w-full bg-rule">
+                          <div className="h-full bg-gold" style={{ width: `${pct}%` }} />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
+
+            <div className="lg:col-span-3 lg:col-start-10 lg:justify-self-end">
+              <CTA href="#prenota" tone="outline">
+                Prenota la porchetta
+              </CTA>
+            </div>
           </div>
-          <Link
-            href="#prenota"
-            className="group/av relative inline-flex shrink-0 items-center gap-3 overflow-hidden rounded-full bg-gold px-8 py-3.5 text-sm font-semibold text-on-gold focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:outline-none"
-          >
-            <span
-              aria-hidden
-              className="absolute inset-0 bg-brown-950 [clip-path:circle(0%_at_50%_120%)] transition-[clip-path] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover/av:[clip-path:circle(150%_at_50%_120%)]"
-            />
-            <span className="relative z-10 inline-flex items-center gap-3 transition-colors duration-500 group-hover/av:text-cream">
-              <Flame className="size-4" />
-              Prenota la porchetta
-            </span>
-          </Link>
         </Reveal>
       </section>
 

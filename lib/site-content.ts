@@ -66,9 +66,37 @@ export type ContentDef = {
 const HOME = "Home";
 const STORIA = "La nostra storia";
 const PORCHETTA = "Porchetta";
+const CONTATTI = "Contatti";
 const LEGAL = "Note legali";
 
+/**
+ * `**…**` inside a heading is the gold-emphasis convention — see
+ * `components/site/Headline.tsx`. Repeated in the help text of every heading
+ * entry because that is where somebody about to edit one is looking.
+ */
+const EMPHASIS_HELP =
+  "Metti fra **due asterischi** la parte da evidenziare in oro (una sola, di solito l'ultima).";
+
 export const SITE_CONTENT: ContentDef[] = [
+  {
+    key: "home.hero.titolo",
+    page: "/",
+    label: "Home — titolo grande",
+    help: `Il titolo in copertina, una riga per riga: sono righe volute, non un testo che va a capo da solo. ${EMPHASIS_HELP}`,
+    group: HOME,
+    type: "lines",
+    default: ["Il banco", "di famiglia,", "**dal 1946.**"].join("\n"),
+  },
+  {
+    key: "home.hero.testo",
+    page: "/",
+    label: "Home — testo di apertura",
+    help: "Il paragrafo sotto il titolo: la prima cosa che si legge dopo il nome. Tienilo breve.",
+    group: HOME,
+    type: "text",
+    default:
+      "Formaggi scelti uno a uno, salumi lavorati come si faceva allora e la porchetta che il sabato esce calda dal forno. Ordina online e ritira in giornata, oppure passa al banco e fatti consigliare.",
+  },
   {
     key: "home.hero.facts",
     page: "/",
@@ -187,6 +215,45 @@ export const SITE_CONTENT: ContentDef[] = [
       "/images/banco-carni-bovino.jpg | Il banco carni",
       "/images/pasta-artigianale-bottega.jpg | Le specialità in bottega",
     ].join("\n"),
+  },
+  {
+    key: "contatti.titolo",
+    page: "/contatti",
+    label: "Contatti — titolo",
+    help: `Il titolo grande in cima alla pagina. ${EMPHASIS_HELP}`,
+    group: CONTATTI,
+    type: "text",
+    default: "Parliamone **di persona.**",
+  },
+  {
+    key: "contatti.testo",
+    page: "/contatti",
+    label: "Contatti — testo di apertura",
+    help: "Il paragrafo sotto il titolo: a chi serve scrivere, e per cosa.",
+    group: CONTATTI,
+    type: "text",
+    default:
+      "Per un tagliere, un buffet, una consegna o una forma che non trovate da nessun'altra parte: scriveteci, o passate al banco e ne parliamo.",
+  },
+  {
+    key: "contatti.form.titolo",
+    page: "/contatti",
+    label: "Contatti — titolo del modulo",
+    help: "L'intestazione sopra il modulo di contatto.",
+    group: CONTATTI,
+    type: "text",
+    default: "Scriveteci",
+  },
+  {
+    key: "contatti.form.testo",
+    page: "/contatti",
+    label: "Contatti — cosa scrivere nel modulo",
+    help:
+      "La riga che dice al cliente quali dettagli servono. È quella che fa arrivare richieste complete invece di «quanto costa?».",
+    group: CONTATTI,
+    type: "text",
+    default:
+      "Più dettagli ci date, più precisa sarà la risposta: quante persone, per quando, e se ci sono allergie o intolleranze da tenere presenti.",
   },
   {
     key: "legal.privacy.updated",

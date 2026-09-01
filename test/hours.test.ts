@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseStructuredHours, structuredToRows, shopIsOpenNow, shopWeekGrid } from "@/lib/hours";
 import { isOpenNow } from "@/lib/hours";
+import { weekIsDrawable } from "@/components/site/sedi/WeekBars";
 
 // "Tutti i giorni" matches any weekday, so these assertions don't depend on the run date.
 const allDay = [{ label: "Tutti i giorni", value: "9:00–13:00, 16:00–20:00" }];
@@ -176,5 +177,45 @@ describe("shopWeekGrid", () => {
     expect(
       shopWeekGrid({ hours: [{ label: "???", value: "quando capita" }], hoursStructured: null }),
     ).toBeNull();
+  });
+});
+
+/**
+ * The gap between "the grid could be built" and "the chart can be drawn".
+ *
+ * `shopWeekGrid` returns a grid as soon as one day is *known*, and an explicitly
+ * closed day counts — so a shop whose only readable row is "Domenica: Chiuso"
+ * gets a non-null grid with no hours in it. `WeekBars` cannot size an axis
+ * against that and bails, which is right; the pages laying out around a chart
+ * have to know it in advance, and this is what they ask.
+ */
+describe("weekIsDrawable", () => {
+  it("is false for a week whose only known day is closed", () => {
+    const grid = shopWeekGrid({
+      hours: [
+        { label: "Lun – Sab", value: "Orari da confermare in negozio" },
+        { label: "Domenica", value: "Chiuso" },
+      ],
+      hoursStructured: null,
+    });
+    // The grid exists — Sunday was readable — but there is no clock in it.
+    expect(grid).not.toBeNull();
+    expect(weekIsDrawable(grid)).toBe(false);
+  });
+
+  it("is false for a null or absent grid", () => {
+    expect(weekIsDrawable(null)).toBe(false);
+    expect(weekIsDrawable(undefined)).toBe(false);
+  });
+
+  it("is true as soon as one day carries a range", () => {
+    const grid = shopWeekGrid({
+      hours: [
+        { label: "Lun – Sab", value: "7:00 – 13:30" },
+        { label: "Domenica", value: "Chiuso" },
+      ],
+      hoursStructured: null,
+    });
+    expect(weekIsDrawable(grid)).toBe(true);
   });
 });

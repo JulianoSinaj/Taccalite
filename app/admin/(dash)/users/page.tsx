@@ -15,7 +15,7 @@ import {
 import { SegmentedFilter, FilterToolbar, ActiveFilters, labelFrom } from "@/components/admin/FilterBar";
 import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
 import { PasswordField } from "@/components/admin/PasswordField";
-import { getUsersPage, adminGetShops } from "@/lib/admin/queries";
+import { getUsersPage, adminGetShops, countUnscopedStaff } from "@/lib/admin/queries";
 import { userFilters, filterQuery } from "@/lib/admin/filters";
 import { TotalSubtitle } from "@/components/admin/Streamed";
 import type { ShopRow } from "@/lib/db/schema";
@@ -94,7 +94,7 @@ export default async function AdminUsers({ searchParams }: SP) {
   const filters = userFilters(sp);
   // Started, not awaited: the chrome below must render without waiting on it.
   const promise = getUsersPage({ ...filters, page });
-  const shops = await adminGetShops();
+  const [shops, unscopedStaff] = await Promise.all([adminGetShops(), countUnscopedStaff()]);
   const shopName = new Map(shops.map((s) => [s.slug, s.name]));
   const filtered = Object.values(filters).some((v) => v && v !== "all");
 
@@ -112,6 +112,24 @@ export default async function AdminUsers({ searchParams }: SP) {
         }
         action={<NewButton href="/admin/users/new">+ Nuovo utente</NewButton>}
       />
+
+      {/* The separation between the two sedi is enforced everywhere — list
+          queries, detail pages, every write — and all of it is a no-op for a
+          staff account with no sede, because "nessuna sede" legitimately means
+          "the whole business". So an account nobody assigned looks exactly like
+          an owner who works both counters, and the difference was visible on no
+          screen. Shown only when there is more than one sede to separate. */}
+      {unscopedStaff > 0 && shops.length > 1 && (
+        <Panel className="mb-4 border-warn/40 bg-warn-soft">
+          <p className="text-sm text-warn-soft-fg">
+            {unscopedStaff === 1
+              ? "Un account staff non ha una sede assegnata e vede quindi entrambe le botteghe"
+              : `${unscopedStaff} account staff non hanno una sede assegnata e vedono quindi entrambe le botteghe`}{" "}
+            — incassi, ordini, prenotazioni e clienti dell&apos;una e dell&apos;altra. Se è voluto va
+            bene così; altrimenti assegna la sede da «Ruolo e sede» nella riga dell&apos;account.
+          </p>
+        </Panel>
+      )}
 
       <SegmentedFilter
         basePath={BASE}

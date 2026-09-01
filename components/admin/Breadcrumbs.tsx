@@ -47,6 +47,7 @@ const LABELS: Record<string, string> = {
   // segment and the crumb read "cassa" / "fatture" in lower case.
   cassa: "Chiusura di cassa",
   fatture: "Registro fatture",
+  vendite: "Analisi vendite",
   // …and this one is nine letters of plain lower-case, which is exactly what a
   // nanoid looks like to `looksLikeId` below: without an entry the whole page
   // announced itself as "Dettaglio".

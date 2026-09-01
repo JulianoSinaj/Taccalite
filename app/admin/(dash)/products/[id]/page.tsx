@@ -368,12 +368,26 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
         </Panel>
       )}
 
-      {/* Lot + expiry tracking, for anything that carries a scadenza. */}
-      {product.stock != null && (
-        <>
-          <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Tracciabilità</h2>
-          <BatchPanel productId={product.id} batches={batches} today={today} />
-        </>
+      {/* Lot + expiry tracking, for anything that carries a scadenza.
+
+          The heading renders either way now. Receiving a lot *is* a stock
+          movement — `receiveBatch` refuses a product with no giacenza, and
+          rightly — but the section used to disappear entirely for those
+          products, so on a fresh salume with no stock set the traceability
+          feature simply did not exist as far as the screen was concerned. A
+          refusal you can read beats a control that is not there. */}
+      <h2 className="font-display mt-10 mb-3 text-xl text-brown-950">Tracciabilità</h2>
+      {product.stock == null ? (
+        <Panel>
+          <p className="text-sm text-brown-800/70">
+            Questo prodotto non traccia le scorte, quindi non può registrare lotti: caricare un
+            lotto significa caricare delle unità in giacenza. Imposta una giacenza nella scheda qui
+            sopra per tenere lotto e scadenza — serve per i freschi, dove la data di scadenza va
+            saputa al banco.
+          </p>
+        </Panel>
+      ) : (
+        <BatchPanel productId={product.id} batches={batches} today={today} />
       )}
 
       {/* Taking the product out of circulation. Archiving lived only in the

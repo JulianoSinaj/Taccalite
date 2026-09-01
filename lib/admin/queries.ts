@@ -94,6 +94,12 @@ import {
   type OrderRow,
   type ReservationRow,
 } from "@/lib/db/schema";
+import {
+  analyseSales,
+  type SaleLine,
+  type OrderContext,
+  type SalesAnalysis,
+} from "@/lib/sales-analysis";
 
 /**
  * Revenue is money **settled** in a window, net of refunds.
@@ -293,7 +299,7 @@ export async function getDashboardInsights(scope: string | null = null) {
     return r?.n ?? 0;
   };
 
-  const [last30, prev30, newCust30, newCustPrev, settledRows, topProducts] = await Promise.all([
+  const [last30, prev30, newCust30, newCustPrev, settledRows, sales30] = await Promise.all([
     sumRev(p30),
     sumRev(p60, p30),
     countCustomers(p30),
@@ -310,25 +316,19 @@ export async function getDashboardInsights(scope: string | null = null) {
       })
       .from(orders)
       .where(and(everSettled, sql`${settledAt} >= ${p30.getTime()}`, ordShop)),
-    // Group on the stable product id, not the line's name snapshot: renaming a
-    // product used to split its sales history into two rows. Lines with no
-    // productId (a since-deleted product) fall back to grouping by name so their
-    // revenue still shows. `max(name)` picks a single display label per group.
-    db
-      .select({
-        name: sql<string>`max(${orderItems.name})`,
-        cents: sql<number>`coalesce(sum(${orderItems.lineTotalCents}), 0)`,
-        qty: sql<number>`coalesce(sum(${orderItems.quantity}), 0)`,
-      })
-      .from(orderItems)
-      .innerJoin(orders, eq(orderItems.orderId, orders.id))
-      .where(and(everSettled, sql`${settledAt} >= ${p30.getTime()}`, ordShop))
-      .groupBy(sql`coalesce(${orderItems.productId}, ${orderItems.name})`)
-      .orderBy(desc(sql`sum(${orderItems.lineTotalCents})`))
-      .limit(5),
+    // Through the same engine as /admin/reports/vendite, not a second `group by`
+    // of its own. It used to be one: the dashboard summed `lineTotalCents` gross
+    // of any coupon, while the report allocates each order's discount across its
+    // lines — so the same product could head both screens with two different
+    // numbers, and the ranking itself could differ on a period with a big
+    // coupon. One definition, and the ranking now carries the margin, which is
+    // the point: the best-selling product is not necessarily the one to make
+    // more of.
+    getSalesLines(p30, new Date(now), undefined, scope),
   ]);
 
   const aovCents = last30.n > 0 ? Math.round(last30.sum / last30.n) : 0;
+  const topProducts = analyseSales(sales30.lines, sales30.orders).byProduct.slice(0, 5);
 
   // Fill a continuous 30-day series on the Rome calendar so the chart has no gaps
   // and shares its day boundary with the money tiles above it.
@@ -350,7 +350,7 @@ export async function getDashboardInsights(scope: string | null = null) {
     newCustomers30d: newCust30,
     newCustomersPrev30d: newCustPrev,
     dailySeries, // [{ day: "yyyy-mm-dd", cents }] — 30 continuous days
-    topProducts, // [{ name, cents, qty }]
+    topProducts, // SalesGroup[] — revenue-ranked, each carrying its own margin
   };
 }
 
@@ -2639,4 +2639,124 @@ export function adminUpcomingClosures(today: string = dateInRome()) {
     .from(shopClosures)
     .where(gte(shopClosures.toDate, today))
     .orderBy(asc(shopClosures.fromDate), asc(shopClosures.shopSlug));
+}
+
+// ── Sales & margin analysis ──────────────────────────────────────────────────
+
+/**
+ * Every merchandise line settled in a window, with the order context the margin
+ * arithmetic needs and the product's current cost.
+ *
+ * Rows rather than a `group by`, because the aggregation has to split VAT out of
+ * each line and allocate each order's discount across its own lines — neither of
+ * which SQLite can do without repeating `splitGross` in SQL, where it would
+ * silently drift from `lib/fiscal.ts`. The volume is bounded by the period: a
+ * month of this shop is a few hundred rows.
+ *
+ * `left join` on products deliberately: a line whose product was deleted still
+ * sold, so it keeps its revenue and lands in the uncosted bucket rather than
+ * vanishing from the period's takings.
+ */
+export async function getSalesLines(
+  from: Date,
+  to: Date,
+  shopSlug: string | undefined,
+  scope: string | null = null,
+): Promise<{ lines: SaleLine[]; orders: OrderContext[] }> {
+  const where = and(
+    everSettled,
+    sql`${settledAt} >= ${from.getTime()}`,
+    sql`${settledAt} < ${to.getTime()}`,
+    shopSlug && shopSlug !== "all" ? eq(orders.shopSlug, shopSlug) : undefined,
+    inShop(orders.shopSlug, scope),
+  );
+
+  const [rows, orderRows] = await Promise.all([
+    db
+      .select({
+        orderId: orderItems.orderId,
+        shopSlug: orders.shopSlug,
+        productId: orderItems.productId,
+        name: orderItems.name,
+        category: products.category,
+        vatRateBps: orderItems.vatRateBps,
+        lineTotalCents: orderItems.lineTotalCents,
+        quantity: orderItems.quantity,
+        weightKg: orderItems.weightKg,
+        unitCostCents: products.costCents,
+      })
+      .from(orderItems)
+      .innerJoin(orders, eq(orderItems.orderId, orders.id))
+      .leftJoin(products, eq(orderItems.productId, products.id))
+      .where(where),
+    db
+      .select({
+        id: orders.id,
+        subtotalCents: orders.subtotalCents,
+        discountCents: orders.discountCents,
+      })
+      .from(orders)
+      .where(where),
+  ]);
+
+  return {
+    lines: rows.map((r) => ({
+      orderId: r.orderId,
+      shopSlug: r.shopSlug,
+      productId: r.productId,
+      productName: r.name,
+      category: r.category ?? "",
+      vatRateBps: r.vatRateBps,
+      lineTotalCents: r.lineTotalCents,
+      quantity: r.quantity,
+      weightKg: r.weightKg,
+      unitCostCents: r.unitCostCents,
+    })),
+    orders: orderRows,
+  };
+}
+
+/**
+ * The analysis for a window, plus the same analysis over the window immediately
+ * before it — which is what turns "€5.218" into "€5.218, up 55%".
+ *
+ * The comparison period is the same *length* ending where this one starts, not
+ * "last month": comparing a 9-day range against a 31-day one is the classic way
+ * a dashboard reports a collapse that never happened.
+ */
+export async function getSalesAnalysis(
+  from: Date,
+  to: Date,
+  shopSlug: string | undefined,
+  scope: string | null = null,
+  shopLabel?: (slug: string | null) => string,
+): Promise<{ current: SalesAnalysis; previous: SalesAnalysis }> {
+  const span = to.getTime() - from.getTime();
+  const prevFrom = new Date(from.getTime() - span);
+  const [cur, prev] = await Promise.all([
+    getSalesLines(from, to, shopSlug, scope),
+    getSalesLines(prevFrom, from, shopSlug, scope),
+  ]);
+  return {
+    current: analyseSales(cur.lines, cur.orders, { shopLabel }),
+    previous: analyseSales(prev.lines, prev.orders, { shopLabel }),
+  };
+}
+
+/**
+ * Staff accounts with no sede assigned.
+ *
+ * `inShop(col, null)` adds no predicate, so a staff row with a null `shopSlug`
+ * sees the whole business — every scope guard in the app is a no-op for them.
+ * That is the correct behaviour for an owner who works both counters, and it is
+ * also what an account nobody got round to assigning looks like. The two are
+ * indistinguishable from the outside, which is why the state was invisible: the
+ * separation was built, tested, and switched on for nobody.
+ */
+export async function countUnscopedStaff(): Promise<number> {
+  const [r] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(users)
+    .where(and(eq(users.role, "staff"), isNull(users.shopSlug), eq(users.active, true)));
+  return r?.n ?? 0;
 }

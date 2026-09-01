@@ -236,6 +236,21 @@ export default async function CashUp({ searchParams }: SP) {
               </Link>
               , così i due documenti si riconciliano.
             </p>
+            {/* The one place the numbers on this page legitimately disagree with
+                another screen. Both rules are deliberate — a till sheet has to
+                show the money that moved that day, a management figure has to
+                show what a sale was ultimately worth — but an operator who finds
+                the gap without being told assumes one of the two is broken. */}
+            <p className="mt-2 text-xs text-brown-800/70">
+              La{" "}
+              <Link href="/admin" className="font-semibold text-gold-deep underline">
+                dashboard
+              </Link>{" "}
+              segue invece una regola gestionale: scala il rimborso dal giorno della{" "}
+              <em>vendita</em>. Se un ordine è stato incassato in un periodo e rimborsato in quello
+              dopo, le due cifre non coincidono — di preciso l&apos;importo restituito. È voluto:
+              qui conta il denaro che si muove oggi in cassa.
+            </p>
           </Panel>
 
           <p className="text-xs text-brown-800/70 print:hidden">

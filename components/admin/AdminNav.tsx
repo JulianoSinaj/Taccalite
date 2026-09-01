@@ -30,6 +30,7 @@ import {
   ShoppingBag,
   Store,
   Tags,
+  TrendingUp,
   FileText,
   Truck,
   Users,
@@ -93,6 +94,10 @@ const GROUPS: Group[] = [
       // Not adminOnly: closing the till is a counter job, and the page is
       // scoped to the operator's own sede like every other list.
       { href: "/admin/reports/cassa", label: "Chiusura di cassa", icon: Wallet },
+      // Not adminOnly, and deliberately: knowing which counter earns on what is
+      // the shopkeeper's question, and the page is scoped to the operator's own
+      // sede like every other list.
+      { href: "/admin/reports/vendite", label: "Analisi vendite", icon: TrendingUp },
       { href: "/admin/reports/iva", label: "Riepilogo IVA", icon: Receipt, adminOnly: true },
       { href: "/admin/reports/fatture", label: "Registro fatture", icon: FileText, adminOnly: true },
       { href: "/admin/analytics", label: "Statistiche", icon: BarChart3, adminOnly: true },

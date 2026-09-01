@@ -28,7 +28,7 @@ import ProductTile from "@/components/site/ProductTile";
 import MedallionBadge from "@/components/MedallionBadge";
 import PillButton from "@/components/PillButton";
 import JsonLd from "@/components/JsonLd";
-import WeekBars from "@/components/site/sedi/WeekBars";
+import WeekBars, { WeekBarsPending, weekIsDrawable } from "@/components/site/sedi/WeekBars";
 import {
   CompassRose,
   CornerTicks,
@@ -180,6 +180,7 @@ export default async function ShopDetailPage({ params }: Params) {
   const openState = shopIsOpenNow(shop);
   const hoursRows = shopHoursRows(shop);
   const week = shopWeekGrid(shop);
+  const weekDrawable = weekIsDrawable(week);
   const { day: todayIso, minutes: nowMinutes } = clockNow();
   const todayRow = week?.find((d) => d.day === todayIso) ?? null;
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
@@ -329,24 +330,27 @@ export default async function ShopDetailPage({ params }: Params) {
                 </h3>
               </div>
 
-              {week ? (
+              {/* Always one or the other, so the rule under it always has a
+                  chart above it — and a bottega whose hours are not yet fixed
+                  keeps the same card as the one whose are. */}
+              {weekDrawable ? (
                 <WeekBars week={week} today={todayIso} nowMinutes={nowMinutes} tone="dark" />
-              ) : null}
+              ) : (
+                <WeekBarsPending today={todayIso} tone="dark" />
+              )}
 
-              <dl className={week ? "mt-7 border-t border-cream/10 pt-2" : ""}>
-                {hoursRows.length === 0 && (
-                  <p className="text-sm text-cream/70">
-                    Orari in aggiornamento — chiamaci per conferma.
-                  </p>
-                )}
-                {hoursRows.map((h) => (
-                  <LeaderRow key={h.label} tone="cream" label={h.label} value={h.value} />
-                ))}
-              </dl>
+              {hoursRows.length > 0 && (
+                <dl className="mt-7 border-t border-cream/10 pt-2">
+                  {hoursRows.map((h) => (
+                    <LeaderRow key={h.label} tone="cream" label={h.label} value={h.value} />
+                  ))}
+                </dl>
+              )}
 
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <OpenBadge state={openState} />
-                {!shop.hoursConfirmed && (
+                {/* The stand-in panel above already says this, and better. */}
+                {!shop.hoursConfirmed && weekDrawable && (
                   <p className="text-xs text-cream/55">Orari da confermare in negozio.</p>
                 )}
               </div>

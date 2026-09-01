@@ -21,7 +21,7 @@ import CTA from "@/components/site/CTA";
 import PillButton from "@/components/PillButton";
 import JsonLd from "@/components/JsonLd";
 import ShopLocator, { OpenPill, type LocatorShop } from "@/components/ShopLocator";
-import WeekBars from "@/components/site/sedi/WeekBars";
+import WeekBars, { WeekBarsPending, weekIsDrawable } from "@/components/site/sedi/WeekBars";
 import {
   CompassRose,
   CornerTicks,
@@ -557,6 +557,7 @@ export default async function NegoziPage() {
               const todayIdx = todayRowIndex(shop.hours, now);
               const state = bySlug.get(shop.slug)?.open ?? null;
               const week = weekBySlug.get(shop.slug) ?? null;
+              const drawable = weekIsDrawable(week);
               return (
                 <RevealStaggerItem
                   key={shop.slug}
@@ -580,51 +581,54 @@ export default async function NegoziPage() {
                     <OpenPill state={state} className="mt-1" />
                   </div>
 
-                  {week && (
+                  {/* Always one or the other: two cards composed around a
+                      chart, one of them without one, read as one bottega
+                      mattering less than the other. */}
+                  {drawable ? (
                     <WeekBars
                       week={week}
                       today={todayIso}
                       nowMinutes={nowMinutes}
                       className="mt-8"
                     />
+                  ) : (
+                    <WeekBarsPending today={todayIso} className="mt-8" />
                   )}
 
-                  <dl className="mt-8 divide-y divide-rule border-y border-rule">
-                    {shop.hours.length === 0 && (
-                      <div className="py-4 text-sm text-brown-700">
-                        Orari in aggiornamento — chiamaci per conferma.
-                      </div>
-                    )}
-                    {shop.hours.map((row, hi) => {
-                      const isToday = hi === todayIdx;
-                      return (
-                        <div
-                          key={`${row.label}-${hi}`}
-                          className={`flex items-baseline justify-between gap-4 ${
-                            isToday ? "-mx-4 bg-gold/15 px-4" : ""
-                          }`}
-                        >
-                          <dt className="flex shrink-0 items-center gap-3 py-3.5 text-sm font-semibold text-brown-950">
-                            {row.label}
-                            {isToday && (
-                              <span className="rounded-full bg-brown-950 px-2 py-0.5 text-[11px] font-bold tracking-widest text-cream uppercase sm:text-[10px]">
-                                Oggi
-                              </span>
-                            )}
-                          </dt>
-                          <span
-                            aria-hidden
-                            className="mb-1.5 hidden min-w-4 flex-1 self-end border-b border-dotted border-rule-strong sm:block"
-                          />
-                          <dd className="py-3.5 text-right text-sm text-brown-700 tabular-nums">
-                            {row.value}
-                          </dd>
-                        </div>
-                      );
-                    })}
-                  </dl>
+                  {shop.hours.length > 0 && (
+                    <dl className="mt-8 divide-y divide-rule border-y border-rule">
+                      {shop.hours.map((row, hi) => {
+                        const isToday = hi === todayIdx;
+                        return (
+                          <div
+                            key={`${row.label}-${hi}`}
+                            className={`flex items-baseline justify-between gap-4 ${
+                              isToday ? "-mx-4 bg-gold/15 px-4" : ""
+                            }`}
+                          >
+                            <dt className="flex shrink-0 items-center gap-3 py-3.5 text-sm font-semibold text-brown-950">
+                              {row.label}
+                              {isToday && (
+                                <span className="rounded-full bg-brown-950 px-2 py-0.5 text-[11px] font-bold tracking-widest text-cream uppercase sm:text-[10px]">
+                                  Oggi
+                                </span>
+                              )}
+                            </dt>
+                            <span
+                              aria-hidden
+                              className="mb-1.5 hidden min-w-4 flex-1 self-end border-b border-dotted border-rule-strong sm:block"
+                            />
+                            <dd className="py-3.5 text-right text-sm text-brown-700 tabular-nums">
+                              {row.value}
+                            </dd>
+                          </div>
+                        );
+                      })}
+                    </dl>
+                  )}
 
-                  {!shop.hoursConfirmed && (
+                  {/* The stand-in panel above already says this, and better. */}
+                  {!shop.hoursConfirmed && drawable && (
                     <p className="mt-4 text-xs text-taupe">Orari da confermare in negozio.</p>
                   )}
 

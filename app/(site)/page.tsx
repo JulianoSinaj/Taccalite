@@ -22,7 +22,7 @@ import {
   getBlogPosts,
   getSetting,
 } from "@/lib/db/queries";
-import { siteLines, siteRecords } from "@/lib/site-content";
+import { siteLines, siteRecords, siteText } from "@/lib/site-content";
 import type { Servizio } from "@/components/site/home/Servizi";
 import type { Ingrediente } from "@/components/site/home/Porchetta";
 import type { FaqItem } from "@/components/site/Faq";
@@ -120,7 +120,9 @@ export default async function Home() {
 
   // Editorial copy that used to be arrays in these components; each falls back
   // to exactly the text it had, so an untouched install renders unchanged.
-  const [facts, servizi, ricetta, faqRecords] = await Promise.all([
+  const [heroTitolo, heroTesto, facts, servizi, ricetta, faqRecords] = await Promise.all([
+    siteLines("home.hero.titolo"),
+    siteText("home.hero.testo"),
     siteLines("home.hero.facts"),
     siteRecords("home.servizi"),
     siteRecords("home.porchetta.ricetta"),
@@ -148,7 +150,7 @@ export default async function Home() {
           ...(faqForSchema.length > 0 ? [faqSchema(faqForSchema)] : []),
         ]}
       />
-      <Hero openNow={openNow} facts={facts} />
+      <Hero openNow={openNow} facts={facts} titolo={heroTitolo} testo={heroTesto} />
       <OggiAlBanco items={today} dateLabel={todayLabel()} />
       <ChiSiamo />
       <Servizi servizi={servizi as Servizio[]} />

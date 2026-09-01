@@ -28,6 +28,7 @@ import { dateInRome } from "@/lib/time";
 import { smtpAuthConfigured, smtpConfigured, stripeConfigured } from "@/lib/env";
 import { simulatedPayments } from "@/lib/payments/config";
 import { shopScope } from "@/lib/admin/scope";
+import { marginPct } from "@/lib/sales-analysis";
 import { adminGetShops } from "@/lib/admin/queries";
 
 export const dynamic = "force-dynamic";
@@ -125,7 +126,7 @@ export default async function AdminDashboard() {
   const chartLabel = `Incassi giornalieri dal ${series[0]?.day ?? ""} al ${
     series[series.length - 1]?.day ?? ""
   }. Totale ${euro(insights.revenue30dCents)}. Giornata migliore ${best.day} con ${euro(best.cents)}.`;
-  const maxTopCents = Math.max(1, ...insights.topProducts.map((p) => p.cents));
+  const maxTopCents = Math.max(1, ...insights.topProducts.map((p) => p.grossCents));
 
   const revDelta = delta(insights.revenue30dCents, insights.revenuePrev30dCents);
   const custDelta = delta(insights.newCustomers30d, insights.newCustomersPrev30d);
@@ -327,22 +328,48 @@ export default async function AdminDashboard() {
         </Panel>
 
         <Panel>
-          <h2 className="font-display mb-4 text-lg text-brown-950">Prodotti più venduti · 30 gg</h2>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="font-display text-lg text-brown-950">Prodotti più venduti · 30 gg</h2>
+            <Link
+              href="/admin/reports/vendite"
+              className="shrink-0 text-xs font-bold tracking-widest text-gold-deep uppercase hover:underline"
+            >
+              Analisi
+            </Link>
+          </div>
           {insights.topProducts.length === 0 ? (
             <p className="py-6 text-center text-sm text-brown-800/70">Nessuna vendita nel periodo.</p>
           ) : (
             <ul className="space-y-3">
-              {insights.topProducts.map((p) => (
-                <li key={p.name}>
-                  <div className="flex items-baseline justify-between gap-2 text-sm">
-                    <span className="truncate text-brown-950">{p.name}</span>
-                    <span className="shrink-0 font-semibold text-brown-950">{euro(p.cents)}</span>
-                  </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-brown-900/10">
-                    <div className="h-full rounded-full bg-gold-deep" style={{ width: `${Math.round((p.cents / maxTopCents) * 100)}%` }} />
-                  </div>
-                </li>
-              ))}
+              {insights.topProducts.map((p) => {
+                // Ranked by revenue, annotated with margin — because the two are
+                // not the same list, and the ranking alone was quietly inviting
+                // the shop to make more of whatever it earns least on.
+                const pct = marginPct(p);
+                return (
+                  <li key={p.key}>
+                    <div className="flex items-baseline justify-between gap-2 text-sm">
+                      <span className="truncate text-brown-950">{p.label}</span>
+                      <span className="shrink-0 font-semibold text-brown-950">{euro(p.grossCents)}</span>
+                    </div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-brown-900/10">
+                      <div className="h-full rounded-full bg-gold-deep" style={{ width: `${Math.round((p.grossCents / maxTopCents) * 100)}%` }} />
+                    </div>
+                    <p className="mt-1 text-[11px] text-brown-800/70">
+                      {pct == null ? (
+                        "margine non calcolabile — manca il costo d'acquisto"
+                      ) : (
+                        <>
+                          margine{" "}
+                          <span className={`font-bold ${p.marginCents >= 0 ? "text-ok" : "text-danger"}`}>
+                            {euro(p.marginCents)} · {pct}%
+                          </span>
+                        </>
+                      )}
+                    </p>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Panel>

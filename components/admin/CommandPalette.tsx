@@ -30,6 +30,7 @@ const COMMANDS: Cmd[] = [
   { label: "Sicurezza (2FA)", href: "/admin/security", group: "Vai a" },
   { label: "Statistiche", href: "/admin/analytics", group: "Vai a", adminOnly: true },
   { label: "Chiusura di cassa", href: "/admin/reports/cassa", group: "Vai a", keywords: "contanti pos incasso quadratura fondo cassa giornata" },
+  { label: "Analisi vendite", href: "/admin/reports/vendite", group: "Vai a", keywords: "margine margini costo ricarico guadagno profitto categoria prodotti più venduti andamento" },
   { label: "Riepilogo IVA", href: "/admin/reports/iva", group: "Vai a", adminOnly: true, keywords: "fiscale fattura" },
   { label: "Registro fatture", href: "/admin/reports/fatture", group: "Vai a", adminOnly: true, keywords: "fatturazione elettronica sdi xml nota di credito" },
   { label: "Utenti", href: "/admin/users", group: "Vai a", adminOnly: true },

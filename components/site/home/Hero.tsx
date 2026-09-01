@@ -1,6 +1,7 @@
 import Image from "next/image";
 import CTA from "@/components/site/CTA";
 import RevealLines from "@/components/site/RevealLines";
+import { emphasise } from "@/components/site/Headline";
 import ParallaxMedia from "@/components/site/ParallaxMedia";
 import SealStamp from "@/components/site/SealStamp";
 
@@ -9,9 +10,13 @@ type HeroProps = {
   openNow: boolean | null;
   /** Editable in the gestionale (`home.hero.facts`); the page resolves them. */
   facts: string[];
+  /** `home.hero.titolo` — deliberate line breaks, `**…**` for the gold fragment. */
+  titolo: string[];
+  /** `home.hero.testo` — the paragraph under the headline. */
+  testo: string;
 };
 
-export default function Hero({ openNow, facts }: HeroProps) {
+export default function Hero({ openNow, facts, titolo, testo }: HeroProps) {
   return (
     <section className="relative overflow-hidden px-5 pt-28 pb-14 sm:px-8 sm:pt-32 sm:pb-16 lg:px-12">
       {/* Warmth behind the headline. The hero used to be type on flat white,
@@ -46,24 +51,19 @@ export default function Hero({ openNow, facts }: HeroProps) {
           </p>
 
           <h1 className="font-display display-xl display-fit mt-6 font-semibold text-brown-950">
+            {/* One `<span>` per line, always — `RevealLines` animates whatever it
+                is handed, and wrapping every line keeps the emphasised one from
+                being the only element in the list. */}
             <RevealLines
               immediate
               delay={0.05}
-              lines={[
-                "Il banco",
-                "di famiglia,",
-                <span key="3" className="wonk text-gold-deep">
-                  dal 1946.
-                </span>,
-              ]}
+              lines={titolo.map((line, i) => (
+                <span key={`t${i}`}>{emphasise(line, `t${i}`)}</span>
+              ))}
             />
           </h1>
 
-          <p className="mt-7 max-w-xl text-lg leading-relaxed text-brown-700">
-            Formaggi scelti uno a uno, salumi lavorati come si faceva allora e la porchetta
-            che il sabato esce calda dal forno. Ordina online e ritira in giornata, oppure
-            passa al banco e fatti consigliare.
-          </p>
+          <p className="mt-7 max-w-xl text-lg leading-relaxed text-brown-700">{testo}</p>
 
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <CTA href="/negozio">Ordina online</CTA>

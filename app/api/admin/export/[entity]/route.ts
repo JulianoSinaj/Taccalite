@@ -15,6 +15,7 @@ import {
   getLoyaltyForExport,
   getDiscountUsageForExport,
   getInvoiceRegister,
+  getSalesAnalysis,
   adminGetShops,
 } from "@/lib/admin/queries";
 import {
@@ -32,6 +33,7 @@ import { getSetting } from "@/lib/db/queries";
 import { normalizeRange, getAnalyticsSummary } from "@/lib/analytics";
 import { vatRateLabel } from "@/lib/fiscal";
 import { vatPeriod } from "@/lib/fiscal-period";
+import { marginPct, type SalesGroup } from "@/lib/sales-analysis";
 import { toCsv, streamCsv } from "@/lib/csv";
 
 export const runtime = "nodejs";
@@ -266,6 +268,56 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
           ["Riepilogo", `Visite ${range} giorni`, summary.views],
           ["Riepilogo", `Ordini ${range} giorni`, summary.orders],
           ["Riepilogo", `Incasso ${range} giorni (€)`, (summary.revenueCents / 100).toFixed(2)],
+        ],
+      );
+      break;
+    }
+    case "vendite": {
+      // The margin report's own three tables, one file, with the section in the
+      // first column — a pivot table is what the shop would otherwise build by
+      // hand, and this is already grouped for it. Same period and shop resolver
+      // as the page, so the download can never disagree with the screen.
+      const period = vatPeriod({
+        da: params.get("da") ?? undefined,
+        a: params.get("a") ?? undefined,
+        periodo: params.get("periodo") ?? undefined,
+      });
+      const negozio = params.get("negozio") ?? undefined;
+      const shops = await adminGetShops();
+      const shopName = new Map(shops.map((s) => [s.slug, s.name]));
+      const { current } = await getSalesAnalysis(
+        period.from,
+        period.toExclusive,
+        negozio && negozio !== "all" ? negozio : undefined,
+        null,
+        (slug) => (slug ? (shopName.get(slug) ?? slug) : "Spedizioni / senza sede"),
+      );
+      const row = (section: string, g: SalesGroup) => {
+        const pct = marginPct(g);
+        return [
+          section,
+          g.label,
+          String(g.units),
+          (g.grossCents / 100).toFixed(2),
+          (g.netCents / 100).toFixed(2),
+          (g.costCents / 100).toFixed(2),
+          // Blank rather than 0 when nothing in the row carries a cost: a zero
+          // margin and an unknown one are different facts about a product.
+          pct == null ? "" : (g.marginCents / 100).toFixed(2),
+          pct == null ? "" : String(pct),
+          String(g.uncostedLines),
+        ];
+      };
+      body = toCsv(
+        [
+          "sezione", "voce", "quantita", "incassoEuros", "imponibileEuros",
+          "costoEuros", "margineEuros", "marginePct", "righeSenzaCosto",
+        ],
+        [
+          row("Totale", current.totals),
+          ...current.byCategory.map((g) => row("Categoria", g)),
+          ...current.byShop.map((g) => row("Sede", g)),
+          ...current.byProduct.map((g) => row("Prodotto", g)),
         ],
       );
       break;
