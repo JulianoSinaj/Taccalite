@@ -1,7 +1,4 @@
 import { NextResponse } from "next/server";
-import { gte, sql } from "drizzle-orm";
-import { db } from "@/lib/db/client";
-import { pageViews } from "@/lib/db/schema";
 import { requireRole } from "@/lib/auth/session";
 import {
   getCustomersWithPoints,
@@ -40,7 +37,6 @@ import { toCsv, streamCsv } from "@/lib/csv";
 export const runtime = "nodejs";
 
 const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : "");
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function GET(request: Request, ctx: { params: Promise<{ entity: string }> }) {
   try {
@@ -252,21 +248,19 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
     }
     case "analytics": {
       const range = normalizeRange(params.get("giorni"));
-      const since = new Date(Date.now() - range * DAY_MS);
-      const dayExpr = sql<string>`date(${pageViews.createdAt} / 1000, 'unixepoch')`;
-      const daily = await db
-        .select({ day: dayExpr, n: sql<number>`count(*)` })
-        .from(pageViews)
-        .where(gte(pageViews.createdAt, since))
-        .groupBy(dayExpr)
-        .orderBy(dayExpr);
       // Everything the page shows, not just the daily counts: top paths and
       // referrers used to be visible on screen and impossible to take away.
+      //
+      // The daily series comes from the summary too, rather than being queried
+      // again here. The second copy grouped by UTC day while the chart resolves
+      // Rome days, so the download and the page it came from could disagree on
+      // which day a late-evening visit belonged to — the same rule the IVA
+      // export below states outright.
       const summary = await getAnalyticsSummary(new Date(), range);
       body = toCsv(
         ["sezione", "chiave", "valore"],
         [
-          ...daily.map((r) => ["Visite giornaliere", r.day, r.n]),
+          ...summary.daily.map((r) => ["Visite giornaliere", r.day, r.n]),
           ...summary.topPaths.map((p) => ["Pagine più viste", p.path, p.n]),
           ...summary.topReferrers.map((r) => ["Provenienza", r.referrer ?? "—", r.n]),
           ["Riepilogo", `Visite ${range} giorni`, summary.views],

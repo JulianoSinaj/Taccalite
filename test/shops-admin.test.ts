@@ -52,7 +52,9 @@ describe("shopInput", () => {
 
   it("no longer carries the dead addressConfirmed flag", () => {
     // The toggle was stored and read by nothing on the site; the schema drops
-    // it so an old form post cannot resurrect it.
+    // it so an old form post cannot resurrect it. The column itself is gone too
+    // as of drizzle/0044, so a post that got through would now fail the insert
+    // rather than write a value nothing reads.
     const parsed = shopInput.parse({ ...base, addressConfirmed: "on" }) as Record<string, unknown>;
     expect("addressConfirmed" in parsed).toBe(false);
   });

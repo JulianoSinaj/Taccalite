@@ -2,9 +2,9 @@ import "server-only";
 import { and, desc, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { pageViews, orders } from "@/lib/db/schema";
+import { dateInRome, instantInRome } from "@/lib/time";
 
 const MAX_PATH = 512;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Record a page view. First-party, cookieless, no IP, no PII: we keep only the
@@ -27,7 +27,33 @@ export async function recordPageView(rawPath: string, rawReferrer?: string | nul
   await db.insert(pageViews).values({ path, referrer });
 }
 
-const dayExpr = sql<string>`date(${pageViews.createdAt} / 1000, 'unixepoch')`;
+/**
+ * Views bucketed by the UTC *hour* they happened in, as unix-ms.
+ *
+ * Not by day: SQLite has no timezone database, so `date(…, 'unixepoch')` can
+ * only give a UTC day and `'localtime'` only the container's (also UTC). Either
+ * way a visit at 00:30 in Ancona counted towards the day before, and the chart
+ * disagreed with "Incasso oggi" beside it, which is resolved in Rome.
+ *
+ * Rome is always a whole number of hours ahead of UTC (+1, +2 in summer), so
+ * every hour bucket falls entirely inside one Rome day and can be re-bucketed in
+ * JS — correct across both DST changes, which a fixed offset would not be. At
+ * most 90 x 24 rows come back.
+ *
+ * 3600000 is written out rather than interpolated from a constant, and that is
+ * load-bearing: an interpolated JS number is bound as a REAL, which turns `/`
+ * into float division, so every row lands in a bucket of its own and the GROUP BY
+ * collapses nothing. The answer stays correct — the day is still derived from the
+ * instant — so nothing fails; the query just returns one row per view instead of
+ * one per hour. `test/analytics.test.ts` asserts the grouping actually groups.
+ */
+const hourExpr = sql<number>`(${pageViews.createdAt} / 3600000) * 3600000`;
+
+/** Add `n` days to a yyyy-mm-dd string via UTC math (DST-safe). */
+function isoAddDays(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
 
 /** Allowed analytics windows (days). Anything else is clamped to the nearest. */
 export const ANALYTICS_RANGES = [7, 30, 90] as const;
@@ -48,8 +74,14 @@ export function normalizeRange(value: unknown): AnalyticsRange {
  */
 export async function getAnalyticsSummary(now = new Date(), rangeDays = 30) {
   const range = normalizeRange(rangeDays);
-  const sinceRange = new Date(now.getTime() - range * DAY_MS);
-  const sincePrev = new Date(now.getTime() - 2 * range * DAY_MS);
+  // "Gli ultimi 30 giorni" means 30 whole Italian days ending with today, not a
+  // rolling 30x24h from this instant. The two differ by however far into the day
+  // it is now, which is why the headline count and the bars under it never quite
+  // added up: the first bar was a part-day the total counted in full.
+  const today = dateInRome(now);
+  const firstDay = isoAddDays(today, -(range - 1));
+  const sinceRange = instantInRome(firstDay, "00:00");
+  const sincePrev = instantInRome(isoAddDays(today, -(2 * range - 1)), "00:00");
 
   const [total] = await db.select({ n: sql<number>`count(*)` }).from(pageViews);
   // Headline figures follow the selected range. They were hard-coded to 7/30
@@ -100,18 +132,23 @@ export async function getAnalyticsSummary(now = new Date(), rangeDays = 30) {
     .orderBy(desc(sql`count(*)`))
     .limit(8);
 
-  const dailyRows = await db
-    .select({ day: dayExpr, n: sql<number>`count(*)` })
+  const hourlyRows = await db
+    .select({ hour: hourExpr, n: sql<number>`count(*)` })
     .from(pageViews)
     .where(gte(pageViews.createdAt, sinceRange))
-    .groupBy(dayExpr)
-    .orderBy(dayExpr);
+    .groupBy(hourExpr);
+
+  // Roll the hours up onto the Rome day each one belongs to.
+  const counts = new Map<string, number>();
+  for (const row of hourlyRows) {
+    const day = dateInRome(new Date(Number(row.hour)));
+    counts.set(day, (counts.get(day) ?? 0) + row.n);
+  }
 
   // Fill a contiguous `range`-day series (days with no views → 0) for a clean chart.
-  const counts = new Map(dailyRows.map((d) => [d.day, d.n]));
   const daily: { day: string; n: number }[] = [];
-  for (let i = range - 1; i >= 0; i--) {
-    const day = new Date(now.getTime() - i * DAY_MS).toISOString().slice(0, 10);
+  for (let i = 0; i < range; i++) {
+    const day = isoAddDays(firstDay, i);
     daily.push({ day, n: counts.get(day) ?? 0 });
   }
 

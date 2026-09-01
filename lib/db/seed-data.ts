@@ -105,7 +105,6 @@ export async function seedBaseData(db: Db, log: (msg: string) => void = console.
         tagline: s.tagline,
         description: s.description,
         address: s.address,
-        addressConfirmed: s.addressConfirmed,
         hours: s.hours,
         hoursConfirmed: s.hoursConfirmed,
         phone: s.phone,

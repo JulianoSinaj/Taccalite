@@ -5,7 +5,6 @@ export type Shop = {
   tagline: string;
   description: string;
   address: string;
-  addressConfirmed: boolean;
   hours: { label: string; value: string }[];
   hoursConfirmed: boolean;
   phone: string;
@@ -24,7 +23,6 @@ export const shops: Shop[] = [
     description:
       "Il negozio di Piazza Kennedy, nel centro di Ancona. Qui la selezione è dedicata alle forme più pregiate: pecorini di fossa, formaggi cremosi come gorgonzola e taleggio, stagionature lunghe e specialità da tutta Italia, scelte una a una dal nostro banco.",
     address: "Piazza Kennedy, 10 — Ancona",
-    addressConfirmed: true,
     hours: [
       { label: "Lun – Sab", value: "9:00 – 20:00 (orario continuato)" },
       { label: "Domenica", value: "Chiuso" },
@@ -48,7 +46,6 @@ export const shops: Shop[] = [
     description:
       "Il secondo negozio di famiglia, al Mercato Coperto del Piano. Qui trovate carni selezionate, salumi artigianali come il prosciutto di Norcia e i tagli pronti per la brace, lavorati con la stessa cura di sempre.",
     address: "Piazza d'Armi, 59 — Ancona",
-    addressConfirmed: true,
     hours: [
       { label: "Lun – Sab", value: "Orari da confermare in negozio" },
       { label: "Domenica", value: "Chiuso" },

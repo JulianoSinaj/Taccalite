@@ -51,7 +51,6 @@ export const shops = sqliteTable("shops", {
   tagline: text("tagline").notNull().default(""),
   description: text("description").notNull().default(""),
   address: text("address").notNull().default(""),
-  addressConfirmed: integer("address_confirmed", { mode: "boolean" }).notNull().default(true),
   hours: text("hours", { mode: "json" }).$type<{ label: string; value: string }[]>().notNull().default([]),
   hoursConfirmed: integer("hours_confirmed", { mode: "boolean" }).notNull().default(true),
   phone: text("phone").notNull().default(""),

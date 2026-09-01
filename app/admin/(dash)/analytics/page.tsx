@@ -111,17 +111,27 @@ export default async function AdminAnalytics({ searchParams }: SP) {
         {/* An all-zero range used to render an invisible row of bars, which
             reads as a broken page rather than as "no data". */}
         {hasData ? (
-          <div className="flex h-40 items-end gap-1">
+          <div className="flex h-40 items-stretch gap-1">
+            {/* `items-stretch` on the row, not `items-end`: with `items-end` each
+                column was sized to its own content, so the bars' percentage
+                heights resolved against an indefinite height, computed to
+                `auto`, and every bar rendered at the 4px `minHeight` — a flat
+                row of stubs whatever the numbers were. The columns must be
+                full-height for a percentage to mean anything; the bar then sits
+                in its own flex-1 track so the day label keeps its place
+                underneath. */}
             {s.daily.map((d) => (
               <div
                 key={d.day}
-                className="flex flex-1 flex-col items-center justify-end gap-1"
+                className="flex flex-1 flex-col items-center gap-1"
                 title={`${d.day}: ${d.n} visite`}
               >
-                <div
-                  className="w-full rounded-t bg-gold"
-                  style={{ height: `${Math.round((d.n / maxDaily) * 100)}%`, minHeight: d.n > 0 ? "4px" : "0" }}
-                />
+                <div className="flex w-full flex-1 items-end">
+                  <div
+                    className="w-full rounded-t bg-gold"
+                    style={{ height: `${Math.round((d.n / maxDaily) * 100)}%`, minHeight: d.n > 0 ? "4px" : "0" }}
+                  />
+                </div>
                 {showDayLabels && <span className="text-[10px] text-brown-800/70">{d.day.slice(8)}</span>}
               </div>
             ))}

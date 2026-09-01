@@ -309,6 +309,13 @@
       "when": 1787828217629,
       "tag": "0043_newsletter_unsubscribed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1788263641901,
+      "tag": "0044_fat_lorna_dane",
+      "breakpoints": true
     }
   ]
 }
