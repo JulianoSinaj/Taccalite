@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import CTA from "@/components/site/CTA";
 import Reveal from "@/components/Reveal";
+import ParallaxMedia from "@/components/site/ParallaxMedia";
 import RevealLines from "@/components/site/RevealLines";
 import { getShops } from "@/lib/db/queries";
 import { siteRecords } from "@/lib/site-content";
