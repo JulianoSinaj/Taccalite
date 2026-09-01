@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import Reveal from "@/components/Reveal";
@@ -14,6 +15,8 @@ export type Servizio = {
   href: string;
   cta: string;
   accent: string;
+  /** Optional: a row the shop widened before this field existed has none. */
+  image?: string;
 };
 
 export default function Servizi({ servizi }: { servizi: Servizio[] }) {
@@ -62,9 +65,32 @@ export default function Servizi({ servizi }: { servizi: Servizio[] }) {
                     {String(i + 1).padStart(2, "0")}
                   </span>
 
-                  <h3 className="relative font-display text-[1.75rem] leading-none font-semibold tracking-[-0.025em] text-brown-950 transition-colors duration-500 group-hover:text-[var(--acc)] md:text-[2.125rem]">
-                    {servizio.title}
-                  </h3>
+                  <div className="relative">
+                    <h3 className="font-display text-[1.75rem] leading-none font-semibold tracking-[-0.025em] text-brown-950 transition-colors duration-500 group-hover:text-[var(--acc)] md:text-[2.125rem]">
+                      {servizio.title}
+                    </h3>
+
+                    {/* A photograph under the name, kept small on purpose: the
+                        row is a list, not a card grid, and a picture the width
+                        of the column would have turned five rows into five
+                        posters. Decorative — `alt=""` — because the link is
+                        already announced by the title and the CTA beside it. */}
+                    {servizio.image && (
+                      <div className="relative mt-4 aspect-3/2 w-[7.5rem] overflow-hidden bg-paper md:w-[9rem]">
+                        <Image
+                          src={servizio.image}
+                          alt=""
+                          fill
+                          sizes="(min-width: 768px) 9rem, 7.5rem"
+                          className="object-cover transition-transform duration-[1.4s] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.06]"
+                        />
+                        <span
+                          aria-hidden
+                          className="absolute inset-0 border border-brown-950/8 transition-colors duration-500 group-hover:border-[color-mix(in_oklab,var(--acc)_55%,transparent)]"
+                        />
+                      </div>
+                    )}
+                  </div>
 
                   <p className="relative max-w-xl text-base leading-relaxed text-brown-700">
                     {servizio.body}

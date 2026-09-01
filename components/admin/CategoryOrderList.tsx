@@ -96,10 +96,19 @@ function DragGroup({
 
   // Resync with the server once it's caught up — but never mid-drag, and never
   // while our own reorder is still in flight (the server hasn't echoed it yet).
-  useEffect(() => {
-    if (draggingId || saving) return;
+  //
+  // Adjusted during render rather than in an effect, which is the shape React
+  // documents for "reset state when a prop changes" and the same one `AdminNav`
+  // uses for its drawer. As an effect this painted the stale order once and then
+  // immediately re-rendered with the new one — a cascading render the compiler
+  // lint flags. `lastItems` is the guard that stops it looping; holding it back
+  // while dragging or saving means a refresh that lands mid-drag is still
+  // applied, on the first idle render after the drag ends.
+  const [lastItems, setLastItems] = useState(items);
+  if (items !== lastItems && !draggingId && !saving) {
+    setLastItems(items);
     setOrder(items);
-  }, [items, draggingId, saving]);
+  }
 
   useEffect(() => {
     orderRef.current = order;

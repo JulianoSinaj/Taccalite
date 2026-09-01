@@ -1,11 +1,13 @@
+import Image from "next/image";
 import CTA from "@/components/site/CTA";
 import RevealLines from "@/components/site/RevealLines";
 import SaturdayCountdown from "@/components/SaturdayCountdown";
 
 /**
- * The first of the page's two brown bands. No photograph on purpose: the only
- * porchetta shots on file are stock, and a typographic block carries more
- * authority than a picture of somebody else's roast.
+ * The first of the page's two brown bands. The left half stays photo-free on
+ * purpose — a typographic block carries more authority than a picture of
+ * somebody else's roast — but the countdown card on the right now leads with
+ * a shot, since a photo reads faster than the kicker text it replaced.
  *
  * What the band *does* need is heat. It used to be flat brown with one blurred
  * gold orb and an empty right half, so the loudest section of the page was also
@@ -83,9 +85,17 @@ export default function Porchetta({ ricetta }: { ricetta: Ingrediente[] }) {
           {/* Given a ground of its own so the countdown reads as an instrument
               on the wall rather than four numbers adrift in a dark rectangle. */}
           <div className="flex h-full flex-col border border-cream/12 bg-brown-950/45 p-8 backdrop-blur-sm sm:p-10">
-            <p className="text-[0.625rem] font-semibold tracking-[0.24em] text-gold uppercase">
-              La prossima infornata tra
-            </p>
+            {/* Placeholder until there's a real porchetta shot on file: the
+                oven-tray photo stands in for the kicker text it replaced. */}
+            <div className="relative -mx-8 -mt-8 aspect-video overflow-hidden sm:-mx-10 sm:-mt-10">
+              <Image
+                src="/images/gastronomia-teglie-forno.jpg"
+                alt="Teglie pronte per il forno in bottega Taccalite"
+                fill
+                className="object-cover"
+                sizes="(min-width: 1024px) 40vw, 90vw"
+              />
+            </div>
 
             {/* The numbers own the middle of the card: the block takes the slack
                 between the kicker and the ledger and centres itself in it. */}

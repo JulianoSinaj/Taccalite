@@ -135,11 +135,11 @@ export default async function Home() {
       <JsonLd schema={[organizationSchema(), ...shops.map(shopSchema)]} />
       <Hero openNow={openNow} facts={facts} />
       <OggiAlBanco items={today} dateLabel={todayLabel()} />
+      <Servizi servizi={servizi as Servizio[]} />
       <ChiSiamo />
       <DueBotteghe shops={shops} />
       <ProdottiMigliori products={products} />
       <Porchetta ricetta={ricetta as Ingrediente[]} />
-      <Servizi servizi={servizi as Servizio[]} />
       <Marche brands={brands} />
       <Diario posts={diario} />
       <InstagramFeed

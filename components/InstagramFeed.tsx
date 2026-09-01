@@ -112,8 +112,8 @@ function PostTile({ post, index }: { post: InstagramPost; index: number }) {
           className="absolute -inset-3 transition-transform duration-[1.4s] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.07]"
         >
           {imgFailed ? (
-            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brown-900 to-brown-950 text-gold/70">
-              <InstagramIcon className="size-10" />
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brown-900 to-brown-950">
+              <InstagramIcon className="size-10" gradient />
             </div>
           ) : (
             <Image
@@ -207,7 +207,7 @@ function ProfileChip({ profile, handle, url }: { profile: InstagramProfile | nul
               onError={() => setAvatarFailed(true)}
             />
           ) : (
-            <InstagramIcon className="size-5 text-brown-950" />
+            <InstagramIcon className="size-5" gradient />
           )}
         </span>
       </span>
@@ -254,7 +254,7 @@ export default function InstagramFeed({ posts, profile, handle, url }: Props) {
         >
           <div className="space-y-3">
             <span className="eyebrow eyebrow-dark inline-flex items-center gap-2">
-              <InstagramIcon className="size-3.5" />
+              <InstagramIcon className="size-3.5" gradient />
               Instagram
             </span>
             <h2
@@ -300,8 +300,8 @@ export default function InstagramFeed({ posts, profile, handle, url }: Props) {
             <div className="bg-noise absolute inset-0 opacity-15" />
             <div className="parallax-orb absolute -top-32 -right-24 h-[24rem] w-[24rem] opacity-15" />
             <div className="relative flex items-start gap-5">
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold sm:size-14">
-                <InstagramIcon className="size-6" />
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-gold/15 sm:size-14">
+                <InstagramIcon className="size-6" gradient />
               </span>
               <div className="space-y-2">
                 <p className="text-[11px] font-bold tracking-[0.25em] text-gold uppercase">@{handle}</p>

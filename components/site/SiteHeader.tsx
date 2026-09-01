@@ -86,7 +86,7 @@ export default function SiteHeader({ shops = [] }: { shops?: HeaderShop[] }) {
     <>
       <header
         className={cn(
-          "vt-header px-safe fixed inset-x-0 top-0 z-[80] border-b bg-paper/85 backdrop-blur-xl transition-[border-color,box-shadow] duration-500",
+          "vt-header px-safe fixed inset-x-0 top-0 z-[80] border-b bg-paper-warm/90 backdrop-blur-xl transition-[border-color,box-shadow] duration-500",
           scrolled ? "border-rule shadow-[0_1px_24px_-12px_rgba(42,26,16,0.35)]" : "border-transparent"
         )}
       >
@@ -159,7 +159,7 @@ export default function SiteHeader({ shops = [] }: { shops?: HeaderShop[] }) {
                   className="absolute inset-0 bg-brown-950 [clip-path:circle(0%_at_50%_120%)] transition-[clip-path] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover/pren:[clip-path:circle(150%_at_50%_120%)]"
                 />
                 <span className="relative z-10 transition-colors duration-500 group-hover/pren:text-cream">
-                  Prenota
+                  Prenota un tavolo
                 </span>
               </Link>
             </Magnetic>
