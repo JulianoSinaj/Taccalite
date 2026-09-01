@@ -38,27 +38,42 @@ export default async function StoriaPage() {
   return (
     <>
       <section className="px-5 pt-28 pb-16 sm:px-8 sm:pt-32 lg:px-12">
-        <div className="mx-auto max-w-[88rem]">
-          <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
-            <span aria-hidden className="h-px w-10 bg-gold" />
-            La nostra storia
-          </p>
-          <h1 className="font-display display-xl mt-8 max-w-4xl font-semibold text-brown-950">
-            <RevealLines
-              immediate
-              lines={[
-                "Ottant'anni",
-                <span key="2">
-                  dietro lo <span className="wonk text-gold-deep">stesso banco.</span>
-                </span>,
-              ]}
-            />
-          </h1>
-          <p className="mt-8 max-w-2xl text-lg leading-relaxed text-brown-700">
-            Abbiamo aperto nel 1946 e da allora facciamo la stessa cosa: scegliere bene,
-            lavorare con calma e dirlo in faccia a chi compra. Questa è la parte di
-            storia che vale la pena raccontare.
-          </p>
+        <div className="mx-auto grid max-w-[88rem] gap-14 lg:grid-cols-12 lg:items-center lg:gap-16">
+          <div className="lg:col-span-7">
+            <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
+              <span aria-hidden className="h-px w-10 bg-gold" />
+              La nostra storia
+            </p>
+            <h1 className="font-display display-xl mt-8 font-semibold text-brown-950">
+              <RevealLines
+                immediate
+                lines={[
+                  "Ottant'anni",
+                  <span key="2">
+                    dietro lo <span className="wonk text-gold-deep">stesso banco.</span>
+                  </span>,
+                ]}
+              />
+            </h1>
+            <p className="mt-8 max-w-2xl text-lg leading-relaxed text-brown-700">
+              Abbiamo aperto nel 1946 e da allora facciamo la stessa cosa: scegliere bene,
+              lavorare con calma e dirlo in faccia a chi compra. Questa è la parte di
+              storia che vale la pena raccontare.
+            </p>
+          </div>
+
+          <Reveal className="lg:col-span-5">
+            <ParallaxMedia className="aspect-[4/5] bg-paper-warm" distance={64}>
+              <Image
+                src="https://images.unsplash.com/photo-1604443402123-0bf4dd913f05?auto=format&fit=crop&q=80&w=1200"
+                alt="Un norcino con il grembiule bianco affetta un prosciutto al banco, salumi appesi alle sue spalle"
+                fill
+                preload
+                sizes="(max-width: 1024px) 90vw, 40vw"
+                className="object-cover"
+              />
+            </ParallaxMedia>
+          </Reveal>
         </div>
       </section>
 
@@ -69,7 +84,6 @@ export default async function StoriaPage() {
               src="/images/banco-carni-vetrina.jpg"
               alt="Il banco delle carni della norcineria Taccalite, con i cartellini scritti a mano"
               fill
-              preload
               sizes="100vw"
               className="object-cover"
             />
