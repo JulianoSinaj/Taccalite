@@ -1,5 +1,5 @@
 import "server-only";
-import { dateInRome } from "@/lib/time";
+import { dateInRome, instantInRome } from "@/lib/time";
 
 /**
  * Fiscal period resolution for the IVA report and its CSV export.
@@ -74,10 +74,22 @@ function dayBefore(isoDate: string): string {
   return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
 }
 
-/** The instant a local ISO date begins, in the server's interpretation. */
-const startOf = (isoDate: string) => new Date(`${isoDate}T00:00:00`);
+/**
+ * The instant a business-local ISO date begins, on the Rome wall clock.
+ *
+ * NOT `new Date("2026-09-01T00:00:00")`: a bare timestamp is parsed in the
+ * *server's* zone, which is UTC in the Docker image — so a September period
+ * started at 02:00 Rome, and a sale settled at 00:30 on the 1st was declared in
+ * August while every other screen dated it September. The period is chosen from
+ * `dateInRome`, so its bounds have to be read on the same clock.
+ *
+ * `getCashUp` already resolves its day this way; this is the same rule applied
+ * to the fiscal periods behind the IVA report, the invoice register and both
+ * CSV exports.
+ */
+const startOf = (isoDate: string) => instantInRome(isoDate, "00:00");
 
-/** The instant the day AFTER a local ISO date begins. */
+/** The instant the day AFTER a business-local ISO date begins. */
 function endExclusive(isoDate: string): Date {
   const [y, m, d] = isoDate.split("-").map(Number);
   const next = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);

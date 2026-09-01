@@ -46,6 +46,7 @@ import {
 } from "@/lib/validation/admin";
 import { requireShopScope } from "@/lib/admin/scope";
 import { adminShopReferences } from "@/lib/admin/queries";
+import { dateInRome } from "@/lib/time";
 
 // Parse "Label | Value" lines into hours; blank-separated lines into a list.
 function parseHours(raw?: string) {
@@ -693,7 +694,10 @@ export async function saveBlogPost(_prev: ActionState, fd: FormData): Promise<Ac
         excludeId: d.id,
       }),
       title: d.title,
-      date: d.date || new Date().toISOString().slice(0, 10),
+      // Rome, not UTC: the publish gate and the "programmato" badge both read
+      // this column on the Italian calendar, so a post written just after
+      // midnight must not be stamped with yesterday's date.
+      date: d.date || dateInRome(),
       category: cat.category,
       categoryId: cat.categoryId,
       // A blank excerpt is derived from the opening paragraph, so a post always

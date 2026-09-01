@@ -2,6 +2,7 @@ import "server-only";
 import type { OrderRow, OrderItemRow } from "@/lib/db/schema";
 import { splitGross, orderVatBuckets, refundVatBuckets, vatRateLabel } from "@/lib/fiscal";
 import { modalitaPagamento } from "@/lib/payments/methods";
+import { dateInRome } from "@/lib/time";
 
 /**
  * FatturaPA (fattura elettronica) XML builder — FormatoTrasmissione FPR12, the
@@ -103,8 +104,16 @@ function normalizeCode(v: string | null | undefined): string {
   return (v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
-/** ISO yyyy-mm-dd from a timestamp, falling back to now. */
-const isoDay = (d: Date | null | undefined) => (d ? new Date(d) : new Date()).toISOString().slice(0, 10);
+/**
+ * ISO yyyy-mm-dd from a timestamp, falling back to now — on the Rome clock.
+ *
+ * Not the UTC day: the VAT report files a sale by the Italian calendar day it
+ * settled on (`lib/fiscal-period.ts`), so an invoice for a sale taken at 00:30
+ * on the 1st has to carry that date too. Dated in UTC it read as the last day of
+ * the previous month, putting the document in a period the return does not
+ * cover.
+ */
+const isoDay = (d: Date | null | undefined) => dateInRome(d ? new Date(d) : new Date());
 
 /**
  * The document number of the credit note for an order.

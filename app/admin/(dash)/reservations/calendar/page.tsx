@@ -4,6 +4,7 @@ import { getReservationsPage, adminGetShops } from "@/lib/admin/queries";
 import { getClosures } from "@/lib/db/queries";
 import { closureTimeLabel, isWholeDay } from "@/lib/closures";
 import { shopScope, lockShop } from "@/lib/admin/scope";
+import { dateInRome } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -20,12 +21,6 @@ const STATUS_ENTRY: Record<string, string> = {
 };
 
 const WEEKDAYS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
-
-/** Today as yyyy-mm-dd using the server's local calendar components. */
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 /** Add `n` days to a yyyy-mm-dd string via UTC math (DST-safe). */
 function isoAddDays(iso: string, n: number): string {
@@ -68,9 +63,13 @@ export default async function ReservationCalendar({ searchParams }: SP) {
   const scope = await shopScope();
   const shopFilter = lockShop(negozio, scope);
   const valid = start && /^\d{4}-\d{2}-\d{2}$/.test(start);
-  const weekStart = mondayOf(valid ? start! : todayISO());
+  // The shop's own calendar day, like every other date-scoped admin screen. Read
+  // off the server's clock (UTC in the container) the grid opened on last week
+  // between midnight and 02:00 on a Monday, and ringed the wrong day the rest of
+  // the week.
+  const today = dateInRome();
+  const weekStart = mondayOf(valid ? start! : today);
   const weekEnd = isoAddDays(weekStart, 6);
-  const today = todayISO();
 
   // The week grid is where a closed day is most likely to be booked over by
   // hand, so it says which days are shut. Every location's closures show in

@@ -61,7 +61,13 @@ export const getBlogPosts = cache(async () => {
   // Scheduled publishing: a published post with a future date stays hidden until
   // its date arrives. `date` is stored as ISO yyyy-mm-dd, so a lexicographic
   // comparison against today is correct.
-  const today = new Date().toISOString().slice(0, 10);
+  //
+  // Today on the Rome clock, not the server's: `date` holds Italian local dates,
+  // and the back office already classifies "programmato" with `dateInRome` (see
+  // `lib/admin/filters.ts`). Read in UTC, a post dated today stayed hidden for
+  // the first hour or two of the Italian day while the admin list called it
+  // published.
+  const today = dateInRome();
   return db
     .select()
     .from(schema.blogPosts)
