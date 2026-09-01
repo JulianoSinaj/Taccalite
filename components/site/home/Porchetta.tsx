@@ -81,19 +81,25 @@ export default function Porchetta({ ricetta }: { ricetta: Ingrediente[] }) {
         </div>
 
         <div className="lg:col-span-5 lg:col-start-8">
-          {/* Given a ground of its own so the countdown reads as an instrument
-              on the wall rather than four numbers adrift in a dark rectangle. */}
+          {/* Given a ground of its own so the two photos read as a frame on
+              the wall rather than images adrift in a dark rectangle. */}
           <div className="flex h-full flex-col border border-cream/12 bg-brown-950/45 p-8 backdrop-blur-sm sm:p-10">
-            {/* Placeholder until there's a real porchetta shot on file: the
-                oven-tray photo stands in for the kicker text it replaced. */}
+            {/* Stand-in until there's a real shop photo: a Wikimedia Commons
+                shot (CC BY-SA 3.0, Popo le Chien) in place of the kicker text
+                it replaced. The credit line is the license's requirement, not
+                a design choice — keep it if the photo stays. */}
             <div className="relative -mx-8 -mt-8 aspect-video overflow-hidden sm:-mx-10 sm:-mt-10">
               <Image
-                src="/images/gastronomia-teglie-forno.jpg"
-                alt="Teglie pronte per il forno in bottega Taccalite"
+                src="/images/porchetta-al-forno.jpg"
+                alt="Porchetta intera arrosto, appena sfornata"
                 fill
                 className="object-cover"
                 sizes="(min-width: 1024px) 40vw, 90vw"
               />
+              <div aria-hidden className="absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-brown-950/70 to-transparent" />
+              <p className="absolute right-2 bottom-1 text-[0.5625rem] text-cream/60">
+                Foto: Popo le Chien, CC BY-SA 3.0
+              </p>
             </div>
 
             {/* A second photograph owns the middle of the card: the block takes

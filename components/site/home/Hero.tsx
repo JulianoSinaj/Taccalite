@@ -74,10 +74,10 @@ export default function Hero({ openNow, facts }: HeroProps) {
 
           {/* The proof row, on its own ground rather than floating under a
               hairline. Three facts and a live state is a claim worth a surface. */}
-          <ul className="mt-8 flex flex-wrap items-center gap-x-7 gap-y-3 border border-rule bg-paper-warm px-5 py-3.5 text-[0.8125rem] text-brown-700 sm:px-6">
+          <ul className="mt-8 flex flex-wrap items-center gap-x-7 gap-y-3 border border-gold-dark/40 bg-gold px-5 py-3.5 text-[0.8125rem] text-on-gold sm:px-6">
             {facts.map((fact) => (
               <li key={fact} className="flex items-center gap-2.5">
-                <span aria-hidden className="size-[5px] rotate-45 bg-gold-dark" />
+                <span aria-hidden className="size-[5px] rotate-45 bg-on-gold/70" />
                 {fact}
               </li>
             ))}

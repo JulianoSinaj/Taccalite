@@ -291,7 +291,7 @@ Two **pages** added this phase (both rendered server-side, not `/api` handlers):
   `error.tsx` + `loading.tsx` for `(site)` and `admin/(dash)` — previously absent, so a
   failed per-request query no longer falls through to the framework default page.
 - **Marketing**: unchanged cinematic components (`SplitHero`, `ScrollFilm`, 3D intro,
-  `SaturdayCountdown`, `Reveal`, …) now fed by DB data.
+  `Reveal`, …) now fed by DB data.
 - **SEO/legal**: `JsonLd`, `lib/seo.ts`, `CookieConsent`, `LegalLayout`, `NewsletterForm`.
 
 ---
