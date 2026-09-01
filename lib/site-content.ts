@@ -183,7 +183,7 @@ export const SITE_CONTENT: ContentDef[] = [
     fields: ["src", "alt"],
     default: [
       "/images/banco-carni-vetrina.jpg | I tagli interi al banco, tra i cartellini scritti a mano",
-      "/images/salumi-appesi-stagionatura.jpg | I salumi in stagionatura",
+      "/images/prosciutti-stagionatura.jpg | I prosciutti appesi al banco",
       "/images/banco-carni-bovino.jpg | Il banco carni",
       "/images/pasta-artigianale-bottega.jpg | Le specialità in bottega",
     ].join("\n"),

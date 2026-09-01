@@ -233,9 +233,13 @@ export default async function NegoziPage() {
               <CornerTicks />
               <div className="relative m-1.5 border border-rule">
                 <div className="relative aspect-[16/10]">
+                  {/* A board with both the cheese and the salumi on it, because
+                      the headline above is "due botteghe, un'anima sola" — one
+                      photo that shows what each counter is known for says that
+                      better than a wall of salumi from only one of them. */}
                   <Image
-                    src="/images/salumi-appesi-stagionatura.jpg"
-                    alt="Culatte, capocolli e pancette appesi in stagionatura nella bottega"
+                    src="/images/tagliere-formaggi-salumi.jpg"
+                    alt="Un tagliere con formaggi al taglio e salumi affettati, composto in bottega"
                     fill
                     preload
                     className="object-cover"

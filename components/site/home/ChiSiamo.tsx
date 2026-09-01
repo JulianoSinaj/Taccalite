@@ -20,11 +20,12 @@ export default function ChiSiamo() {
         <Reveal className="lg:col-span-5">
           <div className="relative">
             <ParallaxMedia className="aspect-[5/6] bg-paper" distance={64}>
-              {/* The counter itself, not another studio still life. It is the
-                  only photograph on file with the shop's real colour in it —
-                  the trays, the herbs, the crowd of things — shot in the bottega
-                  rather than bought from a stock library like everything that
-                  used to run on this page. */}
+              {/* The counter itself, not another studio still life: the trays,
+                  the herbs, the crowd of things, shot in the bottega rather
+                  than bought from a stock library like everything that used to
+                  run on this page. It was once the only such photograph on
+                  file; there are others now, but none of them beats this one
+                  for "chi siamo" — it is the messiest, and that is the point. */}
               <Image
                 src="/images/gastronomia-teglie-forno.jpg"
                 alt="Le teglie della gastronomia: pollo e coniglio conditi con olive, peperoni ed erbe, pronti per il forno"

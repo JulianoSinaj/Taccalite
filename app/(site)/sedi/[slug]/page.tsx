@@ -104,8 +104,14 @@ const shopContent: Record<
   centro: {
     heroLead: "Il paradiso",
     heroItalic: "dei formaggi",
-    storyImage: "/images/pasta-artigianale-bottega.jpg",
-    storyImageAlt: "Pasta artigianale e specialità sul banco del negozio Centro",
+    // The tasting room rather than a shelf of pasta: this page opens on "il
+    // paradiso dei formaggi", and the forms stacked along the top shelves say
+    // that where the pasta did not. Placed here because Centro is the shop
+    // whose highlights list "degustazioni in negozio" — if the aperitivo room
+    // is actually at Mercato del Piano, this and `carni` should swap.
+    storyImage: "/images/bottega-angolo-aperitivo.jpg",
+    storyImageAlt:
+      "La sala dell'aperitivo in bottega, tra gli scaffali dei vini e le forme di formaggio",
     pullQuote:
       "Una forma si sceglie con le mani e con il naso: qui le assaggiamo prima noi, una a una.",
     features: [

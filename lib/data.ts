@@ -35,8 +35,12 @@ export const shops: Shop[] = [
       "Formaggio di fossa e stagionature lunghe",
       "Gastronomia pronta e degustazioni in negozio",
     ],
-    imageLabel: "Tagliere di formaggi al taglio, con noci e confetture",
-    image: "/images/tagliere-formaggi.jpg",
+    // Was `tagliere-formaggi.jpg`, a Wikimedia photo standing in under CC
+    // BY-SA 4.0. This is our own board, so the credit it required is gone from
+    // `PhotoCredit` along with it — which is the whole point of keying credits
+    // off the `src`.
+    imageLabel: "Formaggi al taglio sul tagliere di legno, accanto ai salumi affettati",
+    image: "/images/tagliere-formaggi-verticale.jpg",
   },
   {
     slug: "carni",
@@ -91,8 +95,8 @@ export const featuredProducts: Product[] = [
     category: "Salumi",
     description:
       "Il salame morbido e spalmabile tipico marchigiano, prodotto secondo la tradizione norcina di famiglia.",
-    imageLabel: "Salumi di produzione propria appesi in bottega",
-    image: "/images/salumi-appesi-stagionatura.jpg",
+    imageLabel: "Ciauscolo e salumi di produzione propria appesi in bottega",
+    image: "/images/salumi-appesi-bottega.jpg",
   },
   {
     slug: "pecorino-di-fossa",

@@ -64,15 +64,22 @@ export default async function StoriaPage() {
 
           <Reveal className="lg:col-span-5">
             <ParallaxMedia className="aspect-[4/5] bg-paper-warm" distance={64}>
-              {/* Was a hotlinked Unsplash photo of an unrelated norcino, which
-                  is the one thing this page cannot afford: a page that says
-                  "this is our story since 1946" illustrated by a stranger's
-                  shop. The salumi on their hooks are ours, and hotlinking a
-                  third-party CDN from the hero also put the LCP of this page
-                  behind a domain nobody here controls. */}
+              {/* This started as a hotlinked Unsplash photo of an unrelated
+                  norcino — the one thing this page cannot afford: "our story
+                  since 1946" illustrated by a stranger's shop, with the LCP
+                  behind a CDN nobody here controls. It then became our own
+                  salumi on their hooks, which was honest but anonymous.
+
+                  It is now Paolo, at the banco the headline is about. A page
+                  that promises eighty years behind the same counter should
+                  open on the person standing behind it; the salumi still hang
+                  in the frame, but they are the setting, not the subject.
+                  Cut from the shop's own video — the only footage of him we
+                  have — so it is softer than a studio portrait. That is the
+                  right trade until someone photographs him properly. */}
               <Image
-                src="/images/salumi-appesi-stagionatura.jpg"
-                alt="Culatte, capocolli e pancette appesi in stagionatura nella bottega Taccalite"
+                src="/images/paolo-taccalite-ritratto.jpg"
+                alt="Paolo Taccalite affetta un pezzo di coppa al banco, tra i prosciutti e le forme di formaggio della bottega"
                 fill
                 preload
                 sizes="(max-width: 1024px) 90vw, 40vw"

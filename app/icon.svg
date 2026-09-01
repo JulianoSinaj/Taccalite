@@ -1,0 +1,16 @@
+<!--
+  The tab-strip mark. The full seal (public/logo-taccalite.png) has four rings of
+  type — NORCINERIA / TACCALITE / ANCONA / DAL 1946 — and at 16px all of it
+  collapses into a smudge, so this keeps only the two things that survive: the
+  ring and the T.
+
+  Drawn as a path, not <text>: an SVG favicon is rendered outside the page, so
+  Fraunces is not loaded there and a font-based letterform would fall back to
+  whatever serif the OS has. The brown field (not paper) is deliberate — it is
+  the half of the mark that still reads against a dark tab strip.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="6.5" fill="#3a2314"/>
+  <circle cx="16" cy="16" r="13.1" fill="none" stroke="#fdfaf5" stroke-width="1.7"/>
+  <path fill="#fdfaf5" d="M8.6 9.4 H23.4 V13.3 H21.7 V11.7 H17.75 V21.3 H19.8 V23.2 H12.2 V21.3 H14.25 V11.7 H10.3 V13.3 H8.6 Z"/>
+</svg>
