@@ -17,6 +17,8 @@ export type Servizio = {
   accent: string;
   /** Optional: a row the shop widened before this field existed has none. */
   image?: string;
+  /** Optional, same reason as `image`: a quieter second line under the body. */
+  note?: string;
 };
 
 export default function Servizi({ servizi }: { servizi: Servizio[] }) {
@@ -33,10 +35,27 @@ export default function Servizi({ servizi }: { servizi: Servizio[] }) {
               I nostri <span className="wonk text-gold-deep">servizi</span>
             </h2>
           </div>
-          <p className="max-w-sm text-base leading-relaxed text-brown-700">
-            Oltre al banco: quello che possiamo preparare, consegnare o tenere da parte
-            per voi.
-          </p>
+          {/* A small framed card rather than a bare paragraph: the promise
+              this section makes gets its own printed panel, corner-stamped
+              like a wax seal — a smaller echo of the shop's mark (SealSvg)
+              rather than the mark itself, which stays reserved for the hero
+              and the intro veil. */}
+          <div className="relative mt-3 max-w-sm rounded-sm border border-rule bg-paper px-7 py-6 shadow-[0_1px_2px_rgba(42,26,16,0.05)]">
+            <span
+              aria-hidden
+              className="absolute inset-[3px] rounded-[1px] border border-gold/15"
+            />
+            <span
+              aria-hidden
+              className="font-display absolute -top-4 -left-4 flex size-9 items-center justify-center rounded-full border border-gold bg-paper-warm text-lg text-gold-deep shadow-[0_1px_3px_rgba(42,26,16,0.15)]"
+            >
+              &ldquo;
+            </span>
+            <p className="relative text-base leading-relaxed text-brown-700">
+              <span className="wonk font-display text-lg text-gold-deep">Oltre al banco:</span>{" "}
+              quello che possiamo preparare, consegnare o tenere da parte per voi.
+            </p>
+          </div>
         </div>
 
         <ol className="mt-14 border-t border-rule md:-mx-6">
@@ -92,9 +111,24 @@ export default function Servizi({ servizi }: { servizi: Servizio[] }) {
                     )}
                   </div>
 
-                  <p className="relative max-w-xl text-base leading-relaxed text-brown-700">
-                    {servizio.body}
-                  </p>
+                  <div className="relative max-w-xl self-start md:mt-16 lg:mt-20">
+                    <p className="text-base leading-relaxed text-brown-700">{servizio.body}</p>
+
+                    {/* The afterthought line — the thing the person behind the
+                        counter adds once you've said yes. Set quieter and led
+                        by a short rule in the row's own colour, so it reads as
+                        a footnote to the description rather than a second
+                        paragraph competing with it. */}
+                    {servizio.note && (
+                      <p className="mt-3 flex gap-3 text-[0.9375rem] leading-relaxed text-brown-700/70">
+                        <span
+                          aria-hidden
+                          className="mt-[0.7em] h-px w-4 shrink-0 bg-[color-mix(in_oklab,var(--acc)_50%,transparent)]"
+                        />
+                        {servizio.note}
+                      </p>
+                    )}
+                  </div>
 
                   <span className="relative flex items-center gap-2.5 text-[0.6875rem] font-semibold tracking-[0.18em] text-brown-950 uppercase transition-[gap] duration-500 group-hover:gap-4">
                     {servizio.cta}
