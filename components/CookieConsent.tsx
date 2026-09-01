@@ -117,24 +117,27 @@ export default function CookieConsent() {
                 Privacy
               </Link>
             </p>
-            {/* Reversed on a phone: the accept button leads, because a thumb
-                reaching up from the bottom edge hits the *last* item in a column
-                first and the dismissal is what the visitor is reaching for.
-                Both are full-width rows there rather than two small words side
-                by side — this bar is the first thing covering the page, so
-                getting rid of it should not need aim. */}
-            <div className="flex shrink-0 flex-col-reverse gap-2 sm:flex-row sm:items-center sm:gap-5">
+            {/* One row on a phone, not two stacked ones.
+                Full-width rows were the answer to "getting rid of this should
+                not need aim", and they overshot: the bar came to 192px — 29% of
+                a 664px screen — pinned over the fold of every page on a first
+                visit, and on /negozio that is the search field the page opens
+                with. Side by side each button is still ~170px wide and 44px
+                tall, four times the area a thumb needs, and the bar comes down
+                to a fifth of the screen. "Accetta" keeps the right-hand end,
+                where the thumb already is. */}
+            <div className="flex shrink-0 items-center gap-2.5 sm:gap-5">
               <button
                 type="button"
                 onClick={() => choose("essential")}
-                className="rounded-full border border-rule-strong px-6 py-3 text-[0.6875rem] font-semibold tracking-[0.16em] text-taupe uppercase underline-offset-4 transition-colors hover:text-brown-950 hover:underline focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none sm:border-0 sm:px-0 sm:py-1"
+                className="flex-1 rounded-full border border-rule-strong px-4 py-3 text-[0.6875rem] font-semibold tracking-[0.16em] text-taupe uppercase underline-offset-4 transition-colors hover:text-brown-950 hover:underline focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none sm:flex-none sm:border-0 sm:px-0 sm:py-1"
               >
                 Solo necessari
               </button>
               <button
                 type="button"
                 onClick={() => choose("accepted")}
-                className="group/ck relative overflow-hidden rounded-full bg-brown-950 px-6 py-3.5 text-[0.6875rem] font-semibold tracking-[0.16em] text-cream uppercase focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:outline-none sm:py-2.5"
+                className="group/ck relative flex-1 overflow-hidden rounded-full bg-brown-950 px-4 py-3.5 text-[0.6875rem] font-semibold tracking-[0.16em] text-cream uppercase focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:outline-none sm:flex-none sm:px-6 sm:py-2.5"
               >
                 <span
                   aria-hidden

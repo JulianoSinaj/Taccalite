@@ -88,10 +88,10 @@ export const SITE_CONTENT: ContentDef[] = [
     type: "records",
     fields: ["title", "body", "href", "cta", "accent", "image", "note"],
     default: [
-      "Aperitivi | Taglieri di salumi e formaggi composti al momento su quello che c'è di buono quel giorno. Da portare via o da aprire in compagnia. | /negozio | Guarda la selezione | var(--acc-formaggi) | /images/salumi-appesi-stagionatura.jpg | Diteci quante persone siete e come lo volete: al taglio pensiamo noi.",
-      "Asporto | Gastronomia pronta, primi e secondi del giorno, olive all'ascolana appena fritte. Ordina la mattina, passi quando ti fa comodo. | /negozio | Ordina online | var(--acc-gastronomia) | /images/gastronomia-teglie-forno.jpg | Il menù cambia ogni giorno, con la stagione e con quello che arriva la mattina.",
-      "Domicilio | Portiamo la spesa a casa ad Ancona e dintorni. Per la consegna in giornata basta chiamare entro mezzogiorno. | /contatti | Chiedi la consegna | var(--acc-carni) | /images/pasta-artigianale-bottega.jpg | Fuori città ci mettiamo d'accordo sul giorno: chiamate e troviamo il modo.",
-      "Catering | Compleanni, uffici, feste di famiglia. Prepariamo noi: dal tagliere per otto al buffet completo, concordato voce per voce. | /contatti | Richiedi un preventivo | var(--acc-salumi) | /images/spiedini-verdure-banco.jpg | Per i numeri grandi avvisateci con qualche giorno: così scegliamo con calma.",
+      "Aperitivi | Taglieri di salumi e formaggi composti al momento su quello che c'è di buono quel giorno. Da portare via o da aprire in compagnia. | /negozio | Guarda la selezione | var(--acc-formaggi) | /images/prosciutto-norcino-appeso.jpg | Diteci quante persone siete e come lo volete: al taglio pensiamo noi.",
+      "Asporto | Gastronomia pronta, primi e secondi del giorno, olive all'ascolana appena fritte. Ordina la mattina, passi quando ti fa comodo. | /negozio | Ordina online | var(--acc-gastronomia) | /images/banco-gastronomia-pronta.jpg | Il menù cambia ogni giorno, con la stagione e con quello che arriva la mattina.",
+      "Domicilio | Portiamo la spesa a casa ad Ancona e dintorni. Per la consegna in giornata basta chiamare entro mezzogiorno. | /contatti | Chiedi la consegna | var(--acc-carni) | /images/lonza-suino-brado.jpg | Fuori città ci mettiamo d'accordo sul giorno: chiamate e troviamo il modo.",
+      "Catering | Compleanni, uffici, feste di famiglia. Prepariamo noi: dal tagliere per otto al buffet completo, concordato voce per voce. | /contatti | Richiedi un preventivo | var(--acc-salumi) | /images/fiera-san-ciriaco-banco.jpg | Per i numeri grandi avvisateci con qualche giorno: così scegliamo con calma.",
       "Richieste speciali | Una forma intera, un taglio che non trovi, una porchetta per cinquanta persone. Se esiste ve la troviamo, se serve tempo ve lo diciamo. | /contatti | Scrivici | var(--acc-regalo) | /images/banco-carni-vetrina.jpg | Chiedete pure al banco o scriveteci: se si può fare, si fa.",
     ].join("\n"),
   },
@@ -108,6 +108,26 @@ export const SITE_CONTENT: ContentDef[] = [
       "Aglio | in camicia",
       "Finocchietto | selvatico, raccolto qui",
       "Cottura lenta | dalle cinque del mattino",
+    ].join("\n"),
+  },
+  {
+    key: "home.faq",
+    page: "/",
+    label: "Home — domande frequenti",
+    help:
+      "Una domanda per riga: domanda | risposta. L'ordine è quello in cui appaiono, " +
+      "e le risposte finiscono anche nei dati strutturati che legge Google: scrivile " +
+      "come le diresti al banco, per intero.",
+    group: HOME,
+    type: "records",
+    fields: ["question", "answer"],
+    default: [
+      "Posso ordinare online e ritirare in bottega? | Sì, ed è il modo che consigliamo. Scegli dal negozio online, indichi la bottega e quando passi: prepariamo tutto e il ritiro non costa nulla. Paghi con carta al momento dell'ordine oppure al banco quando ritiri.",
+      "Consegnate a domicilio o spedite? | Ad Ancona e dintorni portiamo la spesa con il nostro mezzo: per la consegna in giornata chiamaci entro mezzogiorno. Fuori zona spediamo con corriere; costo e tempi te li mostra il carrello in base al CAP, prima di pagare.",
+      "Come funziona il prezzo dei prodotti al peso? | Salumi, carni, formaggi e porchetta hanno un prezzo al chilo: online scegli la quantità, in bottega pesiamo davanti a te. L'importo finale è quello del peso servito davvero, e lo vedi prima di pagare.",
+      "Quando c'è la porchetta? | Il sabato mattina, calda dal forno, e di solito finisce prima di sera. Per essere sicuro di trovarla prenotala entro il venerdì, dalla pagina della porchetta o per telefono: non chiediamo nessun anticipo.",
+      "Preparate taglieri, catering e richieste speciali? | Sì: dal tagliere per otto al buffet per una festa, concordato voce per voce. Diteci quante persone siete e che occasione è. Per i numeri grandi avvisateci con qualche giorno, così scegliamo con calma.",
+      "C'è un programma fedeltà? | Sì, il Club Taccalite: accumuli punti a ogni acquisto e li usi al banco. Ti iscrivi in un minuto dalla tua area personale, e i punti valgono sia online sia in bottega.",
     ].join("\n"),
   },
   {

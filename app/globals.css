@@ -467,6 +467,32 @@ html[data-intro="skip"] .intro-curtain {
   font-size: clamp(3.1rem, min(8.5vw, 13vh), 8rem);
 }
 
+/* The bottom of the scale, for the screens the scale's own floor is too big for.
+ *
+ * Every clamp above bottoms out at a fixed rem, so from about 360px down the
+ * headline stops responding to the viewport while the viewport keeps shrinking.
+ * At 320px — an SE, an older Android, any phone with display zoom turned on —
+ * 3.1rem puts "Due botteghe," at 303px inside a 278px column, and because
+ * `RevealLines` sets each line as its own non-wrapping box the excess does not
+ * reflow: it widens the grid track, and the whole document scrolls sideways.
+ *
+ * A media query rather than a lower floor in the clamp itself, because the floor
+ * is doing its job everywhere above this: at 375 and 390 the same headline fits
+ * and lowering it there would shrink a hero that is not in trouble. Last of the
+ * display rules and at the same (0,2,0) specificity, so it also wins over
+ * `.display-fit` on the elements that carry both.
+ */
+@media (max-width: 359px) {
+  .site-shell .display-xl,
+  .site-shell .display-fit {
+    font-size: 2.75rem;
+  }
+
+  .site-shell .display-lg {
+    font-size: 2.15rem;
+  }
+}
+
 /* Fraunces' signature: `WONK` swaps in the quirky alternates. It replaces italic
  * as the emphasis treatment — more characteristic of the face, and one fewer
  * font file to ship. Always on an inner span, so it beats the scale on its own
@@ -1212,6 +1238,41 @@ html {
   }
 }
 
+/* ── Tick boxes and their captions ───────────────────────────────────────────
+ *
+ * The same pair of rules the gestionale got, and for the same reason — the
+ * storefront simply never got them, so the three "preferenze speciali" toggles
+ * on a reservation, the marketing-consent tick on a sign-up and the payment
+ * radio at the checkout were 16–21px marks on a 35px row: the smallest targets
+ * on the site, sitting in the one place where a mis-tap changes what the shop
+ * is told.
+ *
+ * A tick and its caption are one control and the caption is where the finger
+ * goes, so both halves matter — a pseudo-element cannot grow a replaced element
+ * like `<input>`, and padding on the input does nothing either. `min-height` on
+ * the label rather than `.tap` because it takes real space: two stacked toggles
+ * cannot end up with overlapping hit areas the way two absolutely-positioned
+ * pseudo-elements would. `:has(> input)` rather than a class, because these
+ * labels are written longhand at every call site and the next new form would
+ * forget the class.
+ *
+ * Coarse pointers only — unlike `.admin-shell`, which sizes its boxes for every
+ * device because the gestionale asked for it. Here there is no reason to touch
+ * a mouse-driven form, so the desktop keeps its density and its metrics exactly.
+ */
+@media (pointer: coarse) {
+  .site-shell input[type="checkbox"],
+  .site-shell input[type="radio"] {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  .site-shell label:has(> input[type="checkbox"]),
+  .site-shell label:has(> input[type="radio"]) {
+    min-height: 2.75rem;
+  }
+}
+
 /* ── Hit areas ───────────────────────────────────────────────────────────────
  *
  * A 24px icon button is 24px of glass; the finger that aims at it is nearer 45.
@@ -1314,6 +1375,60 @@ html {
   .site-shell h2,
   .site-shell h3 {
     overflow-wrap: break-word;
+  }
+
+  /* ── The micro-caps floor ──────────────────────────────────────────────────
+   *
+   * `.eyebrow` above is the *named* version of a mark the site uses about a
+   * hundred and fifty times: small uppercase, letter-spaced, semibold — the
+   * category over a product, the "al banco oggi" over a caption, the column
+   * heads in the footer, the state pill on a shop. Almost none of those call
+   * sites use the class; they spell the three declarations out longhand. So the
+   * one rule that fixed the eyebrow for a phone fixed about six labels, and the
+   * rest still rendered at 10.3px with 0.22em between the letters — which at
+   * phone distance is not a small label, it is a texture.
+   *
+   * Two tiers, because the design uses two on purpose (a sub-label under a
+   * label) and collapsing them to one would flatten a hierarchy that is doing
+   * work. Each moves up one step of the same scale it was already on:
+   *
+   *     0.5 / 0.5625 / 0.625rem, 10px  →  0.6875rem   (10.3px → 11.3px)
+   *     0.6875rem, 11px               →  0.75rem      (11.3px → 12.4px)
+   *
+   * Matched on the literal utility rather than a class the markup would have to
+   * adopt, because the alternative is the same edit at a hundred and fifty call
+   * sites and a scale that lives at its call sites is not a scale. `~=` matches
+   * a whole class token, so a `sm:`-prefixed copy of the same size is untouched
+   * and the desktop art direction is byte-for-byte what it was. `test/phone-
+   * type.test.ts` fails if a storefront file introduces a size under the floor
+   * that this block does not list.
+   *
+   * Tracking is in `em`, so it grows with the step and the mark keeps its
+   * proportions. The exception is the wide end — past about 0.22em the gaps
+   * start reading as spaces between letters rather than air around a word — so
+   * anything wider is pulled back to the eyebrow's own 0.2em.
+   */
+  .site-shell [class~="text-[0.5rem]"],
+  .site-shell [class~="text-[0.5625rem]"],
+  .site-shell [class~="text-[0.625rem]"],
+  .site-shell [class~="text-[10px]"] {
+    font-size: 0.6875rem;
+  }
+
+  .site-shell [class~="text-[0.6875rem]"],
+  .site-shell [class~="text-[11px]"] {
+    font-size: 0.75rem;
+  }
+
+  .site-shell [class~="tracking-[0.24em]"],
+  .site-shell [class~="tracking-[0.25em]"],
+  .site-shell [class~="tracking-[0.26em]"],
+  .site-shell [class~="tracking-[0.28em]"],
+  .site-shell [class~="tracking-[0.3em]"],
+  .site-shell [class~="tracking-[0.38em]"],
+  .site-shell [class~="tracking-[0.4em]"],
+  .site-shell [class~="tracking-[0.42em]"] {
+    letter-spacing: 0.2em;
   }
 }
 

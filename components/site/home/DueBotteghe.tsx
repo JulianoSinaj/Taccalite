@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, MapPin, Phone } from "lucide-react";
+import { PhotoCredit } from "@/components/site/PhotoCredit";
 import { shopIsOpenNow } from "@/lib/hours";
 import type { getShops } from "@/lib/db/queries";
 
@@ -61,6 +62,10 @@ export default function DueBotteghe({ shops }: { shops: Shop[] }) {
                 aria-hidden
                 className="absolute inset-x-0 top-0 h-px bg-cream/10 lg:inset-y-0 lg:right-0 lg:left-auto lg:h-auto lg:w-px"
               />
+              {/* Licence obligation travels with the file, not with the page —
+                  see components/site/PhotoCredit.tsx. Renders nothing for the
+                  bottega's own photographs. */}
+              <PhotoCredit src={shop.image || "/images/salumi-appesi-stagionatura.jpg"} />
 
               <div className="relative w-full p-8 sm:p-12 lg:p-14">
                 <div className="flex flex-wrap items-center gap-3">

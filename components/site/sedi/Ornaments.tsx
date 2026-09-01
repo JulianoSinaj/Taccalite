@@ -163,9 +163,18 @@ export function LeaderRow({
           dark ? "border-cream/25" : "border-rule-strong"
         )}
       />
+      {/* Shrinkable, unlike the label and the leader.
+          A ledger row was written for "LU · 08:00–13:00", and it is also used
+          for "Dove si ritira · Taccalite Centro · Taccalite Mercato del Piano".
+          With `shrink-0` here that value could not give up a pixel, so the row
+          pushed straight through the gutter and took the whole document
+          sideways with it — /porchetta scrolled to 376px on a 360px phone.
+          `min-w-0` is the half that lets a flex item go under its own
+          min-content width; `break-words` is what it does with the room it is
+          given. Short values are unaffected: nothing shrinks that fits. */}
       <span
         className={cn(
-          "shrink-0 text-right text-sm tabular-nums",
+          "min-w-0 text-right text-sm break-words tabular-nums",
           dark ? "text-cream/70" : "text-brown-700",
           emphasis && (dark ? "font-semibold text-cream" : "font-semibold text-brown-950")
         )}

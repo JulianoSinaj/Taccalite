@@ -254,11 +254,23 @@ export default async function NegoziPage() {
 
                 <ul className="divide-y divide-rule">
                   {locatorShops.map((shop, i) => (
-                    <li key={shop.slug} className="flex items-center gap-4 px-5 py-5">
+                    // Wraps below `sm`, and it has to. The state pill spells out
+                    // "Aperto ora · chiude 20:00" — 230px that will not shrink past
+                    // its own min-content — while the shop's name sits in a
+                    // `flex-1 min-w-0` column that will. On a 390px phone that
+                    // arithmetic left the name **0px wide**, and the shell's
+                    // `overflow-wrap: break-word` then set "Taccalite Centro" one
+                    // letter per line down the side of the card, with the pill
+                    // drawn on top of it. The name takes the first line and the
+                    // pill the second; above `sm` the single row is back.
+                    <li
+                      key={shop.slug}
+                      className="flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-5 sm:flex-nowrap"
+                    >
                       <span className="font-display text-2xl leading-none font-semibold text-brown-950/15 tabular-nums">
                         {ordinal(i)}
                       </span>
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 basis-[calc(100%-3.5rem)] sm:basis-0">
                         <p className="font-display text-xl leading-tight font-semibold text-brown-950">
                           {shop.name}
                         </p>
@@ -427,74 +439,87 @@ export default async function NegoziPage() {
 
           <Reveal delay={0.1} className="relative border border-rule bg-paper">
             <CornerTicks />
-            <table className="w-full border-collapse text-left">
-              <caption className="sr-only">
-                Servizi disponibili in ciascuna bottega Taccalite
-              </caption>
-              <thead>
-                <tr className="border-b border-rule-strong">
-                  <th
-                    scope="col"
-                    className="px-5 py-5 text-[0.625rem] font-semibold tracking-[0.2em] text-taupe uppercase sm:px-8"
-                  >
-                    Servizio
-                  </th>
-                  {shops.map((shop) => (
+            {/* Scrolls sideways only when it has to.
+                The row header carries an icon, a service name and a line of
+                explanation, and none of that shrinks past its longest word
+                — so on a 320px screen (an SE, or any phone with display
+                zoom turned on) the three columns wanted 311px inside a 279px
+                card and took the whole document sideways with them. A
+                comparison table is the one shape that is *allowed* to scroll
+                on its own, and from 360px up it still fits, so nothing moves
+                on the phones that were already fine. The wrapper sits inside
+                the frame, so the card's border and its corner ticks stay put
+                while the table slides under them. */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left">
+                <caption className="sr-only">
+                  Servizi disponibili in ciascuna bottega Taccalite
+                </caption>
+                <thead>
+                  <tr className="border-b border-rule-strong">
                     <th
-                      key={shop.slug}
                       scope="col"
-                      className="w-[4.5rem] border-l border-rule px-2 py-5 text-center align-bottom sm:w-40 sm:px-4"
+                      className="px-5 py-5 text-[0.625rem] font-semibold tracking-[0.2em] text-taupe uppercase sm:px-8"
                     >
-                      <span className="font-display block text-[0.9375rem] leading-tight font-semibold text-brown-950 sm:text-lg">
-                        {shortName(shop.name)}
-                      </span>
-                      <span className="mt-1 hidden text-[0.625rem] font-semibold tracking-[0.16em] text-taupe uppercase sm:block">
-                        {shop.specialty}
-                      </span>
+                      Servizio
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {services.map(({ label, note, icon: Icon }, i) => (
-                  <tr key={label} className={i > 0 ? "border-t border-rule" : ""}>
-                    <th scope="row" className="px-5 py-5 font-normal sm:px-8">
-                      <span className="flex items-start gap-3.5">
-                        <Icon className="mt-0.5 size-4 shrink-0 text-gold-deep" aria-hidden />
-                        <span>
-                          <span className="block text-[0.9375rem] font-semibold text-brown-950">
-                            {label}
-                          </span>
-                          <span className="mt-1 block text-[0.8125rem] leading-relaxed text-taupe">
-                            {note}
+                    {shops.map((shop) => (
+                      <th
+                        key={shop.slug}
+                        scope="col"
+                        className="w-[4.5rem] border-l border-rule px-2 py-5 text-center align-bottom sm:w-40 sm:px-4"
+                      >
+                        <span className="font-display block text-[0.9375rem] leading-tight font-semibold text-brown-950 sm:text-lg">
+                          {shortName(shop.name)}
+                        </span>
+                        <span className="mt-1 hidden text-[0.625rem] font-semibold tracking-[0.16em] text-taupe uppercase sm:block">
+                          {shop.specialty}
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {services.map(({ label, note, icon: Icon }, i) => (
+                    <tr key={label} className={i > 0 ? "border-t border-rule" : ""}>
+                      <th scope="row" className="px-5 py-5 font-normal sm:px-8">
+                        <span className="flex items-start gap-3.5">
+                          <Icon className="mt-0.5 size-4 shrink-0 text-gold-deep" aria-hidden />
+                          <span>
+                            <span className="block text-[0.9375rem] font-semibold text-brown-950">
+                              {label}
+                            </span>
+                            <span className="mt-1 block text-[0.8125rem] leading-relaxed text-taupe">
+                              {note}
+                            </span>
                           </span>
                         </span>
-                      </span>
-                    </th>
-                    {shops.map((shop) => {
-                      const yes = services[i].has(shop);
-                      return (
-                        <td
-                          key={shop.slug}
-                          className="border-l border-rule px-2 py-5 text-center sm:px-4"
-                        >
-                          {yes ? (
-                            <span className="mx-auto flex size-7 items-center justify-center rounded-full bg-gold/25 text-brown-950">
-                              <Check className="size-3.5" aria-hidden />
-                              <span className="sr-only">Disponibile</span>
-                            </span>
-                          ) : (
-                            <span className="mx-auto block h-px w-4 bg-rule-strong">
-                              <span className="sr-only">Non disponibile</span>
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </th>
+                      {shops.map((shop) => {
+                        const yes = services[i].has(shop);
+                        return (
+                          <td
+                            key={shop.slug}
+                            className="border-l border-rule px-2 py-5 text-center sm:px-4"
+                          >
+                            {yes ? (
+                              <span className="mx-auto flex size-7 items-center justify-center rounded-full bg-gold/25 text-brown-950">
+                                <Check className="size-3.5" aria-hidden />
+                                <span className="sr-only">Disponibile</span>
+                              </span>
+                            ) : (
+                              <span className="mx-auto block h-px w-4 bg-rule-strong">
+                                <span className="sr-only">Non disponibile</span>
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p className="border-t border-rule bg-paper-warm px-5 py-4 text-[0.75rem] leading-relaxed text-taupe sm:px-8">
               La spedizione parte dall&apos;e-shop ed è unica per tutta la casa; il ritiro,
               invece, lo scegli tu al momento dell&apos;ordine.

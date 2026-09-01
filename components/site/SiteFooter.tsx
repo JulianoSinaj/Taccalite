@@ -218,17 +218,21 @@ export default async function SiteFooter() {
               © {siteConfig.founded}–{new Date().getFullYear()} {legalName}
               {vatNumber && <> · P.IVA {vatNumber}</>}
             </p>
-            <div className="-my-2 flex flex-wrap items-center gap-x-7 gap-y-0">
-              <Link href="/privacy" className="py-2 transition-colors hover:text-gold">
+            {/* `py-3` on a 13px line is what brings these to 44px. They are the
+                last three links on every page and the smallest, and the vertical
+                padding is invisible — the row reads the same and the negative
+                margin gives the space back to the layout. */}
+            <div className="-my-3 flex flex-wrap items-center gap-x-7 gap-y-0">
+              <Link href="/privacy" className="py-3 transition-colors hover:text-gold">
                 Privacy
               </Link>
-              <Link href="/cookie" className="py-2 transition-colors hover:text-gold">
+              <Link href="/cookie" className="py-3 transition-colors hover:text-gold">
                 Cookie
               </Link>
-              <Link href="/termini" className="py-2 transition-colors hover:text-gold">
+              <Link href="/termini" className="py-3 transition-colors hover:text-gold">
                 Condizioni di vendita
               </Link>
-              <span className="py-2">Ancona · Marche · Italia</span>
+              <span className="py-3">Ancona · Marche · Italia</span>
             </div>
           </div>
         </div>

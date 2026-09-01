@@ -8,9 +8,10 @@ import Servizi from "@/components/site/home/Servizi";
 import Marche, { DEFAULT_BRANDS } from "@/components/site/home/Marche";
 import OggiAlBanco from "@/components/site/home/OggiAlBanco";
 import Diario, { type DiarioPost } from "@/components/site/home/Diario";
+import Domande from "@/components/site/home/Domande";
 import InstagramFeed from "@/components/InstagramFeed";
 import type { ProductTileData } from "@/components/site/ProductTile";
-import { organizationSchema, shopSchema } from "@/lib/seo";
+import { organizationSchema, shopSchema, faqSchema } from "@/lib/seo";
 import { shopIsOpenNow } from "@/lib/hours";
 import { getInstagramFeedForSite } from "@/lib/instagram";
 import { siteConfig } from "@/lib/site";
@@ -24,6 +25,7 @@ import {
 import { siteLines, siteRecords } from "@/lib/site-content";
 import type { Servizio } from "@/components/site/home/Servizi";
 import type { Ingrediente } from "@/components/site/home/Porchetta";
+import type { FaqItem } from "@/components/site/Faq";
 
 export const dynamic = "force-dynamic";
 
@@ -118,11 +120,18 @@ export default async function Home() {
 
   // Editorial copy that used to be arrays in these components; each falls back
   // to exactly the text it had, so an untouched install renders unchanged.
-  const [facts, servizi, ricetta] = await Promise.all([
+  const [facts, servizi, ricetta, faqRecords] = await Promise.all([
     siteLines("home.hero.facts"),
     siteRecords("home.servizi"),
     siteRecords("home.porchetta.ricetta"),
+    siteRecords("home.faq"),
   ]);
+
+  // A half-typed row still renders — the owner needs to see what they left
+  // unfinished — but only complete pairs go into the FAQPage graph: telling
+  // Google about a question with no answer is worse than saying nothing.
+  const faq = faqRecords as FaqItem[];
+  const faqForSchema = faq.filter((f) => f.question && f.answer);
 
   // The hero's live badge speaks for the shop as a whole: open if either
   // bottega is serving right now.
@@ -132,7 +141,13 @@ export default async function Home() {
 
   return (
     <>
-      <JsonLd schema={[organizationSchema(), ...shops.map(shopSchema)]} />
+      <JsonLd
+        schema={[
+          organizationSchema(),
+          ...shops.map(shopSchema),
+          ...(faqForSchema.length > 0 ? [faqSchema(faqForSchema)] : []),
+        ]}
+      />
       <Hero openNow={openNow} facts={facts} />
       <OggiAlBanco items={today} dateLabel={todayLabel()} />
       <ChiSiamo />
@@ -142,6 +157,7 @@ export default async function Home() {
       <Porchetta ricetta={ricetta as Ingrediente[]} />
       <Marche brands={brands} />
       <Diario posts={diario} />
+      <Domande faq={faq} shops={shops} />
       <InstagramFeed
         posts={instagram.posts}
         profile={instagram.profile}

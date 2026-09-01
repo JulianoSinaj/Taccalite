@@ -6,6 +6,7 @@ import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
 import JsonLd from "@/components/JsonLd";
 import PageHero from "@/components/site/PageHero";
 import CTA from "@/components/site/CTA";
+import Faq from "@/components/site/Faq";
 import ProductPlate from "@/components/site/ProductPlate";
 import { PhotoCredit } from "@/components/site/PhotoCredit";
 import AddToCartButton from "@/components/store/AddToCartButton";
@@ -642,6 +643,43 @@ export default async function PorchettaPage() {
           </RevealStagger>
         </div>
       </section>
+
+      {/* Domande frequenti.
+          These four answers already existed on this page — but only inside
+          `faqSchema`, which is a note to a search engine and invisible to the
+          person standing on the page with exactly those questions. Declaring
+          an FAQPage for text nobody can read is also the one thing Google asks
+          you not to do, so the markup and the band now say the same thing. */}
+      <Faq
+        items={faq}
+        className="bg-paper-warm"
+        eyebrow="Domande frequenti"
+        title={
+          <>
+            Prima di <span className="wonk text-gold-deep">prenotare</span>
+          </>
+        }
+        intro={`Il resto ve lo diciamo volentieri al telefono: la porchetta si prenota anche così, entro ${cutoffDayName}.`}
+        aside={
+          <div className="space-y-2">
+            {roasting.map((shop) =>
+              shop.phone ? (
+                <a
+                  key={shop.slug}
+                  href={telHref(shop.phone)}
+                  className="group flex items-baseline gap-3 border-b border-rule py-3 text-[0.8125rem] text-taupe transition-colors hover:text-brown-950"
+                >
+                  <Phone className="size-3.5 shrink-0 translate-y-0.5 text-gold-deep" aria-hidden />
+                  <span className="font-medium text-brown-950">{shop.name}</span>
+                  <span className="font-display ml-auto text-[1.0625rem] font-semibold tracking-[-0.01em] text-brown-950 tabular-nums transition-colors group-hover:text-gold-deep">
+                    {shop.phone}
+                  </span>
+                </a>
+              ) : null
+            )}
+          </div>
+        }
+      />
 
       {/* CTA finale */}
       <section className="bg-paper-warm py-16 sm:py-28">

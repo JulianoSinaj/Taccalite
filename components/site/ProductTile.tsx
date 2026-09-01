@@ -161,8 +161,10 @@ export default function ProductTile({
             // `inline-block` + vertical padding: as an inline link the name was a
             // 25px-tall target, and it is the one a reader actually aims at —
             // the transparent hit area over the photograph is invisible, so
-            // nobody knows it is there.
-            className="inline-block py-1 transition-colors hover:text-gold-deep focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
+            // nobody knows it is there. `.tap` carries the last 14px of that on
+            // a one-line name (`py-1` gets it to 30px), because more padding
+            // here would open a visible gap between the name and its price.
+            className="tap inline-block py-1 transition-colors hover:text-gold-deep focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
           >
             {product.name}
           </Link>

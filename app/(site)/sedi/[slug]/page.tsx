@@ -23,6 +23,7 @@ import Reveal, { RevealStagger, RevealStaggerItem } from "@/components/Reveal";
 import PageHero from "@/components/site/PageHero";
 import CTA from "@/components/site/CTA";
 import ParallaxMedia from "@/components/site/ParallaxMedia";
+import { PhotoCredit } from "@/components/site/PhotoCredit";
 import ProductTile from "@/components/site/ProductTile";
 import MedallionBadge from "@/components/MedallionBadge";
 import PillButton from "@/components/PillButton";
@@ -248,6 +249,7 @@ export default async function ShopDetailPage({ params }: Params) {
                     className="object-cover"
                     sizes="(max-width: 1024px) 100vw, 42vw"
                   />
+                  <PhotoCredit src={shop.image} />
                 </ParallaxMedia>
 
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule px-5 py-4">
@@ -357,7 +359,7 @@ export default async function ShopDetailPage({ params }: Params) {
 
               <a
                 href={telHref(shop.phone)}
-                className="font-display block text-3xl leading-tight font-semibold tracking-[-0.02em] text-cream tabular-nums transition-colors hover:text-gold sm:text-4xl"
+                className="tap font-display block text-3xl leading-tight font-semibold tracking-[-0.02em] text-cream tabular-nums transition-colors hover:text-gold sm:text-4xl"
               >
                 {shop.phone}
               </a>
@@ -368,7 +370,7 @@ export default async function ShopDetailPage({ params }: Params) {
 
               <a
                 href={`mailto:${shop.email}`}
-                className="mt-6 inline-flex items-center gap-2.5 border-b border-gold/40 pb-1 text-sm break-all text-cream/85 transition-colors hover:text-gold"
+                className="tap mt-6 inline-flex items-center gap-2.5 border-b border-gold/40 pb-1 text-sm break-all text-cream/85 transition-colors hover:text-gold"
               >
                 <Mail className="size-4 shrink-0 text-gold" />
                 {shop.email}
@@ -694,6 +696,7 @@ export default async function ShopDetailPage({ params }: Params) {
                     className="object-cover"
                     sizes="(max-width: 1024px) 100vw, 58vw"
                   />
+                  <PhotoCredit src={shop.image} />
                   <div className="absolute inset-0 bg-gradient-to-t from-brown-950/85 via-brown-950/25 to-transparent" />
                   <div className="absolute inset-x-0 bottom-0 p-7 sm:p-9">
                     <GhostNumeral

@@ -35,8 +35,8 @@ export const shops: Shop[] = [
       "Formaggio di fossa e stagionature lunghe",
       "Gastronomia pronta e degustazioni in negozio",
     ],
-    imageLabel: "Pasta artigianale e specialità sugli scaffali della bottega",
-    image: "/images/pasta-artigianale-bottega.jpg",
+    imageLabel: "Tagliere di formaggi al taglio, con noci e confetture",
+    image: "/images/tagliere-formaggi.jpg",
   },
   {
     slug: "carni",

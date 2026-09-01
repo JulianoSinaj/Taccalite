@@ -19,6 +19,7 @@
 /** `src` → the credit its licence requires. Absent means "ours, no credit". */
 const CREDITS: Record<string, string> = {
   "/images/porchetta-al-forno.jpg": "Foto: Popo le Chien, CC BY-SA 3.0",
+  "/images/tagliere-formaggi.jpg": "Foto: Peachyeung316, CC BY-SA 4.0",
 };
 
 /** The credit for `src`, or `undefined` when the photo is the shop's own. */

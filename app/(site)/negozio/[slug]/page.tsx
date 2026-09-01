@@ -96,7 +96,10 @@ export default async function ProductDetailPage({ params }: Params) {
           <nav className="mb-5 text-[11px] font-bold tracking-[0.3em] text-taupe uppercase sm:mb-8">
             <Link
               href="/negozio"
-              className="inline-flex items-center gap-1.5 py-2 transition-colors hover:text-gold-deep"
+              // `.tap` and not more padding: the back link sits directly under
+              // the fixed header, and 44px of real box here would push the
+              // product's own title down by that much on every phone.
+              className="tap inline-flex items-center gap-1.5 py-2 transition-colors hover:text-gold-deep"
             >
               <ArrowLeft className="size-3" />
               Torna al negozio
