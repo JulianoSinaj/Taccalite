@@ -8,6 +8,7 @@ import { useReducedMotionAfterMount } from "@/lib/use-reduced-motion-after-mount
 import { ArrowRight, ArrowUpRight, Clock, MapPin, Navigation, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OpenState } from "@/lib/hours";
+import PillButton from "@/components/PillButton";
 
 /** Serializable slice of a shop the locator needs (built server-side by the page). */
 export type LocatorShop = {
@@ -169,15 +170,9 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
             const selected = shop.slug === active.slug;
             return (
               <li key={shop.slug} className="relative">
-                <motion.button
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  aria-controls={`locator-panel-${shop.slug}`}
-                  onClick={() => setActiveSlug(shop.slug)}
-                  whileTap={reduce ? undefined : { scale: 0.99 }}
+                <div
                   className={cn(
-                    "group relative w-full overflow-hidden  border p-6 text-left transition-colors duration-500 sm:p-7",
+                    "group relative overflow-hidden border transition-colors duration-500",
                     selected
                       ? "border-rule-strong bg-paper"
                       : "border-rule bg-paper-warm hover:border-rule-strong hover:bg-paper"
@@ -191,30 +186,40 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
                       transition={{ type: "spring", stiffness: 380, damping: 34 }}
                     />
                   )}
-                  <div className="flex items-start gap-5">
-                    <span className="font-display text-4xl leading-none font-bold text-brown-950/10 sm:text-5xl">
-                      0{i + 1}
-                    </span>
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <span className="eyebrow eyebrow-dark">{shop.specialty}</span>
-                        <OpenPill state={shop.open} />
+                  <motion.button
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    aria-controls={`locator-panel-${shop.slug}`}
+                    onClick={() => setActiveSlug(shop.slug)}
+                    whileTap={reduce ? undefined : { scale: 0.99 }}
+                    className="w-full p-6 text-left sm:p-7"
+                  >
+                    <div className="flex items-start gap-5">
+                      <span className="font-display text-4xl leading-none font-bold text-brown-950/10 sm:text-5xl">
+                        0{i + 1}
+                      </span>
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                          <span className="eyebrow eyebrow-dark">{shop.specialty}</span>
+                          <OpenPill state={shop.open} />
+                        </div>
+                        <h3 className="font-display text-2xl leading-tight tracking-tight text-brown-950 sm:text-3xl">
+                          {shop.name}
+                        </h3>
+                        <p className="flex items-start gap-2 text-sm font-semibold text-brown-700">
+                          <MapPin className="mt-0.5 size-4 shrink-0 text-gold-deep" />
+                          {shop.address}
+                        </p>
                       </div>
-                      <h3 className="font-display text-2xl leading-tight tracking-tight text-brown-950 sm:text-3xl">
-                        {shop.name}
-                      </h3>
-                      <p className="flex items-start gap-2 text-sm font-semibold text-brown-700">
-                        <MapPin className="mt-0.5 size-4 shrink-0 text-gold-deep" />
-                        {shop.address}
-                      </p>
+                      <ArrowRight
+                        className={cn(
+                          "mt-1 size-4 shrink-0 text-gold-deep transition-transform duration-500",
+                          selected ? "rotate-90" : "group-hover:translate-x-1"
+                        )}
+                      />
                     </div>
-                    <ArrowRight
-                      className={cn(
-                        "mt-1 size-4 shrink-0 text-gold-deep transition-transform duration-500",
-                        selected ? "rotate-90" : "group-hover:translate-x-1"
-                      )}
-                    />
-                  </div>
+                  </motion.button>
 
                   <AnimatePresence initial={false}>
                     {selected && (
@@ -228,31 +233,37 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
                         transition={{ duration: 0.55, ease: EASE }}
                         className="overflow-hidden"
                       >
-                        <div className="mt-6 space-y-3 border-t border-rule pt-6 text-sm font-semibold text-brown-700">
-                          <p className="flex items-center gap-3">
-                            <Clock className="size-4 shrink-0 text-gold-deep" />
-                            {shop.today ? (
-                              <>
-                                Oggi ({shop.today.label}): {shop.today.value}
-                              </>
-                            ) : (
-                              <>Orari: chiamaci per conferma</>
-                            )}
-                          </p>
-                          {!shop.hoursConfirmed && (
-                            <p className="pl-7 text-xs font-medium text-taupe">
-                              Orari da confermare in negozio.
+                        <div className="space-y-5 border-t border-rule px-6 pt-6 pb-6 sm:px-7 sm:pb-7">
+                          <div className="space-y-3 text-sm font-semibold text-brown-700">
+                            <p className="flex items-center gap-3">
+                              <Clock className="size-4 shrink-0 text-gold-deep" />
+                              {shop.today ? (
+                                <>
+                                  Oggi ({shop.today.label}): {shop.today.value}
+                                </>
+                              ) : (
+                                <>Orari: chiamaci per conferma</>
+                              )}
                             </p>
-                          )}
-                          <p className="flex items-center gap-3">
-                            <Phone className="size-4 shrink-0 text-gold-deep" />
-                            {shop.phone}
-                          </p>
+                            {!shop.hoursConfirmed && (
+                              <p className="pl-7 text-xs font-medium text-taupe">
+                                Orari da confermare in negozio.
+                              </p>
+                            )}
+                            <p className="flex items-center gap-3">
+                              <Phone className="size-4 shrink-0 text-gold-deep" />
+                              {shop.phone}
+                            </p>
+                          </div>
+                          <PillButton href={`/sedi/${shop.slug}`} tone="gold">
+                            Scopri la bottega
+                            <ArrowRight className="size-4" />
+                          </PillButton>
                         </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </motion.button>
+                </div>
               </li>
             );
           })}
@@ -275,13 +286,6 @@ export default function ShopLocator({ shops }: { shops: LocatorShop[] }) {
             <Phone className="size-4" />
             Chiama
           </MagneticAnchor>
-          <Link
-            href={`/sedi/${active.slug}`}
-            className="underline-draw col-span-2 inline-flex items-center justify-center gap-2 py-3 text-sm font-semibold text-brown-950 sm:col-span-1 sm:justify-start sm:py-3.5"
-          >
-            Scopri la bottega
-            <ArrowRight className="size-4" />
-          </Link>
         </div>
       </div>
 

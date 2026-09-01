@@ -48,7 +48,7 @@ export default function Servizi({ servizi }: { servizi: Servizio[] }) {
               >
                 <Link
                   href={servizio.href}
-                  className="group relative grid items-baseline gap-x-8 gap-y-3 px-4 py-9 transition-colors duration-500 focus-visible:outline-none md:grid-cols-[4rem_minmax(0,15rem)_1fr_auto] md:px-6 md:py-11 hover:bg-[color-mix(in_oklab,var(--acc)_7%,transparent)]"
+                  className="group relative grid items-baseline gap-x-8 gap-y-3 px-4 py-9 transition-colors duration-500 focus-visible:outline-none md:grid-cols-[4rem_minmax(0,15rem)_1fr_auto] lg:grid-cols-[4rem_minmax(0,18rem)_1fr_auto] md:px-6 md:py-11 hover:bg-[color-mix(in_oklab,var(--acc)_7%,transparent)]"
                 >
                   {/* The row number, struck huge and ghosted, arriving from the
                       right on hover. Five identical rows had no reward for
@@ -76,12 +76,12 @@ export default function Servizi({ servizi }: { servizi: Servizio[] }) {
                         posters. Decorative — `alt=""` — because the link is
                         already announced by the title and the CTA beside it. */}
                     {servizio.image && (
-                      <div className="relative mt-4 aspect-3/2 w-[7.5rem] overflow-hidden bg-paper md:w-[9rem]">
+                      <div className="relative mt-5 aspect-3/2 w-[12rem] overflow-hidden bg-paper md:w-full">
                         <Image
                           src={servizio.image}
                           alt=""
                           fill
-                          sizes="(min-width: 768px) 9rem, 7.5rem"
+                          sizes="(min-width: 1024px) 18rem, (min-width: 768px) 15rem, 12rem"
                           className="object-cover transition-transform duration-[1.4s] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.06]"
                         />
                         <span

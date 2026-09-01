@@ -376,7 +376,7 @@ export default async function ShopDetailPage({ params }: Params) {
 
               <div className="mt-8 flex flex-wrap gap-3">
                 <PillButton href="/prenotazioni" tone="gold">
-                  Prenota
+                  Prenota un tavolo
                 </PillButton>
                 <PillButton href="/contatti" tone="ghost">
                   Scrivici

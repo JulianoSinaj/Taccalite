@@ -1,20 +1,19 @@
 import Image from "next/image";
 import CTA from "@/components/site/CTA";
 import RevealLines from "@/components/site/RevealLines";
-import SaturdayCountdown from "@/components/SaturdayCountdown";
 
 /**
  * The first of the page's two brown bands. The left half stays photo-free on
  * purpose — a typographic block carries more authority than a picture of
- * somebody else's roast — but the countdown card on the right now leads with
- * a shot, since a photo reads faster than the kicker text it replaced.
+ * somebody else's roast — but the card on the right leads with a shot, since
+ * a photo reads faster than the kicker text it replaced.
  *
  * What the band *does* need is heat. It used to be flat brown with one blurred
  * gold orb and an empty right half, so the loudest section of the page was also
  * its quietest surface. The ember wash lights it, and the recipe now occupies
- * the space the countdown was rattling around in — the four things that go into
- * a porchetta, set as a list, which is the closest thing to a photograph that
- * costs nothing and is entirely true.
+ * the space that used to sit empty under the paragraph — the four things that
+ * go into a porchetta, set as a list, which is the closest thing to a
+ * photograph that costs nothing and is entirely true.
  */
 
 export type Ingrediente = { name: string; note: string };
@@ -97,10 +96,23 @@ export default function Porchetta({ ricetta }: { ricetta: Ingrediente[] }) {
               />
             </div>
 
-            {/* The numbers own the middle of the card: the block takes the slack
-                between the kicker and the ledger and centres itself in it. */}
-            <div className="flex flex-1 items-center justify-center py-9">
-              <SaturdayCountdown />
+            {/* A second photograph owns the middle of the card: the block takes
+                the slack between the top shot and the ledger and centres
+                itself in it, the same way the countdown it replaced did. */}
+            <div className="flex flex-1 items-center py-9">
+              <div className="relative aspect-video w-full overflow-hidden border border-cream/12">
+                <Image
+                  src="/images/lonza-suino-brado.jpg"
+                  alt="Lonza di suino brado, selezionata per la porchetta"
+                  fill
+                  className="object-cover"
+                  sizes="(min-width: 1024px) 40vw, 90vw"
+                />
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 bg-gradient-to-t from-brown-950/55 via-transparent to-transparent"
+                />
+              </div>
             </div>
 
             <div className="mt-auto space-y-3 border-t border-cream/12 pt-7 text-[0.8125rem] text-cream/55">

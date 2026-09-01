@@ -613,13 +613,10 @@ export default async function NegoziPage() {
                     </span>
                   </div>
 
-                  <Link
-                    href={`/sedi/${shop.slug}`}
-                    className="underline-draw tap mt-6 inline-flex items-center gap-2 text-sm font-semibold text-brown-950"
-                  >
+                  <PillButton href={`/sedi/${shop.slug}`} tone="gold" className="mt-6">
                     Scopri questa bottega
                     <ArrowRight className="size-4" />
-                  </Link>
+                  </PillButton>
                 </RevealStaggerItem>
               );
             })}
