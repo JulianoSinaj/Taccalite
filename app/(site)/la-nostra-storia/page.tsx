@@ -64,9 +64,15 @@ export default async function StoriaPage() {
 
           <Reveal className="lg:col-span-5">
             <ParallaxMedia className="aspect-[4/5] bg-paper-warm" distance={64}>
+              {/* Was a hotlinked Unsplash photo of an unrelated norcino, which
+                  is the one thing this page cannot afford: a page that says
+                  "this is our story since 1946" illustrated by a stranger's
+                  shop. The salumi on their hooks are ours, and hotlinking a
+                  third-party CDN from the hero also put the LCP of this page
+                  behind a domain nobody here controls. */}
               <Image
-                src="https://images.unsplash.com/photo-1604443402123-0bf4dd913f05?auto=format&fit=crop&q=80&w=1200"
-                alt="Un norcino con il grembiule bianco affetta un prosciutto al banco, salumi appesi alle sue spalle"
+                src="/images/salumi-appesi-stagionatura.jpg"
+                alt="Culatte, capocolli e pancette appesi in stagionatura nella bottega Taccalite"
                 fill
                 preload
                 sizes="(max-width: 1024px) 90vw, 40vw"

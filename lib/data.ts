@@ -101,9 +101,12 @@ export const featuredProducts: Product[] = [
     category: "Formaggi",
     description:
       "Stagionato in fossa secondo il metodo tradizionale marchigiano, dal profumo intenso e dal gusto deciso.",
+    // No photograph of our own pecorino yet. An empty `image` is the honest
+    // answer: `ProductTile` falls back to the typographic plate, which reads as
+    // a printed-catalogue device rather than a hole — and beats the hotlinked
+    // Unsplash wheel that used to sit here passing for ours.
     imageLabel: "Foto forma di pecorino di fossa",
-    image:
-      "https://images.unsplash.com/photo-1452195100486-9cc805987862?auto=format&fit=crop&q=80&w=800",
+    image: "",
   },
   {
     slug: "bistecca-marchigiana",

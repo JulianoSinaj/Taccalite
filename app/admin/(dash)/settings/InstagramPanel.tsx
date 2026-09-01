@@ -36,7 +36,7 @@ export async function InstagramPanel() {
                 ? `collegato${status.cache?.username ? ` come @${status.cache.username}` : ""}${
                     status.source === "env" ? " (token da variabile d'ambiente)" : ""
                   }`
-                : "non collegato — la homepage mostra solo il banner «Seguici»"}
+                : "non collegato — la homepage mostra i post d'archivio inclusi nel sito"}
             </span>
           </p>
         </div>
@@ -121,7 +121,7 @@ export async function InstagramPanel() {
             <ActionForm action={disconnectInstagram} className="inline-flex items-center gap-2">
               <PendingButton
                 tone="danger"
-                confirm="Rimuovere il token Instagram? La homepage tornerà a mostrare solo il banner «Seguici»."
+                confirm="Rimuovere il token Instagram? La homepage tornerà ai post d'archivio inclusi nel sito."
               >
                 Scollega
               </PendingButton>

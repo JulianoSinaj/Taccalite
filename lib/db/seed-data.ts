@@ -183,8 +183,10 @@ export async function seedBaseData(db: Db, log: (msg: string) => void = console.
       name: "Verdicchio in abbinamento",
       points: 850,
       description: "Una bottiglia di Verdicchio dei Castelli di Jesi selezionata dal nostro banco.",
-      image:
-        "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&q=80&w=800",
+      // No photograph of the bottle yet, and the dashboard already guards on
+      // `reward.image` — better an honest blank than a hotlinked stock bottle
+      // that is not the wine we actually hand over.
+      image: "",
     },
     {
       slug: "porchetta-famiglia",

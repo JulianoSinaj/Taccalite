@@ -12,7 +12,7 @@ import InstagramFeed from "@/components/InstagramFeed";
 import type { ProductTileData } from "@/components/site/ProductTile";
 import { organizationSchema, shopSchema } from "@/lib/seo";
 import { shopIsOpenNow } from "@/lib/hours";
-import { getInstagramFeed } from "@/lib/instagram";
+import { getInstagramFeedForSite } from "@/lib/instagram";
 import { siteConfig } from "@/lib/site";
 import {
   getShops,
@@ -98,7 +98,7 @@ export default async function Home() {
       getBlogPosts(),
       getSetting<string>("home.brands", DEFAULT_BRANDS),
       getSetting<string>("home.today", ""),
-      getInstagramFeed(),
+      getInstagramFeedForSite(),
     ]);
 
   const products = pickProducts(featured, purchasable);

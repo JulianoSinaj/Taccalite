@@ -148,9 +148,9 @@ export const SITE_CONTENT: ContentDef[] = [
     type: "records",
     fields: ["title", "text", "image", "alt"],
     default: [
-      "La selezione | Scegliamo solo carne di suino di alta qualità, lavorata a mano dai nostri norcini. | /images/banco-carni-bovino.jpg | La selezione della carne al banco",
-      "L'aromatizzazione | Rosmarino, aglio, finocchietto selvatico e le spezie della ricetta di famiglia, custodita da tre generazioni. | /images/spiedini-verdure-banco.jpg | La lavorazione artigianale a mano",
-      "La cottura lenta | Cotta lentamente in forno, fino a raggiungere la pelle croccante e la carne morbidissima all'interno. | /images/gastronomia-teglie-forno.jpg | Le teglie pronte per il forno",
+      "La selezione | Scegliamo solo carne di suino di alta qualità, lavorata a mano dai nostri norcini. | /images/banco-carni-macinati.jpg | Il banco delle carni fresche, da cui si sceglie il taglio ogni mattina",
+      "L'aromatizzazione | Rosmarino, aglio, finocchietto selvatico e le spezie della ricetta di famiglia, custodita da tre generazioni. | /images/gastronomia-teglie-forno.jpg | Le carni condite a mano con erbe e aromi, pronte per il forno",
+      "La cottura lenta | Cotta lentamente in forno, fino a raggiungere la pelle croccante e la carne morbidissima all'interno. | /images/porchetta-al-forno.jpg | Una porchetta arrosto tagliata, con la pelle croccante",
     ].join("\n"),
   },
   {
@@ -162,7 +162,7 @@ export const SITE_CONTENT: ContentDef[] = [
     type: "records",
     fields: ["src", "alt"],
     default: [
-      "/images/gastronomia-teglie-forno.jpg | Il banco gastronomia",
+      "/images/banco-carni-vetrina.jpg | I tagli interi al banco, tra i cartellini scritti a mano",
       "/images/salumi-appesi-stagionatura.jpg | I salumi in stagionatura",
       "/images/banco-carni-bovino.jpg | Il banco carni",
       "/images/pasta-artigianale-bottega.jpg | Le specialità in bottega",

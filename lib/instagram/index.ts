@@ -1,6 +1,7 @@
 import "server-only";
 import { env } from "@/lib/env";
 import { getSetting, setSetting } from "@/lib/db/queries";
+import { FALLBACK_FEED } from "./fallback";
 import {
   MEDIA_FIELDS_BASIC,
   MEDIA_FIELDS_RICH,
@@ -15,6 +16,7 @@ import {
 } from "./parse";
 
 export type { InstagramFeed, InstagramPost, InstagramProfile } from "./parse";
+export { FALLBACK_FEED } from "./fallback";
 
 /**
  * Instagram feed for the homepage.
@@ -201,6 +203,25 @@ export async function getInstagramFeed(): Promise<InstagramFeed> {
     }
   })();
   return inflight;
+}
+
+/**
+ * What the public site renders: the live feed when there is one, the shipped
+ * archive (`./fallback`) when there isn't.
+ *
+ * Kept separate from `getInstagramFeed` on purpose. That function is the honest
+ * report of what Instagram gave us, and the gestionale leans on it — "aggiorna
+ * ora" tells the shop the refresh returned nothing precisely by seeing an empty
+ * `posts`. Folding the archive in there would have turned every failed fetch
+ * into a cheerful "feed aggiornato: 12 post".
+ */
+export async function getInstagramFeedForSite(): Promise<InstagramFeed> {
+  const feed = await getInstagramFeed();
+  if (feed.posts.length > 0) return feed;
+  // The archive holds more than the API hands over in one page. Serving all of
+  // it would mean the homepage grid *shrank* the day a token was connected, so
+  // it is trimmed to the same window the live path uses.
+  return { ...FALLBACK_FEED, posts: FALLBACK_FEED.posts.slice(0, FEED_LIMIT) };
 }
 
 /** Drop the in-memory + persisted cache so the next render refetches. */

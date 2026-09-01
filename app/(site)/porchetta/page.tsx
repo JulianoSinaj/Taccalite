@@ -7,6 +7,7 @@ import JsonLd from "@/components/JsonLd";
 import PageHero from "@/components/site/PageHero";
 import CTA from "@/components/site/CTA";
 import ProductPlate from "@/components/site/ProductPlate";
+import { PhotoCredit } from "@/components/site/PhotoCredit";
 import AddToCartButton from "@/components/store/AddToCartButton";
 import PorchettaConfigurator, {
   type ConfiguratorDay,
@@ -569,6 +570,10 @@ export default async function PorchettaPage() {
                   <div className="font-display absolute top-6 left-6 flex h-12 w-12 items-center justify-center rounded-full bg-gold text-2xl font-bold text-brown-950 shadow-lg">
                     {i + 1}
                   </div>
+                  {/* The step images are shop-editable, so any of them can end
+                      up pointing at a photo that is not ours. Renders nothing
+                      for the bottega photography. */}
+                  <PhotoCredit src={step.image} />
                 </div>
                 <h3 className="font-display mb-4 text-[1.5rem] leading-tight font-semibold tracking-[-0.02em] text-brown-950">
                   {step.title}

@@ -1,12 +1,13 @@
 import Image from "next/image";
 import CTA from "@/components/site/CTA";
 import RevealLines from "@/components/site/RevealLines";
+import { PhotoCredit } from "@/components/site/PhotoCredit";
 
 /**
  * The first of the page's two brown bands. The left half stays photo-free on
  * purpose — a typographic block carries more authority than a picture of
- * somebody else's roast — but the card on the right leads with a shot, since
- * a photo reads faster than the kicker text it replaced.
+ * somebody else's roast — but the card on the right carries a single shot,
+ * centred, since a photo reads faster than the kicker text it replaced.
  *
  * What the band *does* need is heat. It used to be flat brown with one blurred
  * gold orb and an empty right half, so the loudest section of the page was also
@@ -81,43 +82,29 @@ export default function Porchetta({ ricetta }: { ricetta: Ingrediente[] }) {
         </div>
 
         <div className="lg:col-span-5 lg:col-start-8">
-          {/* Given a ground of its own so the two photos read as a frame on
-              the wall rather than images adrift in a dark rectangle. */}
+          {/* Given a ground of its own so the photo reads as a frame on the
+              wall rather than an image adrift in a dark rectangle. */}
           <div className="flex h-full flex-col border border-cream/12 bg-brown-950/45 p-8 backdrop-blur-sm sm:p-10">
-            {/* Stand-in until there's a real shop photo: a Wikimedia Commons
-                shot (CC BY-SA 3.0, Popo le Chien) in place of the kicker text
-                it replaced. The credit line is the license's requirement, not
-                a design choice — keep it if the photo stays. */}
-            <div className="relative -mx-8 -mt-8 aspect-video overflow-hidden sm:-mx-10 sm:-mt-10">
-              <Image
-                src="/images/porchetta-al-forno.jpg"
-                alt="Porchetta intera arrosto, appena sfornata"
-                fill
-                className="object-cover"
-                sizes="(min-width: 1024px) 40vw, 90vw"
-              />
-              <div aria-hidden className="absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-brown-950/70 to-transparent" />
-              <p className="absolute right-2 bottom-1 text-[0.5625rem] text-cream/60">
-                Foto: Popo le Chien, CC BY-SA 3.0
-              </p>
-            </div>
+            {/* One photograph, centred: the block takes all the slack above the
+                ledger and sits in the middle of it, so the card reads as a
+                single framed picture instead of a stack of two. 5:4 rather
+                than 16:9 because one photo has to carry the card on its own —
+                the taller crop spends the slack the second image used to,
+                and still leaves air above and below it.
 
-            {/* A second photograph owns the middle of the card: the block takes
-                the slack between the top shot and the ledger and centres
-                itself in it, the same way the countdown it replaced did. */}
-            <div className="flex flex-1 items-center py-9">
-              <div className="relative aspect-video w-full overflow-hidden border border-cream/12">
+                Stand-in until there's a real shop photo: a Wikimedia Commons
+                shot. The credit its licence requires is keyed off the `src` in
+                `PhotoCredit`, so moving the photo cannot drop it. */}
+            <div className="flex flex-1 items-center py-4">
+              <div className="relative aspect-[5/4] w-full overflow-hidden border border-cream/12">
                 <Image
-                  src="/images/lonza-suino-brado.jpg"
-                  alt="Lonza di suino brado, selezionata per la porchetta"
+                  src="/images/porchetta-al-forno.jpg"
+                  alt="Porchetta intera arrosto, appena sfornata"
                   fill
                   className="object-cover"
                   sizes="(min-width: 1024px) 40vw, 90vw"
                 />
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 bg-gradient-to-t from-brown-950/55 via-transparent to-transparent"
-                />
+                <PhotoCredit src="/images/porchetta-al-forno.jpg" />
               </div>
             </div>
 
