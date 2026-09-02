@@ -1,6 +1,6 @@
 import "server-only";
 import { customAlphabet } from "nanoid";
-import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { orders, orderItems, products } from "@/lib/db/schema";
 import { applyStockChange, consumeBatchesFefo, restoreBatches, stockUnitsForLine } from "@/lib/stock";
@@ -105,6 +105,10 @@ export async function quoteCarriage(opts: {
   return { feeCents: waived ? 0 : flat, zone: null, error: null };
 }
 
+/** Ceiling on how much of one product a single order may contain. Mirrors the
+ *  per-item cap in `checkoutSchema`; applied to the *summed* quantity. */
+export const MAX_LINE_QUANTITY = 50;
+
 const orderCode = customAlphabet("0123456789", 6); // ~1M namespace/year
 
 export function generateOrderNumber(): string {
@@ -129,7 +133,32 @@ export type CreatedOrder = {
  * Server-authoritative order creation: prices come from the DB, never the client.
  */
 export async function createOrder(input: CheckoutInput, userId?: string): Promise<CreatedOrder> {
-  const slugs = input.items.map((i) => i.slug);
+  // One line per product, quantities summed.
+  //
+  // The basket used to be priced item-by-item as it arrived, and the oversell
+  // guard below compared each line against on-hand *separately*. So a request
+  // naming the same slug twice — which the storefront cart never produces, but
+  // this is a plain JSON endpoint and the guard exists precisely for the
+  // hand-rolled POST — passed both checks and then oversold: two lines of 25
+  // against a stock of 30 are 25 ≤ 30 twice, and 50 units out of the door. The
+  // decrement floors at zero, so the shop simply ran out, having taken money for
+  // meat it had already promised to somebody else.
+  //
+  // Summing first also stops the same product appearing twice on the packing
+  // slip and the invoice.
+  const wanted = new Map<string, number>();
+  for (const i of input.items) {
+    wanted.set(i.slug, (wanted.get(i.slug) ?? 0) + i.quantity);
+  }
+  // The per-item ceiling in `checkoutSchema` is meaningless if it can be
+  // sidestepped by splitting one product across several entries.
+  const overLimit = [...wanted.entries()].find(([, q]) => q > MAX_LINE_QUANTITY);
+  if (overLimit) {
+    throw new Error(
+      `Puoi ordinare al massimo ${MAX_LINE_QUANTITY} pezzi per prodotto. Riduci la quantità e riprova.`,
+    );
+  }
+  const slugs = [...wanted.keys()];
   const dbProducts = await db
     .select()
     .from(products)
@@ -146,15 +175,15 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
     );
 
   const priceMap = new Map(dbProducts.map((p) => [p.slug, p]));
-  const lines = input.items
-    .map((i) => {
-      const p = priceMap.get(i.slug);
+  const lines = [...wanted.entries()]
+    .map(([slug, quantity]) => {
+      const p = priceMap.get(slug);
       if (!p || p.priceCents == null) return null;
       return {
         product: p,
-        quantity: i.quantity,
+        quantity,
         unitPriceCents: p.priceCents,
-        lineTotalCents: p.priceCents * i.quantity,
+        lineTotalCents: p.priceCents * quantity,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -171,9 +200,9 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
   // Stripe showing a total they never agreed to, or turned up at the counter for
   // goods that were never on the order. Nothing told them, and nothing told the
   // shop either.
-  if (lines.length !== input.items.length) {
+  if (lines.length !== wanted.size) {
     const resolved = new Set(lines.map((l) => l.product.slug));
-    const missing = [...new Set(input.items.map((i) => i.slug).filter((s) => !resolved.has(s)))];
+    const missing = slugs.filter((s) => !resolved.has(s));
     throw new Error(
       missing.length === 1
         ? "Un prodotto nel carrello non è più disponibile. Rimuovilo e riprova."
@@ -685,7 +714,16 @@ export async function finalizeOrder(
       // A Stripe payment is a card by definition. Anything else has to say so.
       ...(opts.paidWith ? { paidWith: opts.paidWith } : opts.paymentIntentId ? { paidWith: "card" as const } : {}),
     })
-    .where(and(eq(orders.id, orderId), ne(orders.paymentStatus, "paid")))
+    // `unpaid`, not "anything except paid". A fully refunded order sits at
+    // `refunded`, which passed the old predicate — so a redelivered
+    // `checkout.session.completed` (Stripe retries a failed delivery for days)
+    // arriving after a refund claimed the order, flipped it back to paid,
+    // counted the coupon a second time, awarded the loyalty points again and
+    // re-stamped `paidAt` — moving the sale into a different VAT period on its
+    // way past. Nothing legitimately finalizes an order that is not unpaid:
+    // `settleOrderPayment` refuses paid and refunded before it gets here, and
+    // every Stripe path starts from unpaid.
+    .where(and(eq(orders.id, orderId), eq(orders.paymentStatus, "unpaid")))
     .returning({ id: orders.id })
 ;
   if (!claimed) {

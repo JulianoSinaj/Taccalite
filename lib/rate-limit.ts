@@ -38,8 +38,18 @@ export function rateLimit(
  * conservative, but not bypassable.
  */
 export function clientIp(req: Request): string {
+  return clientIpFromHeaders(req.headers);
+}
+
+/**
+ * The same, for a caller holding headers rather than a whole `Request` — a
+ * Server Component reading `await headers()`, which is how a *page* rate-limits
+ * itself. `/traccia` needs this: it is an unauthenticated PII lookup that lives
+ * on a page rather than behind an API route, and was the only public entry
+ * point in the app with no limit at all.
+ */
+export function clientIpFromHeaders(h: Headers | { get(name: string): string | null }): string {
   if (!env.trustProxy) return "untrusted-proxy";
-  const h = req.headers;
   return (
     h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     h.get("x-real-ip") ||

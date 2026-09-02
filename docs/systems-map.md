@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **2 of 24 systems audited**. The rest of the
+> **Status:** in progress — **3 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -59,7 +59,7 @@ The constellations are for navigation; the systems are the audit unit.
 |---|--------|---------------|-----------|
 | 1 | [Catalogue & Products](audits/01-catalogue-products.md) | ① Il Banco | **91** |
 | 2 | [Inventory & Stock](audits/02-inventory-stock.md) | ① Il Banco | **84** |
-| 3 | Orders & Checkout | ① Il Banco | — |
+| 3 | [Orders & Checkout](audits/03-orders-checkout.md) | ① Il Banco | **90** |
 | 4 | Payments | ① Il Banco | — |
 | 5 | Discounts & Promotions | ① Il Banco | — |
 | 6 | Fulfilment & Logistics | ② La Consegna | — |
@@ -156,9 +156,15 @@ counter/phone sales, guest orders, order tracking, packing slips.
 | **Components** | `components/store/cart.tsx`, `CartDrawer.tsx`, `CartBar.tsx`, `CheckoutClient.tsx`, `AddToCartButton.tsx`, `StickyBuyBar.tsx`, `components/admin/OrderEditor.tsx`, `ManualOrderForm.tsx` |
 | **Tests** | `order-lifecycle.test.ts`, `order-edit.test.ts`, `refunds.test.ts`, `cancel-settled-order.test.ts`, `settled-order-guards.test.ts`, `domain-db.test.ts` |
 
-**Audit questions** — Are state transitions total and guarded? Can a settled
-order be mutated? Does editing an order correctly reverse stock, loyalty and
-coupon effects? Is the cart authoritative on the server?
+**Readiness: 90/100** — audited 2026-09-02 at 80, remediated the same day; see
+[`docs/audits/03-orders-checkout.md`](audits/03-orders-checkout.md). The most
+mature system in the codebase: the status machine refuses by name every
+transition that would move goods without moving money, idempotency is *claimed*
+rather than assumed at four separate points, and pricing is server-authoritative
+throughout. Fixed: a basket naming one product twice bypassed the oversell guard
+entirely, a refunded order could be settled again by a redelivered webhook, and
+`/traccia` was the only public entry point in the app with no rate limit —
+leaving a customer's address one million unthrottled guesses away.
 
 ---
 
@@ -591,7 +597,7 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 2 of 24.** Systems 1 and 2, both remediated in the same pass.
+**Audited: 3 of 24.** Systems 1, 2 and 3, all remediated in the same pass.
 Everything else in the index is unexamined — an empty cell means "not looked
 at", never "fine".
 
@@ -605,7 +611,8 @@ at", never "fine".
   external terminal? a payment link from elsewhere?). **Do not audit or score
   system 4 until this is settled** — scoring it against the wrong intent is
   worse than leaving it blank. The answer also reaches systems 3, 18 and 19,
-  which read the settlement fields.
+  which read the settlement fields — system 3's audit records exactly which of
+  its guards survive the decision and which become dead weight.
 
 ### Recorded but not built
 
@@ -618,7 +625,10 @@ not oversights.
 | 2 | **Lot → order traceability.** `consumeBatchesFefo` computes which lots went out and both callers discard it, so a recall cannot name the affected customers. Design: `order_id` + `lots` on `stock_movements`. | Schema change; feature work, not a defect |
 | 2 | **Ledger ↔ on-hand reconciliation.** Nothing surfaces a divergence, and legacy rows have no opening movement so the sum is expected to differ. Design: backfill opening balances, then a divergence report. | Migration + new report surface |
 | 2 | A half-applied `applyOrderStock` is now *logged* but still not *recoverable*. | Depends on the reconciliation report above |
+| 3 | **Loyalty accrues on the pre-discount subtotal**, so a 50 %-off coupon still earns full points. A business decision to make deliberately, not a defect. | Needs the owner's call |
+| 3 | `order_items.product_id` has no FK; the reservation lookup on `/traccia` is single-factor (reference only, now throttled). | Low value against the risk |
 | 1 | TOCTOU window on derived slugs; allergens absent from the CSV round-trip; `unit` is free text. | Low value against the risk |
+| 23 | **The e2e suite is not repeatable.** Fixtures accumulate across runs until a capped resource refuses; the suite cannot cold-start (seed runs before migrations); two tests are load-sensitive. All 52 pass on a correctly seeded DB. | Its own system's audit |
 
 ## How to read a readiness score
 

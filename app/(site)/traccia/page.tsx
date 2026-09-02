@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { rateLimit, clientIpFromHeaders } from "@/lib/rate-limit";
 import {
   getReservationByReference,
   getShopBySlug,
@@ -91,6 +93,7 @@ function LookupForms({
   tab,
   reservationNotFound,
   orderNotFound,
+  throttled,
   refCode,
   order,
   email,
@@ -98,6 +101,7 @@ function LookupForms({
   tab: "reservation" | "order";
   reservationNotFound?: boolean;
   orderNotFound?: boolean;
+  throttled?: boolean;
   refCode?: string;
   order?: string;
   email?: string;
@@ -114,6 +118,12 @@ function LookupForms({
         <p className="mt-4 text-lg text-brown-700">
           Controlla lo stato di una prenotazione o di un ordine dell&apos;e-shop.
         </p>
+
+        {throttled && (
+          <p className="mx-auto mt-8 max-w-md bg-red-500/10 px-5 py-3.5 text-sm text-red-700">
+            Troppi tentativi di ricerca. Attendi qualche minuto e riprova.
+          </p>
+        )}
 
         {/* Tabs */}
         <div className="mx-auto mt-8 flex max-w-md gap-2 rounded-full border border-rule bg-paper-warm p-1">
@@ -236,6 +246,23 @@ export default async function TracciaPage({ searchParams }: SearchParams) {
   // Which tab is active. An explicit lookup forces its own tab.
   const tab: "reservation" | "order" =
     orderNumber || email || sp.t === "order" ? "order" : "reservation";
+
+  // Both lookups here are unauthenticated reads of somebody's personal data,
+  // proved by a single piece of knowledge: an order needs its number plus the
+  // email, a booking only its reference. An order number is
+  // `ORD-<year>-<six digits>`, so an attacker who knows a customer's address —
+  // usually the easy half — has a million guesses between them and that
+  // customer's name, phone, delivery address, basket and total. Every other
+  // public entry point in the app is throttled; this one is a *page*, so it was
+  // missed. Counted only when a lookup is actually attempted, so browsing to
+  // the empty form costs nothing.
+  const attempted = Boolean(reference || (orderNumber && email));
+  if (attempted) {
+    const ip = clientIpFromHeaders(await headers());
+    if (!rateLimit(`traccia:${ip}`, { limit: 12, windowMs: 60_000 }).ok) {
+      return <LookupForms tab={tab} throttled refCode={reference} order={orderNumber} email={email} />;
+    }
+  }
 
   // ── Order lookup (email is the bearer proof — never show without a match). ──
   if (tab === "order") {
