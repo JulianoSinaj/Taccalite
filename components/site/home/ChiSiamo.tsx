@@ -17,7 +17,7 @@ export default function ChiSiamo() {
       </span>
 
       <div className="relative mx-auto grid max-w-[88rem] gap-14 lg:grid-cols-12 lg:items-center lg:gap-16">
-        <Reveal className="lg:col-span-5">
+        <Reveal className="order-2 lg:order-none lg:col-span-5">
           <div className="relative">
             <ParallaxMedia className="aspect-[5/6] bg-paper" distance={64}>
               {/* The counter itself, not another studio still life: the trays,
@@ -37,7 +37,7 @@ export default function ChiSiamo() {
           </div>
         </Reveal>
 
-        <div className="lg:col-span-6 lg:col-start-7">
+        <div className="order-1 lg:order-none lg:col-span-6 lg:col-start-7">
           <p className="flex items-center gap-4 text-[0.6875rem] font-semibold tracking-[0.28em] text-gold-deep uppercase">
             <span aria-hidden className="h-px w-10 bg-gold" />
             Chi siamo
