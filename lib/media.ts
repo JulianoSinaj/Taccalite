@@ -35,6 +35,46 @@ const ALLOWED: Record<string, string> = {
   "image/webp": "webp",
   "image/avif": "avif",
 };
+
+export type ImageKind = "jpg" | "png" | "webp" | "avif";
+
+/**
+ * What the bytes actually are, regardless of what the upload claimed.
+ *
+ * `File.type` is the browser's `Content-Type` on the multipart part — which is
+ * to say, whatever the client wrote there. Trusting it meant any bytes at all
+ * could be stored and served back from the shop's own domain under an image
+ * content type, at a stable public URL. `nosniff` and a non-executable
+ * content type keep that from becoming stored XSS, but "the only thing standing
+ * between this and a hosted payload is a response header" is not where the
+ * check belongs. The file is whatever its first bytes say it is.
+ */
+export function sniffImageKind(bytes: Buffer): ImageKind | null {
+  if (bytes.length < 12) return null;
+  // JPEG: SOI + marker.
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpg";
+  // PNG: the 8-byte signature.
+  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return "png";
+  }
+  // WebP: a RIFF container whose form type is WEBP.
+  if (bytes.subarray(0, 4).toString("latin1") === "RIFF" && bytes.subarray(8, 12).toString("latin1") === "WEBP") {
+    return "webp";
+  }
+  // AVIF: an ISO-BMFF box whose brand is avif (or avis, the sequence variant).
+  if (bytes.subarray(4, 8).toString("latin1") === "ftyp") {
+    const brand = bytes.subarray(8, 12).toString("latin1");
+    if (brand === "avif" || brand === "avis") return "avif";
+  }
+  return null;
+}
+
+const CONTENT_TYPE: Record<ImageKind, string> = {
+  jpg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  avif: "image/avif",
+};
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const BLOB_PREFIX = "uploads/";
 
@@ -63,18 +103,27 @@ function contentTypeFor(name: string): string {
  * (never derived from the client's filename).
  */
 export async function saveUploadedImage(file: File): Promise<string> {
-  const ext = ALLOWED[file.type];
-  if (!ext) throw new Error("Formato immagine non supportato (usa JPG, PNG, WebP o AVIF).");
+  // The claimed type is checked first only so an obviously wrong upload gets the
+  // friendly message rather than the byte-level one.
+  if (!ALLOWED[file.type]) throw new Error("Formato immagine non supportato (usa JPG, PNG, WebP o AVIF).");
   if (file.size === 0) throw new Error("Il file immagine è vuoto.");
   if (file.size > MAX_BYTES) throw new Error("L'immagine supera il limite di 5 MB.");
 
-  const name = `${nanoid()}.${ext}`;
   const bytes = Buffer.from(await file.arrayBuffer());
+  // The extension, and the content type it will be served under, come from the
+  // bytes rather than the claim — so a renamed payload is stored as nothing at
+  // all instead of as the image it said it was.
+  const ext = sniffImageKind(bytes);
+  if (!ext) {
+    throw new Error("Il file non è un'immagine valida (JPG, PNG, WebP o AVIF).");
+  }
+
+  const name = `${nanoid()}.${ext}`;
 
   if (blobConfigured) {
     const blob = await put(`${BLOB_PREFIX}${name}`, bytes, {
       access: "public",
-      contentType: file.type,
+      contentType: CONTENT_TYPE[ext],
       addRandomSuffix: false,
       token: env.blobToken,
     });

@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **17 of 24 systems audited**. The rest of the
+> **Status:** in progress — **18 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -73,7 +73,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 14 | [Automation & Scheduled Jobs](audits/14-automation-scheduled-jobs.md) | ④ La Voce | **86** |
 | 15 | CMS & Editorial | ⑤ La Vetrina | — |
 | 16 | Storefront Experience | ⑤ La Vetrina | — |
-| 17 | Media & Assets | ⑤ La Vetrina | — |
+| 17 | [Media & Assets](audits/17-media-assets.md) | ⑤ La Vetrina | **87** |
 | 18 | [Fiscal & Accounting](audits/18-fiscal-accounting.md) | ⑥ Il Registro | **90** |
 | 19 | [Analytics & Reporting](audits/19-analytics-reporting.md) | ⑥ Il Registro | **88** |
 | 20 | [Security, Audit & Compliance](audits/20-security-audit-compliance.md) | ⑥ Il Registro | **88** |
@@ -492,11 +492,16 @@ orphan cleanup, placeholders and credits.
 | **Surfaces** | `GET /api/media/[file]`, `public/images/*`, `public/video/*` |
 | **Components** | `components/ImagePlaceholder.tsx`, `components/site/PhotoCredit.tsx` |
 | **Scripts** | `scripts/fix-image-labels.ts` |
-| **Tests** | — *(no dedicated suite; gap)* |
+| **Tests** | `media-upload.test.ts` |
 
-**Audit questions** — Is upload type/size validated and the filename
-non-traversable? Are orphans reclaimed? Is the local/blob split correct in both
-directions?
+**Readiness: 87/100** — audited 2026-09-02 at 76, remediated the same day; see
+[`docs/audits/17-media-assets.md`](audits/17-media-assets.md). Filenames are
+generated rather than client-derived, the read path applies a strict allowlist
+that deliberately excludes `.svg`, and local and Blob storage share one
+validated code path. Fixed: the stored extension and served content type came
+from `file.type`, which is whatever the client wrote — so any bytes could be
+hosted on the shop's domain under an image type. Both now come from the actual
+signature.
 
 ---
 
@@ -661,8 +666,8 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 17 of 24.** Systems 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18,
-19, 20 and 22.
+**Audited: 18 of 24.** Systems 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 17,
+18, 19, 20 and 22.
 All remediated in the same pass except 18, which had no defects.
 
 **A shape worth naming.** Three systems held a capacity rule by reading a count
