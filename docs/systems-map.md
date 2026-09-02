@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **4 of 24 systems audited**. The rest of the
+> **Status:** in progress — **5 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -65,7 +65,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 6 | Fulfilment & Logistics | ② La Consegna | — |
 | 7 | Reservations | ② La Consegna | — |
 | 8 | Locations, Hours & Closures | ② La Consegna | — |
-| 9 | Identity & Authentication | ③ I Clienti | — |
+| 9 | [Identity & Authentication](audits/09-identity-authentication.md) | ③ I Clienti | **89** |
 | 10 | Customer Accounts | ③ I Clienti | — |
 | 11 | Loyalty & Rewards | ③ I Clienti | — |
 | 12 | Transactional Mail & Outbox | ④ La Voce | — |
@@ -282,9 +282,14 @@ rate limiting, staff roles.
 | **Components** | `components/account/AuthForms.tsx`, `PasswordForms.tsx`, `components/admin/AdminLoginForm.tsx`, `RecoveryCodes.tsx` |
 | **Tests** | `password.test.ts`, `totp.test.ts`, `auth-recovery.test.ts` |
 
-**Audit questions** — Session fixation/rotation? Token single-use and expiry?
-Is the login rate limit per-identity *and* per-IP? Is 2FA enforceable for
-admins?
+**Readiness: 89/100** — audited 2026-09-02 at 83, remediated the same day; see
+[`docs/audits/09-identity-authentication.md`](audits/09-identity-authentication.md).
+Emailed tokens are hashed at rest, single-use via an atomic claim, and supersede
+each other on resend; rate limiting is DB-backed so it survives a restart;
+password reset is not an enumeration oracle. Fixed: the login lockout was a
+ratchet rather than a budget — once locked, an account got one attempt per
+fifteen minutes forever, and anyone who knew the address could hold it shut with
+four requests an hour.
 
 ---
 
@@ -601,7 +606,7 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 4 of 24.** Systems 1, 2, 3 and 20, all remediated in the same pass.
+**Audited: 5 of 24.** Systems 1, 2, 3, 9 and 20, all remediated in the same pass.
 Everything else in the index is unexamined — an empty cell means "not looked
 at", never "fine".
 

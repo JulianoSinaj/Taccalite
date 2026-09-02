@@ -326,16 +326,28 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
 
 /** Count a failed attempt and lock the account once it crosses the threshold. */
 async function registerFailedAttempt(
-  user: Pick<UserRow, "id" | "name" | "username" | "failedLoginCount">,
+  user: Pick<UserRow, "id" | "name" | "username" | "failedLoginCount" | "lockedUntil">,
   kind: "password" | "2fa",
 ): Promise<void> {
-  const count = (user.failedLoginCount ?? 0) + 1;
+  // A served lockout starts the budget again.
+  //
+  // The counter only ever reset on a *successful* login, so once an account had
+  // been locked once it stayed at the threshold for good: the next single wrong
+  // password — fifteen minutes later, or a month later — was attempt eleven of
+  // ten and locked it for another quarter of an hour. Ten tries quietly became
+  // one try per fifteen minutes, forever, and anyone who knew the address could
+  // hold the account shut with one request every fifteen minutes. Serving the
+  // lock is what pays the debt.
+  const servedLock = user.lockedUntil != null && user.lockedUntil.getTime() <= Date.now();
+  const count = servedLock ? 1 : (user.failedLoginCount ?? 0) + 1;
   const locked = count >= LOCK_THRESHOLD;
   await db
     .update(users)
     .set({
       failedLoginCount: count,
-      ...(locked ? { lockedUntil: new Date(Date.now() + LOCK_MS) } : {}),
+      // Set on a fresh lock; cleared when a served one is being restarted, so
+      // the stamp always describes a lock that is either live or absent.
+      ...(locked ? { lockedUntil: new Date(Date.now() + LOCK_MS) } : servedLock ? { lockedUntil: null } : {}),
     })
     .where(eq(users.id, user.id));
 
