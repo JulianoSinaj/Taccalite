@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **13 of 24 systems audited**. The rest of the
+> **Status:** in progress — **14 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -68,7 +68,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 9 | [Identity & Authentication](audits/09-identity-authentication.md) | ③ I Clienti | **89** |
 | 10 | [Customer Accounts](audits/10-customer-accounts.md) | ③ I Clienti | **87** |
 | 11 | [Loyalty & Rewards](audits/11-loyalty-rewards.md) | ③ I Clienti | **89** |
-| 12 | Transactional Mail & Outbox | ④ La Voce | — |
+| 12 | [Transactional Mail & Outbox](audits/12-transactional-mail-outbox.md) | ④ La Voce | **89** |
 | 13 | Newsletter, Campaigns & Segments | ④ La Voce | — |
 | 14 | [Automation & Scheduled Jobs](audits/14-automation-scheduled-jobs.md) | ④ La Voce | **86** |
 | 15 | CMS & Editorial | ⑤ La Vetrina | — |
@@ -373,9 +373,14 @@ that records what was sent and what failed.
 | **Components** | `components/site/ContactForm.tsx` |
 | **Tests** | `outbox.test.ts`, `mail-text.test.ts` |
 
-**Audit questions** — Is send failure surfaced rather than swallowed? Is retry
-bounded? Do templates render correctly in plain text? Is SMTP configured and
-verified in production?
+**Readiness: 89/100** — audited 2026-09-02 at 83, remediated the same day; see
+[`docs/audits/12-transactional-mail-outbox.md`](audits/12-transactional-mail-outbox.md).
+Outbox-first by design so no message is ever lost; drain passes claim a row
+before attempting it; retries are capped; the SMTP timeouts exist because the
+settings page once took two minutes to not load. Fixed: only `sent` rows were
+pruned, so a failed message kept the customer's address and basket forever — and
+on an install with no SMTP, where every message stays queued, the outbox grew
+without bound.
 
 ---
 
@@ -642,7 +647,7 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 13 of 24.** Systems 1, 2, 3, 5, 6, 7, 9, 10, 11, 14, 18, 20 and 22.
+**Audited: 14 of 24.** Systems 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 14, 18, 20 and 22.
 All remediated in the same pass except 18, which had no defects.
 
 **A shape worth naming.** Three systems held a capacity rule by reading a count

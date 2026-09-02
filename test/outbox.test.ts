@@ -5,6 +5,7 @@ import { emailOutbox, newsletterCampaigns } from "@/lib/db/schema";
 import { outboxFilters, outboxWhere, filterQuery } from "@/lib/admin/filters";
 import { getOutboxPage, getOutboxSummary, getOutboxForExport } from "@/lib/admin/queries";
 import { drainOutbox, orderEmailDelivery, OUTBOX_MAX_ATTEMPTS } from "@/lib/mail/mailer";
+import { runMaintenance } from "@/lib/automation";
 
 /** Every fixture address ends in this, so other suites' mail never leaks in. */
 const DOMAIN = "@outbox-test.local";
@@ -129,5 +130,36 @@ describe("mailer", () => {
     expect(await orderEmailDelivery("ORD-1001", to("anna"))).toBe("sent");
     expect(await orderEmailDelivery("ORD-1002", to("bruno"))).toBe("pending");
     expect(await orderEmailDelivery("ORD-1002", to("nobody"))).toBe("none");
+  });
+});
+
+/**
+ * Every outbox row holds the message body in full — for an order confirmation
+ * that is the customer's name, delivery address, phone and basket. Pruning only
+ * the delivered ones meant a message that exhausted its retries sat there with
+ * all of that in it forever, and on an install where SMTP was never configured
+ * every message stays `queued`, so the table grew without bound as a store of
+ * personal data nobody had decided to keep.
+ */
+describe("outbox retention", () => {
+  const OLD = new Date(Date.now() - 200 * 86_400_000);
+  const RECENT = new Date(Date.now() - 2 * 86_400_000);
+
+  it("prunes an old row whatever its status, and keeps recent ones", async () => {
+    await db.delete(emailOutbox).where(like(emailOutbox.toAddress, "retention-%"));
+    await db.insert(emailOutbox).values([
+      { toAddress: "retention-sent@example.com", subject: "s", status: "sent", createdAt: OLD },
+      { toAddress: "retention-failed@example.com", subject: "f", status: "failed", createdAt: OLD, attempts: 5 },
+      { toAddress: "retention-queued@example.com", subject: "q", status: "queued", createdAt: OLD },
+      { toAddress: "retention-recent@example.com", subject: "r", status: "failed", createdAt: RECENT },
+    ]);
+
+    await runMaintenance(new Date(), 90);
+
+    const left = await db
+      .select({ to: emailOutbox.toAddress })
+      .from(emailOutbox)
+      .where(like(emailOutbox.toAddress, "retention-%"));
+    expect(left.map((r) => r.to)).toEqual(["retention-recent@example.com"]);
   });
 });

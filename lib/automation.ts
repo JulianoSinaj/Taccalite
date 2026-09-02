@@ -471,10 +471,21 @@ export async function runMaintenance(
   const { deleted: authTokensDeleted } = await deleteExpiredAuthTokens();
   const { deleted: rateLimitsDeleted } = await deleteExpiredRateLimits();
   const drain = await drainOutbox();
+  // Outbox retention, for every status rather than just `sent`.
+  //
+  // Each row holds the message body in full, which for an order confirmation is
+  // the customer's name, delivery address, phone and basket. Pruning only the
+  // delivered ones meant a message that exhausted its five attempts sat there
+  // with all of that in it forever — and on an install where SMTP was never
+  // configured, *every* message stays `queued`, so the outbox grew without
+  // bound as a store of personal data nobody had decided to keep.
+  //
+  // A `failed` row will not be retried; a `queued` one this old is either a
+  // relay nobody fixed months ago or a message whose moment has long passed.
+  // Holding a customer's address and basket against either is the worse
+  // outcome, so the retention window applies to all three.
   const cutoff = new Date(now.getTime() - outboxRetentionDays * 24 * 60 * 60 * 1000);
-  const pruned = await db
-    .delete(emailOutbox)
-    .where(and(eq(emailOutbox.status, "sent"), lt(emailOutbox.createdAt, cutoff)));
+  const pruned = await db.delete(emailOutbox).where(lt(emailOutbox.createdAt, cutoff));
 
   // Audit retention. The log grew forever, unlike the outbox — and an audit
   // trail nobody prunes eventually becomes one nobody reads. Default 730 days

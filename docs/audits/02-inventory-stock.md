@@ -254,10 +254,11 @@ half-applied order shows up as a divergence somebody can correct.
 
 ## Note for other systems
 
-**System 12 (Transactional Mail & Outbox):** `notifyBackInStock` sends through
-`sendMail` directly with `Promise.allSettled` and no outbox row, so a failed
-back-in-stock notice is invisible to `/admin/outbox`. Worth checking whether
-that is true of other direct `sendMail` callers when System 12 is audited.
+**System 12 (Transactional Mail & Outbox):** ~~`notifyBackInStock` sends through
+`sendMail` with no outbox row, so a failed notice is invisible to
+`/admin/outbox`.~~ **Wrong — corrected when system 12 was audited.** `sendMail`
+inserts the outbox row *first* and then attempts delivery, so every message is
+recorded including this one. The concern was unfounded.
 
 **System 19 (Analytics & Reporting):** the reconciliation report described in
 finding 10 is arguably that system's to build rather than this one's.
