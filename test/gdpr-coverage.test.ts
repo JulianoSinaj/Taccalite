@@ -61,7 +61,10 @@ beforeEach(async () => {
       role: "customer",
       totpEnabled: true,
       totpSecret: "JBSWY3DPEHPK3PXP",
-      totpRecoveryCodes: ["hash-a", "hash-b"],
+      totpRecoveryCodes: [
+        { hash: "hash-a", usedAt: null },
+        { hash: "hash-b", usedAt: null },
+      ],
     })
     .returning({ id: users.id });
   userId = u!.id;

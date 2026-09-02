@@ -80,6 +80,49 @@ export async function runCronJob(job: CronJob, now = new Date()): Promise<CronRu
   return record;
 }
 
+/**
+ * Jobs that failed last time, or have not reported in for over a day.
+ *
+ * The run records were written faithfully and displayed in exactly one place —
+ * a panel on `/admin/settings`, which an operator opens roughly never. So a job
+ * that started throwing every night went on throwing every night: no porchetta
+ * reminders went out, or no abandoned checkouts were swept, and the first
+ * anybody heard of it was a customer saying nobody had called.
+ *
+ * This is the same information, carried by the one message the owner already
+ * reads every morning. It cannot detect the scheduler dying outright — nothing
+ * running *inside* the scheduler can — but that case announces itself by the
+ * digest not arriving, whereas one job quietly failing announced nothing at all.
+ *
+ * A job that has never run is not trouble: it may simply be switched off (the
+ * pickup auto-close and points expiry both idle until configured).
+ */
+export async function automationTrouble(
+  now = new Date(),
+): Promise<{ label: string; detail: string }[]> {
+  const status = await getCronStatus();
+  const STALE_MS = 36 * 60 * 60 * 1000; // a day and a half: a daily job may drift
+  const out: { label: string; detail: string }[] = [];
+
+  for (const job of CRON_JOBS) {
+    const record = status[job.key];
+    if (!record) continue;
+    if (!record.ok) {
+      out.push({ label: job.label, detail: record.error ?? "errore sconosciuto" });
+      continue;
+    }
+    const age = now.getTime() - new Date(record.at).getTime();
+    if (age > STALE_MS) {
+      const days = Math.floor(age / (24 * 60 * 60 * 1000));
+      out.push({
+        label: job.label,
+        detail: days >= 1 ? `nessuna esecuzione da ${days} giorni` : "nessuna esecuzione nelle ultime 36 ore",
+      });
+    }
+  }
+  return out;
+}
+
 /** Last recorded run per job (null when a job has never run). */
 export async function getCronStatus(): Promise<Record<CronJobKey, CronRunRecord | null>> {
   const entries = await Promise.all(
@@ -549,6 +592,8 @@ export async function runOwnerDigest(
       totalCents: o.totalCents,
     })),
     lowStock: lowStockRows.map((p) => ({ name: p.name, stock: p.stock ?? 0 })),
+    // Read before this run is recorded, so the digest never reports on itself.
+    automationTrouble: await automationTrouble(now),
   };
 
   const res = await sendMail({ to: env.ownerEmail, ...ownerDigestEmail(data) });

@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **9 of 24 systems audited**. The rest of the
+> **Status:** in progress — **10 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -70,7 +70,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 11 | [Loyalty & Rewards](audits/11-loyalty-rewards.md) | ③ I Clienti | **89** |
 | 12 | Transactional Mail & Outbox | ④ La Voce | — |
 | 13 | Newsletter, Campaigns & Segments | ④ La Voce | — |
-| 14 | Automation & Scheduled Jobs | ④ La Voce | — |
+| 14 | [Automation & Scheduled Jobs](audits/14-automation-scheduled-jobs.md) | ④ La Voce | **86** |
 | 15 | CMS & Editorial | ⑤ La Vetrina | — |
 | 16 | Storefront Experience | ⑤ La Vetrina | — |
 | 17 | Media & Assets | ⑤ La Vetrina | — |
@@ -404,9 +404,13 @@ the secured cron entry point and its run-status reporting.
 | **Surfaces** | `GET`/`POST` `/api/cron?job=…` (Bearer `CRON_SECRET`, constant-time compare), `scripts/scheduler.sh` |
 | **Tests** | `inventory-automation.test.ts` (partial) |
 
-**Audit questions** — Is every job idempotent under the frequent `job=all`
-sweep? Does a failing job block the rest? Is there alerting when the scheduler
-stops firing? Is the digest self-limiting?
+**Readiness: 86/100** — audited 2026-09-02 at 76, remediated the same day; see
+[`docs/audits/14-automation-scheduled-jobs.md`](audits/14-automation-scheduled-jobs.md).
+The endpoint compares its secret with `timingSafeEqual` and accepts it only from
+the header, every job is idempotent under the frequent `job=all` sweep, and a
+failed send leaves its stamp unset so it retries. Fixed: a failing job wrote its
+error to a settings panel nobody opens, so it kept failing in silence — the
+daily owner digest now carries any job that failed or has gone quiet.
 
 ---
 
@@ -623,8 +627,8 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 9 of 24.** Systems 1, 2, 3, 5, 9, 10, 11, 18 and 20. All remediated
-in the same pass except 18, which had no defects.
+**Audited: 10 of 24.** Systems 1, 2, 3, 5, 9, 10, 11, 14, 18 and 20. All
+remediated in the same pass except 18, which had no defects.
 Everything else in the index is unexamined — an empty cell means "not looked
 at", never "fine".
 

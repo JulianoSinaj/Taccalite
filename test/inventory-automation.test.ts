@@ -3,7 +3,7 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { shops, products, orders, settings, newsletterCampaigns } from "@/lib/db/schema";
 import { isLowStock, reorderPointFor, margin } from "@/lib/inventory";
-import { runPickupAutoFulfil } from "@/lib/automation";
+import { runPickupAutoFulfil, automationTrouble, CRON_JOBS } from "@/lib/automation";
 import { runDueCampaigns, campaignBodyHtml } from "@/lib/newsletter-campaigns";
 import { resolveSlug, slugify } from "@/lib/slug";
 
@@ -205,5 +205,55 @@ describe("slug derivation", () => {
       excludeId: row.id,
     });
     expect(slug).toBe("lardo-test");
+  });
+});
+
+/**
+ * A job that fails has to reach the one message the owner actually reads.
+ *
+ * The run records were written faithfully and displayed in exactly one place —
+ * a panel on /admin/settings, which nobody opens. So a job that started
+ * throwing every night went on throwing every night, and the first anybody
+ * heard of it was a customer saying nobody had called.
+ */
+describe("automationTrouble", () => {
+  beforeEach(async () => {
+    for (const job of CRON_JOBS) await setSetting(`cron.lastRun.${job.key}`, null);
+  });
+
+  it("says nothing on a healthy morning", async () => {
+    const now = new Date();
+    for (const job of CRON_JOBS) {
+      await setSetting(`cron.lastRun.${job.key}`, { at: now.toISOString(), ok: true });
+    }
+    expect(await automationTrouble(now)).toEqual([]);
+  });
+
+  it("names a job that failed, and why", async () => {
+    const now = new Date();
+    await setSetting(`cron.lastRun.porchetta-reminders`, {
+      at: now.toISOString(),
+      ok: false,
+      error: "SMTP irraggiungibile",
+    });
+    const trouble = await automationTrouble(now);
+    expect(trouble).toHaveLength(1);
+    expect(trouble[0]!.detail).toBe("SMTP irraggiungibile");
+  });
+
+  it("names a job that has gone quiet", async () => {
+    const now = new Date();
+    const threeDaysAgo = new Date(now.getTime() - 3 * 86_400_000);
+    await setSetting(`cron.lastRun.maintenance`, { at: threeDaysAgo.toISOString(), ok: true });
+
+    const trouble = await automationTrouble(now);
+    expect(trouble).toHaveLength(1);
+    expect(trouble[0]!.detail).toMatch(/3 giorni/);
+  });
+
+  it("does not complain about a job that has simply never run", async () => {
+    // Pickup auto-close and points expiry both idle until they are configured;
+    // silence there is a setting, not a fault.
+    expect(await automationTrouble(new Date())).toEqual([]);
   });
 });

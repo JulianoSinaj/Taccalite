@@ -895,10 +895,17 @@ export type OwnerDigestData = {
   reservations: { reference: string; type: "table" | "porchetta" | "order"; name: string; time?: string | null; quantityKg?: number | null }[];
   orders: { orderNumber: string; name: string; totalCents: number }[];
   lowStock: { name: string; stock: number }[];
+  /**
+   * Scheduled jobs that failed or have gone quiet. Empty on a normal day, and
+   * the section is omitted entirely then — a health line that appears every
+   * morning saying "all fine" is a line nobody reads by the third week.
+   */
+  automationTrouble?: { label: string; detail: string }[];
 };
 
 /** (I2) Daily digest to the owner: today's reservations + recent orders + low stock. */
 export function ownerDigestEmail(d: OwnerDigestData): Built {
+  const trouble = d.automationTrouble ?? [];
   const section = (title: string, inner: string) =>
     `<p style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:${MUTED};margin:20px 0 6px;">${title}</p>${inner}`;
   const resHtml = d.reservations.length
@@ -924,6 +931,19 @@ export function ownerDigestEmail(d: OwnerDigestData): Built {
     ${section("Prenotazioni di oggi", resHtml)}
     ${section("Ordini (ultime 24h)", ordHtml)}
     ${section("Scorte in esaurimento", lowHtml)}
+    ${
+      trouble.length
+        ? section(
+            "Automazioni da controllare",
+            `<ul style="padding-left:18px;margin:0;">${trouble
+              .map(
+                (t) =>
+                  `<li style="margin:0 0 4px;font-size:14px;"><strong>${esc(t.label)}</strong> \u2014 <span style="color:${MUTED};">${esc(t.detail)}</span></li>`,
+              )
+              .join("")}</ul>`,
+          )
+        : ""
+    }
       ${button(absoluteUrl("/admin"), "Apri il gestionale")}`;
   return {
     subject: `Riepilogo giornaliero · ${fmtDateIt(d.date)}`,
@@ -933,7 +953,10 @@ export function ownerDigestEmail(d: OwnerDigestData): Built {
       d.reservations.map((r) => `- ${TYPE_LABEL[r.type]} ${r.name}${r.time ? ` ${r.time}` : ""} (${r.reference})`).join("\n") +
       `\n\nOrdini 24h: ${d.orders.length}\n` +
       d.orders.map((o) => `- ${o.orderNumber} ${o.name} ${euro(o.totalCents)}`).join("\n") +
-      `\n\nScorte basse: ${d.lowStock.map((p) => `${p.name} (${p.stock})`).join(", ") || "nessuna"}`,
+      `\n\nScorte basse: ${d.lowStock.map((p) => `${p.name} (${p.stock})`).join(", ") || "nessuna"}` +
+      (trouble.length
+        ? `\n\nAutomazioni da controllare:\n${trouble.map((t) => `- ${t.label}: ${t.detail}`).join("\n")}`
+        : ""),
   };
 }
 
