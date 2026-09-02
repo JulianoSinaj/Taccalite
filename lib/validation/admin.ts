@@ -180,6 +180,10 @@ export const blogInput = z.object({
   category: optionalText(120),
   excerpt: optionalText(1000),
   content: optionalText(20000),
+  // One of the four article templates. Validated here rather than as a column
+  // CHECK — `resolveLayout` falls back for anything unrecognised, so a bad value
+  // is a form error and never a broken page.
+  layout: optionalText(40),
   imageLabel: optionalText(200),
   image: optionalText(1000),
   seoTitle: optionalText(70),

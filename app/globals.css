@@ -1438,6 +1438,45 @@ html {
   text-wrap: pretty;
 }
 
+/* ── The drop cap ────────────────────────────────────────────────────────────
+ *
+ * The opening initial of a long-read post (`components/site/blog/Editoriale`).
+ *
+ * A class rather than a utility stack, because `::first-letter` is the only way
+ * to do this without cutting the first character out of the parsed paragraph —
+ * and the first character is not reliably a character: a paragraph may open with
+ * `**` or with a link, and slicing the string would drop the markup with it.
+ *
+ * `font-variation-settings` is restated rather than inherited from
+ * `.font-display`: this element is body copy, so the display face is applied to
+ * the pseudo-element alone, and `opsz` has to come with it or Fraunces renders
+ * the initial at text optical size — a fat, muddy letter three lines tall.
+ *
+ * `initial-letter` would express the sink natively and is supported nowhere it
+ * matters yet, so it is a float — and the number of lines a float displaces is
+ * its *line box*, `font-size × line-height`, not the size of the glyph. That
+ * arithmetic is the whole rule and it has one input, the body leading:
+ *
+ *     the paragraph runs at line-height 1.8, so one line is 1.8em
+ *     two lines is 3.6em
+ *     3.55em ÷ 0.78 = 4.55em   ← the font-size that makes the box two lines tall
+ *
+ * The first version was 3.55em at the same line-height, which is the *box* used
+ * as the font-size: it sank one and a half lines and read as a large first
+ * letter rather than as an initial. If the body leading ever changes, this
+ * number changes with it.
+ */
+.site-shell .drop-cap::first-letter {
+  float: left;
+  margin: 0.02em 0.08em 0 0;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 30, "WONK" 1, "opsz" 144;
+  font-size: 4.55em;
+  font-weight: 600;
+  line-height: 0.78;
+  color: var(--acc, var(--color-gold-deep));
+}
+
 /* A product page pins its own buy bar to the bottom edge on a phone, and that
  * bar already carries the cart with its count. The floating cart pill an inch
  * above it would be a second control saying the same thing — so it stands down

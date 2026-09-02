@@ -22,6 +22,7 @@
 import "./_bootstrap-env"; // MUST be first: defaults NODE_ENV before lib/env loads
 import { openDatabase, type Db } from "../lib/db/connection";
 import { reconcileCategories } from "../lib/db/seed-data";
+import { DEMO_BLOG_TITLES, demoBlogPost } from "../lib/db/demo-blog";
 import { eq } from "drizzle-orm";
 import * as schema from "../lib/db/schema";
 import { hashPassword } from "../lib/auth/password";
@@ -524,46 +525,30 @@ async function main() {
   console.log(`✓ rewards: ${DEMO_REWARDS.length} new · 80 redemptions`);
 
   // ── Blog ───────────────────────────────────────────────────────────────────
-  const TITLES = [
-    ["La stagionatura del ciauscolo, mese per mese", "Storie"],
-    ["Perché la porchetta si prenota entro il venerdì", "Bottega"],
-    ["Vincisgrassi: la ricetta di nonna Elide", "Ricette"],
-    ["Come tagliare il prosciutto a coltello", "Tecnica"],
-    ["Il maiale marchigiano e i suoi allevatori", "Territorio"],
-    ["Abbinare il Rosso Conero ai salumi stagionati", "Cantina"],
-    ["Cosa cambia tra Casciotta e Caciotta", "Formaggi"],
-    ["Il nostro Natale in bottega: cesti e prenotazioni", "Bottega"],
-    ["Olive all'ascolana: friggerle come si deve", "Ricette"],
-    ["Tre modi di usare il guanciale (che non sono la carbonara)", "Ricette"],
-    ["Visita al Caseificio Esino", "Territorio"],
-    ["Sottovuoto o carta: come conservare i salumi", "Tecnica"],
-    ["Il banco dei formaggi si rinnova", "Bottega"],
-    ["Pasqua 2026: agnello e crescia", "Bottega"],
-  ];
-  for (const [i, [title, category]] of TITLES.entries()) {
+  //
+  // The bodies live in `lib/db/demo-blog.ts`. Until this pass all fourteen
+  // carried the same three sentences, no photograph and no structure — which
+  // made `/blog` in a demo database look exactly like the complaint the four
+  // real posts were rewritten to answer.
+  //
+  // Dates and the draft/published split stay here, because they come from this
+  // script's PRNG; everything an article *is* comes from the module, so
+  // `scripts/refresh-blog.ts --demo` can restate it without touching orders,
+  // customers or four hundred audit rows.
+  for (let i = 0; i < DEMO_BLOG_TITLES.length; i++) {
     const d = daysAgo(int(5, 380));
     await db
       .insert(schema.blogPosts)
       .values({
-        slug: `demo-${slugify(title)}`.slice(0, 80),
-        title,
+        ...demoBlogPost(i),
         date: iso(d),
-        category,
-        excerpt: `${title} — appunti dalla norcineria.`,
-        // Stored as one entry per paragraph, not a blob of text.
-        content: [
-          "Un racconto dalla bottega, senza fretta.",
-          `${title}: quello che facciamo ogni giorno, spiegato come lo spiegheremmo al banco.`,
-          "Passa a trovarci e assaggia — è il modo migliore per capirlo.",
-        ],
-        imageLabel: title,
-        published: i < TITLES.length - 4, // last few stay drafts
+        published: i < DEMO_BLOG_TITLES.length - 4, // last few stay drafts
         sortOrder: i,
         createdAt: d,
       })
       .onConflictDoNothing({ target: schema.blogPosts.slug });
   }
-  console.log(`✓ blog: ${TITLES.length} articles (4 drafts)`);
+  console.log(`✓ blog: ${DEMO_BLOG_TITLES.length} articles (4 drafts, 4 layouts)`);
 
   // ── Stock movements ────────────────────────────────────────────────────────
   const tracked = products.filter((p) => p.stock != null);

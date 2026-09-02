@@ -108,12 +108,21 @@ export default async function ContattiPage() {
       <section className="px-5 pb-16 sm:px-8 sm:pb-20 lg:px-12">
         <div className="mx-auto grid max-w-[88rem] gap-16 border-t border-rule pt-14 lg:grid-cols-12 lg:gap-14">
           <div className="lg:col-span-7">
-            <h2 className="font-display display-md font-semibold text-brown-950">
-              {formTitolo}
-            </h2>
-            <p className="mt-4 max-w-xl text-base leading-relaxed text-brown-700">{formTesto}</p>
-            <div className="mt-10">
-              <ContactForm />
+            {/* `Le due botteghe` runs two photographed shop cards and so is
+                reliably the taller column; without this the form would end
+                a screen early and leave the rest of the scroll as bare paper.
+                `lg:top-28` matches the sticky offset `PorchettaConfigurator`
+                already uses for the same kind of bordered panel. */}
+            <div className="lg:sticky lg:top-28">
+              <h2 className="font-display display-md font-semibold text-brown-950">
+                {formTitolo}
+              </h2>
+              <p className="mt-4 max-w-xl text-base leading-relaxed text-brown-700">
+                {formTesto}
+              </p>
+              <div className="mt-10">
+                <ContactForm />
+              </div>
             </div>
           </div>
 

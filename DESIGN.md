@@ -146,6 +146,49 @@ The port that finished the language everywhere else:
 - **Legal pages** open on paper like everything else. They were the last of the
   near-black slab heroes.
 
+### An article is one of four templates
+
+A post used to be `string[]` and one page. Two sentences each is what that
+shape encourages, and two sentences each is what the diary held — no headings,
+no photographs inside the body, and a change of opening hours laid out exactly
+like the story of the Saturday roast.
+
+The body is now written in a closed grammar (`lib/blog-article.ts`, parsed into
+typed blocks, never `dangerouslySetInnerHTML`) and rendered by one of four
+templates the shop picks per post in the gestionale:
+
+| `layout` | Shape | For |
+| --- | --- | --- |
+| `editoriale` | One book measure (38rem) with a drop cap; photographs at 52rem and pull quotes at 44rem, so everything that is not prose is set *wider* than the prose | The long read |
+| `rivista` | Masthead with the headline beside a portrait cover, then a sticky rail (date, reading time, an index built from the `##` headings) and numbered sections; a photograph's caption sits in the right margin | The structured round-up |
+| `avviso` | A single printed sheet with a torn corner (`.ticket`), a coloured header strip and the facts table at the top; compact measure, no cover photograph | Hours, closures, announcements |
+| `galleria` | Full-screen cover with the headline over it, then photographs edge to edge and prose on a 40rem column; two in a row become a pair, a quote becomes a band | The photo essay |
+
+The grammar, which is also printed under the editor's textarea:
+
+```
+## Titolo di sezione
+- voce di elenco
+> Una citazione
+— Chi l'ha detta
+| Etichetta | Valore
+![Didascalia | alta](/images/foo.jpg)
+Testo, con **grassetto** e [un link](/porchetta).
+```
+
+Rules the templates share, and must keep sharing: captions are micro caps under
+the frame, body links are the gold `underline-draw`, a photograph that needs a
+credit gets one wherever it appears (`PhotoCredit`, keyed off the `src`), and
+`--acc` is set once on the article root so nothing below knows its own colour.
+The shared parts live in `components/site/blog/ArticleBits.tsx` — four templates
+are allowed to disagree about placement and about nothing else.
+
+Two numbers in here are derived, not chosen. The drop cap's `font-size` is
+`(2 × body line-height) ÷ its own line-height`, because a float displaces
+lines by its *line box*; and the photo-essay scrim runs to 72% through the
+middle, because cream at 85% over less than that fails 4.5:1 on a pale
+photograph — which is what these photographs are.
+
 Mechanical conventions the port settled, for anything added later:
 
 | Instead of | Use |

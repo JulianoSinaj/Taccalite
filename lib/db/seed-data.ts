@@ -156,6 +156,7 @@ export async function seedBaseData(db: Db, log: (msg: string) => void = console.
         category: post.category,
         excerpt: post.excerpt,
         content: post.content,
+        layout: post.layout,
         imageLabel: post.imageLabel,
         image: post.image ?? null,
         published: true,

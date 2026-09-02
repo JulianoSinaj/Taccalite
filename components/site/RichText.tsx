@@ -1,5 +1,5 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
+import { inline } from "@/components/site/inline-markup";
 
 /**
  * The smallest markup that survives being edited by the shop.
@@ -23,56 +23,6 @@ import type { ReactNode } from "react";
  * which is the right failure: a stray bracket shows up as a stray bracket
  * instead of eating the paragraph.
  */
-
-/** Only these destinations are rendered as links. */
-function safeHref(href: string): string | null {
-  const h = href.trim();
-  if (h.startsWith("/") && !h.startsWith("//")) return h;
-  if (/^https?:\/\//i.test(h)) return h;
-  if (/^mailto:[^\s<>]+@[^\s<>]+$/i.test(h)) return h;
-  if (/^tel:[+\d\s-]+$/i.test(h)) return h;
-  return null;
-}
-
-const INLINE = /(\*\*[^*]+\*\*|\[[^\]]+\]\([^)\s]+\))/g;
-
-/** Bold and links inside one line. */
-function inline(text: string, keyPrefix: string): ReactNode[] {
-  return text.split(INLINE).filter(Boolean).map((part, i) => {
-    const key = `${keyPrefix}-${i}`;
-    const bold = /^\*\*([^*]+)\*\*$/.exec(part);
-    if (bold) return <strong key={key}>{bold[1]}</strong>;
-
-    const link = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(part);
-    if (link) {
-      const href = safeHref(link[2]);
-      // An unsafe destination degrades to its own label: the words stay, the
-      // link does not.
-      if (!href) return link[1];
-      if (href.startsWith("/")) {
-        return (
-          <Link key={key} href={href}>
-            {link[1]}
-          </Link>
-        );
-      }
-      const external = href.startsWith("http");
-      return (
-        <a
-          key={key}
-          href={href}
-          {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-        >
-          {link[1]}
-        </a>
-      );
-    }
-    // Plain text goes back as a plain string: wrapping every run in a <span>
-    // would put an element around most of a legal document for no reason, and
-    // React needs no key for a text child.
-    return part;
-  });
-}
 
 export default function RichText({ blocks }: { blocks: string[] }) {
   const out: ReactNode[] = [];

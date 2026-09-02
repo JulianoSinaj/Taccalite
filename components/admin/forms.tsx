@@ -9,6 +9,7 @@ import { saveProduct, saveBlogPost, saveShop, saveReward } from "@/lib/admin/act
 import { saveDiscount } from "@/lib/admin/discount-actions";
 import { saveCategory } from "@/lib/admin/category-actions";
 import { CATEGORY_ACCENTS } from "@/lib/categories";
+import { BLOG_LAYOUTS, resolveLayout } from "@/lib/blog-article";
 import { createUser } from "@/lib/admin/user-actions";
 import { VAT_RATES_BPS, vatRateLabel } from "@/lib/fiscal";
 import type {
@@ -432,16 +433,72 @@ export function BlogForm({
         <textarea id={fid("excerpt")} name="excerpt" rows={2} defaultValue={post?.excerpt} className={inputCls} />
       </div>
       <div className="sm:col-span-2">
+        <label className={labelCls} htmlFor={fid("layout")}>
+          Impaginazione
+        </label>
+        <select
+          id={fid("layout")}
+          name="layout"
+          defaultValue={resolveLayout(post?.layout)}
+          className={inputCls}
+        >
+          {BLOG_LAYOUTS.map((l) => (
+            <option key={l.value} value={l.value}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+        {/* The hints, all four, rather than only the selected one: the choice is
+            a comparison ("is this a story or a notice?"), and a description that
+            appears only after you have already chosen cannot help you choose. */}
+        <ul className="mt-2 space-y-1 text-xs text-brown-800/70">
+          {BLOG_LAYOUTS.map((l) => (
+            <li key={l.value}>
+              <span className="font-semibold text-brown-950">{l.label.split(" — ")[0]}</span> —{" "}
+              {l.hint}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="sm:col-span-2">
         <label className={labelCls} htmlFor="post-content">
-          Contenuto (un paragrafo per riga vuota)
+          Contenuto (una riga vuota separa i blocchi)
         </label>
         <textarea
           id="post-content"
           name="content"
-          rows={8}
+          rows={16}
           defaultValue={post?.content?.join("\n\n")}
-          className={inputCls}
+          className={`${inputCls} font-mono text-[0.8125rem]`}
         />
+        {/* The grammar, spelled out where it is typed. It is small enough to fit
+            in a legend and useless anywhere else: nobody opens the docs to find
+            out how to put a photograph in a paragraph. */}
+        <div className="mt-2 rounded-lg border border-brown-700/15 bg-cream/60 p-3 text-xs leading-relaxed text-brown-800/70">
+          <p className="font-semibold text-brown-950">Come si scrive</p>
+          <ul className="mt-1.5 space-y-1">
+            <li>
+              <code>## Titolo</code> — titolo di sezione
+            </li>
+            <li>
+              <code>- voce</code> — elenco puntato
+            </li>
+            <li>
+              <code>&gt; Citazione</code>, con <code>— Chi l&apos;ha detta</code> sulla riga dopo
+            </li>
+            <li>
+              <code>| Etichetta | Valore</code> — riga della tabella informazioni
+            </li>
+            <li>
+              <code>![Didascalia](/images/foto.jpg)</code> — foto nel testo. Aggiungi{" "}
+              <code>| alta</code>, <code>| quadrata</code> o <code>| panoramica</code> alla
+              didascalia per cambiare il taglio.
+            </li>
+            <li>
+              <code>**grassetto**</code> e <code>[testo](/pagina)</code> dentro una riga qualsiasi.
+            </li>
+          </ul>
+        </div>
       </div>
       <ImageField current={post?.image} />
       <div>

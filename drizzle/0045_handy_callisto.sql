@@ -1,0 +1,1 @@
+ALTER TABLE `blog_posts` ADD `layout` text DEFAULT 'editoriale' NOT NULL;

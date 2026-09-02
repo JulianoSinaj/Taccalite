@@ -28,6 +28,7 @@ import { redemptionStatusEmail } from "@/lib/mail/templates";
 import { smtpConfigured } from "@/lib/env";
 import { saveUploadedImage } from "@/lib/media";
 import { logAudit } from "@/lib/audit";
+import { firstParagraph, resolveLayout } from "@/lib/blog-article";
 import { parseStructuredHours } from "@/lib/hours";
 import { planProductImport, applyProductImport } from "@/lib/admin/product-import";
 import { notifyBackInStock } from "@/lib/stock-notify";
@@ -663,9 +664,17 @@ export async function importProducts(_prev: ActionState, fd: FormData): Promise<
   });
 }
 
-/** First paragraph of a post, trimmed to a listing-friendly length. */
+/**
+ * First paragraph of a post, trimmed to a listing-friendly length.
+ *
+ * `firstParagraph`, not `content[0]`: a post may now open with a heading, a
+ * photograph or a table of opening hours, and a card in the diary listing
+ * captioned "## Gli orari delle feste" is worse than no caption at all. Inline
+ * markup is stripped for the same reason — an excerpt is read as plain text in
+ * a card, in a `<meta>` description and in a link preview.
+ */
 function excerptFrom(paragraphs: string[], max = 200): string {
-  const first = paragraphs[0] ?? "";
+  const first = firstParagraph(paragraphs);
   if (first.length <= max) return first;
   // Cut at the last word boundary before the limit so we don't split a word.
   const cut = first.slice(0, max);
@@ -704,6 +713,7 @@ export async function saveBlogPost(_prev: ActionState, fd: FormData): Promise<Ac
       // has something to show in listings and link previews.
       excerpt: d.excerpt ?? excerptFrom(content),
       content,
+      layout: resolveLayout(d.layout),
       imageLabel: d.imageLabel ?? "",
       image: d.image ?? null,
       seoTitle: d.seoTitle ?? null,

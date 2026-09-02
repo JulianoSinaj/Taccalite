@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PrivacyNote } from "@/components/site/PrivacyNote";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, PenLine } from "lucide-react";
 import SelectField from "@/components/ui/SelectField";
 
 const TOPICS = ["Informazioni", "Catering", "Consegna a domicilio", "Richiesta speciale"];
@@ -10,8 +10,11 @@ const TOPICS = ["Informazioni", "Catering", "Consegna a domicilio", "Richiesta s
 const fieldClass =
   "w-full border-b border-rule bg-transparent py-3 text-[0.9375rem] text-brown-950 placeholder:text-taupe transition-colors focus:border-gold-deep focus:outline-none";
 
-const labelClass =
-  "block text-[0.625rem] font-semibold tracking-[0.22em] text-taupe uppercase";
+// `.eyebrow` grows its gold rule from a `::before` unless the element is a
+// `<label>` (see globals.css) — a form with six fields would otherwise carry
+// six little rules down its edge. So the labels get the same gold-on-caps
+// mark as `ReservationForm`'s `Field`, just without the rule.
+const labelClass = "eyebrow eyebrow-dark block";
 
 export default function ContactForm() {
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
@@ -48,9 +51,11 @@ export default function ContactForm() {
 
   if (state === "sent") {
     return (
-      <div className="border border-gold/40 bg-paper-warm p-6 sm:p-8">
-        <Check className="size-6 text-gold-deep" aria-hidden />
-        <p className="font-display mt-4 text-2xl font-semibold text-brown-950">
+      <div className="card-shadow-soft border border-gold/40 bg-paper-warm p-6 sm:p-9">
+        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gold text-brown-950">
+          <Check className="size-5" aria-hidden />
+        </span>
+        <p className="font-display mt-5 text-2xl font-semibold text-brown-950">
           Messaggio ricevuto.
         </p>
         <p className="mt-3 text-[0.9375rem] leading-relaxed text-brown-700">
@@ -69,7 +74,19 @@ export default function ContactForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6 sm:gap-7">
+    <form
+      onSubmit={handleSubmit}
+      className="card-shadow-soft flex flex-col gap-7 border border-rule bg-paper-warm p-6 sm:gap-8 sm:p-9"
+    >
+      <div className="flex items-center gap-4 border-b border-rule pb-7 sm:pb-8">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-gold/45 text-gold-deep">
+          <PenLine className="size-4" aria-hidden />
+        </span>
+        <p className="text-[0.8125rem] leading-relaxed text-taupe">
+          Più dettagli ci date, più veloce sarà la nostra risposta.
+        </p>
+      </div>
+
       <div className="grid gap-6 sm:grid-cols-2 sm:gap-7">
         <div>
           <label className={labelClass} htmlFor="contact-name">

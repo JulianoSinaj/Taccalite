@@ -258,7 +258,17 @@ export const blogPosts = sqliteTable("blog_posts", {
   category: text("category").notNull().default(""),
   categoryId: text("category_id").references(() => categories.id),
   excerpt: text("excerpt").notNull().default(""),
+  // Blocks separated by a blank line in the editor, in the grammar
+  // `lib/blog-article.ts` parses: paragraphs plus `## titolo`, `- voce`,
+  // `> citazione`, `![didascalia](/images/x.jpg)` and `| etichetta | valore`.
+  // Still a plain `string[]` on disk, so every post written before the grammar
+  // existed reads back as the paragraphs it always was.
   content: text("content", { mode: "json" }).$type<string[]>().notNull().default([]),
+  // Which of the four article templates renders this post — see
+  // `BLOG_LAYOUTS` in `lib/blog-article.ts`. Free text rather than a CHECK
+  // constraint: SQLite would force a table rebuild for one, and an unknown
+  // value already falls back to the default template.
+  layout: text("layout").notNull().default("editoriale"),
   imageLabel: text("image_label").notNull().default(""),
   image: text("image"),
   // Search-result title and snippet. Both optional: the post's own title and
