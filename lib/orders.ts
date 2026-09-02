@@ -20,6 +20,7 @@ import {
   releaseDiscountUseByCode,
   normalizeCode,
 } from "@/lib/discounts";
+import { logAudit } from "@/lib/audit";
 import { sendMail } from "@/lib/mail/mailer";
 import {
   orderCustomerEmail,
@@ -744,12 +745,31 @@ export async function finalizeOrder(
   // Count the coupon now that the order is actually paid (idempotent: the claim
   // above lets only the first finalize proceed).
   if (order.discountCode) {
-    await recordDiscountUseByCode(order.discountCode, {
+    const counted = await recordDiscountUseByCode(order.discountCode, {
       orderId: order.id,
       userId: order.userId,
       email: order.email,
       amountCents: order.discountCents,
     });
+    // The cap is checked at checkout and again, atomically, at the moment it is
+    // counted — so a code with one use left, offered to two people at once,
+    // settles for both and is counted for one. Honouring the second is right:
+    // refusing to settle an order the customer has already paid for, because a
+    // promotion ran out while they were typing their card number, is the worse
+    // outcome. But it was completely silent, and the books agree with
+    // themselves afterwards — `times_used` and the redemption ledger both stop
+    // at the cap — so a promotion capped at fifty could be honoured sixty times
+    // with nothing anywhere to say so. It is on the record now.
+    if (!counted) {
+      await logAudit({
+        actor: SYSTEM_ACTOR,
+        action: "discount.over_redeemed",
+        entity: "order",
+        entityId: order.id,
+        summary: `Codice ${order.discountCode} onorato oltre il limite sull'ordine ${order.orderNumber}`,
+        meta: { code: order.discountCode, discountCents: order.discountCents },
+      });
+    }
   }
 
   const emailData = await orderEmailData(order);
@@ -778,6 +798,12 @@ export async function finalizeOrder(
   // finds the claim taken and does nothing.
   await applyOrderStock(orderId, `Ordine ${order.orderNumber}`);
 }
+
+/**
+ * Who the trail names for something the platform did on its own. `audit_log`
+ * has no foreign key on the actor precisely so non-human actors can appear.
+ */
+const SYSTEM_ACTOR = { id: "system:orders", name: "Sistema ordini" } as const;
 
 export type RefundOutcome = {
   /** Amount newly given back on this call, in cents (0 when nothing changed). */

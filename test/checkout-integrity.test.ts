@@ -15,7 +15,7 @@ vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { orderItems, orders, products, shops, stockMovements } from "@/lib/db/schema";
+import { auditLog, discountCodes, orderItems, orders, products, shops, stockMovements } from "@/lib/db/schema";
 import { createOrder, finalizeOrder, recordRefund, MAX_LINE_QUANTITY } from "@/lib/orders";
 import type { CheckoutInput } from "@/lib/validation/order";
 
@@ -153,6 +153,42 @@ describe("createOrder — basket aggregation", () => {
     // `in_store` reserves at placement, so the decrement has already run.
     await finalizeOrder(created.orderId, { paidWith: "cash" });
     expect((await productRow())!.stock).toBe(20);
+  });
+});
+
+describe("a capped coupon honoured past its limit", () => {
+  it("leaves a trail when the cap ran out between checkout and settlement", async () => {
+    // The cap is checked at checkout and again atomically when it is counted,
+    // so a code with one use left, offered to two people at once, settles for
+    // both and is counted for one. Honouring the second is right — refusing to
+    // settle an order somebody has already paid for is worse — but it used to
+    // be silent, and the books agree with themselves afterwards, so a promotion
+    // capped at fifty could be honoured sixty times with nothing to say so.
+    await db.delete(discountCodes).where(eq(discountCodes.code, "PROVA1"));
+    await db.insert(discountCodes).values({
+      code: "PROVA1",
+      type: "fixed",
+      value: 100,
+      active: true,
+      maxRedemptions: 1,
+      timesUsed: 1, // already exhausted by somebody else
+    });
+
+    const created = await createOrder({ ...base([{ slug: SLUG, quantity: 2 }]), discountCode: undefined });
+    // Attach the code the way an order that passed validation earlier would
+    // carry it into settlement.
+    await db.update(orders).set({ discountCode: "PROVA1", discountCents: 100 }).where(eq(orders.id, created.orderId));
+
+    await finalizeOrder(created.orderId, { paidWith: "cash" });
+
+    const trail = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.entityId, created.orderId));
+    expect(trail.some((e) => e.action === "discount.over_redeemed")).toBe(true);
+    // And the counter was not pushed past its cap.
+    const [code] = await db.select().from(discountCodes).where(eq(discountCodes.code, "PROVA1"));
+    expect(code!.timesUsed).toBe(1);
   });
 });
 

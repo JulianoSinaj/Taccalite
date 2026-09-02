@@ -79,7 +79,9 @@ describe("login lockout", () => {
     // guess cannot be confirmed by trying it.
     const res = await attempt(PASSWORD);
     expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/Troppi tentativi/);
+    // Narrowed rather than cast: `AuthResult` carries `error` only on the
+    // failure arm, and the assertion above is what proves we are on it.
+    if (!res.ok) expect(res.error).toMatch(/Troppi tentativi/);
   });
 
   it("gives the whole budget back once the lock has been served", async () => {

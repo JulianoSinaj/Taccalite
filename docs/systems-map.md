@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **5 of 24 systems audited**. The rest of the
+> **Status:** in progress — **7 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -61,7 +61,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 2 | [Inventory & Stock](audits/02-inventory-stock.md) | ① Il Banco | **84** |
 | 3 | [Orders & Checkout](audits/03-orders-checkout.md) | ① Il Banco | **90** |
 | 4 | Payments | ① Il Banco | — |
-| 5 | Discounts & Promotions | ① Il Banco | — |
+| 5 | [Discounts & Promotions](audits/05-discounts-promotions.md) | ① Il Banco | **88** |
 | 6 | Fulfilment & Logistics | ② La Consegna | — |
 | 7 | Reservations | ② La Consegna | — |
 | 8 | Locations, Hours & Closures | ② La Consegna | — |
@@ -74,7 +74,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 15 | CMS & Editorial | ⑤ La Vetrina | — |
 | 16 | Storefront Experience | ⑤ La Vetrina | — |
 | 17 | Media & Assets | ⑤ La Vetrina | — |
-| 18 | Fiscal & Accounting | ⑥ Il Registro | — |
+| 18 | [Fiscal & Accounting](audits/18-fiscal-accounting.md) | ⑥ Il Registro | **90** |
 | 19 | Analytics & Reporting | ⑥ Il Registro | — |
 | 20 | [Security, Audit & Compliance](audits/20-security-audit-compliance.md) | ⑥ Il Registro | **88** |
 | 21 | Admin Gestionale Shell | ⑥ Il Registro | — |
@@ -200,9 +200,13 @@ per-customer usage limits, redemption records, live validation at checkout.
 | **Surfaces** | `POST /api/discounts/validate`, `/admin/discounts/*` |
 | **Tests** | `discounts.test.ts`, `discount-limits.test.ts` |
 
-**Audit questions** — Are limits enforced atomically (no race between validate
-and apply)? Is the discount re-derived server-side at order creation? Does
-cancelling an order free the redemption?
+**Readiness: 88/100** — audited 2026-09-02 at 84, remediated the same day; see
+[`docs/audits/05-discounts-promotions.md`](audits/05-discounts-promotions.md).
+The cap increment is a compare-and-set that cannot be raced, release is anchored
+to the order rather than blind, and the coupon is counted at payment so an
+abandoned basket cannot burn one. Fixed: a code honoured past its cap — the
+right call, when somebody has already paid — left no trace at all, so a
+promotion capped at fifty could be honoured sixty times invisibly.
 
 ---
 
@@ -472,10 +476,14 @@ the invoice registry, till closing (chiusura di cassa).
 | **Surfaces** | `GET /api/admin/invoice/[orderId]/xml`, `/admin/reports/iva`, `/admin/reports/fatture`, `/admin/reports/cassa` |
 | **Tests** | `fiscal.test.ts`, `fiscal-id.test.ts`, `fiscal-period.test.ts`, `vat-report.test.ts`, `security-fiscal.test.ts` |
 
-**Audit questions** — Is VAT derived from gross exactly once and rounded
-consistently? Does the XML validate against the SDI schema? Is a closed fiscal
-period immutable? *(History: a VAT over-declaration was the single critical
-finding of the 2026-07 gap analysis — verify it stayed fixed.)*
+**Readiness: 90/100** — audited 2026-09-02, **no code defects found**; see
+[`docs/audits/18-fiscal-accounting.md`](audits/18-fiscal-accounting.md). The
+2026-07 VAT over-declaration is properly closed, and not by a patch: `splitGross`
+is exact, the cart discount is apportioned pro-rata across rate buckets by
+largest-remainder, and a refund is booked as a credit note in the period it
+happened. The fiscal dates are immutable once written. Gaps are business
+decisions: the XML is produced but not transmitted to SdI, and there is no
+concept of a closed period.
 
 ---
 
@@ -606,7 +614,8 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 5 of 24.** Systems 1, 2, 3, 9 and 20, all remediated in the same pass.
+**Audited: 7 of 24.** Systems 1, 2, 3, 5, 9, 18 and 20. All remediated in the
+same pass except 18, which had no defects.
 Everything else in the index is unexamined — an empty cell means "not looked
 at", never "fine".
 
