@@ -837,6 +837,13 @@ export async function finalizeOrder(
   }
 
   // Loyalty accrual for logged-in customers, when the programme is enabled.
+  //
+  // Points are earned on `subtotalCents`, the price **before** any discount —
+  // so a 50 %-off coupon still accrues on the full shelf price. That is a
+  // deliberate decision, confirmed by the owner on 2026-09-02, not an oversight:
+  // a discount is meant to feel like a gift, and docking the customer's points
+  // for accepting one takes half of it back. Recorded here because it reads
+  // exactly like a bug, and the next person to notice will otherwise "fix" it.
   const loyaltyEnabled = await getSetting<boolean>("loyalty.enabled", true);
   if (loyaltyEnabled && order.userId) {
     const perEuro = await getSetting<number>("loyalty.pointsPerEuro", 1);

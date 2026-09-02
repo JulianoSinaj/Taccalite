@@ -3,13 +3,14 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **23 of 24 systems audited** — every system except Payments, which is on hold. The rest of the
-> readiness column is deliberately empty; it gets filled one system at a time by
-> a dedicated code audit. See **Programme status** below for what is outstanding
-> and what has been recorded-but-not-built.
+> **Status:** complete — **all 24 systems audited and remediated**, 2026-09-02.
+> Scores 84–91. Each links to its own write-up in `docs/audits/`; every one
+> records what was fixed, what was checked and found clean, and what is still
+> open. See **Programme status** below.
 >
-> Last surveyed: 2026-09-02 · 333 source files (`app/`, `components/`, `lib/`),
-> 33 tables, 46 migrations, 54 unit suites, 6 e2e suites.
+> Surveyed 2026-09-02 · 335 source files (`app/`, `components/`, `lib/`),
+> 33 tables, 48 migrations, **71 unit suites / 827 tests** (from 54 / 685 at the
+> start of the programme), 6 e2e suites.
 
 ---
 
@@ -60,7 +61,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 1 | [Catalogue & Products](audits/01-catalogue-products.md) | ① Il Banco | **91** |
 | 2 | [Inventory & Stock](audits/02-inventory-stock.md) | ① Il Banco | **89** |
 | 3 | [Orders & Checkout](audits/03-orders-checkout.md) | ① Il Banco | **90** |
-| 4 | Payments | ① Il Banco | — |
+| 4 | [Payments](audits/04-payments.md) | ① Il Banco | **90** |
 | 5 | [Discounts & Promotions](audits/05-discounts-promotions.md) | ① Il Banco | **88** |
 | 6 | [Fulfilment & Logistics](audits/06-fulfilment-logistics.md) | ② La Consegna | **88** |
 | 7 | [Reservations](audits/07-reservations.md) | ② La Consegna | **88** |
@@ -182,9 +183,14 @@ counter, simulated payments in dev, settlement, refund money movement.
 | **Surfaces** | `POST /api/checkout`, `POST /api/checkout/webhook` |
 | **Tests** | `payments.test.ts` |
 
-**Audit questions** — Is the webhook signature-verified and idempotent? Can the
-client influence the accepted method set? Is simulated payment truly
-unreachable outside `NODE_ENV=development`? Do refunds reconcile with Stripe?
+**Readiness: 90/100** — audited 2026-09-02, **no code defects found**; see
+[`docs/audits/04-payments.md`](audits/04-payments.md). Scored only once the
+owner settled what the system is *for*: **counter only — cash and POS**. That
+needed no code change, which is itself the finding: card is gated on a setting
+*and* on Stripe being usable, so a shop that never configures keys is already a
+counter-only shop. I withdrew my own suggestion to delete the Stripe code — it
+is a switched-off feature rather than dead weight, and the switch is the designed
+mechanism.
 
 ---
 
@@ -695,8 +701,8 @@ names them.
 
 ## Programme status
 
-**Audited: 23 of 24 — everything except Payments.** Systems 1, 2, 3, 5, 6, 7, 8,
-9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23 and 24.
+**Audited: 24 of 24.** Every system, all remediated. Systems 8, 18, 19 and 21
+had no code defects; 4 had none once its intent was settled.
 All remediated in the same pass except 18, which had no defects.
 
 **A shape worth naming.** Three systems held a capacity rule by reading a count
@@ -707,18 +713,15 @@ thing to look for.
 Everything else in the index is unexamined — an empty cell means "not looked
 at", never "fine".
 
-### Scope questions outstanding
+### Scope questions — settled 2026-09-02
 
-- **④ Payments (system 4)** — the owner has indicated payments will most likely
-  **not** be taken through this platform, which would change what "ready" means
-  for that system entirely: the Stripe checkout, its webhook and the settlement
-  fields would become dead weight rather than the money path. *Not yet
-  confirmed, and not yet decided what replaces it* (counter-only cash/POS? an
-  external terminal? a payment link from elsewhere?). **Do not audit or score
-  system 4 until this is settled** — scoring it against the wrong intent is
-  worse than leaving it blank. The answer also reaches systems 3, 18 and 19,
-  which read the settlement fields — system 3's audit records exactly which of
-  its guards survive the decision and which become dead weight.
+- **④ Payments** — the owner confirmed the shop takes **no money online**: cash
+  and POS at the counter. System 4 is audited against that intent and scores 90.
+  The Stripe code stays, switched off; see its write-up for why deleting it would
+  be the wrong move.
+- **③ Loyalty on the pre-discount subtotal** — confirmed **deliberate**. A
+  discount is meant to feel like a gift, and docking the customer's points takes
+  half of it back. Recorded in `finalizeOrder` so nobody "fixes" it later.
 
 ### Recorded but not built
 
@@ -730,7 +733,7 @@ not oversights.
 |---|---|---|
 | 2 | ~~Lot → order traceability~~ — **built 2026-09-02.** `stock_movements` carries `order_id` and the lots the movement drew on; `/admin/products/scadenze` answers "who received this lot". | — |
 | 2 | ~~Ledger ↔ on-hand reconciliation~~ — **built 2026-09-02.** Migration 0048 gave every legacy product an opening balance, so the invariant holds for all rows; `getStockDivergences` finds any that drift and the expiry page shows them when there are any. This is also what makes a half-applied `applyOrderStock` recoverable. | — |
-| 3 | **Loyalty accrues on the pre-discount subtotal**, so a 50 %-off coupon still earns full points. A business decision to make deliberately, not a defect. | Needs the owner's call |
+| 3 | ~~Loyalty accrues on the pre-discount subtotal~~ — **confirmed deliberate 2026-09-02** and recorded in the code. | — |
 | 3 | `order_items.product_id` has no FK; the reservation lookup on `/traccia` is single-factor (reference only, now throttled). | Low value against the risk |
 | 1 | ~~Allergens absent from the CSV round-trip~~ — **built**. ~~TOCTOU on derived slugs~~ — **made legible**: a slug collision now says so instead of reading as an internal fault. Remaining: `unit` is free text. | Low value against the risk |
 
