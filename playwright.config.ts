@@ -42,6 +42,20 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     // Seed a dedicated E2E database, then start the dev server (which auto-migrates).
+    //
+    // NB: `reuseExistingServer` below means this whole command — the seed
+    // included — is **skipped** whenever something is already listening on
+    // PORT. Locally that is the normal case from the second run onwards, so the
+    // database is seeded once and every later run inherits whatever state the
+    // previous one left behind. Fixtures therefore accumulate, and after enough
+    // runs a capped resource starts refusing: the first to go is
+    // `admin-operations.spec.ts` "a filtered list can be saved as a view",
+    // which fails with the app correctly reporting twelve saved views already.
+    //
+    // That is a deliberate trade (a full server boot per run is slow), not a
+    // bug — but it means a green local run is only meaningful on a fresh
+    // database. `npm run test:e2e:fresh` drops `.pw-tmp` first and is what to
+    // reach for when a failure looks like it might be leftovers.
     command: `npm run db:seed && npm run dev -- -p ${PORT}`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,

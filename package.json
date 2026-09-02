@@ -18,7 +18,8 @@
     "mail:check": "tsx scripts/mail-check.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:fresh": "rimraf .pw-tmp && playwright test"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

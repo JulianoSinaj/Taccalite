@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **19 of 24 systems audited**. The rest of the
+> **Status:** in progress — **21 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -77,9 +77,9 @@ The constellations are for navigation; the systems are the audit unit.
 | 18 | [Fiscal & Accounting](audits/18-fiscal-accounting.md) | ⑥ Il Registro | **90** |
 | 19 | [Analytics & Reporting](audits/19-analytics-reporting.md) | ⑥ Il Registro | **88** |
 | 20 | [Security, Audit & Compliance](audits/20-security-audit-compliance.md) | ⑥ Il Registro | **88** |
-| 21 | Admin Gestionale Shell | ⑥ Il Registro | — |
+| 21 | [Admin Gestionale Shell](audits/21-admin-gestionale-shell.md) | ⑥ Il Registro | **89** |
 | 22 | [Data Layer & Migrations](audits/22-data-layer-migrations.md) | ⑦ Le Fondamenta | **85** |
-| 23 | Quality & Testing | ⑦ Le Fondamenta | — |
+| 23 | [Quality & Testing](audits/23-quality-testing.md) | ⑦ Le Fondamenta | **84** |
 | 24 | Runtime, Config & Deployment | ⑦ Le Fondamenta | — |
 
 ---
@@ -599,9 +599,13 @@ pagination, printing.
 | **Components** | `components/admin/*` (35 files): `AdminNav.tsx`, `DataTable.tsx`, `FilterBar.tsx`, `SavedViews.tsx`, `CommandPalette.tsx`, `BulkBar.tsx`, `ActionForm.tsx`, `UnsavedGuard.tsx`, `ConfirmDialog.tsx`, `Toasts.tsx`, `Streamed.tsx` |
 | **Tests** | `admin-filters.test.ts`, `search-fts.test.ts`, `pagination.test.ts`, `action-state.test.ts`, `validation.test.ts`, e2e `admin-forms.spec.ts`, `admin-operations.spec.ts`, `admin-category-reorder.spec.ts` |
 
-**Audit questions** — Is `queries.ts` at 2.7k lines still coherent, or does it
-need splitting per-domain? Are list pages consistently Suspense-shelled? Is
-every mutating form guarded the same way?
+**Readiness: 89/100** — audited 2026-09-02, **no code defects found**; see
+[`docs/audits/21-admin-gestionale-shell.md`](audits/21-admin-gestionale-shell.md).
+FTS is raw SQL but escaped correctly at both layers — once for FTS5 syntax, once
+for SQLite — with the table and index names from a frozen map. Every admin
+surface is gated on the *role*, so a customer cannot reach the gestionale, and
+all six `/api/admin/*` routes carry their own guard. `queries.ts` at 2,762 lines
+is coherent but is the natural next split.
 
 ---
 
@@ -645,8 +649,14 @@ the form harness and its settle signal, stubs, lint config, CI.
 | **CI** | `.github/workflows/` |
 | **Coverage gaps** | newsletter/campaigns, media, payments webhook end-to-end, automation jobs |
 
-**Audit questions** — What is the real coverage of the money paths? Do e2e
-tests run in CI on every push? Is there a flake budget?
+**Readiness: 84/100** — audited 2026-09-02 at 78, documented and given a remedy;
+see [`docs/audits/23-quality-testing.md`](audits/23-quality-testing.md). The
+suite grew from 685 tests to 797 over this programme. Finding: `reuseExistingServer`
+skips the *whole* webServer command — seed included — so a local run never
+reseeds and fixtures accumulate until a capped resource refuses. `npm run
+test:e2e:fresh` is the remedy. **Contains two corrections** to what I reported
+earlier: the suite *can* cold-start, and the "load-sensitive" tests were most
+likely the same accumulation.
 
 ---
 
@@ -672,8 +682,8 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 19 of 24.** Systems 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-17, 18, 19, 20 and 22.
+**Audited: 21 of 24.** Systems 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+17, 18, 19, 20, 21, 22 and 23.
 All remediated in the same pass except 18, which had no defects.
 
 **A shape worth naming.** Three systems held a capacity rule by reading a count
@@ -711,7 +721,6 @@ not oversights.
 | 3 | **Loyalty accrues on the pre-discount subtotal**, so a 50 %-off coupon still earns full points. A business decision to make deliberately, not a defect. | Needs the owner's call |
 | 3 | `order_items.product_id` has no FK; the reservation lookup on `/traccia` is single-factor (reference only, now throttled). | Low value against the risk |
 | 1 | TOCTOU window on derived slugs; allergens absent from the CSV round-trip; `unit` is free text. | Low value against the risk |
-| 23 | **The e2e suite is not repeatable.** Fixtures accumulate across runs until a capped resource refuses; the suite cannot cold-start (seed runs before migrations); two tests are load-sensitive. All 52 pass on a correctly seeded DB. | Its own system's audit |
 
 ## How to read a readiness score
 
