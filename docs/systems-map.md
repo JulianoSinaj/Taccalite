@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **18 of 24 systems audited**. The rest of the
+> **Status:** in progress — **19 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -71,7 +71,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 12 | [Transactional Mail & Outbox](audits/12-transactional-mail-outbox.md) | ④ La Voce | **89** |
 | 13 | [Newsletter, Campaigns & Segments](audits/13-newsletter-campaigns-segments.md) | ④ La Voce | **86** |
 | 14 | [Automation & Scheduled Jobs](audits/14-automation-scheduled-jobs.md) | ④ La Voce | **86** |
-| 15 | CMS & Editorial | ⑤ La Vetrina | — |
+| 15 | [CMS & Editorial](audits/15-cms-editorial.md) | ⑤ La Vetrina | **88** |
 | 16 | Storefront Experience | ⑤ La Vetrina | — |
 | 17 | [Media & Assets](audits/17-media-assets.md) | ⑤ La Vetrina | **87** |
 | 18 | [Fiscal & Accounting](audits/18-fiscal-accounting.md) | ⑥ Il Registro | **90** |
@@ -455,8 +455,14 @@ the blog/news with its article grammar and templates, per-shop editorial text.
 | **Components** | `components/admin/ContentEditor.tsx`, `components/BlogCard.tsx`, `components/site/blog/*`, `RichText.tsx`, `inline-markup.tsx` |
 | **Tests** | `site-content.test.ts`, `blog-article.test.ts` |
 
-**Audit questions** — How much of the storefront is actually editable vs.
-hardcoded? Is the rich-text renderer XSS-safe? Are drafts/scheduling real?
+**Readiness: 88/100** — audited 2026-09-02 at 76, remediated the same day; see
+[`docs/audits/15-cms-editorial.md`](audits/15-cms-editorial.md). The rich-text
+renderer never touches `dangerouslySetInnerHTML` at all — it builds elements
+from a closed grammar, safe by construction rather than by escaping. Fixed the
+one place that *had* to emit raw markup: `JsonLd` wrote `JSON.stringify` into a
+`<script>` tag, and `JSON.stringify` does not escape `<`, so a product name
+containing `</script>` executed in every visitor's browser. `'unsafe-inline'` in
+the CSP meant it ran.
 
 ---
 
@@ -666,8 +672,8 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 18 of 24.** Systems 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 17,
-18, 19, 20 and 22.
+**Audited: 19 of 24.** Systems 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+17, 18, 19, 20 and 22.
 All remediated in the same pass except 18, which had no defects.
 
 **A shape worth naming.** Three systems held a capacity rule by reading a count
