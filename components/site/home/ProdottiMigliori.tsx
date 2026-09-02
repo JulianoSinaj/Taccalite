@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import ProductTile, { type ProductTileData } from "@/components/site/ProductTile";
+import ProdottiStack from "@/components/site/home/ProdottiStack";
 import Reveal from "@/components/Reveal";
 
 export default function ProdottiMigliori({ products }: { products: ProductTileData[] }) {
@@ -28,14 +29,12 @@ export default function ProdottiMigliori({ products }: { products: ProductTileDa
           </Link>
         </div>
 
-        {/* Scroll-snapped row on a phone, grid from the small breakpoint up. A
-            carousel beats a 2-up grid here: the prices stay comparable side by
-            side instead of stacking into a wall.
-            `scroll-pl-5` matches the page gutter, so a snapped tile lands flush
-            with the headline above it rather than hard against the screen edge;
-            `no-scrollbar` removes the grey bar that otherwise sits under the
-            last row of type and reads as a rule belonging to nothing. */}
-        <div className="no-scrollbar -mx-5 mt-9 flex snap-x snap-mandatory scroll-pl-5 gap-4 overflow-x-auto px-5 pb-2 sm:mx-0 sm:mt-12 sm:grid sm:grid-cols-2 sm:gap-x-7 sm:gap-y-14 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4">
+        {/* On a phone the products are a fanned deck of cards (below); from the
+            small breakpoint up they stay the comparison grid, where prices sit
+            side by side instead of stacking into a wall. */}
+        <ProdottiStack products={products} className="mt-10 sm:hidden" />
+
+        <div className="mt-9 hidden gap-4 sm:mt-12 sm:grid sm:grid-cols-2 sm:gap-x-7 sm:gap-y-14 lg:grid-cols-4">
           {products.map((product, i) => (
             <Reveal
               key={product.slug}
