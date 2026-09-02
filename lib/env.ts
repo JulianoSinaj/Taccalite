@@ -176,6 +176,25 @@ export const stripeConfigured = env.stripe.secretKey !== "";
 export const blobConfigured = env.blobToken !== "";
 
 /**
+ * Secrets still sitting at their published development defaults, in an
+ * environment that is not development.
+ *
+ * Computed here so the boot warning below and the `/api/health?checks=full`
+ * probe report the same thing. A warning printed once at module load lives at
+ * the top of a log nobody reads twice; an install running with
+ * `ADMIN_PASSWORD=taccalite-admin` deserves to turn a monitor red, because the
+ * default is in `.env.example` in this repository and the login page is public.
+ *
+ * Empty in development, where the defaults are the point.
+ */
+export const insecureDefaults: string[] = !enforceSecurity
+  ? []
+  : [
+      ...(env.cronSecret === DEV_DEFAULTS.cronSecret ? ["CRON_SECRET"] : []),
+      ...(env.admin.password === DEV_DEFAULTS.adminPassword ? ["ADMIN_PASSWORD"] : []),
+    ];
+
+/**
  * Warn loudly if a server boots with known dev-default secrets. Checked for
  * every non-development environment (production, staging, test, or an unset
  * `NODE_ENV`). This does NOT abort startup — the server keeps running with the
@@ -185,9 +204,7 @@ export const blobConfigured = env.blobToken !== "";
  * "phase-production-build") so the build doesn't require real secrets.
  */
 if (enforceSecurity && process.env.NEXT_PHASE !== "phase-production-build") {
-  const insecure: string[] = [];
-  if (env.cronSecret === DEV_DEFAULTS.cronSecret) insecure.push("CRON_SECRET");
-  if (env.admin.password === DEV_DEFAULTS.adminPassword) insecure.push("ADMIN_PASSWORD");
+  const insecure = insecureDefaults;
   if (insecure.length > 0) {
     console.warn(
       `[env] WARNING: running in a non-development environment (NODE_ENV=${

@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { emailOutbox } from "@/lib/db/schema";
-import { env, smtpAuthConfigured, smtpConfigured } from "@/lib/env";
+import { env, insecureDefaults, smtpAuthConfigured, smtpConfigured } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,10 +70,22 @@ export async function GET(request: Request) {
 
   // Mail that cannot authenticate is degraded even with an empty outbox — the
   // failures only appear once someone tries to place an order.
-  const degraded = (smtpConfigured && !smtpAuthConfigured) || mail.failed24h > 0;
+  //
+  // Secrets left at their published development defaults count too. That is
+  // warned about once at boot, at the top of a log nobody reads twice, while
+  // `ADMIN_PASSWORD=taccalite-admin` is in `.env.example` in the repository and
+  // the login page is public. A monitor should see it.
+  const degraded =
+    (smtpConfigured && !smtpAuthConfigured) || mail.failed24h > 0 || insecureDefaults.length > 0;
 
   return NextResponse.json(
-    { status: degraded ? "degraded" : "ok", database: "ok", mail },
+    {
+      status: degraded ? "degraded" : "ok",
+      database: "ok",
+      mail,
+      // Names only — the variables that are wrong, never their values.
+      insecureDefaults,
+    },
     { status: degraded ? 503 : 200 },
   );
 }

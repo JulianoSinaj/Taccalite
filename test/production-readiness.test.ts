@@ -421,3 +421,24 @@ describe("§7 the remaining launch items", () => {
     expect(row).toMatch(/standalone/i);
   });
 });
+
+/**
+ * A production install running on the published development secrets should be
+ * visible to a monitor, not only to whoever read the boot log once.
+ * `ADMIN_PASSWORD=taccalite-admin` is in `.env.example` in this repository and
+ * the login page is public.
+ */
+describe("insecureDefaults", () => {
+  it("is empty in development, where the defaults are the point", async () => {
+    // The suite runs with NODE_ENV=development (vitest.config.ts).
+    const { insecureDefaults } = await import("@/lib/env");
+    expect(insecureDefaults).toEqual([]);
+  });
+
+  it("names the variable rather than its value", async () => {
+    const { insecureDefaults } = await import("@/lib/env");
+    for (const name of insecureDefaults) {
+      expect(name).toMatch(/^[A-Z_]+$/);
+    }
+  });
+});

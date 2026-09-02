@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **21 of 24 systems audited**. The rest of the
+> **Status:** in progress — **22 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -80,7 +80,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 21 | [Admin Gestionale Shell](audits/21-admin-gestionale-shell.md) | ⑥ Il Registro | **89** |
 | 22 | [Data Layer & Migrations](audits/22-data-layer-migrations.md) | ⑦ Le Fondamenta | **85** |
 | 23 | [Quality & Testing](audits/23-quality-testing.md) | ⑦ Le Fondamenta | **84** |
-| 24 | Runtime, Config & Deployment | ⑦ Le Fondamenta | — |
+| 24 | [Runtime, Config & Deployment](audits/24-runtime-config-deployment.md) | ⑦ Le Fondamenta | **88** |
 
 ---
 
@@ -674,16 +674,21 @@ health checks, the deployment runbook.
 | **Docs** | `DEPLOYMENT.md`, `README.md` |
 | **Tests** | `production-readiness.test.ts` |
 
-**Audit questions** — Does the app refuse to boot on missing critical config,
-or degrade silently? Is the health check deep enough to be useful? Are both
-deploy targets (Docker + Vercel) actually current?
+**Readiness: 88/100** — audited 2026-09-02 at 82, remediated the same day; see
+[`docs/audits/24-runtime-config-deployment.md`](audits/24-runtime-config-deployment.md).
+`/api/health?checks=full` is the standout: it reports what fails *silently*
+(mail above all), bearer-gated, on a rolling 24-hour window, treating "SMTP host
+set, credentials blank" as its own state. `isDev` is an exact match so an unset
+`NODE_ENV` cannot unlock simulated payments. Fixed: published default secrets
+were warned about once at boot and never watched — the probe now answers 503 and
+names them.
 
 ---
 
 ## Programme status
 
-**Audited: 21 of 24.** Systems 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-17, 18, 19, 20, 21, 22 and 23.
+**Audited: 22 of 24.** Systems 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+17, 18, 19, 20, 21, 22, 23 and 24.
 All remediated in the same pass except 18, which had no defects.
 
 **A shape worth naming.** Three systems held a capacity rule by reading a count
