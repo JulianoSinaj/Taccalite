@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **8 of 24 systems audited**. The rest of the
+> **Status:** in progress — **9 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -66,7 +66,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 7 | Reservations | ② La Consegna | — |
 | 8 | Locations, Hours & Closures | ② La Consegna | — |
 | 9 | [Identity & Authentication](audits/09-identity-authentication.md) | ③ I Clienti | **89** |
-| 10 | Customer Accounts | ③ I Clienti | — |
+| 10 | [Customer Accounts](audits/10-customer-accounts.md) | ③ I Clienti | **87** |
 | 11 | [Loyalty & Rewards](audits/11-loyalty-rewards.md) | ③ I Clienti | **89** |
 | 12 | Transactional Mail & Outbox | ④ La Voce | — |
 | 13 | Newsletter, Campaigns & Segments | ④ La Voce | — |
@@ -311,8 +311,13 @@ preferences, GDPR data export and erasure.
 | **Components** | `components/account/AccountDashboard.tsx`, `AccountForm.tsx`, `AccountSettings.tsx`, `StatusChip.tsx`, `components/site/AccountBadge.tsx`, `components/store/ClaimOrderOffer.tsx` |
 | **Tests** | `account-services.test.ts` |
 
-**Audit questions** — Does the export cover every table holding personal data?
-Is erasure real or soft? Can a customer read another's order by number?
+**Readiness: 87/100** — audited 2026-09-02 at 74, remediated the same day; see
+[`docs/audits/10-customer-accounts.md`](audits/10-customer-accounts.md). Orders
+are retained for fiscal obligation with the reason written down, the loyalty card
+is retired on erasure, sessions are destroyed. Fixed three findings in the same
+two functions: the export shipped the **TOTP secret and recovery codes** while
+omitting the saved address book, and erasure left the address book, the secret
+and live reset links behind.
 
 ---
 
@@ -618,8 +623,8 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 8 of 24.** Systems 1, 2, 3, 5, 9, 11, 18 and 20. All remediated in
-the same pass except 18, which had no defects.
+**Audited: 9 of 24.** Systems 1, 2, 3, 5, 9, 10, 11, 18 and 20. All remediated
+in the same pass except 18, which had no defects.
 Everything else in the index is unexamined — an empty cell means "not looked
 at", never "fine".
 
