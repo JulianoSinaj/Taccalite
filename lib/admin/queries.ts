@@ -1394,6 +1394,53 @@ export async function getOrdersForLot(lotCode: string, scope: string | null = nu
     .limit(limit);
 }
 
+/**
+ * Products whose movement ledger no longer sums to their on-hand figure.
+ *
+ * The ledger's whole promise is that the history explains the balance, and
+ * nothing ever checked it. `applyOrderStock` claims `stockAppliedAt` *before*
+ * doing the work, so a failure part-way through a multi-product order leaves
+ * some products decremented and some not, permanently and unretryably — logged
+ * since the system 2 audit, but only findable by reading logs. Anything else
+ * that ever writes `products.stock` outside `lib/stock.ts` would show up here
+ * too, which is the point: this is the check that makes the invariant an
+ * invariant rather than an intention.
+ *
+ * Migration 0048 gave every legacy product an opening balance, so a divergence
+ * now means a real one rather than a product that predates the ledger.
+ *
+ * Scoped like every other list: an operator sees their own sede's shelves.
+ */
+export async function getStockDivergences(scope: string | null = null) {
+  // A grouped join rather than a correlated subquery: the same `sql` fragment
+  // reused in both the projection and the predicate came back null in the
+  // projection while filtering correctly, which is a difference no reader
+  // should have to know about.
+  const ledger = sql<number>`coalesce(sum(${stockMovements.delta}), 0)`;
+
+  return db
+    .select({
+      id: products.id,
+      name: products.name,
+      sku: products.sku,
+      shopSlug: products.shopSlug,
+      onHand: products.stock,
+      ledger,
+    })
+    .from(products)
+    .leftJoin(stockMovements, eq(stockMovements.productId, products.id))
+    .where(
+      and(
+        isNotNull(products.stock),
+        isNull(products.archivedAt),
+        inShop(products.shopSlug, scope),
+      ),
+    )
+    .groupBy(products.id)
+    .having(sql`${products.stock} <> coalesce(sum(${stockMovements.delta}), 0)`)
+    .orderBy(products.name);
+}
+
 /** The lots a single order drew on, for its detail page. */
 export async function getLotsForOrder(orderId: string) {
   const rows = await db

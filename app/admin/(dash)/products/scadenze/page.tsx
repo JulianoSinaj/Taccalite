@@ -2,7 +2,12 @@ import Link from "next/link";
 import { AdminHeader, Panel, BackLink, euro, fmtDate } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { PrintButton } from "@/components/admin/PrintButton";
-import { getExpiringBatches, adminGetShops, getOrdersForLot } from "@/lib/admin/queries";
+import {
+  getExpiringBatches,
+  adminGetShops,
+  getOrdersForLot,
+  getStockDivergences,
+} from "@/lib/admin/queries";
 import { writeOffBatch } from "@/lib/admin/batch-actions";
 import { shopScope, lockShop } from "@/lib/admin/scope";
 import { dateInRome } from "@/lib/time";
@@ -47,10 +52,11 @@ export default async function ExpiringBatches({ searchParams }: SP) {
   // The recall lookup: which customers took this lot away.
   const lotQuery = (sp.lotto ?? "").trim();
 
-  const [rows, allShops, recall] = await Promise.all([
+  const [rows, allShops, recall, divergences] = await Promise.all([
     getExpiringBatches(through, true, scope),
     adminGetShops(),
     lotQuery ? getOrdersForLot(lotQuery, scope) : Promise.resolve([]),
+    getStockDivergences(scope),
   ]);
   const shops = scope ? allShops.filter((s) => s.slug === scope) : allShops;
   const shopName = new Map(allShops.map((s) => [s.slug, s.name]));
@@ -95,6 +101,45 @@ export default async function ExpiringBatches({ searchParams }: SP) {
           </div>
         }
       />
+
+      {/* Shown only when there is something to show. The ledger's whole promise
+          is that the history explains the balance, and nothing ever checked it —
+          so a half-applied order (see `applyOrderStock`, which claims its
+          transition before doing the work) drifted silently until a stocktake.
+          A clean shop never sees this panel. */}
+      {divergences.length > 0 && (
+        <Panel className="mb-6 border-l-4 border-l-danger">
+          <h2 className="font-display text-lg text-brown-950">
+            Giacenze che non tornano con i movimenti
+          </h2>
+          <p className="mt-1 mb-3 text-sm text-brown-800/70">
+            Per {divergences.length === 1 ? "questo prodotto" : "questi prodotti"} la somma dei
+            movimenti non corrisponde alla giacenza registrata. Di solito significa che una
+            scrittura si è interrotta a metà: correggi con una rettifica dalla scheda, così la
+            differenza resta spiegata a registro.
+          </p>
+          <ul className="space-y-1.5">
+            {divergences.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-baseline gap-x-3 text-sm">
+                <Link
+                  href={`/admin/products/${d.id}`}
+                  className="font-semibold text-brown-950 underline decoration-brown-900/30 underline-offset-2"
+                >
+                  {d.name}
+                </Link>
+                {d.sku && <span className="text-xs text-brown-800/50">{d.sku}</span>}
+                <span className="text-brown-800/70">
+                  giacenza {d.onHand} · movimenti {Number(d.ledger)}
+                </span>
+                <span className="font-semibold text-danger">
+                  {Number(d.onHand) - Number(d.ledger) > 0 ? "+" : ""}
+                  {Number(d.onHand) - Number(d.ledger)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       {/* Traceability, the way a recall actually arrives: somebody telephones
           with a lot code off a packet, and the shop has to know within the hour

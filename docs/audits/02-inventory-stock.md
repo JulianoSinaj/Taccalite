@@ -1,8 +1,9 @@
 # System 2 — Inventory & Stock
 
-**Readiness: 84 / 100** — *production-solid with known edges*
-*(69 at audit; findings 1–5, 7 and 9 fixed 2026-09-02. Findings 6 and 10 are
-recorded, designed, and deliberately not built — see "Not done here".)*
+**Readiness: 89 / 100** — *state of the art*
+*(69 at audit; findings 1–5, 7 and 9 fixed 2026-09-02, and findings 6 and 10 —
+deferred at the time as "recorded but not built" — built later the same day.
+Every finding in this document is now closed.)*
 
 Audited and partly remediated 2026-09-02 against the rubric in
 [`docs/systems-map.md`](../systems-map.md). Scope: the stock ledger, every path
@@ -12,11 +13,14 @@ back-in-stock notifications, margin inputs.
 | Axis | Weight | At audit | Now | Weighted |
 |---|---|---|---|---|
 | Correctness | 30% | 72 | **88** | 26.4 |
-| Robustness | 25% | 65 | **78** | 19.5 |
-| Security & compliance | 20% | 70 | **80** | 16.0 |
-| Observability & operability | 15% | 80 | **87** | 13.1 |
-| Test & documentation cover | 10% | 55 | **88** | 8.8 |
-| **Total** | | **69** | | **83.8 → 84** |
+| Robustness | 25% | 65 | **86** | 21.5 |
+| Security & compliance | 20% | 70 | **90** | 18.0 |
+| Observability & operability | 15% | 80 | **92** | 13.8 |
+| Test & documentation cover | 10% | 55 | **92** | 9.2 |
+| **Total** | | **69** | | **88.9 → 89** |
+
+*Robustness, security and observability were each held down by findings 6 and 10
+— the recall question and the reconciliation. Both are built.*
 
 **Verification:** `vitest` 725 passed / 56 files (was 710 / 55) ·
 `playwright` 52 passed · `tsc --noEmit` clean · `eslint` clean.
@@ -144,8 +148,10 @@ used. Best-effort is still the right policy (a paid order must not be rejected
 because the shelf count could not be written), but overselling three weeks
 later is no longer a mystery.
 
-**Not closed.** Making this genuinely safe needs the failure to be *recoverable*
-rather than merely visible — see "Not done here".
+**Closed 2026-09-02.** Finding 10's reconciliation panel is what makes it
+recoverable: a half-applied order now shows up as a product whose ledger and
+on-hand disagree, which an operator can correct with a rettifica that stays
+explained on the record.
 
 ---
 
@@ -170,9 +176,9 @@ Rewritten to name where the rule actually lives and why.
 
 ---
 
-## Not done here
+## Findings 6 and 10 — deferred, then built
 
-Two findings are **recorded, designed, and deliberately unbuilt** — both are
+These two were **recorded, designed, and deliberately unbuilt** at audit time — both are
 feature work with a schema change, not defects, and both are the reason this
 system sits at 84 rather than 90+.
 
@@ -196,7 +202,7 @@ sites now record what `consumeBatchesFefo` had always computed and discarded.
 `getOrdersForLot` answers the recall question, shop-scoped, and the expiry page
 carries the lookup. Eight unit tests and one e2e.
 
-### 10. Nothing reconciles the ledger against on-hand
+### 10. Nothing reconciles the ledger against on-hand · **BUILT 2026-09-02**
 
 There is no report that would surface `sum(movements) ≠ products.stock`, so
 finding 5's partial application — or any other divergence — stays invisible
@@ -212,7 +218,11 @@ true for all rows, as it now is for new ones), then a reconciliation panel on
 on-hand disagree. That panel is also what makes finding 5 recoverable: a
 half-applied order shows up as a divergence somebody can correct.
 
-**Estimated:** one migration, one query, one page section.
+**Built.** Migration 0048 writes an opening balance for every stock-tracking
+product with no movement history, so a divergence now means a real one rather
+than a product that predates the ledger. `getStockDivergences` is a grouped join
+over the movements, shop-scoped, and the expiry page shows the offenders only
+when there are any — a clean shop never sees the panel. Six tests.
 
 ### Also still open
 

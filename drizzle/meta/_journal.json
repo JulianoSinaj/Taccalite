@@ -337,6 +337,13 @@
       "when": 1788363563311,
       "tag": "0047_lonely_zaladane",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1788363564311,
+      "tag": "0048_opening_stock_balances",
+      "breakpoints": true
     }
   ]
 }

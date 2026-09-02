@@ -58,7 +58,7 @@ The constellations are for navigation; the systems are the audit unit.
 | # | System | Constellation | Readiness |
 |---|--------|---------------|-----------|
 | 1 | [Catalogue & Products](audits/01-catalogue-products.md) | ① Il Banco | **91** |
-| 2 | [Inventory & Stock](audits/02-inventory-stock.md) | ① Il Banco | **84** |
+| 2 | [Inventory & Stock](audits/02-inventory-stock.md) | ① Il Banco | **89** |
 | 3 | [Orders & Checkout](audits/03-orders-checkout.md) | ① Il Banco | **90** |
 | 4 | Payments | ① Il Banco | — |
 | 5 | [Discounts & Promotions](audits/05-discounts-promotions.md) | ① Il Banco | **88** |
@@ -135,9 +135,10 @@ direct write to `products.stock` elsewhere is a defect.
 itself is strong (atomic, records the delta *actually* applied, floors at zero)
 and every lot action is shop-scoped. Fixed: FEFO no longer drains expired lots
 off the HACCP report, lot writes and their movements are one transaction, and a
-product cannot become made-to-order while lots still hold units. **Recorded but
-not built:** lot→order traceability (the recall question) and ledger-vs-on-hand
-reconciliation — see that document's "Not done here".
+product cannot become made-to-order while lots still hold units. Both items
+deferred at audit time — lot→order traceability (the recall question) and
+ledger-vs-on-hand reconciliation — were **built later the same day**, so every
+finding in that document is closed.
 
 ---
 
@@ -727,9 +728,8 @@ not oversights.
 
 | System | Item | Why deferred |
 |---|---|---|
-| 2 | ~~Lot → order traceability~~ — **built 2026-09-02.** `stock_movements` now carries `order_id` and the lots the movement drew on, and `/admin/products/scadenze` answers "who received this lot". | — |
-| 2 | **Ledger ↔ on-hand reconciliation.** Nothing surfaces a divergence, and legacy rows have no opening movement so the sum is expected to differ. Design: backfill opening balances, then a divergence report. | Migration + new report surface |
-| 2 | A half-applied `applyOrderStock` is now *logged* but still not *recoverable*. | Depends on the reconciliation report above |
+| 2 | ~~Lot → order traceability~~ — **built 2026-09-02.** `stock_movements` carries `order_id` and the lots the movement drew on; `/admin/products/scadenze` answers "who received this lot". | — |
+| 2 | ~~Ledger ↔ on-hand reconciliation~~ — **built 2026-09-02.** Migration 0048 gave every legacy product an opening balance, so the invariant holds for all rows; `getStockDivergences` finds any that drift and the expiry page shows them when there are any. This is also what makes a half-applied `applyOrderStock` recoverable. | — |
 | 3 | **Loyalty accrues on the pre-discount subtotal**, so a 50 %-off coupon still earns full points. A business decision to make deliberately, not a defect. | Needs the owner's call |
 | 3 | `order_items.product_id` has no FK; the reservation lookup on `/traccia` is single-factor (reference only, now throttled). | Low value against the risk |
 | 1 | TOCTOU window on derived slugs; allergens absent from the CSV round-trip; `unit` is free text. | Low value against the risk |
