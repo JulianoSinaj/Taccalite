@@ -114,3 +114,37 @@ describe("applyProductImport", () => {
     expect(after.vatRateBps).toBe(before.vatRateBps);
   });
 });
+
+/**
+ * Allergens were the one field on a food product a spreadsheet could not reach:
+ * they had no column in either half of the round trip, so a bulk catalogue edit
+ * silently could not touch them. Now that they are a controlled vocabulary
+ * rather than free text, the import can resolve them exactly as the form does.
+ */
+describe("allergens through the round trip", () => {
+  it("resolves a written list to the canonical keys", async () => {
+    const plan = await planProductImport(`slug,allergeni\nimp-salame,"Lattosio, GLUTINE"`);
+
+    expect(plan.issues).toHaveLength(0);
+    expect(plan.updates[0]!.changes.allergens).toEqual(["glutine", "latte"]);
+  });
+
+  it("keeps something outside the fourteen rather than dropping it", async () => {
+    const plan = await planProductImport(`slug,allergeni\nimp-salame,"latte, farina di castagne"`);
+    expect(plan.updates[0]!.changes.allergens).toEqual(["latte", "farina-di-castagne"]);
+  });
+
+  it("leaves the column alone when the cell is blank", async () => {
+    // A blank cell means "leave as is", not "clear" — the rule that makes a
+    // two-column price sheet safe applies here too.
+    const plan = await planProductImport(`slug,allergeni,prezzoEuros\nimp-salame,,9.50`);
+    expect(plan.updates[0]!.changes).not.toHaveProperty("allergens");
+    expect(plan.updates[0]!.changes.priceCents).toBe(950);
+  });
+
+  it("writes them through to the product", async () => {
+    const plan = await planProductImport(`slug,allergeni\nimp-salame,"uova, sedano"`);
+    await applyProductImport(plan);
+    expect((await read("imp-salame"))!.allergens).toEqual(["uova", "sedano"]);
+  });
+});

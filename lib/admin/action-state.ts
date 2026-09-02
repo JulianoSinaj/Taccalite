@@ -77,6 +77,19 @@ export async function runAction(fn: () => Promise<ActionState>): Promise<ActionS
       // scrolled off screen, and the toast is what says "the save did not happen".
       return fail(err.message, err.field ? { [err.field]: err.message } : undefined);
     }
+    // A slug that was free when it was resolved and taken by the time the row
+    // was written — two people creating an identically-named product in the
+    // same moment. Rare, and previously indistinguishable from any other
+    // internal fault, so the operator retyped the form wondering what they had
+    // done wrong. Retrying the whole action would not be safe (it may already
+    // have sent mail or moved stock), so this makes the collision legible
+    // instead: saving again resolves a fresh slug and succeeds.
+    if (err instanceof Error && /UNIQUE constraint failed:\s*\w+\.slug/i.test(err.message)) {
+      return fail(
+        "Qualcun altro ha appena salvato un record con lo stesso indirizzo. Salva di nuovo: ne verrà generato un altro.",
+        { slug: "Indirizzo già in uso." },
+      );
+    }
     console.error("[admin action] unexpected error:", err);
     return fail("Si è verificato un errore imprevisto. Riprova.");
   }

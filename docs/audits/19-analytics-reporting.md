@@ -56,8 +56,10 @@ with the reasoning written down.
   `orders` and `order_items`; the indexes are there (`orders_created_idx`,
   `orders_paid_created_idx`) and a two-counter shop will not notice, but nothing
   would tell anyone when it started to matter.
-- **No retention on `page_views`.** The maintenance sweep prunes the audit log
-  and the outbox on configurable windows; page views grow forever. Harmless
-  (they hold nothing personal) but unbounded.
+- ~~No retention on `page_views`.~~ **Wrong — corrected 2026-09-02.**
+  `runMaintenance` prunes them on `analytics.retentionDays` (default 365, 0 keeps
+  everything), and its comment records that the docstring once claimed this
+  while no delete existed. I repeated the stale docstring instead of reading the
+  body.
 - **Sales analysis has no comparison period.** It answers "what did this month
   do", not "what did it do against last".

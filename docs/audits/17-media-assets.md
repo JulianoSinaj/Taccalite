@@ -72,8 +72,10 @@ that is a WAV rather than a WebP, an MZ executable, and a client filename of
   GPS coordinates if the phone recorded them — so a shop photographing a product
   at home publishes that location. Not a defect in the code as written, but a
   real consequence of storing bytes verbatim.
-- **`sweepOrphanedMedia` exists but is not wired into the maintenance cron**, so
-  orphan cleanup is a manual act.
+- ~~`sweepOrphanedMedia` is not wired into the maintenance cron.~~ **Wrong —
+  corrected 2026-09-02.** `runMaintenance` calls it, with an age guard that
+  keeps it safe next to a live upload, and reports `mediaDeleted` /
+  `mediaBytesFreed`. I wrote that note from a partial read.
 - **No dimension or re-encode step.** A 5 MB 6000×4000 JPEG is stored and served
   as-is; `next/image` handles the storefront, but the admin previews the
   original.

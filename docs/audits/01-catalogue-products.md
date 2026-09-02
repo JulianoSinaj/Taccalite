@@ -215,22 +215,28 @@ Covered by five unit tests and a new e2e test.
 
 ---
 
-### 9. `resolveSlug` has a TOCTOU window — LOW · **open**
+### 9. `resolveSlug` has a TOCTOU window — LOW · **made legible 2026-09-02**
 
 Checks `taken()`, then the caller inserts. Two concurrent creates of the same
-name both resolve to `salame`; the second now hits the UNIQUE index and reports
-the generic error. The explicit-slug path is checked (finding 5), so this is
-narrowed to the *derived* path, and it needs two people creating an
-identically-named product in the same instant in a two-counter shop. Closing it
-means catching the constraint violation and retrying.
+name both resolve to `salame`; the second hits the UNIQUE index.
+
+I said at audit that closing it meant "catching the constraint and retrying".
+Retrying is wrong: `runAction` would have to re-run the whole action body, which
+may already have sent mail or moved stock. So the collision is now *legible*
+instead — a UNIQUE violation on any `slug` column returns a sentence saying
+somebody else just took that address and that saving again will work, with the
+error attached to the field. The race is unchanged; what changed is that it no
+longer looks like an internal fault the operator caused.
 
 ---
 
 ## Also still open
 
-- **Allergens are not in the CSV round-trip.** The importer has no `allergeni`
-  column, so a bulk catalogue edit cannot touch them. Now that they are a
-  controlled vocabulary this is straightforward to add.
+- ~~Allergens are not in the CSV round-trip.~~ **Built 2026-09-02.** The export
+  writes `allergeni` as canonical keys and the importer resolves a written list
+  through `parseAllergens`, exactly as the form does — so a sheet saying
+  "Latte, glutine" and a form with those two boxes ticked produce the same row.
+  A blank cell still means "leave as is".
 - **`unit` is free text** ("kg", "etto", "pezzo", "confezione" by convention
   only), so the same measure can be spelled several ways across the catalogue.
 

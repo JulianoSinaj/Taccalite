@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { products, categories } from "@/lib/db/schema";
 import { slugify } from "@/lib/slug";
+import { parseAllergens } from "@/lib/allergens";
 import { setProductStock } from "@/lib/stock";
 import { DEFAULT_VAT_BPS } from "@/lib/fiscal";
 
@@ -56,6 +57,7 @@ const COLUMNS: Record<string, string> = {
   sogliariordino: "reorderPoint",
   sku: "sku",
   fornitore: "supplier",
+  allergeni: "allergens",
   acquistabile: "purchasable",
   attivo: "active",
   inevidenza: "featured",
@@ -63,6 +65,8 @@ const COLUMNS: Record<string, string> = {
 };
 
 const BOOLEAN_COLS = new Set(["soldByWeight", "purchasable", "active", "featured"]);
+/** Free text in the file, a canonical key list in the column. */
+const ALLERGEN_COLS = new Set(["allergens"]);
 const MONEY_COLS = new Set(["priceCents", "costCents"]);
 const INT_COLS = new Set(["stock", "reorderPoint", "sortOrder"]);
 
@@ -160,7 +164,14 @@ export async function planProductImport(
       // makes a two-column price sheet safe.
       if (raw === "") continue;
 
-      if (BOOLEAN_COLS.has(col)) {
+      if (ALLERGEN_COLS.has(col)) {
+        // Resolved against the fourteen of Annex II exactly as the product form
+        // does, so a sheet saying "Latte, glutine" and a form with those two
+        // boxes ticked produce the same row. Anything outside the fourteen is
+        // kept rather than dropped — losing an allergen from a food product to
+        // tidy an import would be the worse failure by a distance.
+        values[col] = parseAllergens(raw);
+      } else if (BOOLEAN_COLS.has(col)) {
         if (!isTrue(raw) && !isFalse(raw)) {
           issues.push({ row: rowNo, message: `«${raw}» non è si/no nella colonna ${header[c]}.` });
           bad = true;

@@ -732,7 +732,7 @@ not oversights.
 | 2 | ~~Ledger ↔ on-hand reconciliation~~ — **built 2026-09-02.** Migration 0048 gave every legacy product an opening balance, so the invariant holds for all rows; `getStockDivergences` finds any that drift and the expiry page shows them when there are any. This is also what makes a half-applied `applyOrderStock` recoverable. | — |
 | 3 | **Loyalty accrues on the pre-discount subtotal**, so a 50 %-off coupon still earns full points. A business decision to make deliberately, not a defect. | Needs the owner's call |
 | 3 | `order_items.product_id` has no FK; the reservation lookup on `/traccia` is single-factor (reference only, now throttled). | Low value against the risk |
-| 1 | TOCTOU window on derived slugs; allergens absent from the CSV round-trip; `unit` is free text. | Low value against the risk |
+| 1 | ~~Allergens absent from the CSV round-trip~~ — **built**. ~~TOCTOU on derived slugs~~ — **made legible**: a slug collision now says so instead of reading as an internal fault. Remaining: `unit` is free text. | Low value against the risk |
 
 ## How to read a readiness score
 

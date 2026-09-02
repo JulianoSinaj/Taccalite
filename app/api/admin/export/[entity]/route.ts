@@ -161,6 +161,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
         [
           "slug", "nome", "sede", "categoria", "prezzoEuros", "costoEuros", "ivaPercento",
           "unita", "aPeso", "giacenza", "sogliaRiordino", "sku", "fornitore",
+          // The importer reads exactly what this writes, so allergens can now
+          // make the round trip a bulk edit needs: they were the one field on a
+          // food product a spreadsheet could not reach.
+          "allergeni",
           "acquistabile", "attivo", "inEvidenza", "ordine",
         ],
         (limit, offset) => getProductsForExport(f, lowStockThreshold, limit, offset),
@@ -171,6 +175,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ entity: str
           p.vatRateBps / 100,
           p.unit ?? "", p.soldByWeight ? "si" : "no",
           p.stock ?? "", p.reorderPoint ?? "", p.sku ?? "", p.supplier ?? "",
+          // Canonical keys, not labels: what goes out is what comes back in.
+          p.allergens.join(", "),
           p.purchasable ? "si" : "no", p.active ? "si" : "no", p.featured ? "si" : "no",
           p.sortOrder,
         ],

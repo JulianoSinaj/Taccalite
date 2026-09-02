@@ -73,3 +73,31 @@ describe("fail", () => {
     });
   });
 });
+
+/**
+ * A slug that was free when it was resolved and taken by the time the row was
+ * written — two people creating an identically-named product in the same
+ * moment. Previously indistinguishable from any other internal fault, so the
+ * operator retyped the form wondering what they had done wrong.
+ */
+describe("runAction — slug collisions", () => {
+  it("says what happened, and that saving again will work", async () => {
+    const res = await runAction(async () => {
+      throw new Error("UNIQUE constraint failed: products.slug");
+    });
+
+    expect(res.status).toBe("error");
+    expect(res.message).toMatch(/stesso indirizzo/i);
+    expect(res.fieldErrors?.slug).toBeTruthy();
+  });
+
+  it("still hides any other database error behind the generic message", async () => {
+    const res = await runAction(async () => {
+      throw new Error("UNIQUE constraint failed: users.email");
+    });
+
+    expect(res.status).toBe("error");
+    expect(res.message).toMatch(/errore imprevisto/i);
+    expect(res.message).not.toMatch(/users\.email/);
+  });
+});
