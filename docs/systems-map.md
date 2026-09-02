@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **22 of 24 systems audited**. The rest of the
+> **Status:** in progress — **23 of 24 systems audited** — every system except Payments, which is on hold. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -72,7 +72,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 13 | [Newsletter, Campaigns & Segments](audits/13-newsletter-campaigns-segments.md) | ④ La Voce | **86** |
 | 14 | [Automation & Scheduled Jobs](audits/14-automation-scheduled-jobs.md) | ④ La Voce | **86** |
 | 15 | [CMS & Editorial](audits/15-cms-editorial.md) | ⑤ La Vetrina | **88** |
-| 16 | Storefront Experience | ⑤ La Vetrina | — |
+| 16 | [Storefront Experience](audits/16-storefront-experience.md) | ⑤ La Vetrina | **86** |
 | 17 | [Media & Assets](audits/17-media-assets.md) | ⑤ La Vetrina | **87** |
 | 18 | [Fiscal & Accounting](audits/18-fiscal-accounting.md) | ⑥ Il Registro | **90** |
 | 19 | [Analytics & Reporting](audits/19-analytics-reporting.md) | ⑥ Il Registro | **88** |
@@ -480,9 +480,16 @@ structured data, cookie consent, the Instagram feed, legal pages.
 | **Design** | `DESIGN.md` |
 | **Tests** | `instagram.test.ts`, `phone-type.test.ts`, `theme-tokens.test.ts`, e2e `smoke.spec.ts`, `forms.spec.ts` |
 
-**Audit questions** — Accessibility (contrast, focus, reduced motion, keyboard)?
-Core Web Vitals with the motion stack? Does consent actually gate anything?
-Mobile type floor honoured everywhere?
+**Readiness: 86/100** — audited 2026-09-02 at 81, remediated the same day; see
+[`docs/audits/16-storefront-experience.md`](audits/16-storefront-experience.md).
+Measured against a running page rather than read: one `h1` with a clean heading
+order, `alt` on all 27 images, a skip link that actually appears on focus,
+reduced motion honoured in CSS *and* in five components, and a cookie banner that
+gates a real thing (the Maps iframe). Fixed: the home-page diary cards wrapped a
+decorative image in its own link, leaving three anchors with no accessible name.
+Open: focus styling is inconsistent — 35 of 103 interactive elements, the whole
+primary nav among them, fall back to the browser ring rather than the designed
+one. Not a WCAG failure; a design decision.
 
 ---
 
@@ -687,8 +694,8 @@ names them.
 
 ## Programme status
 
-**Audited: 22 of 24.** Systems 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-17, 18, 19, 20, 21, 22, 23 and 24.
+**Audited: 23 of 24 — everything except Payments.** Systems 1, 2, 3, 5, 6, 7, 8,
+9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23 and 24.
 All remediated in the same pass except 18, which had no defects.
 
 **A shape worth naming.** Three systems held a capacity rule by reading a count

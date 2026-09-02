@@ -49,8 +49,17 @@ export default function Diario({ posts }: { posts: DiarioPost[] }) {
                 className="group flex h-full flex-col"
                 style={{ "--acc": categoryAccent(post.category) } as React.CSSProperties}
               >
+                {/* The picture is a second way into the same post, not a second
+                    destination: its image is decorative (`alt=""`), so on its
+                    own this anchor had no accessible name at all and a screen
+                    reader announced it as "link" followed by the URL. Hidden
+                    and taken out of the tab order, exactly as `BlogCard` already
+                    does it — the title below is the real link, and a keyboard
+                    now gets one stop per card instead of two. */}
                 <Link
                   href={`/blog/${post.slug}`}
+                  tabIndex={-1}
+                  aria-hidden
                   className="relative block aspect-3/2 overflow-hidden bg-paper focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:outline-none"
                 >
                   {post.image ? (
