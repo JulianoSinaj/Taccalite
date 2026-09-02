@@ -1,0 +1,1 @@
+ALTER TABLE `email_outbox` ADD `list_unsubscribe_url` text;

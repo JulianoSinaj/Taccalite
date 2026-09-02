@@ -211,9 +211,9 @@ export const SITE_CONTENT: ContentDef[] = [
     fields: ["src", "alt"],
     default: [
       "/images/banco-carni-vetrina.jpg | I tagli interi al banco, tra i cartellini scritti a mano",
-      "/images/prosciutti-stagionatura.jpg | I prosciutti appesi al banco",
+      "/images/porchetta-legatura-spago.jpg | L'arrosto legato a mano con lo spago, prima del forno",
       "/images/banco-carni-bovino.jpg | Il banco carni",
-      "/images/pasta-artigianale-bottega.jpg | Le specialità in bottega",
+      "/images/porchetta-arrosto-croccante.jpg | La porchetta appena sfornata, con la crosta croccante",
     ].join("\n"),
   },
   {

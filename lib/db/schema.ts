@@ -1176,6 +1176,13 @@ export const emailOutbox = sqliteTable(
     // Set for a newsletter send, so delivery outcomes roll back up to the
     // campaign instead of a "sent to 412" figure that hides 80 bounces.
     campaignId: text("campaign_id"),
+    // The recipient's own unsubscribe URL, for the `List-Unsubscribe` headers.
+    //
+    // Stored rather than derived because the drain re-sends from this row long
+    // after the broadcast that made it, and the URL carries a per-subscriber
+    // token. Null for transactional mail, which must not advertise an
+    // unsubscribe at all — nobody opts out of their own order confirmation.
+    listUnsubscribeUrl: text("list_unsubscribe_url"),
     // Claimed by a drain pass before delivery is attempted, so a cron sweep and
     // a manual retry can't both send the same message. Cleared on completion.
     claimedAt: integer("claimed_at", { mode: "timestamp_ms" }),

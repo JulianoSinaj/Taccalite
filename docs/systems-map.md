@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **14 of 24 systems audited**. The rest of the
+> **Status:** in progress — **15 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -69,7 +69,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 10 | [Customer Accounts](audits/10-customer-accounts.md) | ③ I Clienti | **87** |
 | 11 | [Loyalty & Rewards](audits/11-loyalty-rewards.md) | ③ I Clienti | **89** |
 | 12 | [Transactional Mail & Outbox](audits/12-transactional-mail-outbox.md) | ④ La Voce | **89** |
-| 13 | Newsletter, Campaigns & Segments | ④ La Voce | — |
+| 13 | [Newsletter, Campaigns & Segments](audits/13-newsletter-campaigns-segments.md) | ④ La Voce | **86** |
 | 14 | [Automation & Scheduled Jobs](audits/14-automation-scheduled-jobs.md) | ④ La Voce | **86** |
 | 15 | CMS & Editorial | ⑤ La Vetrina | — |
 | 16 | Storefront Experience | ⑤ La Vetrina | — |
@@ -396,11 +396,16 @@ unsubscribe, campaign composition and sending, customer segmentation rules.
 | **Admin** | `lib/admin/campaign-actions.ts`, `/admin/newsletter` |
 | **Surfaces** | `POST /api/newsletter`, `/api/newsletter/confirm`, `/api/newsletter/unsubscribe`, `/newsletter` |
 | **Components** | `components/NewsletterForm.tsx`, `components/admin/CampaignComposer.tsx` |
-| **Tests** | — *(no dedicated suite; gap)* |
+| **Tests** | `newsletter-broadcast.test.ts` |
 
-**Audit questions** — Is opt-in genuinely double? Is unsubscribe one-click and
-honoured everywhere? Are segment rules evaluated safely (no injection via rule
-JSON)? Is send throttled?
+**Readiness: 86/100** — audited 2026-09-02 at 76, remediated the same day; see
+[`docs/audits/13-newsletter-campaigns-segments.md`](audits/13-newsletter-campaigns-segments.md).
+Double opt-in is real and a confirmed subscriber is never downgraded by
+re-signup; segments only ever resolve confirmed addresses; rule JSON is a typed
+closed vocabulary bound through drizzle, so there is nothing to inject. Fixed: a
+bulk send carried no `List-Unsubscribe` header — required of bulk senders by
+Gmail and Yahoo since Feb 2024, and its absence degrades deliverability in a way
+nobody attributes to a header.
 
 ---
 
@@ -647,7 +652,8 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 14 of 24.** Systems 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 14, 18, 20 and 22.
+**Audited: 15 of 24.** Systems 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 18, 20
+and 22.
 All remediated in the same pass except 18, which had no defects.
 
 **A shape worth naming.** Three systems held a capacity rule by reading a count

@@ -62,6 +62,20 @@ export type MailInput = {
   subject: string;
   html: string;
   text: string;
+  /**
+   * The recipient's unsubscribe URL, for bulk mail only.
+   *
+   * Gmail and Yahoo have required `List-Unsubscribe` and
+   * `List-Unsubscribe-Post` from bulk senders since February 2024; without them
+   * a newsletter's deliverability degrades and it starts arriving in spam,
+   * which is a slow failure nobody attributes to a missing header. The link was
+   * already in the body — this is the machine-readable half.
+   *
+   * Deliberately absent from transactional mail: nobody opts out of their own
+   * order confirmation, and telling a mail client they can would be worse than
+   * saying nothing.
+   */
+  listUnsubscribeUrl?: string | null;
 };
 
 export type MailResult = { id: string; delivered: boolean; error?: string };
@@ -77,6 +91,7 @@ async function insertOutbox(input: MailInput, campaignId?: string | null): Promi
       text: input.text,
       status: "queued",
       campaignId: campaignId ?? null,
+      listUnsubscribeUrl: input.listUnsubscribeUrl ?? null,
     })
     .returning({ id: emailOutbox.id });
   return row.id;
@@ -97,6 +112,16 @@ async function deliver(id: string, input: MailInput): Promise<MailResult> {
       subject: input.subject,
       html: input.html,
       text: input.text,
+      ...(input.listUnsubscribeUrl
+        ? {
+            headers: {
+              "List-Unsubscribe": `<${input.listUnsubscribeUrl}>`,
+              // Declares the link as one-click, which is what the providers
+              // actually check for.
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            },
+          }
+        : {}),
     });
     await db
       .update(emailOutbox)
@@ -254,6 +279,7 @@ export async function drainOutbox({
         subject: emailOutbox.subject,
         html: emailOutbox.html,
         text: emailOutbox.text,
+        listUnsubscribeUrl: emailOutbox.listUnsubscribeUrl,
       });
     if (!claimed) continue;
 
@@ -263,6 +289,9 @@ export async function drainOutbox({
       subject: claimed.subject,
       html: claimed.html,
       text: claimed.text,
+      // Carried on the row, not recomputed: the drain re-sends long after the
+      // broadcast that made it, and the URL holds a per-subscriber token.
+      listUnsubscribeUrl: claimed.listUnsubscribeUrl,
     });
     if (res.delivered) sent += 1;
     if (throttleMs > 0) await new Promise((resolve) => setTimeout(resolve, throttleMs));

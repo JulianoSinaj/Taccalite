@@ -310,7 +310,15 @@ export async function broadcastToSubscribers(
   for (const s of recipients) {
     const unsubUrl = absoluteUrl(`/api/newsletter/unsubscribe?token=${s.token}`);
     await enqueueMail(
-      { to: s.email, ...newsletterBroadcast(subject, bodyHtml, unsubUrl) },
+      {
+        to: s.email,
+        ...newsletterBroadcast(subject, bodyHtml, unsubUrl),
+        // The machine-readable half of the same link. Gmail and Yahoo have
+        // required this of bulk senders since February 2024; without it a
+        // newsletter's deliverability degrades and it starts arriving in spam,
+        // which is a slow failure nobody attributes to a missing header.
+        listUnsubscribeUrl: unsubUrl,
+      },
       // Tagging the outbox rows is what lets the campaign report its own
       // bounces instead of reporting "sent to 412" and hiding 80 failures.
       { campaignId: opts.campaignId },
