@@ -349,3 +349,21 @@ test("a shipping zone saves on the tab that is not the default", async ({ page }
   await submitAndSettle(page, page.getByRole("button", { name: /crea zona/i }).first());
   await expect(page.locator("body")).toContainText(name, { timeout: 20_000 });
 });
+
+/**
+ * The card toggle otherwise reads as something somebody flipped by mistake. The
+ * shop takes its money at the counter by decision, and whoever finds this off in
+ * a year should know that before switching it on.
+ */
+test("the settings page says card payment is off by choice", async ({ page }) => {
+  await login(page);
+  await page.goto("/admin/settings");
+
+  await expect(page.getByText(/spento per scelta/i)).toBeVisible();
+  await expect(page.getByText(/incassa al banco/i)).toBeVisible();
+
+  // And the contrassegno cap no longer claims the card is the fallback, which
+  // stopped being true the moment card was switched off.
+  await expect(page.getByText(/non resta nessun metodo per le consegne/i)).toBeVisible();
+  await expect(page.getByText(/resta solo la carta/i)).toHaveCount(0);
+});

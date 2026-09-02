@@ -84,6 +84,24 @@ so, because each was once only in the form:
 
 ## Still open
 
+- **The detail page intermittently shows a stale status after confirming.**
+  `admin-forms.spec.ts` "a table booking saves with covers, and can then be
+  confirmed" fails roughly one run in four, on a *fresh* database and with every
+  change from this programme stashed — so it is pre-existing and unrelated to the
+  seats fix.
+
+  **The write is never the problem.** Every failed run left the row at
+  `confirmed`; what races is the page reflecting it. `updateReservationStatus`
+  revalidates both paths after writing, and the status `<select>` is uncontrolled
+  (`defaultValue={r.status}`), so a `router.refresh()` that lands before the
+  write is visible remounts it showing the old value — which is the exact class
+  of bug the test's own comment says it exists to catch.
+
+  I got this wrong twice: first calling it "load-sensitive flakiness" on one
+  observation, then over-correcting to "accumulated state" when a fresh database
+  ran green. It is neither — it is a genuine intermittent race in this page.
+  Worth a proper fix; not one to guess at.
+
 - **The back office only warns on capacity**, deliberately — an operator taking
   a booking by phone is making a decision the website is not entitled to make.
   Worth knowing that the guarantee above is a public-form guarantee.

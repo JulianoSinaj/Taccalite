@@ -15,8 +15,8 @@ Scope: the unit suite, the e2e suite, the form harness, stubs, lint config, CI.
 | **Total** | | **78** | | **84.3 → 84** |
 
 At the start of this audit programme: **54 unit suites / 685 tests**.
-Now: **67 suites / 797 tests**, plus one new e2e test — the product form, which
-had never been driven by a browser.
+Now: **71 suites / 827 tests**, plus two new e2e tests — the product form and
+the lot-recall lookup, neither of which had ever been driven by a browser.
 
 ---
 
@@ -40,11 +40,19 @@ questa pagina"* — the app enforcing its own limit against my leftovers.
    `{ migrate: true }` and creates its own directory — verified directly. What
    actually happened is the above: a reused server had already recreated an
    empty database, and the seed was skipped, so the tests ran against nothing.
-2. I said two tests were **genuinely load-sensitive**, passing alone and failing
-   in a full run. On a freshly seeded database the full suite has now passed
-   **twice consecutively, 52/52**. The most likely explanation for those
-   failures is the same accumulated state, not load. I over-attributed to
-   flakiness on thin evidence.
+2. I said two tests were **genuinely load-sensitive**, then corrected that to
+   "the same accumulated state". **Both were wrong**, and the second correction
+   was itself an over-correction made because one fresh run came back green.
+
+   Investigated properly afterwards: `admin-forms.spec.ts` "a table booking
+   saves with covers" fails about one run in four, on a fresh database, in
+   isolation, and with every change from this programme stashed. The write
+   always succeeds — every failed run left the row at `confirmed` — so what
+   races is the reservation page reflecting it. Recorded against system 7, where
+   it belongs.
+
+   The lesson for this document: one green run is not evidence of
+   determinism, and I twice treated it as such.
 
 **Remedy** — `npm run test:e2e:fresh` drops `.pw-tmp` before running, and the
 config now carries a comment explaining the trade and naming the canary test.
@@ -80,8 +88,10 @@ missing was anyone knowing about it.
 - **The `RUN` namespacing is not universal.** Applying it to saved views (and
   anything else capped) would make the suite genuinely re-runnable without the
   reset.
-- **No retries configured.** Correct while failures are deterministic; if a real
-  flake ever appears, one will fail the whole run.
+- **No retries configured, and there is at least one real intermittent failure**
+  (system 7's status-display race). Until that is fixed, a full run is green
+  roughly three times in four — so "the suite passed" needs a moment's thought
+  before it means anything.
 - **Coverage is uneven rather than thin.** The money paths are now well covered;
   seven of the nine cron jobs still have no test, and neither does the storefront
   beyond smoke.

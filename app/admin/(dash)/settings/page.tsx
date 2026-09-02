@@ -147,7 +147,11 @@ const KNOWN: {
   {
     key: "payments.cardEnabled",
     label: "Pagamento con carta online",
-    help: "Offre il pagamento immediato con carta al checkout. Richiede le chiavi Stripe: senza, l'opzione non viene mostrata anche se questa è attiva.",
+    // The note exists because the toggle otherwise reads as something somebody
+    // flipped by mistake. The shop takes its money at the counter by decision,
+    // not by accident, and whoever finds this off in a year should know that
+    // before switching it on.
+    help: "Spento per scelta: la bottega incassa al banco, in contanti o con il POS. Il sito raccoglie l'ordine, il pagamento avviene alla consegna o al ritiro. Riaccenderlo richiede anche le chiavi Stripe: senza, l'opzione resta nascosta comunque.",
     control: "boolean",
     default: true,
   },
@@ -168,7 +172,11 @@ const KNOWN: {
   {
     key: "payments.onDeliveryMaxCents",
     label: "Tetto contrassegno (centesimi)",
-    help: "Sopra questo totale il contrassegno non viene offerto e resta solo la carta — utile per non far girare troppo contante. Imposta 0 per non porre limiti.",
+    // Said "resta solo la carta", which stopped being true the moment card was
+    // switched off: above the cap a consegna is left with no payment method at
+    // all, and the checkout says so rather than taking the order anyway. Worth
+    // knowing before setting a low cap.
+    help: "Sopra questo totale il contrassegno non viene offerto — utile per non far girare troppo contante. Con il pagamento con carta spento non resta nessun metodo per le consegne oltre il tetto: il cliente non può concludere l'ordine. Imposta 0 per non porre limiti.",
     control: "number",
     default: 0,
     min: 0,
