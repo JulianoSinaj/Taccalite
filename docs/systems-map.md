@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **12 of 24 systems audited**. The rest of the
+> **Status:** in progress — **13 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -63,7 +63,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 4 | Payments | ① Il Banco | — |
 | 5 | [Discounts & Promotions](audits/05-discounts-promotions.md) | ① Il Banco | **88** |
 | 6 | [Fulfilment & Logistics](audits/06-fulfilment-logistics.md) | ② La Consegna | **88** |
-| 7 | Reservations | ② La Consegna | — |
+| 7 | [Reservations](audits/07-reservations.md) | ② La Consegna | **88** |
 | 8 | Locations, Hours & Closures | ② La Consegna | — |
 | 9 | [Identity & Authentication](audits/09-identity-authentication.md) | ③ I Clienti | **89** |
 | 10 | [Customer Accounts](audits/10-customer-accounts.md) | ③ I Clienti | **87** |
@@ -250,8 +250,14 @@ calendar views, reminders, auto-close of stale bookings.
 | **Components** | `components/ReservationForm.tsx`, `components/admin/ReservationForm.tsx` |
 | **Tests** | `reservations-admin.test.ts`, `calendar.test.ts` |
 
-**Audit questions** — Is double-booking prevented? Do closures and hours gate
-availability? Is the reminder cadence idempotent?
+**Readiness: 88/100** — audited 2026-09-02 at 82, remediated the same day; see
+[`docs/audits/07-reservations.md`](audits/07-reservations.md). Every gate is
+enforced at the write rather than only in the form — master switches, ISO dates,
+past dates, opening hours, closures with their time, the porchetta cut-off — and
+each comment records the version that was form-only. Fixed: the porchetta kilos
+were summed inside the insert transaction but the **seats** check sat outside it,
+so Saturday dinner could be double-booked by exactly the mechanism the kilo cap
+was written to prevent.
 
 ---
 
@@ -636,8 +642,14 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 12 of 24.** Systems 1, 2, 3, 5, 6, 9, 10, 11, 14, 18, 20 and 22. All
-remediated in the same pass except 18, which had no defects.
+**Audited: 13 of 24.** Systems 1, 2, 3, 5, 6, 7, 9, 10, 11, 14, 18, 20 and 22.
+All remediated in the same pass except 18, which had no defects.
+
+**A shape worth naming.** Three systems held a capacity rule by reading a count
+*outside* the transaction that wrote the row — loyalty per-customer caps, pickup
+windows and table seating. All three are now decided where the write happens.
+When auditing what remains, a `count()` followed later by an `insert()` is the
+thing to look for.
 Everything else in the index is unexamined — an empty cell means "not looked
 at", never "fine".
 

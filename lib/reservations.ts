@@ -533,6 +533,9 @@ export async function createReservation(
     // the room never was, so the one thing the shop actually runs on a
     // calendar — Saturday dinner — could be double-booked from the website
     // without a word. The back office still only warns (see `capacityWarning`).
+    // Pre-flight only: this is the message the customer gets in the ordinary
+    // case, and it is re-decided inside the transaction below, which is where a
+    // capacity rule can actually hold.
     if (input.type === "table") {
       const seats = await checkSeatsCapacity(input.shop, date, input.time, input.guests);
       if (seats.exceeded) {
@@ -561,7 +564,47 @@ export async function createReservation(
     input.type === "porchetta" && waitlistOnOverflow ? await porchettaCapacityFor(input.shop) : 0;
   const requestedKg = input.quantityKg ?? 0;
 
+  // The room's capacity, read here for the same reason the kilos are: settings
+  // live behind an async accessor, so only the *decision* can go inside the
+  // transaction. Zero means no limit configured and nothing to re-check.
+  const seatsCapacity =
+    enforceAvailability && input.type === "table" && input.time && input.guests
+      ? (shop.seatsCapacity ?? 0)
+      : 0;
+
   const { id: insertedId, waitlisted } = await db.transaction(async (tx) => {
+    // Seats, decided where it counts.
+    //
+    // The kilos have been summed inside this transaction since the beginning,
+    // with a comment explaining exactly why: two concurrent pre-orders both
+    // reading an under-cap total and both confirming sells more porchetta than
+    // the Saturday can produce. Seats were capped later and got the check but
+    // not the placement — so two parties booking the last table at the same
+    // moment both read the room as free, and Saturday dinner was double-booked
+    // by precisely the mechanism the porchetta cap was written to prevent.
+    if (seatsCapacity > 0) {
+      const [seated] = await tx
+        .select({ total: sql<number>`coalesce(sum(${reservations.guests}), 0)` })
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.shopSlug, input.shop),
+            eq(reservations.date, date),
+            eq(reservations.time, input.time!),
+            ne(reservations.status, "cancelled"),
+          ),
+        );
+      const booked = Number(seated?.total ?? 0);
+      if (booked + input.guests! > seatsCapacity) {
+        const free = Math.max(0, seatsCapacity - booked);
+        throw new ReservationNotAllowedError(
+          free > 0
+            ? `Per le ${input.time} ${free === 1 ? "resta 1 coperto" : `restano ${free} coperti`}. Scegli un altro orario o riduci gli ospiti.`
+            : `Le ${input.time} sono al completo. Scegli un altro orario — o chiamaci, troviamo una soluzione.`,
+        );
+      }
+    }
+
     let overflow = false;
     if (capacityKg > 0) {
       const [booked] = await tx
