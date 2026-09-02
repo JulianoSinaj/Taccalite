@@ -13,6 +13,7 @@ import { pointsForEuros } from "@/lib/loyalty-rules";
 class InsufficientPointsError extends Error {}
 /** Thrown inside the redeem transaction when the last unit was already taken. */
 class OutOfStockError extends Error {}
+class PerCustomerCapError extends Error {}
 
 // 6 digits → a 1,000,000 namespace per year; combined with retry-on-collision
 // below, a duplicate card number never surfaces as an error to the customer.
@@ -511,6 +512,14 @@ export async function redeemReward(
   }
 
   // Per-customer cap, counted from the redemptions that still stand.
+  //
+  // This is the early, friendlier failure, like the availability check above —
+  // it is re-counted inside the transaction below, which is the authority. On
+  // its own it was a read outside the write, so a customer with enough points
+  // for two could claim a "one per customer" reward twice by sending both
+  // requests at once: both counted zero, both passed. The points were debited
+  // correctly either way, so the loss is the cap rather than the balance, but a
+  // cap that only holds when nobody is in a hurry is not a cap.
   if (reward.maxPerCustomer != null) {
     const [{ mine }] = await db
       .select({ mine: sql<number>`count(*)` })
@@ -543,6 +552,23 @@ export async function redeemReward(
         .where(eq(loyaltyAccounts.userId, userId))
 ;
       if (!account || account.points < reward.points) throw new InsufficientPointsError();
+
+      // The cap, re-counted where it can actually hold. libSQL opens a
+      // transaction in write mode, so the rows this counts are locked from here
+      // to the commit and a concurrent claim cannot slip underneath it.
+      if (reward.maxPerCustomer != null) {
+        const [{ mine }] = await tx
+          .select({ mine: sql<number>`count(*)` })
+          .from(redemptions)
+          .where(
+            and(
+              eq(redemptions.userId, userId),
+              eq(redemptions.rewardId, reward.id),
+              ne(redemptions.status, "cancelled"),
+            ),
+          );
+        if (mine >= reward.maxPerCustomer) throw new PerCustomerCapError();
+      }
 
       // Stock is claimed inside the same transaction as the points debit, so
       // two customers can't both take the last one. A reward with unlimited
@@ -593,6 +619,15 @@ export async function redeemReward(
     }
     if (err instanceof OutOfStockError) {
       return { ok: false, error: "Questo premio è esaurito" };
+    }
+    if (err instanceof PerCustomerCapError) {
+      return {
+        ok: false,
+        error:
+          reward.maxPerCustomer === 1
+            ? "Hai già riscattato questo premio"
+            : `Hai già riscattato questo premio ${reward.maxPerCustomer} volte`,
+      };
     }
     throw err;
   }

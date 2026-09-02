@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { rewards, redemptions, users, loyaltyAccounts } from "@/lib/db/schema";
 import { rewardAvailability, redeemReward, getLoyaltySummary, addPoints } from "@/lib/loyalty";
@@ -132,5 +132,42 @@ describe("redeemReward — refuses for the same reasons the page greys out", () 
     expect(res.ok).toBe(true);
     const [after] = await db.select().from(rewards).where(eq(rewards.id, REWARD));
     expect(after.stock).toBe(1);
+  });
+});
+
+/**
+ * The per-customer cap has to hold where the writes happen.
+ *
+ * It used to be counted before the transaction that debits the points and
+ * claims the stock, so a customer with enough points for two could take a "one
+ * per customer" reward twice by sending both requests at once: both counted
+ * zero, both passed. The points were debited correctly either way, so what was
+ * lost was the cap, not the balance — but a cap that only holds when nobody is
+ * in a hurry is not a cap.
+ */
+describe("per-customer cap under concurrency", () => {
+  it("lets only one of two simultaneous claims through", async () => {
+    await makeReward({ points: 10, maxPerCustomer: 1 });
+    // Enough points for two, so the balance is not what refuses the second.
+    await addPoints(USER, 40, "Seed");
+
+    // Settled rather than awaited: the loser of a genuine race against a local
+    // SQLite file comes back as a thrown SQLITE_BUSY rather than a refusal,
+    // because nothing in the app retries a busy write (recorded against system
+    // 22 — it is the data layer's to fix, not this one's). Either way it does
+    // not get a redemption, which is the property under test.
+    const settled = await Promise.allSettled([
+      redeemReward(USER, REWARD),
+      redeemReward(USER, REWARD),
+    ]);
+    const granted = settled.filter((r) => r.status === "fulfilled" && r.value.ok);
+    expect(granted).toHaveLength(1);
+
+    // One redemption on the books, and only one debit against the balance.
+    const rows = await db
+      .select()
+      .from(redemptions)
+      .where(and(eq(redemptions.userId, USER), eq(redemptions.rewardId, REWARD)));
+    expect(rows).toHaveLength(1);
   });
 });

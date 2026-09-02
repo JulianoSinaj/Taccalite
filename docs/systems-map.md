@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **7 of 24 systems audited**. The rest of the
+> **Status:** in progress — **8 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -67,7 +67,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 8 | Locations, Hours & Closures | ② La Consegna | — |
 | 9 | [Identity & Authentication](audits/09-identity-authentication.md) | ③ I Clienti | **89** |
 | 10 | Customer Accounts | ③ I Clienti | — |
-| 11 | Loyalty & Rewards | ③ I Clienti | — |
+| 11 | [Loyalty & Rewards](audits/11-loyalty-rewards.md) | ③ I Clienti | **89** |
 | 12 | Transactional Mail & Outbox | ④ La Voce | — |
 | 13 | Newsletter, Campaigns & Segments | ④ La Voce | — |
 | 14 | Automation & Scheduled Jobs | ④ La Voce | — |
@@ -331,9 +331,13 @@ scanning at the counter, points expiry.
 | **Components** | `components/LoyaltyCard.tsx`, `components/admin/InStoreLoyalty.tsx`, `ScanForm.tsx`, `NewCardForm.tsx`, `RedemptionStatusForm.tsx` |
 | **Tests** | `loyalty-refund.test.ts`, `rewards-availability.test.ts` |
 
-**Audit questions** — Is the points ledger the only source of balance? Do
-refunds claw back points? Can a redemption be double-spent? Is the QR card
-forgeable?
+**Readiness: 89/100** — audited 2026-09-02 at 85, remediated the same day; see
+[`docs/audits/11-loyalty-rewards.md`](audits/11-loyalty-rewards.md). The points
+ledger records the *applied* delta in one transaction, refunds claw back
+proportionally and cumulatively, reward stock is claimed with a compare-and-set,
+and the guessable card number is admin-gated. Fixed: the per-customer cap was
+counted outside the write, so two simultaneous claims could both take a "uno per
+cliente" reward.
 
 ---
 
@@ -614,8 +618,8 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 7 of 24.** Systems 1, 2, 3, 5, 9, 18 and 20. All remediated in the
-same pass except 18, which had no defects.
+**Audited: 8 of 24.** Systems 1, 2, 3, 5, 9, 11, 18 and 20. All remediated in
+the same pass except 18, which had no defects.
 Everything else in the index is unexamined — an empty cell means "not looked
 at", never "fine".
 
@@ -646,6 +650,7 @@ not oversights.
 | 3 | **Loyalty accrues on the pre-discount subtotal**, so a 50 %-off coupon still earns full points. A business decision to make deliberately, not a defect. | Needs the owner's call |
 | 3 | `order_items.product_id` has no FK; the reservation lookup on `/traccia` is single-factor (reference only, now throttled). | Low value against the risk |
 | 1 | TOCTOU window on derived slugs; allergens absent from the CSV round-trip; `unit` is free text. | Low value against the risk |
+| 22 | **No busy-retry on write transactions.** Two concurrent writes to the local SQLite file surface as a thrown `SQLITE_BUSY` rather than one clean refusal — found while testing the loyalty cap under concurrency, but it affects every concurrent-write path (stock, loyalty, coupons). | Its own system's audit |
 | 23 | **The e2e suite is not repeatable.** Fixtures accumulate across runs until a capped resource refuses; the suite cannot cold-start (seed runs before migrations); two tests are load-sensitive. All 52 pass on a correctly seeded DB. | Its own system's audit |
 
 ## How to read a readiness score
