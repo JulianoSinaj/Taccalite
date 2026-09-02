@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **10 of 24 systems audited**. The rest of the
+> **Status:** in progress — **11 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -62,7 +62,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 3 | [Orders & Checkout](audits/03-orders-checkout.md) | ① Il Banco | **90** |
 | 4 | Payments | ① Il Banco | — |
 | 5 | [Discounts & Promotions](audits/05-discounts-promotions.md) | ① Il Banco | **88** |
-| 6 | Fulfilment & Logistics | ② La Consegna | — |
+| 6 | [Fulfilment & Logistics](audits/06-fulfilment-logistics.md) | ② La Consegna | **88** |
 | 7 | Reservations | ② La Consegna | — |
 | 8 | Locations, Hours & Closures | ② La Consegna | — |
 | 9 | [Identity & Authentication](audits/09-identity-authentication.md) | ③ I Clienti | **89** |
@@ -226,9 +226,13 @@ tracking links, the day sheet, auto-fulfil.
 | **Surfaces** | `/admin/fulfilment` (zones & windows), `/admin/fulfilment/oggi` (day sheet) |
 | **Tests** | `fulfilment.test.ts`, `fulfilment-actions.test.ts`, `fulfilment-db.test.ts`, `carriers.test.ts` |
 
-**Audit questions** — Are slots capacity-bounded and closure-aware? Can a
-delivery be booked outside its zone? Is the day sheet correct across shops and
-timezones?
+**Readiness: 88/100** — audited 2026-09-02 at 81, remediated the same day; see
+[`docs/audits/06-fulfilment-logistics.md`](audits/06-fulfilment-logistics.md).
+Slot options test the whole window against closures, the cut-off runs from the
+window opening, an unmatched CAP always errors, and a card checkout holds its
+place for only an hour. Fixed: a capped window counted its bookings outside the
+transaction that wrote the order, so two customers could take the same last
+place and the shop found out when both turned up.
 
 ---
 
@@ -627,7 +631,7 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 10 of 24.** Systems 1, 2, 3, 5, 9, 10, 11, 14, 18 and 20. All
+**Audited: 11 of 24.** Systems 1, 2, 3, 5, 6, 9, 10, 11, 14, 18 and 20. All
 remediated in the same pass except 18, which had no defects.
 Everything else in the index is unexamined — an empty cell means "not looked
 at", never "fine".
@@ -659,7 +663,7 @@ not oversights.
 | 3 | **Loyalty accrues on the pre-discount subtotal**, so a 50 %-off coupon still earns full points. A business decision to make deliberately, not a defect. | Needs the owner's call |
 | 3 | `order_items.product_id` has no FK; the reservation lookup on `/traccia` is single-factor (reference only, now throttled). | Low value against the risk |
 | 1 | TOCTOU window on derived slugs; allergens absent from the CSV round-trip; `unit` is free text. | Low value against the risk |
-| 22 | **No busy-retry on write transactions.** Two concurrent writes to the local SQLite file surface as a thrown `SQLITE_BUSY` rather than one clean refusal — found while testing the loyalty cap under concurrency, but it affects every concurrent-write path (stock, loyalty, coupons). | Its own system's audit |
+| 22 | **Contended writes surface as `SQLITE_BUSY`.** `PRAGMA busy_timeout = 5000` is already set and does **not** cover a contended *commit*: two concurrent writes throw a raw driver error rather than one clean refusal, and the file stays busy long enough afterwards to poison the next sequential caller. Found twice — the loyalty cap and the pickup cap — and it affects every concurrent-write path. | Its own system's audit |
 | 23 | **The e2e suite is not repeatable.** Fixtures accumulate across runs until a capped resource refuses; the suite cannot cold-start (seed runs before migrations); two tests are load-sensitive. All 52 pass on a correctly seeded DB. | Its own system's audit |
 
 ## How to read a readiness score

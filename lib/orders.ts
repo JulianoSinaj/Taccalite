@@ -13,7 +13,7 @@ import {
   getClosures,
 } from "@/lib/db/queries";
 import { quoteFulfilment, billableWeightKg, needsAddress, type ZoneLike } from "@/lib/fulfilment";
-import { resolvePickupSlot, formatSlotLabel } from "@/lib/pickup-slots";
+import { resolvePickupSlot, formatSlotLabel, slotKey } from "@/lib/pickup-slots";
 import {
   validateDiscount,
   recordDiscountUseByCode,
@@ -115,6 +115,9 @@ const orderCode = customAlphabet("0123456789", 6); // ~1M namespace/year
 export function generateOrderNumber(): string {
   return `ORD-${new Date().getFullYear()}-${orderCode()}`;
 }
+
+/** The last place in a capped pickup window went while this order was being written. */
+class SlotFullError extends Error {}
 
 /** True when an error is the unique-constraint violation on orders.order_number. */
 function isDuplicateOrderNumber(err: unknown): boolean {
@@ -233,6 +236,8 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
 
   // For pickup, the chosen shop must exist and have the store enabled.
   let pickupSlotAt: Date | null = null;
+  /** Capacity of the resolved window, re-checked inside the insert below. */
+  let pickupCapacity: number | null = null;
   if (input.fulfilment === "pickup") {
     if (!input.shopSlug) throw new Error("Scegli un negozio per il ritiro");
     const shop = await getShopBySlug(input.shopSlug);
@@ -243,8 +248,9 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
     // form: the page may have rendered an hour ago, the schedule may have
     // changed since, and the last place in a capped window may already be gone.
     const slots = await getPickupSlots(input.shopSlug);
+    const bookedCounts = await getPickupSlotCounts(Date.now());
     const resolved = resolvePickupSlot(slots, input.shopSlug, input.pickupSlot, {
-      bookedCounts: await getPickupSlotCounts(Date.now()),
+      bookedCounts,
       // The weekly schedule has no idea about the calendar, so without this a
       // window generated from Thursday's hours is bookable on the Thursday of
       // the August shutdown.
@@ -252,6 +258,17 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
     });
     if (!resolved.ok) throw new Error(resolved.error);
     pickupSlotAt = resolved.atMs == null ? null : new Date(resolved.atMs);
+    // `resolvePickupSlot` counts what is booked and then hands back an answer;
+    // the order is written some way further down, in its own transaction. Two
+    // customers taking the last place in a Saturday window at the same moment
+    // therefore both passed — the count each of them read was taken before
+    // either row existed. Carried forward so the insert can ask again with the
+    // rows locked; null means the window is uncapped and there is nothing to
+    // re-check.
+    pickupCapacity =
+      resolved.option?.remaining == null
+        ? null
+        : resolved.option.remaining + (bookedCounts.get(slotKey(input.shopSlug!, resolved.atMs!)) ?? 0);
   }
 
   const subtotalCents = lines.reduce((sum, l) => sum + l.lineTotalCents, 0);
@@ -322,6 +339,25 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
     orderNumber = generateOrderNumber();
     try {
       order = await db.transaction(async (tx) => {
+        // The window's capacity, asked again with the rows locked. libSQL opens
+        // a transaction in write mode, so nothing can slip a competing order in
+        // between this count and the insert below it.
+        if (pickupCapacity != null && pickupSlotAt) {
+          const [taken] = await tx
+            .select({ n: sql<number>`count(*)` })
+            .from(orders)
+            .where(
+              and(
+                eq(orders.shopSlug, input.shopSlug!),
+                eq(orders.pickupSlotAt, pickupSlotAt),
+                sql`${orders.status} not in ('cancelled', 'refunded')`,
+              ),
+            );
+          if (Number(taken?.n ?? 0) >= pickupCapacity) {
+            throw new SlotFullError();
+          }
+        }
+
         const [created] = await tx
           .insert(orders)
           .values({
@@ -375,6 +411,11 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
       });
       break;
     } catch (err) {
+      if (err instanceof SlotFullError) {
+        throw new Error(
+          "L'orario di ritiro scelto si è appena riempito. Scegline un altro e riprova.",
+        );
+      }
       if (isDuplicateOrderNumber(err) && attempt < MAX_ATTEMPTS) continue;
       throw err;
     }
