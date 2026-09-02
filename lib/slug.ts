@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { db } from "@/lib/db/client";
+import { ActionError } from "@/lib/admin/action-state";
 
 // The pure half lives in `lib/slug-core.ts` so the seed scripts can build a slug
 // without importing this module's `server-only` runtime. Re-exported here so
@@ -20,6 +21,14 @@ import { slugify } from "./slug-core";
  * catalogue URLs like `/negozio/a7Kx9pQ2`.
  *
  * `excludeId` keeps a record from colliding with itself on update.
+ *
+ * An **explicit** slug is checked too, not trusted. It used to be returned
+ * unseen, so a hand-typed duplicate reached the UNIQUE index and came back to
+ * the operator as "Si è verificato un errore imprevisto" with nothing naming
+ * the slug as the problem — while `saveCategory`, which does its own check,
+ * said exactly which slug was taken. Every table this runs against
+ * (`products`, `blog_posts`, `rewards`) has a unique slug, so the check is
+ * always the right question to ask.
  */
 export async function resolveSlug(opts: {
   table: SQLiteTable;
@@ -28,9 +37,10 @@ export async function resolveSlug(opts: {
   explicit?: string;
   fallbackText: string;
   excludeId?: string;
+  /** Noun for the clash message, e.g. "prodotto". */
+  label?: string;
 }): Promise<string> {
-  const { table, slugColumn, idColumn, explicit, fallbackText, excludeId } = opts;
-  if (explicit) return explicit;
+  const { table, slugColumn, idColumn, explicit, fallbackText, excludeId, label } = opts;
 
   const taken = async (candidate: string): Promise<boolean> => {
     const rows = await db
@@ -39,6 +49,16 @@ export async function resolveSlug(opts: {
       .where(eq(slugColumn, candidate));
     return rows.some((r) => r.id !== excludeId);
   };
+
+  if (explicit) {
+    if (await taken(explicit)) {
+      throw new ActionError(
+        `Esiste già un ${label ?? "record"} con lo slug «${explicit}».`,
+        "slug",
+      );
+    }
+    return explicit;
+  }
 
   const base = slugify(fallbackText);
   if (base && !(await taken(base))) return base;

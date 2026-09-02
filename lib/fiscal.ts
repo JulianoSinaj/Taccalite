@@ -12,6 +12,14 @@
 
 /** The standard Italian IVA rates, most-common-for-food first. */
 export const VAT_RATES_BPS = [400, 500, 1000, 2200] as const;
+
+/**
+ * The rate a product gets when nothing else says otherwise — 10 %, the
+ * ordinary Italian rate for foodstuffs sold at the counter. Named because it
+ * is now asked for in three places (the column default, the product form and
+ * the CSV import) and a VAT default that drifts between them under-declares.
+ */
+export const DEFAULT_VAT_BPS = 1000;
 export type VatRateBps = (typeof VAT_RATES_BPS)[number];
 
 /** Percent label for a bps rate, e.g. 2200 → "22%". */

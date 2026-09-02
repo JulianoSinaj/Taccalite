@@ -6,6 +6,7 @@ import { inputCls, labelCls } from "./ui";
 import { ActionForm, FieldError, PendingButton } from "./ActionForm";
 import { HoursEditor } from "./HoursEditor";
 import { saveProduct, saveBlogPost, saveShop, saveReward } from "@/lib/admin/actions";
+import { EU_ALLERGENS, extraAllergens, allergenLabel } from "@/lib/allergens";
 import { saveDiscount } from "@/lib/admin/discount-actions";
 import { saveCategory } from "@/lib/admin/category-actions";
 import { CATEGORY_ACCENTS } from "@/lib/categories";
@@ -312,12 +313,39 @@ export function ProductForm({
           />
         </div>
         <div className="sm:col-span-2">
-          <label className={labelCls} htmlFor={fid("allergens")}>Allergeni (separati da virgola)</label>
+          {/* The fourteen of Reg. 1169/2011 Annex II, ticked rather than typed.
+              A free-text box was four spellings of "latte" waiting to happen,
+              and an allergen is the one field on a food page where a typo is a
+              safety problem. The boxes and the "altro" input below share the
+              name: the action joins them before validating. */}
+          <span className={labelCls}>Allergeni</span>
+          <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+            {EU_ALLERGENS.map((a) => (
+              <label key={a.key} className="flex items-center gap-2 text-sm text-brown-800">
+                <input
+                  type="checkbox"
+                  name="allergens"
+                  value={a.key}
+                  defaultChecked={product?.allergens?.includes(a.key) ?? false}
+                  className="size-4 shrink-0 accent-brown-950"
+                />
+                {a.label}
+              </label>
+            ))}
+          </div>
+          <label className={`${labelCls} mt-3`} htmlFor={fid("allergens")}>
+            Altro (separati da virgola)
+          </label>
           <input
             id={fid("allergens")}
             name="allergens"
-            defaultValue={product?.allergens?.join(", ") ?? ""}
-            placeholder="es. glutine, latte, frutta a guscio"
+            // Rendered back the way a person wrote it, not as the key it was
+            // stored under: "farina di castagne" typed here comes back
+            // "farina-di-castagne" otherwise, and re-saving would keep feeding
+            // the hyphens into a field a human reads. `allergenLabel` is the
+            // same un-hyphenating the storefront does.
+            defaultValue={extraAllergens(product?.allergens ?? []).map(allergenLabel).join(", ")}
+            placeholder="solo se non è fra i quattordici qui sopra"
             className={inputCls}
           />
         </div>

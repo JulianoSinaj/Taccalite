@@ -1,6 +1,6 @@
 import "server-only";
 import { customAlphabet } from "nanoid";
-import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { orders, orderItems, products } from "@/lib/db/schema";
 import { applyStockChange, consumeBatchesFefo, restoreBatches, stockUnitsForLine } from "@/lib/stock";
@@ -133,7 +133,17 @@ export async function createOrder(input: CheckoutInput, userId?: string): Promis
   const dbProducts = await db
     .select()
     .from(products)
-    .where(and(eq(products.purchasable, true), eq(products.active, true), inArray(products.slug, slugs)));
+    .where(
+      and(
+        eq(products.purchasable, true),
+        eq(products.active, true),
+        // Archiving forces `active` off, so this is defence in depth rather
+        // than a second gate — but this is the query that decides what the
+        // shop is willing to sell, and it should say so itself.
+        isNull(products.archivedAt),
+        inArray(products.slug, slugs),
+      ),
+    );
 
   const priceMap = new Map(dbProducts.map((p) => [p.slug, p]));
   const lines = input.items

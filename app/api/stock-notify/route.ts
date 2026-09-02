@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   }
 
   const product = await getProductBySlug(parsed.data.slug);
-  if (!product || !product.active) {
+  if (!product || !product.active || product.archivedAt) {
     return NextResponse.json({ ok: false, error: "Prodotto non trovato" }, { status: 404 });
   }
 

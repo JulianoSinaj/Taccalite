@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { resolveSlug } from "@/lib/slug";
-import { isLowStock } from "@/lib/inventory";
 import { applyStockChange } from "@/lib/stock";
 import {
   products,
@@ -21,7 +20,6 @@ import {
   users,
 } from "@/lib/db/schema";
 import { requireAdmin, requireRole } from "@/lib/auth/session";
-import { getSetting } from "@/lib/db/queries";
 import { addPoints } from "@/lib/loyalty";
 import { sendMail } from "@/lib/mail/mailer";
 import { redemptionStatusEmail } from "@/lib/mail/templates";
@@ -31,7 +29,9 @@ import { logAudit } from "@/lib/audit";
 import { firstParagraph, resolveLayout } from "@/lib/blog-article";
 import { parseStructuredHours } from "@/lib/hours";
 import { planProductImport, applyProductImport } from "@/lib/admin/product-import";
-import { notifyBackInStock } from "@/lib/stock-notify";
+import { setProductStock } from "@/lib/stock";
+import { DEFAULT_VAT_BPS } from "@/lib/fiscal";
+import { parseAllergens } from "@/lib/allergens";
 import { subscribeNewsletter } from "@/lib/newsletter";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
 import {
@@ -147,32 +147,45 @@ async function resolveCategory(
   kind: "product" | "post",
   categoryId: string | undefined,
   name: string | undefined,
-): Promise<{ categoryId: string | null; category: string }> {
+): Promise<{ categoryId: string | null; category: string; defaultVatRateBps: number | null }> {
   if (categoryId) {
     const [row] = await db.select().from(categories).where(eq(categories.id, categoryId)).limit(1);
-    if (row && row.kind === kind) return { categoryId: row.id, category: row.name };
+    if (row && row.kind === kind) {
+      return { categoryId: row.id, category: row.name, defaultVatRateBps: row.defaultVatRateBps };
+    }
   }
   const wanted = (name ?? "").trim();
-  if (!wanted) return { categoryId: null, category: "" };
+  if (!wanted) return { categoryId: null, category: "", defaultVatRateBps: null };
   const rows = await db.select().from(categories).where(eq(categories.kind, kind));
   const match = rows.find((c) => c.name.toLowerCase() === wanted.toLowerCase());
   // No match: keep the text so nothing is lost, and leave the FK null. Those
   // rows are counted as "senza categoria" on /admin/categories.
-  return match ? { categoryId: match.id, category: match.name } : { categoryId: null, category: wanted };
+  return match
+    ? { categoryId: match.id, category: match.name, defaultVatRateBps: match.defaultVatRateBps }
+    : { categoryId: null, category: wanted, defaultVatRateBps: null };
 }
 
 export async function saveProduct(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireAdmin();
     await applyImageUpload(fd);
+    // The allergen field is a checkbox per allergen plus a free-text box for
+    // anything outside the fourteen, so it arrives as several entries under one
+    // name. `parseForm` builds its object with `Object.fromEntries`, which keeps
+    // only the last — collapsing them here means the schema and every other form
+    // stay exactly as they were.
+    const allergenParts = fd.getAll("allergens").map(String);
+    if (allergenParts.length > 1) fd.set("allergens", allergenParts.join(","));
     const d = parseForm(productInput, fd);
-    // Restocking above the low-stock threshold via the editor clears the alert
-    // stamp so a future dip can alert again.
-    const threshold = await getSetting<number>("store.lowStockThreshold", 5);
-    // Restocking above the product's own reorder point (or the shop default)
-    // clears the alert stamp so a future dip can alert again.
-    const clearLowStock =
-      d.stock != null && !isLowStock({ stock: d.stock, reorderPoint: d.reorderPoint }, threshold);
+    // The sede the row will belong to, checked before anything is written.
+    //
+    // `requireAdmin` admits staff as well as admins, and only the *update*
+    // branch below used to ask about scope — so a counter operator confined to
+    // one location could file a brand-new product under the other one by
+    // posting its slug. The new-product form offers them their own shop and
+    // nothing else, and its comment claimed the action refuses any other; it
+    // did not. A form is a convenience, never the boundary (lib/admin/scope.ts).
+    await requireShopScope(d.shopSlug);
     const cat = await resolveCategory("product", d.categoryId, d.category);
     const values = {
       // A readable slug from the product name, so catalogue URLs are
@@ -184,6 +197,7 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
         explicit: d.slug,
         fallbackText: d.name,
         excludeId: d.id,
+        label: "prodotto",
       }),
       name: d.name,
       shopSlug: d.shopSlug,
@@ -195,24 +209,28 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
       priceCents: d.priceEuros,
       // Something sold by weight is priced per kg unless told otherwise.
       unit: d.unit ?? (d.soldByWeight ? "kg" : null),
-      vatRateBps: d.vatRate,
+      // What the form said, else what the category declares, else the house
+      // rate — so a category's declared aliquota is honoured on the server and
+      // not only by the picker's client-side handler on the new-product form.
+      vatRateBps: d.vatRate ?? cat.defaultVatRateBps ?? DEFAULT_VAT_BPS,
       soldByWeight: d.soldByWeight,
-      // Allergens accepted as a comma/newline separated list, stored as an array.
-      allergens: (d.allergens ?? "")
-        .split(/[,\n]/)
-        .map((s) => s.trim())
-        .filter(Boolean),
+      // Resolved against the fourteen of Annex II and stored as canonical keys,
+      // so "Latte", "latte" and "lattosio" stop being three allergens. Anything
+      // the shop declares beyond the fourteen is kept as it was written.
+      allergens: parseAllergens(d.allergens ?? ""),
       origin: d.origin ?? null,
       ingredients: d.ingredients ?? null,
       purchasable: d.purchasable,
-      stock: d.stock,
+      // `stock` is deliberately absent: it moves through `setProductStock`
+      // below so the change lands in the movement ledger. Writing it here was
+      // how the editor moved on-hand while leaving no history behind it — the
+      // one thing a stock ledger exists to prevent.
       reorderPoint: d.reorderPoint,
       costCents: d.costEuros,
       sku: d.sku ?? null,
       supplier: d.supplier ?? null,
       seoTitle: d.seoTitle ?? null,
       seoDescription: d.seoDescription ?? null,
-      ...(clearLowStock ? { lowStockNotifiedAt: null } : {}),
       featured: d.featured,
       active: d.active,
       sortOrder: d.sortOrder,
@@ -221,23 +239,31 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
     if (d.id) {
       // Detect an out-of-stock → available transition to trigger back-in-stock mail.
       const [prev] = await db.select().from(products).where(eq(products.id, d.id)).limit(1);
-      // Both ends of the move: an operator confined to one location may neither
-      // edit another shop's product nor reassign one of their own away.
+      // The other end of the move: an operator confined to one location may
+      // not edit another shop's product either (the destination was checked
+      // before any of this ran).
       await requireShopScope(prev?.shopSlug);
-      await requireShopScope(d.shopSlug);
       // Archived means out of the catalogue, whatever the form's toggles say:
       // the flags come back only through "Ripristina", never as a side effect
       // of saving an edit.
       if (prev?.archivedAt) Object.assign(values, { active: false, purchasable: false, featured: false });
       await db.update(products).set(values).where(eq(products.id, d.id));
-      if (prev && (prev.stock ?? 0) <= 0 && d.stock != null && d.stock > 0) {
-        await notifyBackInStock(d.id, prev.name, prev.slug);
-      }
+      // Ledgered rather than written. This also re-arms the low-stock alert and
+      // mails the back-in-stock waitlist — both of which were spelled out here
+      // by hand, and are now `afterRestock`'s job for every path alike.
+      await setProductStock({
+        productId: d.id,
+        from: prev?.stock ?? null,
+        to: d.stock,
+        reason: "Modifica scheda prodotto",
+        byUserId: actor.id,
+      });
       // Price, cost and VAT changes are exactly what an audit trail exists for:
       // without this a margin or a shelf price could move with no record of who
       // moved it. Silent when nothing tracked changed, so saving an unedited
-      // form doesn't pollute the log.
-      const changes = describeChanges(prev, values, [...PRODUCT_AUDITED]);
+      // form doesn't pollute the log. `stock` is folded back in for the diff
+      // even though it is no longer part of the write above.
+      const changes = describeChanges(prev, { ...values, stock: d.stock }, [...PRODUCT_AUDITED]);
       if (changes.length > 0) {
         await logAudit({
           actor,
@@ -245,19 +271,34 @@ export async function saveProduct(_prev: ActionState, fd: FormData): Promise<Act
           entity: "product",
           entityId: d.id,
           summary: `Prodotto ${values.name}: ${changes.join(", ")}`,
-          meta: { priceCents: values.priceCents, costCents: values.costCents, stock: values.stock },
+          meta: { priceCents: values.priceCents, costCents: values.costCents, stock: d.stock },
         });
       }
     } else {
-      const [created] = await db.insert(products).values(values).returning({ id: products.id });
+      // Opens at zero when a figure was given, so `setProductStock` can ledger
+      // the opening balance as a real movement rather than the number simply
+      // existing with nothing behind it.
+      const [created] = await db
+        .insert(products)
+        .values({ ...values, stock: d.stock == null ? null : 0 })
+        .returning({ id: products.id });
       productId = created?.id;
+      if (productId) {
+        await setProductStock({
+          productId,
+          from: d.stock == null ? null : 0,
+          to: d.stock,
+          reason: "Giacenza iniziale",
+          byUserId: actor.id,
+        });
+      }
       await logAudit({
         actor,
         action: "product.create",
         entity: "product",
         entityId: productId,
         summary: `Prodotto creato: ${values.name} — ${eur(values.priceCents)}`,
-        meta: { priceCents: values.priceCents, vatRateBps: values.vatRateBps, stock: values.stock },
+        meta: { priceCents: values.priceCents, vatRateBps: values.vatRateBps, stock: d.stock },
       });
     }
     revalidatePath("/admin/products");
@@ -642,7 +683,7 @@ export async function importProducts(_prev: ActionState, fd: FormData): Promise<
       return ok("Nessuna modifica da importare: il file corrisponde già al catalogo.");
     }
 
-    const { updated, created } = await applyProductImport(plan);
+    const { updated, created } = await applyProductImport(plan, actor.id);
 
     await logAudit({
       actor,

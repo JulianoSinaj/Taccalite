@@ -83,11 +83,22 @@ export const productInput = z
       .refine((v) => v == null || (Number.isFinite(v) && v >= 0), "Prezzo non valido"),
     unit: optionalText(40),
     // VAT rate posted as a percent (e.g. "10"), stored as basis points (1000).
+    //
+    // Blank resolves to `null`, not to the 10 % default: the action then falls
+    // back to the *category's* declared rate before the house default. The
+    // schema calls `categories.defaultVatRateBps` "declared, not inferred", but
+    // hard-coding 1000 here meant the declaration was honoured only by a
+    // client-side handler on the new-product form — so a product created any
+    // other way (the importer, a form that never touched the field) silently
+    // took 10 % under a 22 % category, which is an under-declaration.
     vatRate: z
       .union([z.string(), z.null()])
       .optional()
-      .transform((v) => (v != null && v !== "" ? Math.round(Number(v) * 100) : 1000))
-      .refine((v) => Number.isFinite(v) && v >= 0 && v <= 10000, "Aliquota IVA non valida"),
+      .transform((v) => (v != null && v !== "" ? Math.round(Number(v) * 100) : null))
+      .refine(
+        (v) => v == null || (Number.isFinite(v) && v >= 0 && v <= 10000),
+        "Aliquota IVA non valida",
+      ),
     soldByWeight: checkbox,
     allergens: optionalText(600),
     origin: optionalText(300),

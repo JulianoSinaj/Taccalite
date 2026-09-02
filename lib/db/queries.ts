@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { and, asc, desc, eq, gte, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "./client";
 import * as schema from "./schema";
 import { dateInRome } from "@/lib/time";
@@ -20,36 +20,55 @@ export const getShopBySlug = cache(async (slug: string) => {
   return rows[0] ?? null;
 });
 
+/**
+ * What the storefront is allowed to see, and in what order.
+ *
+ * **`archivedAt IS NULL`** is belt as well as braces. Archiving already forces
+ * `active` off, so `active` alone was *usually* enough — but "usually" is the
+ * wrong standard for the boundary between the gestionale and the shop window,
+ * and the CSV importer proved it by being able to flip `active` back on without
+ * touching the archive stamp. The public queries now ask the question directly
+ * rather than relying on another action having remembered to.
+ *
+ * **The name tiebreak** matters because every product ships at `sortOrder: 0`:
+ * ordering by that alone left an unsorted catalogue in whatever order SQLite
+ * happened to return, which could differ between two requests for the same
+ * page. The admin list (`lib/admin/queries.ts`) and the category rail below
+ * both already broke the tie by name; these four did not.
+ */
+const visibleProduct = and(
+  eq(schema.products.active, true),
+  isNull(schema.products.archivedAt),
+);
+
+const catalogueOrder = [asc(schema.products.sortOrder), asc(schema.products.name)] as const;
+
 export const getProducts = cache(async () => {
-  return db
-    .select()
-    .from(schema.products)
-    .where(eq(schema.products.active, true))
-    .orderBy(asc(schema.products.sortOrder));
+  return db.select().from(schema.products).where(visibleProduct).orderBy(...catalogueOrder);
 });
 
 export const getFeaturedProducts = cache(async () => {
   return db
     .select()
     .from(schema.products)
-    .where(and(eq(schema.products.active, true), eq(schema.products.featured, true)))
-    .orderBy(asc(schema.products.sortOrder));
+    .where(and(visibleProduct, eq(schema.products.featured, true)))
+    .orderBy(...catalogueOrder);
 });
 
 export const getProductsByShop = cache(async (shopSlug: string) => {
   return db
     .select()
     .from(schema.products)
-    .where(and(eq(schema.products.active, true), eq(schema.products.shopSlug, shopSlug)))
-    .orderBy(asc(schema.products.sortOrder));
+    .where(and(visibleProduct, eq(schema.products.shopSlug, shopSlug)))
+    .orderBy(...catalogueOrder);
 });
 
 export const getPurchasableProducts = cache(async () => {
   return db
     .select()
     .from(schema.products)
-    .where(and(eq(schema.products.active, true), eq(schema.products.purchasable, true)))
-    .orderBy(asc(schema.products.sortOrder));
+    .where(and(visibleProduct, eq(schema.products.purchasable, true)))
+    .orderBy(...catalogueOrder);
 });
 
 export const getProductBySlug = cache(async (slug: string) => {
@@ -144,7 +163,7 @@ export const getProductCategories = cache(async () => {
       and(
         eq(schema.categories.kind, "product"),
         eq(schema.categories.active, true),
-        eq(schema.products.active, true),
+        visibleProduct,
         eq(schema.products.purchasable, true),
       ),
     )
@@ -186,8 +205,8 @@ export const getRelatedProducts = cache(
     const pool = await db
       .select()
       .from(schema.products)
-      .where(and(eq(schema.products.active, true), eq(schema.products.purchasable, true)))
-      .orderBy(asc(schema.products.sortOrder));
+      .where(and(visibleProduct, eq(schema.products.purchasable, true)))
+      .orderBy(...catalogueOrder);
     const others = pool.filter((p) => p.slug !== product.slug);
     const sameCat = others.filter((p) => p.category && p.category === product.category);
     const sameShop = others.filter((p) => p.shopSlug === product.shopSlug && !sameCat.includes(p));

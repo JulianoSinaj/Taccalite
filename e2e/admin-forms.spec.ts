@@ -370,6 +370,43 @@ test("a shop and a reward save", async ({ page }) => {
   await expectRowExists(page, "/admin/rewards", reward);
 });
 
+test("a product saves, with its allergens ticked rather than typed", async ({ page }) => {
+  // The biggest form in the gestionale, and until now the only major one the
+  // suite never pressed — which is how the allergen field went years as a
+  // free-text box where "Latte", "latte" and "lattosio" were three different
+  // allergens on a food label.
+  await login(page);
+
+  const name = `E2E Prodotto ${RUN}`;
+  await page.goto("/admin/products/new");
+  await page.fill('input[name="name"]', name);
+  await page.fill('input[name="slug"]', `e2e-prodotto-${RUN}`);
+
+  // The fourteen of Reg. 1169/2011 Annex II, as checkboxes sharing one name.
+  const boxes = page.locator('input[type="checkbox"][name="allergens"]');
+  await expect(boxes).toHaveCount(14);
+
+  await page.locator('input[type="checkbox"][name="allergens"][value="latte"]').check();
+  await page.locator('input[type="checkbox"][name="allergens"][value="glutine"]').check();
+  // Anything outside the fourteen still has somewhere to go, and shares the
+  // name — the action joins the checkboxes and this box before validating,
+  // because `parseForm` keeps only the last entry under a repeated key.
+  await page.fill('input#allergens, input[name="allergens"]:not([type="checkbox"])', "farina di castagne");
+
+  await submitAndSettle(page, page.getByRole("button", { name: /^crea prodotto$/i }).first());
+  await expectRowExists(page, "/admin/products", name);
+
+  // Reopened, the boxes come back ticked from the stored keys and the free-text
+  // box holds only what is not one of the fourteen.
+  await openRow(page, "/admin/products", name);
+  await expect(page.locator('input[type="checkbox"][name="allergens"][value="latte"]')).toBeChecked();
+  await expect(page.locator('input[type="checkbox"][name="allergens"][value="glutine"]')).toBeChecked();
+  await expect(page.locator('input[type="checkbox"][name="allergens"][value="sedano"]')).not.toBeChecked();
+  await expect(
+    page.locator('input#allergens, input[name="allergens"]:not([type="checkbox"])'),
+  ).toHaveValue(/farina di castagne/);
+});
+
 test("a newsletter draft saves", async ({ page }) => {
   // The composer is the one admin form whose failure costs a send window rather
   // than a record, and it sits behind a disclosure like the fulfilment forms.

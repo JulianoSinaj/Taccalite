@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { allergenLabel } from "@/lib/allergens";
 import { ArrowLeft, ArrowRight, Store } from "lucide-react";
 import JsonLd from "@/components/JsonLd";
 import ProductBuy from "@/components/store/ProductBuy";
@@ -29,7 +30,7 @@ type Params = { params: Promise<{ slug: string }> };
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
-  if (!product || !product.active || !product.purchasable) return {};
+  if (!product || !product.active || product.archivedAt || !product.purchasable) return {};
   return {
     title: product.seoTitle || product.name,
     description:
@@ -42,7 +43,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 export default async function ProductDetailPage({ params }: Params) {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
-  if (!product || !product.active || !product.purchasable) notFound();
+  if (!product || !product.active || product.archivedAt || !product.purchasable) notFound();
 
   const [shop, related, categoryRow] = await Promise.all([
     getShopBySlug(product.shopSlug),
@@ -230,7 +231,9 @@ export default async function ProductDetailPage({ params }: Params) {
                       <dt className="text-[0.625rem] font-bold tracking-[0.22em] text-taupe uppercase sm:pt-0.5">
                         Allergeni
                       </dt>
-                      <dd className="font-semibold text-brown-950">{product.allergens.join(", ")}</dd>
+                      <dd className="font-semibold text-brown-950">
+                        {product.allergens.map(allergenLabel).join(", ")}
+                      </dd>
                     </>
                   )}
                 </dl>

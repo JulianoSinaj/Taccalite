@@ -69,16 +69,60 @@ export async function applyStockChange(opts: {
   byUserId?: string | null;
   /** Set to write an absolute figure instead of a delta (a stocktake). */
   setTo?: number;
-  /**
-   * Skip the restock side-effects below. Only for a caller that has already
-   * done them itself — `saveProduct` writes `products.stock` directly and mails
-   * its own waitlist, so routing through here would send twice.
-   */
-  skipRestockEffects?: boolean;
 }): Promise<StockChange | null> {
   const change = await applyStockChangeCore(opts);
-  if (change && !opts.skipRestockEffects) await afterRestock(opts.productId, change);
+  if (change) await afterRestock(opts.productId, change);
   return change;
+}
+
+/**
+ * Move a product's on-hand to an absolute figure, ledgering the difference.
+ *
+ * The product editor and the CSV import both wrote `products.stock` with a
+ * plain UPDATE, so the two most-used ways of changing a quantity moved the
+ * balance without leaving a movement — and the history stopped summing to the
+ * figure it exists to explain. `saveProduct` at least re-sent its own waitlist
+ * mail by hand; the importer did not even do that. Both come here now, which
+ * is what makes this module's first line ("the single way inventory moves")
+ * true rather than aspirational.
+ *
+ * `null` is not a quantity but a mode: it means made-to-order, don't track.
+ * Switching in or out of it is a bookkeeping change rather than a movement, so
+ * the four transitions are handled explicitly:
+ *
+ *  - **number → number** — ledgered as the difference.
+ *  - **null → number** — the product starts tracking; on-hand opens at zero so
+ *    the opening figure is a real movement rather than a number that appeared.
+ *  - **number → null** — the product stops tracking; the balance is written
+ *    down to zero first (ledgered, so the history closes where it stopped)
+ *    and only then set to null.
+ *  - **null → null** — nothing.
+ */
+export async function setProductStock(opts: {
+  productId: string;
+  from: number | null;
+  to: number | null;
+  reason: string;
+  byUserId?: string | null;
+}): Promise<void> {
+  const { productId, from, to, reason, byUserId } = opts;
+  if (from === to) return;
+
+  if (to == null) {
+    if (from != null && from !== 0) {
+      await applyStockChange({ productId, delta: 0, setTo: 0, reason, byUserId });
+    }
+    await db.update(products).set({ stock: null }).where(eq(products.id, productId));
+    return;
+  }
+
+  // Opening the ledger at zero: `applyStockChangeCore` reads the row first and
+  // returns null for an untracked product, so it has to be tracking before it
+  // can be moved.
+  if (from == null) {
+    await db.update(products).set({ stock: 0 }).where(eq(products.id, productId));
+  }
+  await applyStockChange({ productId, delta: 0, setTo: to, reason, byUserId });
 }
 
 /**
