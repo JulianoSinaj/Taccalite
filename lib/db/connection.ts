@@ -107,7 +107,71 @@ export function openClient(rawUrl: string, authToken = ""): Client {
 
 /** Drizzle instance over an existing client, typed with the app schema. */
 export function wrapDrizzle(client: Client): Db {
-  return drizzle(client, { schema });
+  return withBusyRetry(drizzle(client, { schema }));
+}
+
+/** True when an error is SQLite refusing to wait for a lock it cannot get. */
+function isBusy(err: unknown): boolean {
+  const code = (err as { code?: string; rawCode?: number } | null)?.code;
+  return (
+    code === "SQLITE_BUSY" ||
+    code === "SQLITE_BUSY_SNAPSHOT" ||
+    (err as { rawCode?: number } | null)?.rawCode === 5 ||
+    (err instanceof Error && /SQLITE_BUSY|database is locked/i.test(err.message))
+  );
+}
+
+const BUSY_ATTEMPTS = 5;
+
+/**
+ * Retry a whole transaction when SQLite says the database is busy.
+ *
+ * `PRAGMA busy_timeout = 5000` is applied at boot — and applies to **that
+ * connection only**. The libSQL sqlite3 driver hands each `transaction()` the
+ * current connection and then drops its reference, so the next caller lazily
+ * opens a *fresh* one, and a fresh connection's busy timeout is **0**. Verified
+ * directly: open a client, set the pragma, take a transaction, and the next
+ * connection reports `busy_timeout: 0` again.
+ *
+ * The consequence is that every transaction after the first has no timeout at
+ * all, so any contention fails instantly rather than waiting — a raw
+ * `SQLITE_BUSY` thrown out of a checkout, a stock movement, a points debit or a
+ * coupon count, on a codebase that otherwise takes concurrency seriously and
+ * claims a transaction "locks the row from the first read". It also lingers: a
+ * contended commit leaves the file busy long enough to knock over the *next*
+ * sequential caller, which is why the test suites had to be ordered around it.
+ *
+ * Retrying the whole callback is the correct shape rather than raising the
+ * timeout, because a transaction that lost the write lock has been rolled back
+ * — there is nothing to resume, only something to redo. Callbacks here are
+ * short, deterministic and already written to be safe to re-run: every one of
+ * them re-reads its rows inside the transaction and claims what it needs with a
+ * conditional UPDATE, so a replay either wins or refuses.
+ *
+ * The backoff is jittered so two racers do not simply collide again in step.
+ */
+function withBusyRetry(db: Db): Db {
+  const original = db.transaction.bind(db) as Db["transaction"];
+  return new Proxy(db, {
+    get(target, prop, receiver) {
+      if (prop !== "transaction") return Reflect.get(target, prop, receiver);
+      return async (...args: Parameters<Db["transaction"]>) => {
+        let lastError: unknown;
+        for (let attempt = 1; attempt <= BUSY_ATTEMPTS; attempt++) {
+          try {
+            return await original(...args);
+          } catch (err) {
+            if (!isBusy(err)) throw err;
+            lastError = err;
+            if (attempt === BUSY_ATTEMPTS) break;
+            const backoffMs = Math.round(2 ** attempt * (5 + Math.random() * 15));
+            await new Promise((r) => setTimeout(r, backoffMs));
+          }
+        }
+        throw lastError;
+      };
+    },
+  }) as Db;
 }
 
 /**

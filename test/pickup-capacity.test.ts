@@ -98,18 +98,15 @@ describe("capped pickup windows", () => {
     expect(await bookedOrders()).toHaveLength(2);
   });
 
-  // Last on purpose. Two contended transactions against one SQLite file leave
-  // it busy for a moment afterwards, and a sequential test starting inside that
-  // window inherits the SQLITE_BUSY instead of its own result. Having to order
-  // a suite around that is itself the finding recorded against system 22:
-  // `PRAGMA busy_timeout = 5000` is already set, and does not cover a contended
-  // commit.
   it("lets only one of two simultaneous orders take the last place", async () => {
-    // Settled rather than awaited: the loser surfaces either as the refusal the
-    // re-count raises or as that thrown SQLITE_BUSY. Either way it does not get
-    // the slot, which is the property under test.
+    // The loser gets the re-count's sentence, not a driver error: the busy
+    // retry added for system 22 means a contended transaction waits its turn
+    // and then loses on the rule, which is the whole point of having the rule.
     const settled = await Promise.allSettled([createOrder(basket()), createOrder(basket())]);
     expect(settled.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+
+    const loser = settled.find((r) => r.status === "rejected") as PromiseRejectedResult;
+    expect(String(loser.reason)).toMatch(/non è più disponibile|si è appena riempito/);
     expect(await bookedOrders()).toHaveLength(1);
   });
 });

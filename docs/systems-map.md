@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **11 of 24 systems audited**. The rest of the
+> **Status:** in progress — **12 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -78,7 +78,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 19 | Analytics & Reporting | ⑥ Il Registro | — |
 | 20 | [Security, Audit & Compliance](audits/20-security-audit-compliance.md) | ⑥ Il Registro | **88** |
 | 21 | Admin Gestionale Shell | ⑥ Il Registro | — |
-| 22 | Data Layer & Migrations | ⑦ Le Fondamenta | — |
+| 22 | [Data Layer & Migrations](audits/22-data-layer-migrations.md) | ⑦ Le Fondamenta | **85** |
 | 23 | Quality & Testing | ⑦ Le Fondamenta | — |
 | 24 | Runtime, Config & Deployment | ⑦ Le Fondamenta | — |
 
@@ -587,9 +587,14 @@ generated migrations, seeding (real and demo), query helpers, settings storage.
 **Known gotcha** — drizzle-kit has a rebuild-migration bug in this project;
 check before regenerating.
 
-**Audit questions** — Are migrations forward-only and tested against a
-production-shaped DB? Is there a restore drill, not just a backup script? Are
-indexes present for the hot admin queries?
+**Readiness: 85/100** — audited 2026-09-02 at 72, remediated the same day; see
+[`docs/audits/22-data-layer-migrations.md`](audits/22-data-layer-migrations.md).
+Audited out of turn because its one finding undermined every other system's
+concurrency guard: `busy_timeout` is per-connection and the libSQL driver opens
+a **fresh** connection for each transaction, so every transaction after the
+first ran with no timeout — contention threw a raw `SQLITE_BUSY` out of
+checkouts, stock movements and points debits, and lost writes. `wrapDrizzle` now
+retries a contended transaction with jittered backoff.
 
 ---
 
@@ -631,7 +636,7 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 11 of 24.** Systems 1, 2, 3, 5, 6, 9, 10, 11, 14, 18 and 20. All
+**Audited: 12 of 24.** Systems 1, 2, 3, 5, 6, 9, 10, 11, 14, 18, 20 and 22. All
 remediated in the same pass except 18, which had no defects.
 Everything else in the index is unexamined — an empty cell means "not looked
 at", never "fine".
@@ -663,7 +668,6 @@ not oversights.
 | 3 | **Loyalty accrues on the pre-discount subtotal**, so a 50 %-off coupon still earns full points. A business decision to make deliberately, not a defect. | Needs the owner's call |
 | 3 | `order_items.product_id` has no FK; the reservation lookup on `/traccia` is single-factor (reference only, now throttled). | Low value against the risk |
 | 1 | TOCTOU window on derived slugs; allergens absent from the CSV round-trip; `unit` is free text. | Low value against the risk |
-| 22 | **Contended writes surface as `SQLITE_BUSY`.** `PRAGMA busy_timeout = 5000` is already set and does **not** cover a contended *commit*: two concurrent writes throw a raw driver error rather than one clean refusal, and the file stays busy long enough afterwards to poison the next sequential caller. Found twice — the loyalty cap and the pickup cap — and it affects every concurrent-write path. | Its own system's audit |
 | 23 | **The e2e suite is not repeatable.** Fixtures accumulate across runs until a capped resource refuses; the suite cannot cold-start (seed runs before migrations); two tests are load-sensitive. All 52 pass on a correctly seeded DB. | Its own system's audit |
 
 ## How to read a readiness score

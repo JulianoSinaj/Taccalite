@@ -151,17 +151,16 @@ describe("per-customer cap under concurrency", () => {
     // Enough points for two, so the balance is not what refuses the second.
     await addPoints(USER, 40, "Seed");
 
-    // Settled rather than awaited: the loser of a genuine race against a local
-    // SQLite file comes back as a thrown SQLITE_BUSY rather than a refusal,
-    // because nothing in the app retries a busy write (recorded against system
-    // 22 — it is the data layer's to fix, not this one's). Either way it does
-    // not get a redemption, which is the property under test.
-    const settled = await Promise.allSettled([
+    const [a, b] = await Promise.all([
       redeemReward(USER, REWARD),
       redeemReward(USER, REWARD),
     ]);
-    const granted = settled.filter((r) => r.status === "fulfilled" && r.value.ok);
-    expect(granted).toHaveLength(1);
+
+    // One grant, one refusal on the rule — not a driver error. The busy retry
+    // added for system 22 is what turns the loser of the race into a sentence.
+    expect([a, b].filter((r) => r.ok)).toHaveLength(1);
+    const refused = [a, b].find((r) => !r.ok)!;
+    expect((refused as { error: string }).error).toMatch(/già riscattato/);
 
     // One redemption on the books, and only one debit against the balance.
     const rows = await db
