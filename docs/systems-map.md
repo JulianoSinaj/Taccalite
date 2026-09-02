@@ -727,7 +727,7 @@ not oversights.
 
 | System | Item | Why deferred |
 |---|---|---|
-| 2 | **Lot → order traceability.** `consumeBatchesFefo` computes which lots went out and both callers discard it, so a recall cannot name the affected customers. Design: `order_id` + `lots` on `stock_movements`. | Schema change; feature work, not a defect |
+| 2 | ~~Lot → order traceability~~ — **built 2026-09-02.** `stock_movements` now carries `order_id` and the lots the movement drew on, and `/admin/products/scadenze` answers "who received this lot". | — |
 | 2 | **Ledger ↔ on-hand reconciliation.** Nothing surfaces a divergence, and legacy rows have no opening movement so the sum is expected to differ. Design: backfill opening balances, then a divergence report. | Migration + new report surface |
 | 2 | A half-applied `applyOrderStock` is now *logged* but still not *recoverable*. | Depends on the reconciliation report above |
 | 3 | **Loyalty accrues on the pre-discount subtotal**, so a 50 %-off coupon still earns full points. A business decision to make deliberately, not a defect. | Needs the owner's call |

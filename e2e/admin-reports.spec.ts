@@ -86,3 +86,26 @@ test.describe("analisi vendite", () => {
     expect(rows.some((r) => r.startsWith("Totale,"))).toBe(true);
   });
 });
+
+/**
+ * Traceability, the way a recall actually arrives: somebody telephones with a
+ * lot code off a packet and the shop has to know within the hour who took that
+ * lot away. `consumeBatchesFefo` always knew which lots a sale drew on and both
+ * callers used to discard it, so this could only be answered from paper
+ * delivery notes and memory.
+ */
+test("the expiry page answers who received a lot", async ({ page }) => {
+  await login(page);
+
+  await page.goto("/admin/products/scadenze");
+  await expect(page.getByLabel(/chi ha ricevuto un lotto/i)).toBeVisible();
+
+  // A code nothing was ever sold under says so plainly, rather than showing an
+  // empty table the operator has to interpret.
+  await page.getByLabel(/chi ha ricevuto un lotto/i).fill(`NESSUN-LOTTO-${RUN}`);
+  await page.getByRole("button", { name: /^cerca$/i }).click();
+  await expect(page.getByText(/nessun ordine risulta aver ricevuto il lotto/i)).toBeVisible({
+    timeout: 20_000,
+  });
+  await expectNoRawSchemaError(page);
+});

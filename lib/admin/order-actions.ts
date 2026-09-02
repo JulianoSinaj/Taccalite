@@ -39,7 +39,12 @@ import {
 import { needsAddress, FULFILMENT_LABEL } from "@/lib/fulfilment";
 import { PAYMENT_INSTRUMENT_LABEL, settlesOnHandover } from "@/lib/payments/methods";
 import { resolvePickupSlot, formatSlotLabel } from "@/lib/pickup-slots";
-import { applyStockChange, consumeBatchesFefo, stockUnitsForLine } from "@/lib/stock";
+import {
+  applyStockChange,
+  consumeBatchesFefo,
+  recordMovementLots,
+  stockUnitsForLine,
+} from "@/lib/stock";
 import { validateDiscount, recordDiscountUse, releaseDiscountUseByCode } from "@/lib/discounts";
 import { addPoints } from "@/lib/loyalty";
 import { logAudit } from "@/lib/audit";
@@ -430,8 +435,12 @@ export async function createManualOrder(_prev: ActionState, fd: FormData): Promi
           delta: -units,
           reason: `Vendita al banco ${orderNumber}`,
           byUserId: actor.id,
+          orderId: created.id,
         });
-        if (change) await consumeBatchesFefo(l.product.id, -change.applied);
+        if (change) {
+          const lots = await consumeBatchesFefo(l.product.id, -change.applied);
+          await recordMovementLots(change.movementId, lots);
+        }
       }
     }
 

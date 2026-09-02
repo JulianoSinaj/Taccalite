@@ -226,9 +226,29 @@ export const stockMovements = sqliteTable(
     reason: text("reason").notNull().default(""),
     stockAfter: integer("stock_after").notNull(),
     createdByUserId: text("created_by_user_id"),
+    // The order this movement was made on account of, when there was one.
+    //
+    // No `references`, deliberately: a movement is a historical fact and must
+    // outlive the row it explains, where a cascade would delete the history and
+    // a RESTRICT would block an order that is legitimately removable.
+    orderId: text("order_id"),
+    // Which lots the movement actually drew on, earliest expiry first.
+    //
+    // `consumeBatchesFefo` has always computed this and both callers threw it
+    // away, so the platform could say *when* a lot was consumed but never *who
+    // received it* — which is the only question a food recall asks, and the
+    // reason `product_batches` exists at all.
+    lots: text("lots", { mode: "json" }).$type<
+      { lotCode: string; expiryDate: string | null; taken: number }[]
+    >(),
     createdAt: createdAt(),
   },
-  (t) => [index("stock_mov_product_idx").on(t.productId)],
+  (t) => [
+    index("stock_mov_product_idx").on(t.productId),
+    // "Which lots went out on this order" and, scanned the other way, "which
+    // orders touched this lot" — the recall walks it in both directions.
+    index("stock_mov_order_idx").on(t.orderId),
+  ],
 );
 
 // ── Back-in-stock notification requests ──────────────────────────────────────

@@ -3,7 +3,13 @@ import { customAlphabet } from "nanoid";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { orders, orderItems, products } from "@/lib/db/schema";
-import { applyStockChange, consumeBatchesFefo, restoreBatches, stockUnitsForLine } from "@/lib/stock";
+import {
+  applyStockChange,
+  consumeBatchesFefo,
+  recordMovementLots,
+  restoreBatches,
+  stockUnitsForLine,
+} from "@/lib/stock";
 import {
   getShopBySlug,
   getSetting,
@@ -625,10 +631,14 @@ export async function applyOrderStock(orderId: string, reason: string): Promise<
       // so the movement history always sums to the balance even if the order
       // oversold (createOrder guards against that, but a concurrent buyer can
       // still race it).
-      const change = await applyStockChange({ productId, delta: -qty, reason });
+      const change = await applyStockChange({ productId, delta: -qty, reason, orderId });
       if (!change) continue;
-      // Lot-level bookkeeping, earliest expiry first.
-      await consumeBatchesFefo(productId, -change.applied);
+      // Lot-level bookkeeping, earliest expiry first — and recorded against the
+      // movement rather than discarded, so a recall can walk from a lot code to
+      // the orders that carried it. FEFO can only run once the applied quantity
+      // is known, so the lots arrive a moment after the movement they belong to.
+      const lots = await consumeBatchesFefo(productId, -change.applied);
+      await recordMovementLots(change.movementId, lots);
 
       const [updated] = await db
         .select({
@@ -997,7 +1007,7 @@ export async function restockOrderItems(
       qtyByProduct.set(it.productId, (qtyByProduct.get(it.productId) ?? 0) + units);
     }
     for (const [productId, qty] of qtyByProduct) {
-      const change = await applyStockChange({ productId, delta: qty, reason, byUserId });
+      const change = await applyStockChange({ productId, delta: qty, reason, byUserId, orderId });
       if (change) await restoreBatches(productId, change.applied);
     }
   } catch (err) {

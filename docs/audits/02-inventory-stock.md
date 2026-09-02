@@ -176,7 +176,7 @@ Two findings are **recorded, designed, and deliberately unbuilt** — both are
 feature work with a schema change, not defects, and both are the reason this
 system sits at 84 rather than 90+.
 
-### 6. Lot consumption is not linked to the order — the recall question
+### 6. Lot consumption is not linked to the order — the recall question · **BUILT 2026-09-02**
 
 `consumeBatchesFefo` returns the lots it took. **Both call sites discard the
 return value.** So the platform can say *when* a lot was consumed, but not
@@ -191,8 +191,10 @@ The wrinkle is that `applyOrderStock` aggregates lines per product before
 moving stock, so the link is order-level, not line-level; that is sufficient
 for a recall and avoids a second table.
 
-**Estimated:** one migration, ~40 lines, plus a "lotti usciti" column on the
-order detail page.
+**Built.** `stock_movements` gained `order_id` (indexed) and `lots`; both call
+sites now record what `consumeBatchesFefo` had always computed and discarded.
+`getOrdersForLot` answers the recall question, shop-scoped, and the expiry page
+carries the lookup. Eight unit tests and one e2e.
 
 ### 10. Nothing reconciles the ledger against on-hand
 

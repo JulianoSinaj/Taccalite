@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AdminHeader, Panel, BackLink, euro, fmtDate } from "@/components/admin/ui";
 import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { PrintButton } from "@/components/admin/PrintButton";
-import { getExpiringBatches, adminGetShops } from "@/lib/admin/queries";
+import { getExpiringBatches, adminGetShops, getOrdersForLot } from "@/lib/admin/queries";
 import { writeOffBatch } from "@/lib/admin/batch-actions";
 import { shopScope, lockShop } from "@/lib/admin/scope";
 import { dateInRome } from "@/lib/time";
@@ -22,7 +22,7 @@ function isoIn(today: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
-type SP = { searchParams: Promise<{ giorni?: string; negozio?: string }> };
+type SP = { searchParams: Promise<{ giorni?: string; negozio?: string; lotto?: string }> };
 
 /**
  * What has to be sold, moved or thrown.
@@ -44,9 +44,13 @@ export default async function ExpiringBatches({ searchParams }: SP) {
   const today = dateInRome();
   const through = isoIn(today, days);
 
-  const [rows, allShops] = await Promise.all([
+  // The recall lookup: which customers took this lot away.
+  const lotQuery = (sp.lotto ?? "").trim();
+
+  const [rows, allShops, recall] = await Promise.all([
     getExpiringBatches(through, true, scope),
     adminGetShops(),
+    lotQuery ? getOrdersForLot(lotQuery, scope) : Promise.resolve([]),
   ]);
   const shops = scope ? allShops.filter((s) => s.slug === scope) : allShops;
   const shopName = new Map(allShops.map((s) => [s.slug, s.name]));
@@ -58,7 +62,12 @@ export default async function ExpiringBatches({ searchParams }: SP) {
     list.reduce((s, r) => s + (r.batch.unitCostCents ?? 0) * r.batch.remaining, 0);
 
   const href = (params: Record<string, string>) => {
-    const qs = new URLSearchParams({ giorni: String(days), negozio: shopFilter, ...params });
+    const qs = new URLSearchParams({
+      giorni: String(days),
+      negozio: shopFilter,
+      ...(lotQuery ? { lotto: lotQuery } : {}),
+      ...params,
+    });
     for (const [k, v] of [...qs.entries()]) if (v === "all") qs.delete(k);
     const s = qs.toString();
     return `/admin/products/scadenze${s ? `?${s}` : ""}`;
@@ -86,6 +95,82 @@ export default async function ExpiringBatches({ searchParams }: SP) {
           </div>
         }
       />
+
+      {/* Traceability, the way a recall actually arrives: somebody telephones
+          with a lot code off a packet, and the shop has to know within the hour
+          who took that lot away. `consumeBatchesFefo` has always known which
+          lots a sale drew on and both callers used to discard it, so this could
+          only be answered from paper delivery notes and memory. */}
+      <Panel className="mb-6 print:hidden">
+        <form method="get" className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="giorni" value={String(days)} />
+          {shopFilter !== "all" && <input type="hidden" name="negozio" value={shopFilter} />}
+          <div className="min-w-0 flex-1">
+            <label
+              htmlFor="lotto"
+              className="mb-1.5 block text-[0.6875rem] font-bold tracking-widest text-brown-950/70 uppercase"
+            >
+              Richiamo: chi ha ricevuto un lotto
+            </label>
+            <input
+              id="lotto"
+              name="lotto"
+              defaultValue={lotQuery}
+              placeholder="Codice del lotto, come stampato sulla confezione"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              className="min-h-11 w-full rounded-lg border border-brown-900/15 bg-cream/40 px-3 py-2.5 text-sm text-brown-950 focus:border-gold-dark focus:outline-none"
+            />
+          </div>
+          <button
+            type="submit"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-950 px-5 py-2 text-xs font-bold tracking-widest text-cream uppercase hover:bg-brown-900"
+          >
+            Cerca
+          </button>
+        </form>
+
+        {lotQuery && (
+          <div className="mt-4 border-t border-brown-900/10 pt-4">
+            {recall.length === 0 ? (
+              <p className="text-sm text-brown-800/70">
+                Nessun ordine risulta aver ricevuto il lotto «{lotQuery}». I lotti usciti sono
+                registrati da quando la tracciabilità è attiva: per le vendite precedenti restano
+                le bolle cartacee.
+              </p>
+            ) : (
+              <>
+                <p className="mb-3 text-sm font-semibold text-brown-950">
+                  {recall.length === 1
+                    ? "1 ordine ha ricevuto questo lotto"
+                    : `${recall.length} ordini hanno ricevuto questo lotto`}
+                </p>
+                <ul className="space-y-2">
+                  {recall.map((r) => (
+                    <li
+                      key={`${r.orderId}-${r.productName}-${r.movedAt?.getTime() ?? 0}`}
+                      className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm"
+                    >
+                      <Link
+                        href={`/admin/orders/${r.orderId}`}
+                        className="font-semibold text-brown-950 underline decoration-brown-900/30 underline-offset-2"
+                      >
+                        {r.orderNumber}
+                      </Link>
+                      <span className="text-brown-950">{r.customerName}</span>
+                      <span className="text-brown-800/70">{r.productName}</span>
+                      {r.phone && <span className="text-brown-800/70">{r.phone}</span>}
+                      <span className="text-brown-800/70">{r.email}</span>
+                      <span className="text-xs text-brown-800/50">{fmtDate(r.movedAt)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        )}
+      </Panel>
 
       <div className="mb-6 flex flex-wrap gap-2 print:hidden">
         {WINDOWS.map((w) => (

@@ -1347,6 +1347,69 @@ export const getOrderItemsForExport = (f: OrderFilters, limit: number, offset: n
     .offset(offset);
 
 /**
+ * Who received a given lot.
+ *
+ * The question a food recall actually asks, and until the movement ledger
+ * started recording which lots it drew on there was no way to answer it: the
+ * platform knew *when* a lot was consumed and never *who took it away*.
+ *
+ * Matched on the lot code inside the recorded JSON rather than by a join,
+ * because a movement can draw on several lots at once and the code is what is
+ * printed on the packaging — it is what somebody holding a recall notice has in
+ * their hand. Orders are returned newest first with the contact details needed
+ * to actually telephone somebody.
+ */
+export async function getOrdersForLot(lotCode: string, scope: string | null = null, limit = 200) {
+  const code = lotCode.trim();
+  if (!code) return [];
+  return db
+    .select({
+      orderId: orders.id,
+      orderNumber: orders.orderNumber,
+      customerName: orders.name,
+      email: orders.email,
+      phone: orders.phone,
+      status: orders.status,
+      shopSlug: orders.shopSlug,
+      productName: products.name,
+      movedAt: stockMovements.createdAt,
+      lots: stockMovements.lots,
+    })
+    .from(stockMovements)
+    .innerJoin(orders, eq(stockMovements.orderId, orders.id))
+    .innerJoin(products, eq(stockMovements.productId, products.id))
+    .where(
+      and(
+        isNotNull(stockMovements.orderId),
+        // The lot codes live in a JSON array on the row; SQLite has no operator
+        // for "array contains" without json_each, and a LIKE on the serialised
+        // text is exact enough because a code is quoted in it.
+        sql`${stockMovements.lots} like ${'%"lotCode":"' + code.replace(/[%_]/g, "") + '"%'}`,
+        // A recall list names customers, so it is bound by the same sede
+        // boundary as every other list an operator can open.
+        inShop(products.shopSlug, scope),
+      ),
+    )
+    .orderBy(desc(stockMovements.createdAt))
+    .limit(limit);
+}
+
+/** The lots a single order drew on, for its detail page. */
+export async function getLotsForOrder(orderId: string) {
+  const rows = await db
+    .select({
+      productName: products.name,
+      delta: stockMovements.delta,
+      lots: stockMovements.lots,
+    })
+    .from(stockMovements)
+    .innerJoin(products, eq(stockMovements.productId, products.id))
+    .where(and(eq(stockMovements.orderId, orderId), isNotNull(stockMovements.lots)))
+    .orderBy(products.name);
+  return rows.filter((r) => (r.lots?.length ?? 0) > 0);
+}
+
+/**
  * The inventory ledger. Every movement with the product it moved and who
  * caused it — the record a stocktake is reconciled against, and the only one
  * that could explain a discrepancy. It was readable twenty rows at a time on a
@@ -1362,6 +1425,7 @@ export const getStockMovementsForExport = (limit: number, offset: number, produc
       delta: stockMovements.delta,
       stockAfter: stockMovements.stockAfter,
       reason: stockMovements.reason,
+      lots: stockMovements.lots,
       actor: users.name,
     })
     .from(stockMovements)

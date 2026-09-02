@@ -19,7 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:fresh": "rimraf .pw-tmp && playwright test"
+    "test:e2e:fresh": "node -e \"require('node:fs').rmSync('.pw-tmp',{recursive:true,force:true})\" && playwright test"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

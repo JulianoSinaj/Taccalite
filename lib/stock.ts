@@ -58,6 +58,14 @@ export type StockChange = {
   stockBefore: number;
   /** True when the request was clamped by the zero floor. */
   clamped: boolean;
+  /**
+   * The ledger row this wrote, or null for a no-op.
+   *
+   * Returned so a caller that only learns *which lots* it drew on after the
+   * fact — FEFO runs on the committed figure — can attach them to the movement
+   * it belongs to. See `recordMovementLots`.
+   */
+  movementId: string | null;
 };
 
 /**
@@ -74,6 +82,8 @@ export async function applyStockChange(opts: {
   byUserId?: string | null;
   /** Set to write an absolute figure instead of a delta (a stocktake). */
   setTo?: number;
+  /** The order this movement is on account of, when there is one. */
+  orderId?: string | null;
 }): Promise<StockChange | null> {
   const change = await db.transaction((tx) => applyStockChangeCore(tx, opts));
   if (change) await runRestockEffects(opts.productId, change);
@@ -95,9 +105,36 @@ export async function applyStockChange(opts: {
  */
 export function applyStockChangeIn(
   tx: Tx,
-  opts: { productId: string; delta: number; reason: string; byUserId?: string | null; setTo?: number },
+  opts: {
+    productId: string;
+    delta: number;
+    reason: string;
+    byUserId?: string | null;
+    setTo?: number;
+    orderId?: string | null;
+  },
 ): Promise<StockChange | null> {
   return applyStockChangeCore(tx, opts);
+}
+
+/**
+ * Attach the lots a movement drew on, after the fact.
+ *
+ * FEFO can only run once the applied quantity is known, which is after the
+ * movement has been written — so the lots arrive a moment late rather than as
+ * part of the same insert. Best-effort and never throws: lot bookkeeping must
+ * not be able to fail a sale, which is the rule the whole batch layer follows.
+ */
+export async function recordMovementLots(
+  movementId: string | null,
+  lots: { lotCode: string; expiryDate: string | null; taken: number }[],
+): Promise<void> {
+  if (!movementId || lots.length === 0) return;
+  try {
+    await db.update(stockMovements).set({ lots }).where(eq(stockMovements.id, movementId));
+  } catch (err) {
+    console.error("[stock] could not attach lots to movement", movementId, err);
+  }
 }
 
 /**
@@ -227,6 +264,7 @@ async function applyStockChangeCore(
     reason: string;
     byUserId?: string | null;
     setTo?: number;
+    orderId?: string | null;
   },
 ): Promise<StockChange | null> {
   const [row] = await tx
@@ -243,19 +281,24 @@ async function applyStockChangeCore(
   // A no-op still returns cleanly, but writes no ledger row: a movement of
   // zero is noise, not history.
   if (applied === 0) {
-    return { applied: 0, stockAfter, stockBefore, clamped: opts.setTo == null && opts.delta !== 0 };
+    return { movementId: null, applied: 0, stockAfter, stockBefore, clamped: opts.setTo == null && opts.delta !== 0 };
   }
 
   await tx.update(products).set({ stock: stockAfter }).where(eq(products.id, opts.productId));
-  await tx.insert(stockMovements).values({
-    productId: opts.productId,
-    delta: applied,
-    reason: opts.reason,
-    stockAfter,
-    createdByUserId: opts.byUserId ?? null,
-  });
+  const [movement] = await tx
+    .insert(stockMovements)
+    .values({
+      productId: opts.productId,
+      delta: applied,
+      reason: opts.reason,
+      stockAfter,
+      createdByUserId: opts.byUserId ?? null,
+      orderId: opts.orderId ?? null,
+    })
+    .returning({ id: stockMovements.id });
 
   return {
+    movementId: movement?.id ?? null,
     applied,
     stockAfter,
     stockBefore,
