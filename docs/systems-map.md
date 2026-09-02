@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **15 of 24 systems audited**. The rest of the
+> **Status:** in progress — **17 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -64,7 +64,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 5 | [Discounts & Promotions](audits/05-discounts-promotions.md) | ① Il Banco | **88** |
 | 6 | [Fulfilment & Logistics](audits/06-fulfilment-logistics.md) | ② La Consegna | **88** |
 | 7 | [Reservations](audits/07-reservations.md) | ② La Consegna | **88** |
-| 8 | Locations, Hours & Closures | ② La Consegna | — |
+| 8 | [Locations, Hours & Closures](audits/08-locations-hours-closures.md) | ② La Consegna | **90** |
 | 9 | [Identity & Authentication](audits/09-identity-authentication.md) | ③ I Clienti | **89** |
 | 10 | [Customer Accounts](audits/10-customer-accounts.md) | ③ I Clienti | **87** |
 | 11 | [Loyalty & Rewards](audits/11-loyalty-rewards.md) | ③ I Clienti | **89** |
@@ -75,7 +75,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 16 | Storefront Experience | ⑤ La Vetrina | — |
 | 17 | Media & Assets | ⑤ La Vetrina | — |
 | 18 | [Fiscal & Accounting](audits/18-fiscal-accounting.md) | ⑥ Il Registro | **90** |
-| 19 | Analytics & Reporting | ⑥ Il Registro | — |
+| 19 | [Analytics & Reporting](audits/19-analytics-reporting.md) | ⑥ Il Registro | **88** |
 | 20 | [Security, Audit & Compliance](audits/20-security-audit-compliance.md) | ⑥ Il Registro | **88** |
 | 21 | Admin Gestionale Shell | ⑥ Il Registro | — |
 | 22 | [Data Layer & Migrations](audits/22-data-layer-migrations.md) | ⑦ Le Fondamenta | **85** |
@@ -275,8 +275,13 @@ own shop.
 | **Surfaces** | `/sedi`, `/sedi/[slug]`, `components/ShopLocator.tsx`, `components/admin/HoursEditor.tsx`, `ClosureCard.tsx`, `ClosureForm.tsx`, `ClosureHolidays.tsx` |
 | **Tests** | `hours.test.ts`, `closures.test.ts`, `holidays.test.ts`, `shop-scope.test.ts`, `shops-admin.test.ts` |
 
-**Audit questions** — Is shop scope enforced on *every* admin query, not just
-the list pages? Does DST/Rome time handling hold at boundaries?
+**Readiness: 90/100** — audited 2026-09-02, **no code defects found**; see
+[`docs/audits/08-locations-hours-closures.md`](audits/08-locations-hours-closures.md).
+`instantInRome` resolves the offset in two passes, which is the correct
+technique across a transition — proven rather than assumed, with seven new
+boundary tests: 10:00 on consecutive days is 23 real hours apart across the
+spring forward and 25 across the autumn one. Closures and zones are admin-only,
+matching their nav flags, and `deleteShop` names what is blocking it.
 
 ---
 
@@ -534,9 +539,13 @@ exports.
 | **Components** | `components/Analytics.tsx` |
 | **Tests** | `analytics.test.ts`, `sales-analysis.test.ts`, `csv.test.ts`, `csv-export.test.ts`, e2e `admin-reports.spec.ts` |
 
-**Audit questions** — Are aggregates correct across shops and refunds? Is page
-view recording genuinely PII-free? Do exports respect shop scope? Does the
-dashboard scale past a few thousand orders?
+**Readiness: 88/100** — audited 2026-09-02, **no code defects found**; see
+[`docs/audits/19-analytics-reporting.md`](audits/19-analytics-reporting.md). The
+two things I expected to be wrong are both handled with the reasoning written
+down: bulk export is full-admin only because it is "a mass-PII operation", and
+CSV cells that a spreadsheet would execute are neutralised. Page views hold a
+normalised path and a referrer host — no query, no IP, no cookie — which is why
+they need no consent banner.
 
 ---
 
@@ -652,8 +661,8 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 15 of 24.** Systems 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 18, 20
-and 22.
+**Audited: 17 of 24.** Systems 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18,
+19, 20 and 22.
 All remediated in the same pass except 18, which had no defects.
 
 **A shape worth naming.** Three systems held a capacity rule by reading a count
