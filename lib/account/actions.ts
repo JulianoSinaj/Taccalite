@@ -204,8 +204,7 @@ export async function confirmOwnTotp(_prev: ActionState, fd: FormData): Promise<
 export async function regenerateOwnRecoveryCodes(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireUser();
-    void fd;
-    const res = await regenerateCodes(actor);
+    const res = await regenerateCodes(actor, String(fd.get("password") ?? ""));
     if (!res.ok) throw new ActionError(res.error);
     revalidatePath(ACCOUNT_PATH);
     return ok(res.message, res.codes);
@@ -215,8 +214,7 @@ export async function regenerateOwnRecoveryCodes(_prev: ActionState, fd: FormDat
 export async function disableOwnTotp(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireUser();
-    void fd;
-    const res = await disableEnrolment(actor);
+    const res = await disableEnrolment(actor, String(fd.get("password") ?? ""));
     if (!res.ok) throw new ActionError(res.error);
     revalidatePath(ACCOUNT_PATH);
     return ok(res.message);

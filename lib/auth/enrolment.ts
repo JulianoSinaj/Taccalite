@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { generateTotpSecret, verifyTotp } from "@/lib/auth/totp";
 import { generateRecoveryCodes, toStored } from "@/lib/auth/recovery-codes";
+import { verifyPasswordAsync } from "@/lib/auth/password";
 import { logAudit, type Actor } from "@/lib/audit";
 
 /**
@@ -24,6 +25,42 @@ import { logAudit, type Actor } from "@/lib/audit";
 export type EnrolmentResult =
   | { ok: true; message: string; codes?: string[] }
   | { ok: false; error: string };
+
+/**
+ * Re-prove who you are before weakening the second factor.
+ *
+ * Turning 2FA off, and minting a fresh set of recovery codes, were both
+ * protected by nothing but holding a live session — which is exactly the thing
+ * a second factor exists to survive. Anyone who sat down at an unlocked
+ * gestionale, or rode a stolen session cookie, could strip the account back to
+ * one factor and let themselves back in later with codes they had generated on
+ * the way past. A confirm dialog is a speed bump, not a control.
+ *
+ * The password is the right proof here rather than a TOTP code: the case this
+ * guards against is somebody who has the session but not the credentials, and
+ * asking for the authenticator would also lock out the person whose legitimate
+ * reason for turning 2FA off is that they no longer have it.
+ */
+async function assertPassword(actor: Actor, password: string): Promise<EnrolmentResult | null> {
+  const [user] = await db
+    .select({ passwordHash: users.passwordHash })
+    .from(users)
+    .where(eq(users.id, actor.id))
+    .limit(1);
+  if (!user) return { ok: false, error: "Utente non trovato." };
+  if (!password) return { ok: false, error: "Inserisci la tua password per confermare." };
+  if (!(await verifyPasswordAsync(password, user.passwordHash))) {
+    await logAudit({
+      actor,
+      action: "security.reauth_failed",
+      entity: "user",
+      entityId: actor.id,
+      summary: "Password errata nel confermare una modifica alla verifica in due passaggi",
+    });
+    return { ok: false, error: "Password non corretta." };
+  }
+  return null;
+}
 
 /** Mint (or re-mint) a pending secret. Never touches an account already enrolled. */
 export async function startEnrolment(actor: Actor): Promise<EnrolmentResult> {
@@ -72,9 +109,11 @@ export async function confirmEnrolment(actor: Actor, code: string): Promise<Enro
 }
 
 /** Fresh batch of recovery codes; the previous batch stops working. */
-export async function regenerateCodes(actor: Actor): Promise<EnrolmentResult> {
+export async function regenerateCodes(actor: Actor, password: string): Promise<EnrolmentResult> {
   const [user] = await db.select().from(users).where(eq(users.id, actor.id)).limit(1);
   if (!user?.totpEnabled) return { ok: false, error: "Attiva prima la verifica in due passaggi." };
+  const denied = await assertPassword(actor, password);
+  if (denied) return denied;
 
   const codes = generateRecoveryCodes();
   await db.update(users).set({ totpRecoveryCodes: toStored(codes) }).where(eq(users.id, actor.id));
@@ -90,7 +129,10 @@ export async function regenerateCodes(actor: Actor): Promise<EnrolmentResult> {
 }
 
 /** Turn the factor off and clear its secret. */
-export async function disableEnrolment(actor: Actor): Promise<EnrolmentResult> {
+export async function disableEnrolment(actor: Actor, password: string): Promise<EnrolmentResult> {
+  const denied = await assertPassword(actor, password);
+  if (denied) return denied;
+
   // The codes go with the secret: they only ever protected this one factor.
   await db
     .update(users)

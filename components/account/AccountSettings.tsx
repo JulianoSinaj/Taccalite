@@ -228,6 +228,17 @@ export default function AccountSettings(props: SettingsProps) {
                 className="mt-3"
                 onSuccess={(state) => <CodeList state={state} />}
               >
+                <label className="eyebrow eyebrow-dark mb-1.5 block" htmlFor="acc-codes-password">
+                  Conferma con la password
+                </label>
+                <input
+                  id="acc-codes-password"
+                  name="password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  className={accountInputCls}
+                />
                 <AccountSubmit
                   tone="quiet"
                   confirm={twoFactor.issued > 0 ? "I codici attuali smetteranno di funzionare." : undefined}
@@ -238,6 +249,17 @@ export default function AccountSettings(props: SettingsProps) {
             </div>
             <div className="border-t border-rule pt-5">
               <AccountForm action={disableOwnTotp}>
+                <label className="eyebrow eyebrow-dark mb-1.5 block" htmlFor="acc-disable-password">
+                  Conferma con la password
+                </label>
+                <input
+                  id="acc-disable-password"
+                  name="password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  className={accountInputCls}
+                />
                 <AccountSubmit tone="danger" confirm="Disattivare la verifica in due passaggi?">
                   Disattiva
                 </AccountSubmit>

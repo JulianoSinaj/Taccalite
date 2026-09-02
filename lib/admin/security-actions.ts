@@ -60,8 +60,7 @@ export async function confirmTotp(_prev: ActionState, fd: FormData): Promise<Act
 export async function regenerateRecoveryCodes(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireAdmin();
-    void fd;
-    const res = await regenerateCodes(actor);
+    const res = await regenerateCodes(actor, String(fd.get("password") ?? ""));
     if (!res.ok) throw new ActionError(res.error);
     revalidatePath("/admin/security");
     return ok(res.message, res.codes);
@@ -98,8 +97,7 @@ export async function signOutOtherSessions(_prev: ActionState, fd: FormData): Pr
 export async function disableTotp(_prev: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const actor = await requireAdmin();
-    void fd;
-    const res = await disableEnrolment(actor);
+    const res = await disableEnrolment(actor, String(fd.get("password") ?? ""));
     if (!res.ok) throw new ActionError(res.error);
     revalidatePath("/admin/security");
     return ok(res.message);

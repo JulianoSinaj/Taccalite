@@ -3,7 +3,7 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** in progress — **3 of 24 systems audited**. The rest of the
+> **Status:** in progress — **4 of 24 systems audited**. The rest of the
 > readiness column is deliberately empty; it gets filled one system at a time by
 > a dedicated code audit. See **Programme status** below for what is outstanding
 > and what has been recorded-but-not-built.
@@ -76,7 +76,7 @@ The constellations are for navigation; the systems are the audit unit.
 | 17 | Media & Assets | ⑤ La Vetrina | — |
 | 18 | Fiscal & Accounting | ⑥ Il Registro | — |
 | 19 | Analytics & Reporting | ⑥ Il Registro | — |
-| 20 | Security, Audit & Compliance | ⑥ Il Registro | — |
+| 20 | [Security, Audit & Compliance](audits/20-security-audit-compliance.md) | ⑥ Il Registro | **88** |
 | 21 | Admin Gestionale Shell | ⑥ Il Registro | — |
 | 22 | Data Layer & Migrations | ⑦ Le Fondamenta | — |
 | 23 | Quality & Testing | ⑦ Le Fondamenta | — |
@@ -508,9 +508,13 @@ staff, GDPR posture, secrets handling.
 | **Config** | `next.config.ts` (headers/CSP), `Caddyfile` |
 | **Tests** | `origin.test.ts`, `security-fiscal.test.ts`, `production-readiness.test.ts` |
 
-**Audit questions** — Is every server action origin-checked? Is the audit log
-complete for destructive actions and tamper-evident? Are headers/CSP actually
-set in production? Any secrets reachable from the client bundle?
+**Readiness: 88/100** — audited 2026-09-02 at 81, remediated the same day; see
+[`docs/audits/20-security-audit-compliance.md`](audits/20-security-audit-compliance.md).
+CSP and the security headers travel with the app rather than one operator's
+proxy, `isSameOrigin` fronts every hand-rolled POST with three correctly-reasoned
+exemptions, and the audit log is insert-only across 50+ action types. Fixed: the
+second factor could be turned off — and fresh recovery codes minted — with
+nothing but a live session, which is the one thing 2FA exists to survive.
 
 ---
 
@@ -597,7 +601,7 @@ deploy targets (Docker + Vercel) actually current?
 
 ## Programme status
 
-**Audited: 3 of 24.** Systems 1, 2 and 3, all remediated in the same pass.
+**Audited: 4 of 24.** Systems 1, 2, 3 and 20, all remediated in the same pass.
 Everything else in the index is unexamined — an empty cell means "not looked
 at", never "fine".
 

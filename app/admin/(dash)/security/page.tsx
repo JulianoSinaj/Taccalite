@@ -1,7 +1,7 @@
 import QRCode from "qrcode";
 import { eq } from "drizzle-orm";
 import { AdminHeader, Panel, inputCls, labelCls, fmtDateTime } from "@/components/admin/ui";
-import { ActionForm, PendingButton, DeleteForm } from "@/components/admin/ActionForm";
+import { ActionForm, PendingButton } from "@/components/admin/ActionForm";
 import { CodeRevealForm } from "@/components/admin/RecoveryCodes";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
@@ -66,17 +66,52 @@ export default async function SecurityPage() {
               meta={
                 storedCodes.length > 0 ? `${remaining} di ${storedCodes.length} ancora validi` : undefined
               }
-            />
+            >
+              {/* A fresh batch of codes is a way back into the account, so it
+                  asks for the password like turning the factor off does. */}
+              <div>
+                <label className={labelCls} htmlFor="codes-password">
+                  Conferma con la password
+                </label>
+                <input
+                  id="codes-password"
+                  name="password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  className={`${inputCls} w-56`}
+                />
+              </div>
+            </CodeRevealForm>
           </div>
 
           <div className="mt-6 border-t border-brown-900/10 pt-5">
-            <DeleteForm
-              action={disableTotp}
-              id={actor.id}
-              confirm="Disattivare la verifica in due passaggi? Il tuo account sarà protetto dalla sola password."
-            >
-              Disattiva 2FA
-            </DeleteForm>
+            {/* Not a `DeleteForm`: weakening the second factor asks for the
+                first one. Holding a live session used to be the only thing
+                standing between somebody at an unlocked gestionale and an
+                account back down to a single factor. */}
+            <ActionForm action={disableTotp} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="id" value={actor.id} />
+              <div>
+                <label className={labelCls} htmlFor="disable-password">
+                  Conferma con la password
+                </label>
+                <input
+                  id="disable-password"
+                  name="password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  className={`${inputCls} w-56`}
+                />
+              </div>
+              <PendingButton
+                tone="danger"
+                confirm="Disattivare la verifica in due passaggi? Il tuo account sarà protetto dalla sola password."
+              >
+                Disattiva 2FA
+              </PendingButton>
+            </ActionForm>
           </div>
         </Panel>
       ) : (
