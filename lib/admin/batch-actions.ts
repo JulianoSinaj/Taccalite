@@ -7,7 +7,7 @@ import { db } from "@/lib/db/client";
 import { productBatches, products } from "@/lib/db/schema";
 import { requireAdmin } from "@/lib/auth/session";
 import { requireShopScope } from "@/lib/admin/scope";
-import { applyStockChange } from "@/lib/stock";
+import { applyStockChangeIn, runRestockEffects } from "@/lib/stock";
 import { notifyBackInStock, pendingStockNotificationCount } from "@/lib/stock-notify";
 import { logAudit } from "@/lib/audit";
 import { type ActionState, runAction, ok, ActionError } from "@/lib/admin/action-state";
@@ -45,6 +45,26 @@ async function mustFindScopedProduct(productId: string) {
   return product;
 }
 
+/**
+ * The same, plus the requirement that the product actually counts units.
+ *
+ * A stock movement returns null for a product with `stock IS NULL` — that is
+ * correct (made-to-order has no quantity to move) but it is *silent*, and only
+ * `receiveBatch` ever asked the question. So writing off or correcting a lot on
+ * a product that had since been switched to made-to-order emptied the lot,
+ * moved no stock, and reported success: the lot records and the on-hand figure
+ * parted company with nothing to say they had.
+ */
+async function mustTrackStock(productId: string) {
+  const product = await mustFindScopedProduct(productId);
+  if (product.stock == null) {
+    throw new ActionError(
+      `"${product.name}" non traccia le scorte: imposta una giacenza nella scheda prima di gestirne i lotti.`,
+    );
+  }
+  return product;
+}
+
 const batchInput = z.object({
   productId: z.string().trim().min(1),
   lotCode: z.string().trim().max(80).optional().transform((v) => v ?? ""),
@@ -70,34 +90,36 @@ export async function receiveBatch(_prev: ActionState, fd: FormData): Promise<Ac
     const actor = await requireAdmin();
     const d = parseForm(batchInput, fd);
 
-    const product = await mustFindScopedProduct(d.productId);
-    if (product.stock == null) {
-      throw new ActionError(
-        "Questo prodotto non traccia le scorte: imposta una giacenza nella scheda prima di registrare un lotto.",
-      );
-    }
+    const product = await mustTrackStock(d.productId);
 
-    await db.insert(productBatches).values({
-      productId: d.productId,
-      lotCode: d.lotCode,
-      expiryDate: d.expiryDate,
-      quantity: d.quantity,
-      remaining: d.quantity,
-      supplier: d.supplier,
-      unitCostCents: d.unitCostEuros,
-      receivedAt: new Date(),
-      note: d.note,
-      createdByUserId: actor.id,
+    // The lot row and the units it brings in are one event, and they used to be
+    // two transactions: a failure between them left a lot claiming stock the
+    // product had never been credited with. Receiving stock is a movement like
+    // any other, so it still goes through the one ledger — joined to this
+    // transaction rather than opening its own.
+    const change = await db.transaction(async (tx) => {
+      await tx.insert(productBatches).values({
+        productId: d.productId,
+        lotCode: d.lotCode,
+        expiryDate: d.expiryDate,
+        quantity: d.quantity,
+        remaining: d.quantity,
+        supplier: d.supplier,
+        unitCostCents: d.unitCostEuros,
+        receivedAt: new Date(),
+        note: d.note,
+        createdByUserId: actor.id,
+      });
+      return applyStockChangeIn(tx, {
+        productId: d.productId,
+        delta: d.quantity,
+        reason: `Carico lotto ${d.lotCode || "—"}${d.expiryDate ? ` (scad. ${d.expiryDate})` : ""}`,
+        byUserId: actor.id,
+      });
     });
-
-    // Receiving stock is a stock movement like any other, so it goes through the
-    // one ledger rather than writing the products row directly.
-    const change = await applyStockChange({
-      productId: d.productId,
-      delta: d.quantity,
-      reason: `Carico lotto ${d.lotCode || "—"}${d.expiryDate ? ` (scad. ${d.expiryDate})` : ""}`,
-      byUserId: actor.id,
-    });
+    // Outside the transaction: this sends the back-in-stock mail, and email has
+    // no business inside a write lock.
+    if (change) await runRestockEffects(d.productId, change);
 
     await logAudit({
       actor,
@@ -139,17 +161,32 @@ export async function writeOffBatch(_prev: ActionState, fd: FormData): Promise<A
 
     const [batch] = await db.select().from(productBatches).where(eq(productBatches.id, id)).limit(1);
     if (!batch) throw new ActionError("Lotto non trovato.");
-    const product = await mustFindScopedProduct(batch.productId);
+    const product = await mustTrackStock(batch.productId);
     if (batch.remaining <= 0) return ok("Questo lotto è già esaurito.");
 
     const removed = batch.remaining;
-    await db.update(productBatches).set({ remaining: 0 }).where(eq(productBatches.id, id));
-    await applyStockChange({
-      productId: batch.productId,
-      delta: -removed,
-      reason: `${reason} — lotto ${batch.lotCode || "—"}`,
-      byUserId: actor.id,
+    // Emptying the lot and removing its units are one event. The compare-and-set
+    // on `remaining` is what stops two operators writing the same lot off twice,
+    // each removing the units the other had already removed.
+    const change = await db.transaction(async (tx) => {
+      const [claimed] = await tx
+        .update(productBatches)
+        .set({ remaining: 0 })
+        .where(and(eq(productBatches.id, id), sql`${productBatches.remaining} = ${removed}`))
+        .returning({ id: productBatches.id });
+      if (!claimed) return "raced" as const;
+      return applyStockChangeIn(tx, {
+        productId: batch.productId,
+        delta: -removed,
+        reason: `${reason} — lotto ${batch.lotCode || "—"}`,
+        byUserId: actor.id,
+      });
     });
+    if (change === "raced") {
+      throw new ActionError(
+        "Il lotto è stato modificato da qualcun altro nel frattempo. Ricarica la pagina e riprova.",
+      );
+    }
 
     await logAudit({
       actor,
@@ -178,7 +215,7 @@ export async function correctBatchRemaining(_prev: ActionState, fd: FormData): P
 
     const [batch] = await db.select().from(productBatches).where(eq(productBatches.id, id)).limit(1);
     if (!batch) throw new ActionError("Lotto non trovato.");
-    await mustFindScopedProduct(batch.productId);
+    await mustTrackStock(batch.productId);
     if (remaining > batch.quantity) {
       throw new ActionError(`Il lotto ne conteneva ${batch.quantity}: non può restarne di più.`);
     }
@@ -188,24 +225,28 @@ export async function correctBatchRemaining(_prev: ActionState, fd: FormData): P
     // The guard is what stops two operators correcting the same lot from both
     // applying their delta. Its *result* was being ignored, so the loser of the
     // race left the lot untouched and still moved the on-hand figure — the one
-    // outcome this whole module exists to prevent. Nothing has changed yet at
-    // this point, so bailing out is clean.
-    const [updated] = await db
-      .update(productBatches)
-      .set({ remaining })
-      .where(and(eq(productBatches.id, id), sql`${productBatches.remaining} = ${batch.remaining}`))
-      .returning({ id: productBatches.id });
-    if (!updated) {
+    // outcome this whole module exists to prevent. It now also shares a
+    // transaction with the movement, so the pair cannot half-land either.
+    const outcome = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(productBatches)
+        .set({ remaining })
+        .where(and(eq(productBatches.id, id), sql`${productBatches.remaining} = ${batch.remaining}`))
+        .returning({ id: productBatches.id });
+      if (!updated) return "raced" as const;
+      return applyStockChangeIn(tx, {
+        productId: batch.productId,
+        delta,
+        reason: `Rettifica lotto ${batch.lotCode || "—"}`,
+        byUserId: actor.id,
+      });
+    });
+    if (outcome === "raced") {
       throw new ActionError(
         "Il lotto è stato modificato da qualcun altro nel frattempo. Ricarica la pagina e riprova.",
       );
     }
-    await applyStockChange({
-      productId: batch.productId,
-      delta,
-      reason: `Rettifica lotto ${batch.lotCode || "—"}`,
-      byUserId: actor.id,
-    });
+    if (outcome) await runRestockEffects(batch.productId, outcome);
 
     await logAudit({
       actor,

@@ -1,10 +1,15 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { products, productBatches, stockMovements } from "@/lib/db/schema";
 import { getSetting } from "@/lib/db/queries";
 import { isLowStock } from "@/lib/inventory";
 import { notifyBackInStock } from "@/lib/stock-notify";
+import { dateInRome } from "@/lib/time";
+import { ActionError } from "@/lib/admin/action-state";
+
+/** A transaction handle, for callers that compose a movement with their own writes. */
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * The single way inventory moves.
@@ -70,9 +75,29 @@ export async function applyStockChange(opts: {
   /** Set to write an absolute figure instead of a delta (a stocktake). */
   setTo?: number;
 }): Promise<StockChange | null> {
-  const change = await applyStockChangeCore(opts);
-  if (change) await afterRestock(opts.productId, change);
+  const change = await db.transaction((tx) => applyStockChangeCore(tx, opts));
+  if (change) await runRestockEffects(opts.productId, change);
   return change;
+}
+
+/**
+ * The same movement, joined to a transaction the caller already opened.
+ *
+ * For a caller that has to change something else in the same breath — receiving
+ * a lot writes a `product_batches` row *and* loads the units — where two
+ * separate transactions can half-succeed and leave the lots claiming stock the
+ * product does not have.
+ *
+ * The restock side-effects are **not** run here: they send email, which has no
+ * business inside a write lock. The caller must invoke `runRestockEffects` once
+ * its transaction has committed. That is the whole contract, and it is the only
+ * reason this is separate from `applyStockChange` above.
+ */
+export function applyStockChangeIn(
+  tx: Tx,
+  opts: { productId: string; delta: number; reason: string; byUserId?: string | null; setTo?: number },
+): Promise<StockChange | null> {
+  return applyStockChangeCore(tx, opts);
 }
 
 /**
@@ -109,6 +134,24 @@ export async function setProductStock(opts: {
   if (from === to) return;
 
   if (to == null) {
+    // Made-to-order and open lots are contradictory: the lots would go on
+    // claiming units the product no longer counts, and they would never appear
+    // on the expiry report again because that only lists what is still on hand.
+    // Refused rather than silently zeroed, for the same reason a category in
+    // use is refused rather than orphaned — the information is the operator's
+    // to spend, not this function's to discard.
+    const open = await db
+      .select({ lotCode: productBatches.lotCode, remaining: productBatches.remaining })
+      .from(productBatches)
+      .where(and(eq(productBatches.productId, productId), gt(productBatches.remaining, 0)));
+    if (open.length > 0) {
+      const units = open.reduce((n, b) => n + b.remaining, 0);
+      throw new ActionError(
+        `Ci sono ancora ${units} unità in ${open.length} ${open.length === 1 ? "lotto" : "lotti"}: ` +
+          "scaricali o vendili prima di togliere la giacenza a questo prodotto.",
+        "stock",
+      );
+    }
     if (from != null && from !== 0) {
       await applyStockChange({ productId, delta: 0, setTo: 0, reason, byUserId });
     }
@@ -140,7 +183,7 @@ export async function setProductStock(opts: {
  * which has no business inside a write lock — and never throws: inventory
  * bookkeeping must not fail because a notification did.
  */
-async function afterRestock(productId: string, change: StockChange): Promise<void> {
+export async function runRestockEffects(productId: string, change: StockChange): Promise<void> {
   if (change.applied <= 0) return;
   try {
     const [p] = await db
@@ -176,47 +219,48 @@ async function afterRestock(productId: string, change: StockChange): Promise<voi
 }
 
 /** The atomic part: read, compute and write one product's stock in one lock. */
-async function applyStockChangeCore(opts: {
-  productId: string;
-  delta: number;
-  reason: string;
-  byUserId?: string | null;
-  setTo?: number;
-}): Promise<StockChange | null> {
-  return db.transaction(async (tx) => {
-    const [row] = await tx
-      .select({ stock: products.stock })
-      .from(products)
-      .where(eq(products.id, opts.productId));
-    if (!row || row.stock == null) return null;
+async function applyStockChangeCore(
+  tx: Tx,
+  opts: {
+    productId: string;
+    delta: number;
+    reason: string;
+    byUserId?: string | null;
+    setTo?: number;
+  },
+): Promise<StockChange | null> {
+  const [row] = await tx
+    .select({ stock: products.stock })
+    .from(products)
+    .where(eq(products.id, opts.productId));
+  if (!row || row.stock == null) return null;
 
-    const stockBefore = row.stock;
-    const target = opts.setTo != null ? Math.max(0, Math.round(opts.setTo)) : stockBefore + opts.delta;
-    const stockAfter = Math.max(0, target);
-    const applied = stockAfter - stockBefore;
+  const stockBefore = row.stock;
+  const target = opts.setTo != null ? Math.max(0, Math.round(opts.setTo)) : stockBefore + opts.delta;
+  const stockAfter = Math.max(0, target);
+  const applied = stockAfter - stockBefore;
 
-    // A no-op still returns cleanly, but writes no ledger row: a movement of
-    // zero is noise, not history.
-    if (applied === 0) {
-      return { applied: 0, stockAfter, stockBefore, clamped: opts.setTo == null && opts.delta !== 0 };
-    }
+  // A no-op still returns cleanly, but writes no ledger row: a movement of
+  // zero is noise, not history.
+  if (applied === 0) {
+    return { applied: 0, stockAfter, stockBefore, clamped: opts.setTo == null && opts.delta !== 0 };
+  }
 
-    await tx.update(products).set({ stock: stockAfter }).where(eq(products.id, opts.productId));
-    await tx.insert(stockMovements).values({
-      productId: opts.productId,
-      delta: applied,
-      reason: opts.reason,
-      stockAfter,
-      createdByUserId: opts.byUserId ?? null,
-    });
-
-    return {
-      applied,
-      stockAfter,
-      stockBefore,
-      clamped: opts.setTo == null && applied !== opts.delta,
-    };
+  await tx.update(products).set({ stock: stockAfter }).where(eq(products.id, opts.productId));
+  await tx.insert(stockMovements).values({
+    productId: opts.productId,
+    delta: applied,
+    reason: opts.reason,
+    stockAfter,
+    createdByUserId: opts.byUserId ?? null,
   });
+
+  return {
+    applied,
+    stockAfter,
+    stockBefore,
+    clamped: opts.setTo == null && applied !== opts.delta,
+  };
 }
 
 /**
@@ -232,6 +276,7 @@ async function applyStockChangeCore(opts: {
 export async function consumeBatchesFefo(
   productId: string,
   quantity: number,
+  today = dateInRome(),
 ): Promise<{ lotCode: string; expiryDate: string | null; taken: number }[]> {
   if (quantity <= 0) return [];
   try {
@@ -241,7 +286,17 @@ export async function consumeBatchesFefo(
         .from(productBatches)
         .where(eq(productBatches.productId, productId));
       const open = rows
-        .filter((b) => b.remaining > 0)
+        // An **expired** lot is not stock, it is waste awaiting a write-off, and
+        // sorting by expiry ascending meant it was the very first thing a sale
+        // was attributed to. Because `/admin/products/scadenze` only lists lots
+        // with units left, an expired lot quietly drained to zero through
+        // ordinary sales and vanished off the one report whose job is to say
+        // "throw this away" — the report erasing exactly what it exists to
+        // surface. Skipping them leaves the lot sitting there demanding a
+        // decision. The sale itself is unaffected: `products.stock` is the
+        // authority on whether there is anything to sell, and lots only explain
+        // how that figure is made up.
+        .filter((b) => b.remaining > 0 && !(b.expiryDate != null && b.expiryDate < today))
         // Earliest expiry first; lots with no expiry go last (they can wait).
         .sort((a, b) => {
           if (a.expiryDate && b.expiryDate) return a.expiryDate.localeCompare(b.expiryDate);
@@ -279,8 +334,20 @@ export async function restoreBatches(productId: string, quantity: number): Promi
         .select()
         .from(productBatches)
         .where(eq(productBatches.productId, productId));
-      // Newest expiry first — the mirror of FEFO consumption.
-      const batches = rows.sort((a, b) => (b.expiryDate ?? "").localeCompare(a.expiryDate ?? ""));
+      // The mirror of FEFO consumption, so a return lands back in the lot it
+      // most likely came out of. Consumption goes earliest expiry first and
+      // undated lots *last*, so undoing it goes undated first and then latest
+      // expiry down to earliest. Coalescing null to "" got the dated lots right
+      // and the undated ones exactly backwards, putting them at the end of both
+      // orders instead of at opposite ends.
+      const batches = rows.sort((a, b) => {
+        if (a.expiryDate == null && b.expiryDate == null) {
+          return (b.receivedAt?.getTime() ?? 0) - (a.receivedAt?.getTime() ?? 0);
+        }
+        if (a.expiryDate == null) return -1;
+        if (b.expiryDate == null) return 1;
+        return b.expiryDate.localeCompare(a.expiryDate);
+      });
 
       let left = quantity;
       for (const batch of batches) {

@@ -573,11 +573,11 @@ export async function applyOrderStock(orderId: string, reason: string): Promise<
 
       // Alert once per dip: collect products now at/under the threshold that
       // haven't already been notified. Stamping lowStockNotifiedAt below
-      // stops a single dip from spamming repeat alerts on later orders. When
-      // an admin restocks a product back above the threshold, that stamp
-      // should be reset to null so a future dip can alert again — that reset
-      // lives in the product-update action (lib/admin/actions.ts, owned by
-      // another agent) and is intentionally not handled here.
+      // stops a single dip from spamming repeat alerts on later orders. The
+      // matching *reset* — clearing the stamp once stock is back above the
+      // threshold, so a future dip can alert again — belongs to the restock
+      // side of the ledger and lives in `runRestockEffects` (lib/stock.ts),
+      // which every path that raises stock now goes through.
       if (isLowStock(updated, threshold) && updated.lowStockNotifiedAt == null) {
         lowStock.push({ name: updated.name, stock: updated.stock });
         notifyIds.push(productId);
@@ -591,8 +591,15 @@ export async function applyOrderStock(orderId: string, reason: string): Promise<
         .set({ lowStockNotifiedAt: new Date() })
         .where(inArray(products.id, notifyIds));
     }
-  } catch {
-    // Swallowed on purpose — stock/alert bookkeeping is best-effort.
+  } catch (err) {
+    // Best-effort by design: a paid order must not be rejected because the
+    // shelf count could not be written. But `stockAppliedAt` was claimed at the
+    // top to make this idempotent, so a throw part-way through a multi-product
+    // order leaves some products decremented, some not, and no retry possible —
+    // and this used to swallow that in complete silence, with the function
+    // still returning true. It is still not fatal, but it is now findable:
+    // overselling three weeks later is not a mystery worth preserving.
+    console.error("[stock] order stock application failed part-way for", orderId, err);
   }
   return true;
 }
@@ -888,7 +895,10 @@ export async function restockOrderItems(
       const change = await applyStockChange({ productId, delta: qty, reason, byUserId });
       if (change) await restoreBatches(productId, change.applied);
     }
-  } catch {
-    // Best-effort — a refund must not fail because inventory bookkeeping did.
+  } catch (err) {
+    // Best-effort — a refund must not fail because inventory bookkeeping did —
+    // but the same partial-application trap as `applyOrderStock` applies, and
+    // silence is what made it invisible.
+    console.error("[stock] order restock failed part-way for", orderId, err);
   }
 }

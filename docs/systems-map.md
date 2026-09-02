@@ -3,8 +3,10 @@
 > A whole-platform decomposition into named systems, so each one can be audited
 > on its own and scored for production readiness.
 >
-> **Status:** map only. The readiness column is deliberately empty — it gets
-> filled one system at a time by a dedicated code audit per system.
+> **Status:** in progress — **2 of 24 systems audited**. The rest of the
+> readiness column is deliberately empty; it gets filled one system at a time by
+> a dedicated code audit. See **Programme status** below for what is outstanding
+> and what has been recorded-but-not-built.
 >
 > Last surveyed: 2026-09-02 · 333 source files (`app/`, `components/`, `lib/`),
 > 33 tables, 46 migrations, 54 unit suites, 6 e2e suites.
@@ -56,7 +58,7 @@ The constellations are for navigation; the systems are the audit unit.
 | # | System | Constellation | Readiness |
 |---|--------|---------------|-----------|
 | 1 | [Catalogue & Products](audits/01-catalogue-products.md) | ① Il Banco | **91** |
-| 2 | Inventory & Stock | ① Il Banco | — |
+| 2 | [Inventory & Stock](audits/02-inventory-stock.md) | ① Il Banco | **84** |
 | 3 | Orders & Checkout | ① Il Banco | — |
 | 4 | Payments | ① Il Banco | — |
 | 5 | Discounts & Promotions | ① Il Banco | — |
@@ -128,9 +130,14 @@ thresholds, back-in-stock notifications, margin inputs.
 **Invariant to protect** — every stock change goes through `lib/stock.ts`. Any
 direct write to `products.stock` elsewhere is a defect.
 
-**Audit questions** — Is the ledger append-only and reconcilable against
-`products.stock`? Are claims released on cancel/expiry? Does batch expiry
-actually block sale?
+**Readiness: 84/100** — audited 2026-09-02 at 69, remediated the same day; see
+[`docs/audits/02-inventory-stock.md`](audits/02-inventory-stock.md). The ledger
+itself is strong (atomic, records the delta *actually* applied, floors at zero)
+and every lot action is shop-scoped. Fixed: FEFO no longer drains expired lots
+off the HACCP report, lot writes and their movements are one transaction, and a
+product cannot become made-to-order while lots still hold units. **Recorded but
+not built:** lot→order traceability (the recall question) and ledger-vs-on-hand
+reconciliation — see that document's "Not done here".
 
 ---
 
@@ -581,6 +588,37 @@ or degrade silently? Is the health check deep enough to be useful? Are both
 deploy targets (Docker + Vercel) actually current?
 
 ---
+
+## Programme status
+
+**Audited: 2 of 24.** Systems 1 and 2, both remediated in the same pass.
+Everything else in the index is unexamined — an empty cell means "not looked
+at", never "fine".
+
+### Scope questions outstanding
+
+- **④ Payments (system 4)** — the owner has indicated payments will most likely
+  **not** be taken through this platform, which would change what "ready" means
+  for that system entirely: the Stripe checkout, its webhook and the settlement
+  fields would become dead weight rather than the money path. *Not yet
+  confirmed, and not yet decided what replaces it* (counter-only cash/POS? an
+  external terminal? a payment link from elsewhere?). **Do not audit or score
+  system 4 until this is settled** — scoring it against the wrong intent is
+  worse than leaving it blank. The answer also reaches systems 3, 18 and 19,
+  which read the settlement fields.
+
+### Recorded but not built
+
+Work identified during an audit, designed, and deliberately deferred. These are
+the reason the audited systems are not scored higher, and they are the backlog —
+not oversights.
+
+| System | Item | Why deferred |
+|---|---|---|
+| 2 | **Lot → order traceability.** `consumeBatchesFefo` computes which lots went out and both callers discard it, so a recall cannot name the affected customers. Design: `order_id` + `lots` on `stock_movements`. | Schema change; feature work, not a defect |
+| 2 | **Ledger ↔ on-hand reconciliation.** Nothing surfaces a divergence, and legacy rows have no opening movement so the sum is expected to differ. Design: backfill opening balances, then a divergence report. | Migration + new report surface |
+| 2 | A half-applied `applyOrderStock` is now *logged* but still not *recoverable*. | Depends on the reconciliation report above |
+| 1 | TOCTOU window on derived slugs; allergens absent from the CSV round-trip; `unit` is free text. | Low value against the risk |
 
 ## How to read a readiness score
 
