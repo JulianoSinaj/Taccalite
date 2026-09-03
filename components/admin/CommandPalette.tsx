@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Cmd = { label: string; href: string; group: string; adminOnly?: boolean; keywords?: string };
@@ -205,6 +205,21 @@ function Palette({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }
     return () => cancelAnimationFrame(id);
   }, []);
 
+  // The listbox wiring. Focus never leaves the input — the arrow keys move a
+  // *marker*, which is what `aria-activedescendant` is for — so the ids below
+  // are the only way a screen reader can be told which row is current. Without
+  // them arrowing down the results was completely silent.
+  const listboxId = useId();
+  const optionId = (i: number) => `${listboxId}-o${i}`;
+
+  // The marked row also has to be *visible*: the list scrolls at 20rem, and
+  // arrowing past the eighth result moved a highlight nobody could see.
+  useEffect(() => {
+    document.getElementById(optionId(active))?.scrollIntoView({ block: "nearest" });
+    // `optionId` is derived from a `useId` that never changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, results.length]);
+
   const go = useCallback(
     (href: string) => {
       onClose();
@@ -245,18 +260,53 @@ function Palette({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }
             }
           }}
           placeholder="Cerca un ordine, un cliente, un prodotto o una sezione…"
+          // A search box that owns a list of results is a combobox, and this one
+          // was an unlabelled text input: nothing said a list existed, nothing
+          // said how many rows it had, and nothing said which row Enter would
+          // open. The placeholder is not a label — it disappears as soon as you
+          // type, which is the whole time you are using it.
+          role="combobox"
+          aria-label="Cerca nel gestionale"
+          aria-autocomplete="list"
+          aria-expanded={results.length > 0}
+          aria-controls={results.length > 0 ? listboxId : undefined}
+          aria-activedescendant={results[active] ? optionId(active) : undefined}
           className="w-full border-b border-brown-900/10 px-5 py-4 text-sm text-brown-950 placeholder:text-brown-800/70 focus:outline-none"
         />
-        <ul className="max-h-[min(20rem,50dvh)] overflow-y-auto py-2">
-          {results.length === 0 ? (
-            <li className="px-5 py-6 text-center text-sm text-brown-800/70">
-              {searching ? "Ricerca…" : "Nessun risultato."}
-            </li>
-          ) : (
-            results.map((c, i) => (
-              <li key={`${c.href}-${c.label}`}>
+        {/* Announced without being drawn: the count is already obvious to anyone
+            who can see the list, and unavailable to anyone who cannot. */}
+        <p aria-live="polite" className="sr-only">
+          {searching
+            ? "Ricerca in corso…"
+            : results.length === 0
+              ? "Nessun risultato."
+              : `${results.length} ${results.length === 1 ? "risultato" : "risultati"}.`}
+        </p>
+        {results.length === 0 ? (
+          <p className="px-5 py-6 text-center text-sm text-brown-800/70">
+            {searching ? "Ricerca…" : "Nessun risultato."}
+          </p>
+        ) : (
+          // Only rendered when it has options: a listbox whose only child is a
+          // "nothing found" line is not a listbox.
+          <ul
+            id={listboxId}
+            role="listbox"
+            aria-label="Risultati"
+            className="max-h-[min(20rem,50dvh)] overflow-y-auto py-2"
+          >
+            {results.map((c, i) => (
+              <li key={`${c.href}-${c.label}`} role="presentation">
                 <button
+                  id={optionId(i)}
                   type="button"
+                  role="option"
+                  aria-selected={i === active}
+                  // Out of the tab order: the input holds focus for the whole
+                  // interaction and the arrow keys do the moving, so a Tab that
+                  // walked through forty results would be walking away from the
+                  // only control that still accepts typing.
+                  tabIndex={-1}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => go(c.href)}
                   className={`flex w-full items-center justify-between gap-3 px-5 py-2.5 text-left text-sm ${
@@ -276,9 +326,9 @@ function Palette({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }
                   </span>
                 </button>
               </li>
-            ))
-          )}
-        </ul>
+            ))}
+          </ul>
+        )}
         <div className="border-t border-brown-900/10 px-5 py-2 text-[12px] text-brown-800/70">
           ↑↓ per navigare · ↵ per aprire · Esc per chiudere
         </div>

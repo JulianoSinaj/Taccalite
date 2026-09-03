@@ -39,11 +39,14 @@ export function ConfirmDialog({
   // question over this row's dialog.
   const titleId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
+  // Whatever had focus when this opened — the row's own button, almost always.
+  const returnTo = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     if (open && !el.open) {
+      returnTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       el.showModal();
       // Moved here rather than left to `autoFocus`, which React only honours on
       // mount — and this dialog mounts closed, alongside its row, long before it
@@ -54,6 +57,32 @@ export function ConfirmDialog({
     }
     if (!open && el.open) el.close();
   }, [open]);
+
+  // Hand focus back on the way out.
+  //
+  // `PendingButton` mounts this only while it is being asked (a list page would
+  // otherwise ship a <dialog> per row), so cancelling *unmounts* an open dialog
+  // rather than closing one — and a `<dialog>` torn out of the document takes
+  // the platform's own focus restoration with it. Measured before this: after
+  // Annulla, `document.activeElement` was `<body>`, so an operator working the
+  // keyboard was dropped at the top of the document instead of back on the
+  // button they had just pressed. Closing it here is not enough on its own
+  // either, since the element is being removed in the same commit; the focus
+  // call is what actually lands.
+  //
+  // Guarded on `el.open`, so the callers that keep the dialog mounted and merely
+  // toggle `open` (the unsaved-changes guard, the recovery codes) are untouched:
+  // for them the effect above has already closed it, the browser has already
+  // restored focus, and stealing it again on unmount would fight the page they
+  // are navigating to.
+  useEffect(() => {
+    const el = ref.current;
+    return () => {
+      if (!el?.open) return;
+      el.close();
+      returnTo.current?.focus();
+    };
+  }, []);
 
   const tones = {
     danger: "bg-danger-solid text-danger-solid-fg hover:brightness-110",

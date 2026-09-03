@@ -1190,8 +1190,18 @@ html[data-intro="skip"] .intro-curtain {
  * 640px up and 15px would still trigger it on a small tablet in portrait.
  * `-webkit-text-size-adjust` stops the same engine inflating body copy when a
  * block happens to be wider than the viewport.
+ *
+ * Keyed on the pointer, not on a width — which is what this used to be, capped
+ * at 767px, and therefore missed on exactly the devices its own comment names.
+ * A phone in landscape is 844–932px wide (every iPhone above the SE), and an
+ * iPad in portrait is 768–834px: measured at 932px, the gestionale's fields
+ * computed 14.875px and Safari zoomed on focus, which is the whole bug. A width
+ * query cannot separate "a wide phone" from "a narrow desktop window"; the
+ * pointer can. `any-pointer` rather than `pointer` so an iPad with a keyboard
+ * and trackpad attached — which can report a fine primary pointer — still
+ * counts as the touch device it is.
  */
-@media (max-width: 767px) {
+@media (any-pointer: coarse) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   select,
   textarea {
@@ -1640,6 +1650,35 @@ html:has(.admin-shell) {
     align-items: center;
     min-height: 2.75rem;
   }
+}
+
+/* ── The bulk bar's action group ─────────────────────────────────────────────
+ *
+ * The bar carries a select and an "Applica a n" button that can do nothing
+ * until a row is ticked. On a desktop they are a quiet strip on the right; on a
+ * 390px phone the select and the button each go full width, and the bar came to
+ * 223px sitting between the filters and the first row of the list — a fifth of
+ * a phone screen spent on two disabled controls.
+ *
+ * Done in CSS rather than in `BulkBar`'s own state, deliberately. The bar is
+ * server-rendered with a count of zero, so a JS collapse would either draw the
+ * whole thing and snap it shut on hydration — a layout jump directly above the
+ * rows — or, if it rendered nothing until hydration, take bulk actions away
+ * from an operator with JS off, which is the one case the checkboxes' `form=`
+ * wiring exists to keep working. `:has()` costs neither.
+ *
+ * `.admin-shell` is the scope because the ticked boxes are inside the table,
+ * which is a *sibling* of the bar rather than a descendant — the nearest
+ * ancestor both share is the shell. One bulk bar per page is the invariant that
+ * makes the generic `[name="ids"]` safe; a second list with its own bar would
+ * need the form id in the selector.
+ */
+.bulk-actions {
+  display: none;
+}
+
+.admin-shell:has(input[name="ids"]:checked) .bulk-actions {
+  display: flex;
 }
 
 /* ── Horizontal scrollers ────────────────────────────────────────────────────

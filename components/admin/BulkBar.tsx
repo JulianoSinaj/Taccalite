@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { inputCls } from "./ui";
 import { ActionForm, PendingButton } from "./ActionForm";
 import type { ActionState } from "@/lib/admin/action-state";
@@ -16,13 +16,21 @@ type Action = (prev: ActionState, fd: FormData) => Promise<ActionState>;
  * (they already contain their own per-row forms, which can't nest).
  *
  * What this adds on top is the interactive part: a live count, a select-all
- * toggle, and hiding the bar until something is actually selected.
+ * toggle, and collapsing the action controls until something is selected.
+ *
+ * The collapse itself is CSS, not this component's state — see `.bulk-actions`
+ * in globals.css. Doing it here would either flash the full bar on every load
+ * (the server renders with a count of zero) or take the bulk actions away from
+ * an operator with no JS, which is exactly the case the `form="…"` wiring above
+ * exists to serve.
  */
 export function BulkBar({
   formId,
   action,
   options,
   label,
+  one,
+  gender = "m",
   confirmTemplate,
 }: {
   /** Must match the `form="…"` on the row checkboxes. */
@@ -30,8 +38,17 @@ export function BulkBar({
   action: Action;
   /** The statuses that may be applied to a whole selection. */
   options: { value: string; label: string }[];
-  /** Noun for the counter, e.g. "ordini". */
+  /** Plural noun for the counter, e.g. "ordini". */
   label: string;
+  /** Singular of `label`, for the count line: "1 ordine selezionato". */
+  one: string;
+  /**
+   * Grammatical gender of the noun, because the participle has to agree with
+   * it: "3 prenotazioni selezionate", not "selezionati". The bar used to print
+   * one hard-coded masculine plural for all three lists, so the reservations
+   * list read "1 prenotazioni selezionati" — wrong on both counts at once.
+   */
+  gender?: "m" | "f";
   /**
    * Confirmation text, with `{n}` standing in for the selected count.
    *
@@ -44,6 +61,8 @@ export function BulkBar({
   confirmTemplate?: string;
 }) {
   const [count, setCount] = useState(0);
+  const [total, setTotal] = useState(0);
+  const allRef = useRef<HTMLInputElement>(null);
 
   // Track the checkboxes that belong to this form. They are rendered by the
   // server inside the rows, so we listen at the document level rather than
@@ -55,7 +74,11 @@ export function BulkBar({
           `input[type="checkbox"][name="ids"][form="${formId}"]`,
         ),
       );
-    const sync = () => setCount(boxes().filter((b) => b.checked).length);
+    const sync = () => {
+      const all = boxes();
+      setTotal(all.length);
+      setCount(all.filter((b) => b.checked).length);
+    };
     document.addEventListener("change", sync);
     // Pick up any boxes the browser restored on a back-navigation.
     const id = requestAnimationFrame(sync);
@@ -65,6 +88,15 @@ export function BulkBar({
     };
   }, [formId]);
 
+  // `indeterminate` is a property, not an attribute, so React cannot set it
+  // from JSX. Without it the box was `checked` whenever *anything* was ticked:
+  // tick one row of twenty-five and "Seleziona tutto" drew itself full, so the
+  // next click on it read as "untick" to the browser and cleared the selection
+  // the operator was trying to extend. Now it draws the dash that means "some".
+  useEffect(() => {
+    if (allRef.current) allRef.current.indeterminate = count > 0 && count < total;
+  }, [count, total]);
+
   function toggleAll(checked: boolean) {
     for (const b of document.querySelectorAll<HTMLInputElement>(
       `input[type="checkbox"][name="ids"][form="${formId}"]`,
@@ -73,6 +105,17 @@ export function BulkBar({
     }
     setCount(checked ? document.querySelectorAll(`input[name="ids"][form="${formId}"]`).length : 0);
   }
+
+  const agree = (n: number) => (gender === "f" ? (n === 1 ? "a" : "e") : n === 1 ? "o" : "i");
+  // At zero the noun adds nothing, and naming it actively hurts: "Nessun ordine
+  // selezionato" reads at a glance like the list's own empty state ("Nessun
+  // ordine corrisponde ai filtri") while twenty-five orders are on screen —
+  // which is also what `e2e/admin-forms.spec.ts` checks for when it asks whether
+  // a saved order made it into the list.
+  const summary =
+    count === 0
+      ? "Nessun elemento selezionato"
+      : `${count} ${count === 1 ? one : label} selezionat${agree(count)}`;
 
   return (
     // Sticky only once something is selected. A bar that follows you down the
@@ -87,23 +130,29 @@ export function BulkBar({
     >
       <label className="tap flex items-center gap-2 text-xs font-bold tracking-widest text-brown-800/70 uppercase">
         <input
+          ref={allRef}
           type="checkbox"
           onChange={(e) => toggleAll(e.target.checked)}
-          checked={count > 0}
+          // Full only when the whole page is ticked; the effect above draws the
+          // in-between state.
+          checked={total > 0 && count === total}
           className="size-5 rounded accent-brown-950"
           aria-label="Seleziona tutto"
         />
         Seleziona tutto
       </label>
 
-      <span className="text-sm text-brown-800/70">
-        {count === 0 ? `Nessun elemento selezionato` : `${count} ${label} selezionati`}
+      <span className="text-sm text-brown-800/70" aria-live="polite">
+        {summary}
       </span>
 
       <ActionForm
         id={formId}
         action={action}
-        className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto"
+        // `bulk-actions` is what collapses this group until a row is ticked. It
+        // cost 223px of a 390px phone screen to sit there disabled, directly
+        // between the filters and the first row of the list it applies to.
+        className="bulk-actions w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto"
       >
         <select
           name="status"

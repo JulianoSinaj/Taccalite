@@ -70,17 +70,34 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             the viewport width. The old `hidden` was covering that; without a
             replacement the orders list scrolled 445px sideways into nothing. */}
         <div className="min-w-0 flex-1 overflow-x-clip">
+          {/* Both banners are disclosures rather than paragraphs.
+              They sit above every page in the gestionale and they are long —
+              measured together at 220px of a 390px phone, more than a quarter of
+              the screen, on every navigation, with no way to put them away. What
+              an operator needs at a glance is the headline; what they need once,
+              when they go to fix it, is the paragraph. `<details>` gives both
+              without JS, and `.admin-shell summary` already sizes the toggle to
+              44px on a touch screen. Left shut by default: the condition is
+              permanent until someone changes an env var, so re-reading the
+              instructions on every page load is not information. */}
           {ephemeralDatabase && (
-            <div
+            <details
+              className="group border-b border-warn/30 bg-warn-soft px-5 py-2 text-sm text-warn-soft-fg sm:px-8"
               role="alert"
-              className="border-b border-warn/30 bg-warn-soft px-5 py-3 text-sm text-warn-soft-fg sm:px-8"
             >
-              <strong className="font-semibold">Modalità demo:</strong> nessun database configurato su
-              Vercel — il sito funziona ma ordini, prenotazioni, modifiche e accessi{" "}
-              <strong className="font-semibold">non vengono salvati</strong> e spariscono a ogni riavvio.
-              Per rendere i dati permanenti collega un database Turso (Vercel → Storage → Turso) e
-              ridistribuisci. Vedi <code>DEPLOYMENT.md §V</code>.
-            </div>
+              <summary className="cursor-pointer list-none font-semibold marker:content-none">
+                <span>
+                  <span className="underline decoration-dotted underline-offset-4">Modalità demo</span>
+                  : i dati non vengono salvati.
+                </span>
+              </summary>
+              <p className="pb-2">
+                Nessun database configurato su Vercel — il sito funziona ma ordini, prenotazioni,
+                modifiche e accessi <strong className="font-semibold">non vengono salvati</strong> e
+                spariscono a ogni riavvio. Per rendere i dati permanenti collega un database Turso
+                (Vercel → Storage → Turso) e ridistribuisci. Vedi <code>DEPLOYMENT.md §V</code>.
+              </p>
+            </details>
           )}
           {/* Not a nicety any more. Before self-service recovery existed, an
               unsent email was an inconvenience the shop could work around by
@@ -98,31 +115,50 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               is marked `failed` and retired after OUTBOX_MAX_ATTEMPTS rather
               than sitting `queued` waiting for a fix. */}
           {!smtpAuthConfigured && (
-            <div
+            <details
               role="alert"
-              className="border-b border-danger/30 bg-danger-soft px-5 py-3 text-sm text-danger-soft-fg sm:px-8"
+              className="border-b border-danger/30 bg-danger-soft px-5 py-2 text-sm text-danger-soft-fg sm:px-8"
             >
-              <strong className="font-semibold">Email non configurata:</strong>{" "}
-              {smtpConfigured ? (
-                <>
-                  il server SMTP è impostato ma <code>SMTP_USER</code>/<code>SMTP_PASS</code>{" "}
-                  sono vuoti, quindi l&apos;invio viene rifiutato e i messaggi finiscono{" "}
-                  <strong className="font-semibold">in errore</strong>
-                </>
-              ) : (
-                <>
-                  nessun server SMTP impostato, quindi{" "}
-                  <strong className="font-semibold">nessuna email parte davvero</strong>
-                </>
-              )}{" "}
-              — conferme d&apos;ordine, prenotazioni e soprattutto i link per{" "}
-              <strong className="font-semibold">reimpostare la password</strong>{" "}
-              non arrivano al cliente; li trovi nell&apos;
-              <a href="/admin/outbox" className="underline">outbox</a>. Finché resta così, un cliente
-              che dimentica la password non può rientrare da solo. Imposta{" "}
-              <code>SMTP_HOST</code>, <code>SMTP_USER</code> e <code>SMTP_PASS</code> (vedi{" "}
-              <code>.env.example</code>).
-            </div>
+              {/* The headline carries the consequence, not the cause: "nessuna
+                  email parte" is what an operator needs to know while working,
+                  and which env var is missing is what they need when they go to
+                  fix it. */}
+              {/* One element inside the summary, not a run of inline nodes:
+                  `.admin-shell summary` is `display: flex` on a touch screen, so
+                  loose text beside a <span> becomes a second flex item and the
+                  headline breaks into two columns. */}
+              <summary className="cursor-pointer list-none font-semibold marker:content-none">
+                <span>
+                  <span className="underline decoration-dotted underline-offset-4">
+                    Email non configurata
+                  </span>
+                  : nessuna email arriva ai clienti.
+                </span>
+              </summary>
+              <p className="pb-2">
+                {smtpConfigured ? (
+                  <>
+                    Il server SMTP è impostato ma <code>SMTP_USER</code>/<code>SMTP_PASS</code> sono
+                    vuoti, quindi l&apos;invio viene rifiutato e i messaggi finiscono{" "}
+                    <strong className="font-semibold">in errore</strong>
+                  </>
+                ) : (
+                  <>
+                    Nessun server SMTP impostato, quindi{" "}
+                    <strong className="font-semibold">nessuna email parte davvero</strong>
+                  </>
+                )}{" "}
+                — conferme d&apos;ordine, prenotazioni e soprattutto i link per{" "}
+                <strong className="font-semibold">reimpostare la password</strong> non arrivano al
+                cliente; li trovi nell&apos;
+                <a href="/admin/outbox" className="underline">
+                  outbox
+                </a>
+                . Finché resta così, un cliente che dimentica la password non può rientrare da solo.
+                Imposta <code>SMTP_HOST</code>, <code>SMTP_USER</code> e <code>SMTP_PASS</code> (vedi{" "}
+                <code>.env.example</code>).
+              </p>
+            </details>
           )}
           <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">
             {/* Derived from the path, so every route gets one - detail pages

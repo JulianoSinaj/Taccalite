@@ -690,9 +690,20 @@ export default async function PorchettaPage() {
         <div className="mx-auto max-w-[88rem]">
           <Reveal>
             <div className="cinematic-shadow group relative h-[480px] overflow-hidden sm:h-[600px]">
+              {/* The band promises three things — crosta croccante, carne
+                  morbida, erbe — and used to show `salumi-appesi-stagionatura`:
+                  culatte and capocolli on their hooks. That is the bottega, but
+                  it is not porchetta, and it is the one photograph on this page
+                  that answers none of the sentence beside it. A whole roast
+                  tied on the board, cut open at one end, says all three at once.
+
+                  Stand-in from Wikimedia Commons until one of ours is
+                  photographed, like `porchetta-al-forno.jpg` above it. The CC BY
+                  credit is keyed off the `src` in `PhotoCredit`, so it travels
+                  with the file rather than with this component. */}
               <Image
-                src="/images/salumi-appesi-stagionatura.jpg"
-                alt="Culatte, capocolli e pancette appesi in stagionatura in bottega"
+                src="/images/porchetta-crosta-croccante.jpg"
+                alt="Porchetta intera legata sul tagliere, la crosta dorata e il taglio che scopre la carne"
                 fill
                 className="object-cover opacity-80 transition-transform duration-[3s] group-hover:scale-105"
                 sizes="100vw"
@@ -707,6 +718,9 @@ export default async function PorchettaPage() {
                   il profumo delle erbe. Ogni morso racconta tre generazioni di maestria.
                 </p>
               </div>
+              {/* Bottom-right, so it never lands on the copy in the corner
+                  opposite. */}
+              <PhotoCredit src="/images/porchetta-crosta-croccante.jpg" />
             </div>
           </Reveal>
         </div>

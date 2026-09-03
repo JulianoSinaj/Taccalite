@@ -275,7 +275,14 @@ export default async function AdminProducts({ searchParams }: SP) {
               </ActionForm>
             </>
           )}
-          <Link href={`/admin/products/${p.id}`} className={`${pill} px-3`}>
+          {/* Hidden below `sm` for the reason "Dettaglio" is on the orders
+              list: the product name in the pinned column already links here,
+              and this column was 337px of an 817px table on a 390px phone. */}
+          {/* `max-sm:hidden` rather than `hidden sm:inline-flex`, because `pill`
+              already carries `inline-flex` and two unprefixed display utilities
+              would be decided by Tailwind's output order rather than by intent.
+              A variant always wins over a bare utility. */}
+          <Link href={`/admin/products/${p.id}`} className={`${pill} px-3 max-sm:hidden`}>
             Modifica
           </Link>
         </div>
@@ -426,6 +433,7 @@ export default async function AdminProducts({ searchParams }: SP) {
         formId={BULK_FORM}
         action={bulkUpdateProducts}
         label="prodotti"
+        one="prodotto"
         options={archivedView ? BULK_OPTIONS_ARCHIVED : BULK_OPTIONS}
         confirmTemplate="Applicare l'azione a {n} prodotti? Quelli per cui non è consentita vengono saltati."
       />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useScrollLock } from "@/lib/use-scroll-lock";
@@ -125,6 +125,11 @@ export default function AdminNav({
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
   const [open, setOpen] = useState(false);
+  // The drawer's three moving parts: what opened it (focus goes back there),
+  // the panel itself (the Tab ring stays inside it) and the first thing in it.
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
 
   const groups = GROUPS.map((g) => ({
     ...g,
@@ -151,13 +156,57 @@ export default function AdminNav({
   // `overflow: hidden` alone does not achieve on iOS.
   useScrollLock(open);
 
+  /**
+   * Dismiss the drawer and hand focus back to the button that opened it.
+   *
+   * Only the *user's* ways out go through here — the ✕, the backdrop, Escape.
+   * The drawer also closes when the path changes (above), and returning focus
+   * to the menu button there would fight the new page for it.
+   */
+  const closeMenu = () => {
+    setOpen(false);
+    menuBtnRef.current?.focus();
+  };
+
+  // Focus goes into the drawer, and stays there while it is open.
+  //
+  // It was a `<div>` over the page with no role, no `aria-modal`, and focus left
+  // on the trigger behind it: a screen reader announced nothing when it opened,
+  // and Tab walked straight out into the list underneath — which is covered by
+  // an overlay and cannot be seen. `aria-modal` is what keeps a screen reader's
+  // virtual cursor inside; this keeps the Tab ring inside to match.
   useEffect(() => {
     if (!open) return;
+    closeBtnRef.current?.focus();
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        closeMenu();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const stops = panel.querySelectorAll<HTMLElement>("a[href], button:not([disabled])");
+      if (stops.length === 0) return;
+      const first = stops[0];
+      const last = stops[stops.length - 1];
+      const here = document.activeElement;
+      const inside = here instanceof Node && panel.contains(here);
+      // Wrapping at both ends, and pulling focus back in if it has already
+      // escaped (the first Tab after opening, if the browser put it elsewhere).
+      if (e.shiftKey && (!inside || here === first)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (!inside || here === last)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+    // Only `open` matters: `closeMenu` reads two refs and a setter, none of
+    // which change identity between renders.
   }, [open]);
 
   const isActive = (item: Item) =>
@@ -263,10 +312,12 @@ export default function AdminNav({
               <Search className="size-5" />
             </button>
             <button
+              ref={menuBtnRef}
               type="button"
               onClick={() => setOpen(true)}
               aria-label="Apri il menu"
               aria-expanded={open}
+              aria-haspopup="dialog"
               className="tap rounded-xl p-2 text-brown-800 hover:bg-brown-900/5"
             >
               <Menu className="size-5" />
@@ -280,19 +331,31 @@ export default function AdminNav({
           <button
             type="button"
             aria-label="Chiudi il menu"
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
+            // Out of the tab order: it is the backdrop, and it already has two
+            // keyboard equivalents inside the panel (Escape and the ✕). Left
+            // focusable it was also the one tab stop the trap had to allow
+            // outside the panel, which is the thing the trap is for.
+            tabIndex={-1}
             className="absolute inset-0 bg-brown-950/40"
           />
           {/* `px-safe`/`pb-safe` set padding outright, so they go on the panel —
               which has none of its own — and the rows inside keep their gutter.
               In landscape on a notched phone the drawer opens under the notch
               without them; at the foot, under the home indicator. */}
-          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-surface px-safe pb-safe shadow-xl">
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu del gestionale"
+            className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-surface px-safe pb-safe shadow-xl"
+          >
             <div className="flex items-center justify-between border-b border-brown-900/10 px-5 py-4">
               {brand}
               <button
+                ref={closeBtnRef}
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={closeMenu}
                 aria-label="Chiudi il menu"
                 className="tap rounded-xl p-2 text-brown-800 hover:bg-brown-900/5"
               >

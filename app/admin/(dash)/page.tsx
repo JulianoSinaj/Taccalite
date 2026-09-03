@@ -332,7 +332,7 @@ export default async function AdminDashboard() {
             <h2 className="font-display text-lg text-brown-950">Prodotti più venduti · 30 gg</h2>
             <Link
               href="/admin/reports/vendite"
-              className="shrink-0 text-xs font-bold tracking-widest text-gold-deep uppercase hover:underline"
+              className="tap shrink-0 text-xs font-bold tracking-widest text-gold-deep uppercase hover:underline"
             >
               Analisi
             </Link>
@@ -424,7 +424,7 @@ export default async function AdminDashboard() {
               <CalendarClock className="size-5 text-gold-deep" />
               Prenotazioni di oggi
             </h2>
-            <Link href="/admin/reservations" className="text-xs font-bold tracking-widest text-gold-deep uppercase hover:underline">
+            <Link href="/admin/reservations" className="tap text-xs font-bold tracking-widest text-gold-deep uppercase hover:underline">
               Tutte
             </Link>
           </div>
@@ -462,7 +462,7 @@ export default async function AdminDashboard() {
               <ShoppingBag className="size-5 text-gold-deep" />
               Ordini recenti
             </h2>
-            <Link href="/admin/orders" className="text-xs font-bold tracking-widest text-gold-deep uppercase hover:underline">
+            <Link href="/admin/orders" className="tap text-xs font-bold tracking-widest text-gold-deep uppercase hover:underline">
               Tutti
             </Link>
           </div>

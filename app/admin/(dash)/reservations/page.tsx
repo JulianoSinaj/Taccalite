@@ -301,6 +301,8 @@ async function ReservationList({
                 formId={BULK_FORM}
                 action={bulkUpdateReservationStatus}
                 label="prenotazioni"
+                one="prenotazione"
+                gender="f"
                 options={[
                   { value: "confirmed", label: "Conferma" },
                   { value: "completed", label: "Segna completate" },

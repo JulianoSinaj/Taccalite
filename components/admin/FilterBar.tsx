@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { inputCls, labelCls } from "./ui";
 import FilterAutoSubmit from "./FilterAutoSubmit";
 
@@ -87,7 +88,20 @@ export function SegmentedFilter({
   return (
     // Scrolls rather than wraps on a narrow screen, so the control stays one
     // visual unit instead of breaking into ragged rows.
-    <div className="no-scrollbar -mx-1 mb-4 overflow-x-auto px-1 pb-1">
+    //
+    // `.scroll-x` for the same reason the tables have it, and it was the one
+    // sideways scroller in the gestionale without it: on a 390px phone the seven
+    // order-status chips measure 793px in a 356px window, so four of them —
+    // "Incassati", "Evasi", "Annullati", "Rimborsati" — sat off-screen behind a
+    // deliberately hidden scrollbar, with nothing at the edge to say the row
+    // continued. `--scroll-ground` is overridden because this strip sits on the
+    // page rather than on a panel; both tokens invert with the dark theme, so
+    // one value covers both.
+    //
+    // The margins are rebalanced rather than changed: `-m-1 p-1` gives the
+    // gutter the shadow needs on every side while `mb-3 + p-1` keeps the same
+    // 16px below the control that `mb-4 + pb-1` gave before.
+    <div className="scroll-x no-scrollbar -m-1 mb-3 p-1 [--scroll-ground:var(--color-cream)]">
       <div
         role="group"
         aria-label={label}
@@ -158,6 +172,10 @@ export function FilterToolbar({
   const hidden = Object.entries(params).filter(
     ([k, v]) => !shown.has(k) && (carry.length === 0 || carry.includes(k)) && isActive(v),
   );
+  // How many of the collapsed facets are currently narrowing the list, so the
+  // phone's disclosure can say so without being opened.
+  const activeFacets = facets.filter((f) => isActive(params[f.name])).length;
+  const moreId = `${formId}-more`;
 
   return (
     <form
@@ -184,27 +202,71 @@ export function FilterToolbar({
         />
       </div>
 
-      {facets.map((f) => (
-        <div key={f.name} className="sm:min-w-[10rem]">
-          <label className={labelCls} htmlFor={`${formId}-${f.name}`}>
-            {f.label}
-          </label>
-          <select
-            id={`${formId}-${f.name}`}
-            name={f.name}
-            defaultValue={params[f.name] ?? "all"}
-            className={inputCls}
-          >
-            {f.options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      ))}
+      {/*
+       * Below `sm` the facets fold away behind this.
+       *
+       * The toolbar is one line on a laptop and a stack of seven controls on a
+       * phone: measured at 703px on a 390px screen, which — with the header, the
+       * status chips and the bulk bar — put the first order of the list 1718px
+       * down, two full screens of chrome before any data. Search stays out (it
+       * is what the counter reaches for most) and so does the submit button; the
+       * four selects and the date range go behind a disclosure.
+       *
+       * A checkbox and `display: contents` rather than state, because this is a
+       * server component and both alternatives are worse: `<details>` cannot be
+       * forced open by a media query in every browser, and a client component
+       * would either flash the whole panel open on load or leave an operator
+       * with no JS unable to reach the facets at all — the toolbar is a plain
+       * GET form precisely so that it works without us.
+       *
+       * `contents` and not `block`: these divs are grid items of the form, and a
+       * real wrapper box would collapse the six controls into one cell.
+       */}
+      <input type="checkbox" id={moreId} className="peer sr-only" />
+      <label
+        htmlFor={moreId}
+        // The chevron turns over through the peer rather than through state, and
+        // the focus ring is here rather than on the box because the box is
+        // `sr-only` — reachable by keyboard, and otherwise invisible when it is.
+        className="inline-flex min-h-11 cursor-pointer items-center justify-between gap-2 rounded-lg border border-brown-900/15 bg-cream/40 px-3 text-xs font-bold tracking-widest text-brown-800/80 uppercase select-none peer-focus-visible:ring-2 peer-focus-visible:ring-gold-deep peer-checked:[&_svg:last-child]:rotate-180 sm:hidden"
+      >
+        <span className="inline-flex items-center gap-2">
+          <SlidersHorizontal className="size-4" aria-hidden />
+          Altri filtri
+          {activeFacets > 0 && (
+            <span className="rounded-full bg-gold px-2 py-0.5 text-[11px] text-on-gold tabular-nums">
+              {activeFacets}
+            </span>
+          )}
+        </span>
+        <ChevronDown className="size-4 transition-transform" aria-hidden />
+      </label>
 
-      {children}
+      <div className="hidden peer-checked:contents sm:contents">
+        {facets.map((f) => (
+          <div key={f.name} className="sm:min-w-[10rem]">
+            <label className={labelCls} htmlFor={`${formId}-${f.name}`}>
+              {f.label}
+            </label>
+            <select
+              id={`${formId}-${f.name}`}
+              name={f.name}
+              defaultValue={params[f.name] ?? "all"}
+              className={inputCls}
+            >
+              {f.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
+
+        {/* The date range and anything else a page adds folds away with the
+            facets — it is the tallest part of the panel on the orders list. */}
+        {children}
+      </div>
 
       {/* Full width below `sm`. Wrapped onto its own line by `flex-wrap` it
           otherwise sat as a short pill against the left edge under a stack of

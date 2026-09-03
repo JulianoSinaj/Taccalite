@@ -2,10 +2,9 @@
  * The attribution line for photographs that are not the shop's own.
  *
  * Most of `public/images` is bottega photography — the counter, the trays, the
- * salumi on their hooks — and needs no credit. One file does:
- * `porchetta-al-forno.jpg` is Wikimedia Commons `Porchetta.jpg` by Popo le
- * Chien, CC BY-SA 3.0, standing in until someone photographs a porchetta of
- * ours coming out of the oven. That licence requires the credit to appear
+ * salumi on their hooks — and needs no credit. Two files do, both Wikimedia
+ * Commons porchette standing in until someone photographs one of ours: see
+ * `CREDITS` below. Those licences require the credit to appear
  * *wherever the photo appears*, and the credit used to be a hardcoded line in
  * `home/Porchetta.tsx` — so the obligation lived in one component rather than
  * with the file, and the second use of the photo would have silently dropped it.
@@ -19,6 +18,10 @@
 /** `src` → the credit its licence requires. Absent means "ours, no credit". */
 const CREDITS: Record<string, string> = {
   "/images/porchetta-al-forno.jpg": "Foto: Popo le Chien, CC BY-SA 3.0",
+  // Wikimedia Commons `Porchetta (3168207946).jpg` by Pedro Angelini, CC BY
+  // 2.0. Stands in for the "Il sapore perfetto" band on /porchetta, which for
+  // want of a porchetta photograph was showing salumi in stagionatura.
+  "/images/porchetta-crosta-croccante.jpg": "Foto: Pedro Angelini, CC BY 2.0",
   // `tagliere-formaggi.jpg` (Peachyeung316, CC BY-SA 4.0) used to be here. The
   // shop's own board replaced it, so the obligation ended with the file —
   // exactly the cleanup this map is shaped for. The stale JPEG is still in

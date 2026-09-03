@@ -238,6 +238,7 @@ export default async function AdminOrders({ searchParams }: SP) {
         formId={BULK_FORM}
         action={bulkUpdateOrderStatus}
         label="ordini"
+        one="ordine"
         options={[
           { value: "fulfilled", label: "Segna evasi" },
           // One gesture, two targets: paid → "da evadere", unpaid → "in attesa".
@@ -446,9 +447,17 @@ async function OrdersTable({
                         <PendingButton tone="gold">✓ Consegnato</PendingButton>
                       </ActionForm>
                     )}
+                    {/* Hidden below `sm`, where it is the most expensive thing
+                        on the row and buys nothing: the order number in the
+                        pinned column is already a link to this same page. The
+                        actions column was 301px of a 920px table on a 390px
+                        phone — the widest column, at the far right, so reaching
+                        it meant swiping most of the way across the list. What
+                        stays is "✓ Consegnato", which is the one action a
+                        counter actually performs from the list. */}
                     <Link
                       href={`/admin/orders/${o.id}`}
-                      className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-3 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"
+                      className="hidden min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-3 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15 sm:inline-flex"
                     >
                       Dettaglio
                     </Link>

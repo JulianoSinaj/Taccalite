@@ -7,7 +7,7 @@ export function BackLink({ href, children }: { href: string; children: ReactNode
   return (
     <Link
       href={href}
-      className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-brown-800/70 hover:text-brown-950 print:hidden"
+      className="tap mb-4 inline-flex items-center gap-2 text-sm font-semibold text-brown-800/70 hover:text-brown-950 print:hidden"
     >
       <ArrowLeft className="size-4" />
       {children}
@@ -27,7 +27,7 @@ export function HistoryLink({ id, className = "" }: { id: string; className?: st
   return (
     <Link
       href={`/admin/audit?record=${encodeURIComponent(id)}`}
-      className={`inline-flex items-center gap-1.5 text-[12px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950 print:hidden ${className}`}
+      className={`tap inline-flex items-center gap-1.5 text-[12px] font-bold tracking-widest text-brown-800/70 uppercase hover:text-brown-950 print:hidden ${className}`}
     >
       <ScrollText className="size-3.5" />
       Cronologia
@@ -338,22 +338,42 @@ export function Pagination({
   const arrowOff = "pointer-events-none bg-brown-900/5 text-brown-800/60";
   const arrowOn = "bg-brown-900/10 text-brown-950 hover:bg-brown-900/15";
 
+  // `Link`, not a bare `<a>`. Every other control on these lists — the sort
+  // headers, the status chips, the active-filter pills — is a client
+  // transition; paging was the one that tore the document down and rebuilt it,
+  // which is both the slowest way to move through a list and the one thing an
+  // operator does most on a list of six hundred orders.
+  //
+  // An end stop is a `<span>` rather than an `<a>` with no `href`: an anchor
+  // without one is not a link, is not focusable, and reads as bare text to a
+  // screen reader — `aria-disabled` on it describes a control that was never
+  // there. A span says the same thing honestly.
+  // A plain function, called directly below rather than rendered as `<Arrow/>`:
+  // a component declared inside a render is a new type on every pass, which
+  // remounts its subtree — and the project's lint rule says so.
+  const arrow = (to: number, enabled: boolean, children: ReactNode) =>
+    enabled ? (
+      <Link href={href(to)} className={`${btn} ${arrowOn}`}>
+        {children}
+      </Link>
+    ) : (
+      <span aria-hidden className={`${btn} ${arrowOff}`}>
+        {children}
+      </span>
+    );
+
   return (
     <nav
       aria-label="Paginazione"
       className="mt-6 flex flex-wrap items-center justify-between gap-3 print:hidden"
     >
-      <a
-        href={page > 1 ? href(page - 1) : undefined}
-        aria-disabled={page <= 1}
-        className={`${btn} ${page > 1 ? arrowOn : arrowOff}`}
-      >
-        ← Precedenti
-      </a>
+      {arrow(page - 1, page > 1, "← Precedenti")}
 
       {/* Scrolls rather than wraps: on a phone a 31-page control would
-          otherwise push the rest of the page down by three rows of pills. */}
-      <div className="no-scrollbar order-last w-full overflow-x-auto sm:order-none sm:w-auto">
+          otherwise push the rest of the page down by three rows of pills.
+          `.scroll-x` for the affordance — the same shadow the tables use, with
+          the page's own ground rather than a panel's. */}
+      <div className="scroll-x no-scrollbar order-last w-full py-1 sm:order-none sm:w-auto [--scroll-ground:var(--color-cream)]">
         <ol className="flex items-center justify-center gap-1">
           {pageWindow(page, pageCount).map((p, i) =>
             p === null ? (
@@ -362,7 +382,7 @@ export function Pagination({
               </li>
             ) : (
               <li key={p}>
-                <a
+                <Link
                   href={href(p)}
                   aria-current={p === page ? "page" : undefined}
                   aria-label={`Pagina ${p} di ${pageCount}`}
@@ -373,20 +393,14 @@ export function Pagination({
                   }`}
                 >
                   {p}
-                </a>
+                </Link>
               </li>
             ),
           )}
         </ol>
       </div>
 
-      <a
-        href={page < pageCount ? href(page + 1) : undefined}
-        aria-disabled={page >= pageCount}
-        className={`${btn} ${page < pageCount ? arrowOn : arrowOff}`}
-      >
-        Successivi →
-      </a>
+      {arrow(page + 1, page < pageCount, "Successivi →")}
     </nav>
   );
 }

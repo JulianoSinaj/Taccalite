@@ -286,7 +286,9 @@ chrome does not wait on the list it describes.
 
 ## Brand & content rules
 - Wordmark is text: "Taccalite" in Playfair Display (no logo file); pair with "NORCINERIA DAL 1946" tagline
-- Every photograph in `public/images/` is a real shot of the bottega, carried over from the shop's previous site: banco-carni-macinati, banco-carni-bovino, banco-carni-vetrina, salumi-appesi-stagionatura, gastronomia-teglie-forno, spiedini-verdure-banco, lonza-suino-brado, pasta-artigianale-bottega. Anything without one uses a labelled placeholder — never stock photography
+- Almost every photograph in `public/images/` is a real shot of the bottega, carried over from the shop's previous site: banco-carni-macinati, banco-carni-bovino, banco-carni-vetrina, salumi-appesi-stagionatura, gastronomia-teglie-forno, spiedini-verdure-banco, lonza-suino-brado, pasta-artigianale-bottega. Anything without one uses a labelled placeholder rather than stock
+- The exceptions are stand-ins on /porchetta, kept until the shop photographs its own: `porchetta-al-forno` (Wikimedia Commons, CC BY-SA) and, in the gallery, `porchetta-legatura-spago` and `porchetta-arrosto-croccante` (Unsplash rZbSKtAiVUA by @girl_behindthelens and SyI5txRzjbA by @jonathanborba)
+- Where a licence demands a visible credit, `components/site/PhotoCredit.tsx` keys it off the `src` so the obligation travels with the file. The Unsplash licence demands none, so those two are deliberately absent from that map — absence there means "no credit owed", not "ours"
 - E-commerce not live: products show "Disponibile in negozio · online a breve"
 - Reservation = request, not confirmation ("Ti ricontatteremo per confermare")
 - Loyalty area is a simulated preview (state the disclaimer)

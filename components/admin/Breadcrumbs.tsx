@@ -116,7 +116,12 @@ export function Breadcrumbs({ isAdmin = true }: { isAdmin?: boolean }) {
           <li key={c.href} className="flex items-center gap-1">
             {i > 0 && <ChevronRight className="size-3 shrink-0 opacity-50" aria-hidden />}
             {c.link ? (
-              <Link href={c.href} className="font-semibold hover:text-brown-950 hover:underline">
+              // `.tap`: these are 17px of 12px type, and on a phone they are
+              // the whole of "go back up a level" — the sidebar is behind a
+              // drawer there. The pseudo-element only grows the axis that is
+              // short, so a crumb wider than 44px keeps its own width and the
+              // row's spacing is untouched.
+              <Link href={c.href} className="tap font-semibold hover:text-brown-950 hover:underline">
                 {c.label}
               </Link>
             ) : (

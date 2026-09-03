@@ -124,7 +124,12 @@ export default async function ReservationCalendar({ searchParams }: SP) {
         title="Calendario prenotazioni"
         subtitle={fmtRange(weekStart, weekEnd)}
         action={
-          <div className="flex items-center gap-2 print:hidden">
+          // `flex-wrap`, like every other header action in the gestionale.
+          // Without it the four pills came to 448px on a 390px phone and
+          // "Settimana →" — the way *forward* through the calendar — ran off the
+          // right edge, where the shell's `overflow-x-clip` cut it in half with
+          // nothing to scroll.
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
             <Link
               href="/admin/reservations"
               className="inline-flex min-h-11 items-center justify-center rounded-full bg-brown-900/10 px-4 py-2 text-xs font-bold tracking-widest text-brown-950 uppercase hover:bg-brown-900/15"

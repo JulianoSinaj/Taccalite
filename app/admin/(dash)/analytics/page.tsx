@@ -36,6 +36,15 @@ export default async function AdminAnalytics({ searchParams }: SP) {
       : null;
   // Above ~30 bars the per-day labels overlap, so we drop them for the 90-day view.
   const showDayLabels = s.daily.length <= 31;
+  // …and a label that fits a laptop does not fit a phone. Each column is
+  // `flex-1` with the default `min-width: auto`, so a two-digit label at 10px
+  // gives every column an 11px floor it cannot shrink past: thirty of them came
+  // to 466px of chart inside a 312px panel, and the last ten days of the month
+  // were drawn outside the card and clipped away by the shell — silently, since
+  // the panel does not scroll. Hiding the labels below `sm` drops the floor to
+  // zero (the bar itself has no intrinsic width) and the whole month fits. A
+  // week keeps its labels everywhere: seven columns have room on any screen.
+  const dayLabelCls = s.daily.length > 14 ? "hidden sm:block" : "block";
 
   return (
     <div>
@@ -132,7 +141,9 @@ export default async function AdminAnalytics({ searchParams }: SP) {
                     style={{ height: `${Math.round((d.n / maxDaily) * 100)}%`, minHeight: d.n > 0 ? "4px" : "0" }}
                   />
                 </div>
-                {showDayLabels && <span className="text-[10px] text-brown-800/70">{d.day.slice(8)}</span>}
+                {showDayLabels && (
+                  <span className={`${dayLabelCls} text-[10px] text-brown-800/70`}>{d.day.slice(8)}</span>
+                )}
               </div>
             ))}
           </div>
