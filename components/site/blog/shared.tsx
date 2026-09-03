@@ -108,7 +108,7 @@ export function ArticleClose({
   const body = (
     <>
       Vuoi assaggiare di persona? Passa in bottega — trovi indirizzi e orari nella pagina{" "}
-      <Link href="/negozi" className="underline-draw font-semibold text-gold-deep">
+      <Link href="/sedi" className="underline-draw font-semibold text-gold-deep">
         dei negozi
       </Link>{" "}
       — oppure{" "}

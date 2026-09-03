@@ -24,8 +24,9 @@ const CREDITS: Record<string, string> = {
   "/images/porchetta-crosta-croccante.jpg": "Foto: Pedro Angelini, CC BY 2.0",
   // `tagliere-formaggi.jpg` (Peachyeung316, CC BY-SA 4.0) used to be here. The
   // shop's own board replaced it, so the obligation ended with the file —
-  // exactly the cleanup this map is shaped for. The stale JPEG is still in
-  // `public/images/` and can be deleted; nothing references it.
+  // exactly the cleanup this map is shaped for. The stale JPEG outlived its
+  // entry by a while and has now been deleted too; `git log` has it if the
+  // credit ever needs checking against the photograph it was for.
 };
 
 /** The credit for `src`, or `undefined` when the photo is the shop's own. */
