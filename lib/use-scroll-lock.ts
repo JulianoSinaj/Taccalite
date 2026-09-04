@@ -19,6 +19,14 @@ import { useEffect } from "react";
  * position out of step with the real one, which lands as a jump on close. Touch
  * scrolling is native — Lenis's `syncTouch` is off — so there is nothing to
  * fight there, and `overflow: hidden` alone remains correct on the desktop.
+ *
+ * The restore is skipped when the overlay closed *because* of a navigation.
+ * Every overlay that uses this hook shuts itself on a path change — the phone
+ * menu and the admin drawer both do it during render, the cart sheet does it by
+ * way of `/checkout` — so on a phone, tapping any link inside one released the
+ * lock in the same commit that painted the new page, and the restore then put
+ * the visitor's *old* offset on it. Tapping "Sedi" from halfway down the home
+ * page opened /sedi 1200px down, every single time.
  */
 export function useScrollLock(active: boolean) {
   useEffect(() => {
@@ -36,6 +44,11 @@ export function useScrollLock(active: boolean) {
     }
 
     const scrollY = window.scrollY;
+    // Read from `location` rather than `usePathname()`: this has to be compared
+    // against the path as it is *when the lock releases*, and a value React
+    // closed over at render time is by definition the old one. The router has
+    // already pushed the new URL by the time the cleanup below runs.
+    const lockedPath = window.location.pathname;
     const previous = {
       position: body.style.position,
       top: body.style.top,
@@ -57,6 +70,10 @@ export function useScrollLock(active: boolean) {
       body.style.left = previous.left;
       body.style.right = previous.right;
       body.style.width = previous.width;
+      // Only when the page underneath is still the one that was pinned: if it is
+      // not, the router has already put the new page where it belongs and this
+      // would drag it back down to an offset that means nothing on it.
+      if (window.location.pathname !== lockedPath) return;
       // Instant, not smooth: the visitor is returning to where they already were.
       window.scrollTo({ top: scrollY, behavior: "instant" as ScrollBehavior });
     };
